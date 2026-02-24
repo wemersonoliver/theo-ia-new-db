@@ -1,0 +1,1 @@
+ALTER TABLE public.contacts ADD COLUMN tags TEXT[] NOT NULL DEFAULT '{}';
