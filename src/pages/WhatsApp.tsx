@@ -29,12 +29,17 @@ export default function WhatsApp() {
 
   // Auto-refresh QR code countdown
   useEffect(() => {
-    if (instance?.status !== "qr_ready") return;
+    if (instance?.status !== "qr_ready") {
+      setCountdown(30);
+      setIsRefreshing(false);
+      return;
+    }
 
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
-          handleRefreshQR();
+          setIsRefreshing(true);
+          refreshQRCode.mutate();
           return 30;
         }
         return prev - 1;
@@ -42,7 +47,7 @@ export default function WhatsApp() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [instance?.status]);
+  }, [instance?.status, refreshQRCode]);
 
   const getStatusBadge = () => {
     switch (instance?.status) {
