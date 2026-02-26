@@ -62,16 +62,6 @@ serve(async (req) => {
       });
     }
 
-    if (instance.status === "connected") {
-      return new Response(JSON.stringify({
-        success: true,
-        connected: true,
-        message: "WhatsApp já está conectado"
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
-    }
-
     // Get Evolution API from global secrets
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
@@ -81,6 +71,60 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Erro de configuração do servidor" }), { 
         status: 500, 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
+    }
+
+    // Primeiro valida o estado real da conexão na Evolution
+    let evolutionState: string | null = null;
+    try {
+      const stateResponse = await fetch(`${evolutionUrl}/instance/connectionState/${instance.instance_name}`, {
+        headers: { apikey: evolutionKey },
+      });
+
+      if (stateResponse.ok) {
+        const stateData = await stateResponse.json();
+        evolutionState = String(
+          stateData?.state ??
+          stateData?.status ??
+          stateData?.instance?.state ??
+          stateData?.instance?.status ??
+          ""
+        ).toLowerCase();
+      } else {
+        const stateError = await stateResponse.text();
+        console.log("connectionState unavailable:", stateError);
+      }
+    } catch (stateError) {
+      console.log("connectionState check failed:", stateError);
+    }
+
+    if (evolutionState === "open" || evolutionState === "connected") {
+      await supabase
+        .from("whatsapp_instances")
+        .update({
+          status: "connected",
+          qr_code_base64: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", userId);
+
+      return new Response(JSON.stringify({
+        success: true,
+        connected: true,
+        message: "WhatsApp já está conectado"
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // fallback para não regressar status local conectado
+    if (instance.status === "connected") {
+      return new Response(JSON.stringify({
+        success: true,
+        connected: true,
+        message: "WhatsApp já está conectado"
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
