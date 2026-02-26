@@ -29,7 +29,9 @@ export default function WhatsApp() {
 
   // Auto-refresh QR code countdown
   useEffect(() => {
-    if (instance?.status !== "qr_ready") {
+    const hasQRCode = Boolean(cachedQRCode || instance?.qr_code_base64);
+
+    if (instance?.status !== "qr_ready" || !hasQRCode) {
       setCountdown(30);
       setIsRefreshing(false);
       return;
@@ -47,7 +49,7 @@ export default function WhatsApp() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [instance?.status, refreshQRCode]);
+  }, [instance?.status, instance?.qr_code_base64, cachedQRCode, refreshQRCode]);
 
   const getStatusBadge = () => {
     switch (instance?.status) {
@@ -165,23 +167,35 @@ export default function WhatsApp() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center justify-center">
-            {instance?.status === "qr_ready" && (cachedQRCode || instance.qr_code_base64) ? (
+            {instance?.status === "qr_ready" ? (
               <div className="space-y-4 text-center">
-                <div className="relative rounded-lg border bg-white p-4">
-                  <img 
-                    src={`data:image/png;base64,${cachedQRCode || instance.qr_code_base64}`}
-                    alt="QR Code"
-                    className={cn("h-64 w-64 transition-opacity duration-300", isRefreshing && "opacity-50")}
-                  />
-                  {isRefreshing && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                {(cachedQRCode || instance.qr_code_base64) ? (
+                  <>
+                    <div className="relative rounded-lg border bg-white p-4">
+                      <img 
+                        src={`data:image/png;base64,${cachedQRCode || instance.qr_code_base64}`}
+                        alt="QR Code"
+                        className={cn("h-64 w-64 transition-opacity duration-300", isRefreshing && "opacity-50")}
+                      />
+                      {isRefreshing && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  QR Code expira em <span className="font-bold text-primary">{countdown}s</span>
-                </p>
+                    <p className="text-sm text-muted-foreground">
+                      QR Code expira em <span className="font-bold text-primary">{countdown}s</span>
+                    </p>
+                  </>
+                ) : (
+                  <div className="space-y-3 py-6">
+                    <Loader2 className="mx-auto h-10 w-10 animate-spin text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      Gerando novo QR Code...
+                    </p>
+                  </div>
+                )}
+
                 <Button 
                   variant="outline" 
                   size="sm"

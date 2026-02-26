@@ -51,7 +51,7 @@ serve(async (req) => {
     // Get user's instance
     const { data: instance } = await supabase
       .from("whatsapp_instances")
-      .select("instance_name")
+      .select("instance_name, status")
       .eq("user_id", userId)
       .maybeSingle();
 
@@ -59,6 +59,16 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Nenhuma instância encontrada" }), { 
         status: 404, 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
+    }
+
+    if (instance.status === "connected") {
+      return new Response(JSON.stringify({
+        success: true,
+        connected: true,
+        message: "WhatsApp já está conectado"
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
@@ -97,7 +107,17 @@ serve(async (req) => {
     
     console.log("QR Code extracted (refresh):", qrCodeBase64 ? `${qrCodeBase64.substring(0, 50)}...` : "null");
 
-    // Update database
+    if (!qrCodeBase64) {
+      return new Response(JSON.stringify({
+        success: false,
+        message: "QR Code indisponível no momento"
+      }), {
+        status: 202,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // Update database only when a valid QR is available
     const { error: updateError } = await supabase
       .from("whatsapp_instances")
       .update({
