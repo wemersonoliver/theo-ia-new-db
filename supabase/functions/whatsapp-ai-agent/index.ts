@@ -81,6 +81,10 @@ const schedulingTools = {
           description: {
             type: "string",
             description: "Detalhes adicionais ou observações"
+          },
+          client_name: {
+            type: "string",
+            description: "Nome do cliente informado durante a conversa"
           }
         },
         required: ["date", "time", "title"]
@@ -404,6 +408,7 @@ REGRAS CRÍTICAS - NUNCA VIOLE:
 - OBRIGATÓRIO: Para criar um agendamento, você DEVE chamar a ferramenta create_appointment. NUNCA diga que o agendamento foi criado ou confirmado sem antes ter chamado create_appointment e recebido uma resposta de sucesso.
 - OBRIGATÓRIO: NUNCA simule ou finja ter criado um agendamento. O agendamento SÓ existe quando a ferramenta create_appointment retorna success: true.
 - Se o cliente confirmou todos os dados (data, horário, serviço, nome), chame create_appointment IMEDIATAMENTE. Não peça mais confirmações desnecessárias.
+- OBRIGATÓRIO: Sempre que o cliente informar o nome durante a conversa, guarde-o e passe no campo client_name ao chamar create_appointment. Se o cliente não informou o nome, pergunte antes de criar o agendamento.
 
 ANÁLISE DE IMAGENS E DOCUMENTOS:
 - Quando o cliente enviar uma imagem ou documento, você receberá o conteúdo visual diretamente.
@@ -653,12 +658,15 @@ async function executeFunction(supabase: any, supabaseUrl: string, name: string,
   const operation = name === "check_available_slots" ? "check_availability" : name;
   console.log(`[executeFunction] Calling manage-appointment: operation=${operation}, args=`, JSON.stringify(args));
   
+  // Use client_name from function args (provided by AI) if available, fallback to contactName from webhook
+  const resolvedContactName = args.client_name || args.contactName || null;
+  
   try {
     const payload = {
       operation,
       userId: args.userId,
       phone: args.phone,
-      contactName: args.contactName,
+      contactName: resolvedContactName,
       date: args.date,
       time: args.time,
       title: args.title,
@@ -817,6 +825,18 @@ async function saveAIMessage(supabase: any, userId: string, phone: string, conte
 
 async function notifyHandoff(supabase: any, userId: string, clientPhone: string, clientName: string | null) {
   try {
+    // Try to get the name from conversation if not provided
+    let displayName = clientName || null;
+    if (!displayName) {
+      const { data: conv } = await supabase
+        .from("whatsapp_conversations")
+        .select("contact_name")
+        .eq("user_id", userId)
+        .eq("phone", clientPhone)
+        .maybeSingle();
+      displayName = conv?.contact_name || "Desconhecido";
+    }
+
     const { data: notifContacts } = await supabase
       .from("notification_contacts")
       .select("phone, name")
@@ -825,7 +845,6 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
 
     if (!notifContacts || notifContacts.length === 0) return;
 
-    const displayName = clientName || "Desconhecido";
     const message = `🔔 *Transferência de Atendimento*\n\nUm cliente precisa de atendimento humano.\n\n👤 *Nome:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n⏰ *Horário:* ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
 
     for (const contact of notifContacts) {

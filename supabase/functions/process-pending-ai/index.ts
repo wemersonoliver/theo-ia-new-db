@@ -115,8 +115,18 @@ serve(async (req) => {
       });
     }
 
+    // Get contact name from conversation
+    const { data: convForName } = await supabase
+      .from("whatsapp_conversations")
+      .select("contact_name")
+      .eq("user_id", userId)
+      .eq("phone", phone)
+      .maybeSingle();
+
+    const contactName = convForName?.contact_name || null;
+
     // Now trigger the AI agent
-    console.log("Triggering AI for:", phone, "with combined messages");
+    console.log("Triggering AI for:", phone, "with combined messages, contactName:", contactName);
     
     const aiResponse = await fetch(`${supabaseUrl}/functions/v1/whatsapp-ai-agent`, {
       method: "POST",
@@ -128,6 +138,7 @@ serve(async (req) => {
         userId,
         phone,
         messageContent: recentIncoming,
+        contactName,
       }),
     });
 
