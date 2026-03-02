@@ -99,7 +99,7 @@ Responda de forma concisa e direta, sem formatação especial.`,
     let geminiResponse: Response | null = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
