@@ -1,0 +1,1 @@
+ALTER TABLE public.whatsapp_pending_responses ADD CONSTRAINT whatsapp_pending_responses_user_id_phone_key UNIQUE (user_id, phone);
