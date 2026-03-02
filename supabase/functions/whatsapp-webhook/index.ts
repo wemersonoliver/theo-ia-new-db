@@ -254,7 +254,8 @@ serve(async (req) => {
         }
 
         // Handle incoming messages
-        const newMessage = {
+        const isMediaMessage = isImageMessage || isDocumentMessage || isStickerMessage;
+        const newMessage: any = {
           id: msg.key?.id || crypto.randomUUID(),
           timestamp: new Date().toISOString(),
           from_me: false,
@@ -262,6 +263,11 @@ serve(async (req) => {
           type: messageType,
           sent_by: "human",
         };
+        // Store media key so AI agent can fetch the original media for vision analysis
+        if (isMediaMessage && messageKey) {
+          newMessage.media_key = messageKey;
+          newMessage.media_type = isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker";
+        }
 
         // Helper function to check if message contains trigger keywords
         const checkKeywordActivation = (): boolean => {
@@ -300,11 +306,13 @@ serve(async (req) => {
                 .eq("id", conversation.id);
               
               console.log("AI reactivated by keyword for:", phone);
-              await triggerAIResponse(supabase, userId, phone, content, aiConfig?.response_delay_seconds);
+              const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
+              await triggerAIResponse(supabase, userId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
             }
           } else if (conversation.ai_active) {
             // AI already active, trigger response with delay
-            await triggerAIResponse(supabase, userId, phone, content, aiConfig?.response_delay_seconds);
+            const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
+            await triggerAIResponse(supabase, userId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
           }
         } else {
           // New conversation - check if should activate AI
@@ -324,7 +332,8 @@ serve(async (req) => {
 
           if (shouldActivateAI) {
             console.log("AI activated for new conversation:", phone);
-            await triggerAIResponse(supabase, userId, phone, content, aiConfig?.response_delay_seconds);
+            const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
+            await triggerAIResponse(supabase, userId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
           } else {
             console.log("AI not activated (no keyword match):", phone);
           }
@@ -348,7 +357,7 @@ serve(async (req) => {
   }
 });
 
-async function triggerAIResponse(supabase: any, userId: string, phone: string, messageContent: string, delaySeconds?: number) {
+async function triggerAIResponse(supabase: any, userId: string, phone: string, messageContent: string, delaySeconds?: number, mediaInfo?: { messageKey: any; instanceName: string; mediaType: string }) {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -398,7 +407,7 @@ async function triggerAIResponse(supabase: any, userId: string, phone: string, m
         "Content-Type": "application/json",
         "Authorization": `Bearer ${serviceKey}`,
       },
-      body: JSON.stringify({ userId, phone, messageContent }),
+      body: JSON.stringify({ userId, phone, messageContent, mediaInfo }),
     });
   } catch (error) {
     console.error("Error triggering AI:", error);
