@@ -172,7 +172,7 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { userId, phone, messageContent, contactName } = await req.json();
+    const { userId, phone, messageContent, contactName, mediaInfo } = await req.json();
 
     if (!userId || !phone) {
       return new Response(JSON.stringify({ error: "Missing parameters" }), { 
@@ -270,6 +270,70 @@ serve(async (req) => {
 
     const recentMessages = (conversation?.messages || []).slice(-10);
 
+    // Check if the last incoming message has media for vision analysis
+    let mediaBase64: string | null = null;
+    let mediaMimeType: string | null = null;
+    
+    // Try to get media from the explicit mediaInfo parameter first
+    if (mediaInfo?.messageKey && mediaInfo?.instanceName) {
+      try {
+        const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+        const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+        
+        if (evolutionUrl && evolutionKey) {
+          console.log("Fetching media for vision analysis:", mediaInfo.mediaType);
+          const mediaResponse = await fetch(
+            `${evolutionUrl}/chat/getBase64FromMediaMessage/${mediaInfo.instanceName}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", apikey: evolutionKey },
+              body: JSON.stringify({ message: { key: mediaInfo.messageKey }, convertToMp4: false }),
+            }
+          );
+          if (mediaResponse.ok) {
+            const mediaData = await mediaResponse.json();
+            mediaBase64 = mediaData.base64 || null;
+            mediaMimeType = mediaData.mimetype || (mediaInfo.mediaType === "image" ? "image/jpeg" : mediaInfo.mediaType === "document" ? "application/pdf" : "image/webp");
+            console.log("Media fetched for vision, size:", mediaBase64?.length || 0);
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching media for vision:", e);
+      }
+    }
+    
+    // Fallback: check recent messages for media_key if no explicit mediaInfo
+    if (!mediaBase64) {
+      const lastMediaMsg = [...recentMessages].reverse().find((m: any) => m.media_key && !m.from_me && (m.type === "image" || m.type === "document"));
+      if (lastMediaMsg) {
+        try {
+          const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+          const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+          const { data: inst } = await supabase.from("whatsapp_instances").select("instance_name").eq("user_id", userId).maybeSingle();
+          
+          if (evolutionUrl && evolutionKey && inst) {
+            console.log("Fetching media from conversation history for vision:", lastMediaMsg.media_type);
+            const mediaResponse = await fetch(
+              `${evolutionUrl}/chat/getBase64FromMediaMessage/${inst.instance_name}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json", apikey: evolutionKey },
+                body: JSON.stringify({ message: { key: lastMediaMsg.media_key }, convertToMp4: false }),
+              }
+            );
+            if (mediaResponse.ok) {
+              const mediaData = await mediaResponse.json();
+              mediaBase64 = mediaData.base64 || null;
+              mediaMimeType = mediaData.mimetype || (lastMediaMsg.media_type === "image" ? "image/jpeg" : "application/pdf");
+              console.log("Media fetched from history, size:", mediaBase64?.length || 0);
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching media from history:", e);
+        }
+      }
+    }
+
     // Get knowledge base documents
     const { data: documents } = await supabase
       .from("knowledge_base_documents")
@@ -315,6 +379,13 @@ REGRAS CRÍTICAS - NUNCA VIOLE:
 - OBRIGATÓRIO: NUNCA simule ou finja ter criado um agendamento. O agendamento SÓ existe quando a ferramenta create_appointment retorna success: true.
 - Se o cliente confirmou todos os dados (data, horário, serviço, nome), chame create_appointment IMEDIATAMENTE. Não peça mais confirmações desnecessárias.
 
+ANÁLISE DE IMAGENS E DOCUMENTOS:
+- Quando o cliente enviar uma imagem ou documento, você receberá o conteúdo visual diretamente.
+- Analise o conteúdo da imagem/documento e responda de forma contextualizada.
+- Se for um documento (PDF, etc), extraia as informações relevantes e responda baseado nelas.
+- Se for uma imagem com texto, leia e interprete o texto.
+- Se for uma foto, descreva e responda de acordo com o contexto da conversa.
+
 Regras adicionais:
 - Responda de forma natural e conversacional
 - Seja objetivo e direto
@@ -331,8 +402,21 @@ Regras adicionais:
       parts: [{ text: msg.content }],
     }));
 
-    // Add current message
-    conversationMessages.push({ role: "user", parts: [{ text: messageContent }] });
+    // Add current message (with media if available)
+    const currentMessageParts: any[] = [];
+    if (mediaBase64 && mediaMimeType) {
+      // Include the actual image/document for Gemini Vision analysis
+      currentMessageParts.push({
+        inline_data: {
+          mime_type: mediaMimeType,
+          data: mediaBase64,
+        },
+      });
+      currentMessageParts.push({ text: messageContent || "Analise esta imagem/documento e responda de acordo com o contexto da conversa." });
+    } else {
+      currentMessageParts.push({ text: messageContent });
+    }
+    conversationMessages.push({ role: "user", parts: currentMessageParts });
 
     // Call Gemini with function calling
     const geminiPayload = {
