@@ -456,14 +456,15 @@ function InterviewTab({
           </ScrollArea>
 
           <div className="border-t p-4">
-            <div className="flex gap-2">
-              <Input
+            <div className="flex gap-2 items-end">
+              <Textarea
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Digite sua resposta..."
                 disabled={isLoading}
-                className="flex-1"
+                className="flex-1 min-h-[80px] max-h-[200px] resize-y"
+                rows={3}
               />
               <Button
                 onClick={handleSend}
@@ -580,8 +581,8 @@ const ChatPanel = ({
       </ScrollArea>
 
       <div className="border-t p-4 shrink-0">
-        <div className="flex gap-2">
-          <Input
+        <div className="flex gap-2 items-end">
+          <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -592,7 +593,8 @@ const ChatPanel = ({
             }}
             placeholder={placeholder}
             disabled={loading}
-            className="flex-1"
+            className="flex-1 min-h-[80px] max-h-[200px] resize-y"
+            rows={3}
           />
           <Button onClick={onSend} disabled={!input.trim() || loading} size="icon">
             <Send className="h-4 w-4" />
