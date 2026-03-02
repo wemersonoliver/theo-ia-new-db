@@ -174,6 +174,15 @@ serve(async (req) => {
           .select()
           .single();
 
+        // Also update contact_name on the conversation if we have a name
+        if (contactName && phone) {
+          await supabase
+            .from("whatsapp_conversations")
+            .update({ contact_name: contactName, updated_at: new Date().toISOString() })
+            .eq("user_id", userId)
+            .eq("phone", phone);
+        }
+
         if (error) {
           console.error("Error creating appointment:", error);
           return new Response(JSON.stringify({ 
@@ -444,6 +453,18 @@ function formatDate(dateStr: string): string {
 
 async function notifyAppointment(supabase: any, userId: string, contactName: string | null, clientPhone: string, date: string, time: string, title: string) {
   try {
+    // Try to get the name from conversation if not provided
+    let displayName = contactName || null;
+    if (!displayName) {
+      const { data: conv } = await supabase
+        .from("whatsapp_conversations")
+        .select("contact_name")
+        .eq("user_id", userId)
+        .eq("phone", clientPhone)
+        .maybeSingle();
+      displayName = conv?.contact_name || "Desconhecido";
+    }
+
     const { data: notifContacts } = await supabase
       .from("notification_contacts")
       .select("phone")
@@ -452,7 +473,6 @@ async function notifyAppointment(supabase: any, userId: string, contactName: str
 
     if (!notifContacts || notifContacts.length === 0) return;
 
-    const displayName = contactName || "Desconhecido";
     const message = `📅 *Novo Agendamento*\n\n👤 *Cliente:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n📋 *Serviço:* ${title}\n🗓️ *Data:* ${formatDate(date)}\n⏰ *Horário:* ${time}`;
 
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
