@@ -174,16 +174,24 @@ ${testConversationText}
     let promptUpdated = false;
     let newPromptValue = "";
     let functionCallsProcessed = 0;
-    const maxFunctionCalls = 3;
+    const maxFunctionCalls = 5;
 
     while (functionCallsProcessed < maxFunctionCalls) {
       const geminiRes = await fetchGeminiWithRetry(geminiApiKey, geminiPayload);
 
       const geminiData = await geminiRes.json();
+      console.log("Gemini response candidates:", JSON.stringify(geminiData.candidates?.map((c: any) => ({
+        finishReason: c.finishReason,
+        partsTypes: c.content?.parts?.map((p: any) => Object.keys(p))
+      }))));
+      
       const candidate = geminiData.candidates?.[0];
       const content = candidate?.content;
 
-      if (!content?.parts) break;
+      if (!content?.parts) {
+        console.error("No content parts in response", JSON.stringify(geminiData).slice(0, 500));
+        break;
+      }
 
       const functionCall = content.parts.find((p: any) => p.functionCall);
 
@@ -192,11 +200,17 @@ ${testConversationText}
         console.log("Prompt generator - Function call:", fc.name, JSON.stringify(fc.args).slice(0, 200));
 
         if (fc.name === "update_agent_prompt" && fc.args?.new_prompt) {
-          // Update the prompt in the database
-          const { error: updateError } = await supabase
+          // Use service role client to ensure the update succeeds
+          const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+          const adminClient = createClient(supabaseUrl, serviceRoleKey);
+          
+          // Use upsert to handle case where no row exists yet
+          const { error: updateError } = await adminClient
             .from("whatsapp_ai_config")
-            .update({ custom_prompt: fc.args.new_prompt })
-            .eq("user_id", userId);
+            .upsert(
+              { user_id: userId, custom_prompt: fc.args.new_prompt },
+              { onConflict: "user_id" }
+            );
 
           let functionResult: any;
           if (updateError) {
@@ -209,6 +223,7 @@ ${testConversationText}
               success: true,
               message: "Prompt atualizado com sucesso no banco de dados!",
             };
+            console.log("Prompt updated successfully for user:", userId);
           }
 
           geminiPayload.contents.push(content);
@@ -229,10 +244,22 @@ ${testConversationText}
         }
       }
 
-      // Text response
-      const textPart = content.parts.find((p: any) => p.text);
-      if (textPart) {
-        aiReply = textPart.text;
+      // Text response - collect text from all parts (skip thinking parts)
+      const textParts = content.parts.filter((p: any) => p.text !== undefined);
+      if (textParts.length > 0) {
+        aiReply = textParts.map((p: any) => p.text).join("");
+        console.log("AI reply length:", aiReply.length);
+      } else {
+        // Model returned only thinking/other parts, no text - continue to get actual response
+        console.log("No text parts found, parts types:", content.parts.map((p: any) => Object.keys(p)));
+        // Don't break - add the content and ask for a text response
+        geminiPayload.contents.push(content);
+        geminiPayload.contents.push({
+          role: "user",
+          parts: [{ text: "Continue com sua resposta em texto." }],
+        });
+        functionCallsProcessed++;
+        continue;
       }
       break;
     }
