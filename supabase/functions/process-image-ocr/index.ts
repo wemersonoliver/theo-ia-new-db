@@ -96,27 +96,29 @@ Responda de forma concisa e direta, sem formatação especial.`,
       },
     };
 
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(geminiPayload),
-      }
-    );
+    let geminiResponse: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(geminiPayload),
+        }
+      );
 
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text();
-      console.error("Gemini Vision error:", errorText);
-      
       if (geminiResponse.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded" }), { 
-          status: 429, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        });
+        const waitMs = Math.pow(2, attempt) * 2000 + Math.random() * 1000;
+        console.log(`OCR Gemini 429, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/3)`);
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
       }
+      break;
+    }
+
+    if (!geminiResponse || !geminiResponse.ok) {
+      const errorText = geminiResponse ? await geminiResponse.text() : "No response";
+      console.error("Gemini Vision error:", errorText);
       
       return new Response(JSON.stringify({ error: "OCR processing failed" }), { 
         status: 500, 

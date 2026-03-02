@@ -120,6 +120,32 @@ const schedulingTools = {
   ]
 };
 
+// Retry with exponential backoff for Gemini API rate limits
+async function fetchGeminiWithRetry(apiKey: string, payload: any, maxRetries = 3): Promise<any> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (response.status === 429) {
+      const retryAfter = response.headers.get("Retry-After");
+      const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : Math.pow(2, attempt) * 2000 + Math.random() * 1000;
+      console.log(`Gemini 429 rate limit, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise(r => setTimeout(r, waitMs));
+      continue;
+    }
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Gemini error:", errText);
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+    return response;
+  }
+  throw new Error("Gemini API rate limit exceeded after retries. Aguarde alguns segundos e tente novamente.");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -252,20 +278,7 @@ CONTEXTO: Esta é uma SIMULAÇÃO DE TESTE. Responda como se fosse um atendiment
     const maxFunctionCalls = 3;
 
     while (functionCallsProcessed < maxFunctionCalls) {
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(geminiPayload),
-        }
-      );
-
-      if (!geminiRes.ok) {
-        const errText = await geminiRes.text();
-        console.error("Gemini error:", errText);
-        throw new Error(`Gemini API error: ${geminiRes.status}`);
-      }
+      const geminiRes = await fetchGeminiWithRetry(geminiApiKey, geminiPayload);
 
       const geminiData = await geminiRes.json();
       const candidate = geminiData.candidates?.[0];
