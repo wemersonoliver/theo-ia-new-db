@@ -369,7 +369,7 @@ async function triggerAIResponse(supabase: any, userId: string, phone: string, m
       const scheduledAt = new Date(Date.now() + delay * 1000).toISOString();
       
       // Upsert pending response - this resets the timer on each new message
-      await supabase
+      const { error: upsertError } = await supabase
         .from("whatsapp_pending_responses")
         .upsert({
           user_id: userId,
@@ -379,23 +379,24 @@ async function triggerAIResponse(supabase: any, userId: string, phone: string, m
           updated_at: new Date().toISOString(),
         }, { onConflict: "user_id,phone" });
       
+      if (upsertError) {
+        console.error("Error upserting pending response:", upsertError);
+      }
+      
       console.log(`AI response scheduled for ${phone} in ${delay}s`);
       
-      // Schedule the processing after delay
-      setTimeout(async () => {
-        try {
-          await fetch(`${supabaseUrl}/functions/v1/process-pending-ai`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${serviceKey}`,
-            },
-            body: JSON.stringify({ userId, phone }),
-          });
-        } catch (err) {
-          console.error("Error calling process-pending-ai:", err);
-        }
-      }, delay * 1000);
+      // Call process-pending-ai immediately (it will sleep internally until scheduled_at)
+      // Use fire-and-forget fetch (don't await) so the webhook responds quickly
+      fetch(`${supabaseUrl}/functions/v1/process-pending-ai`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({ userId, phone, delayMs: delay * 1000 }),
+      }).catch(err => {
+        console.error("Error calling process-pending-ai:", err);
+      });
       
       return;
     }

@@ -17,7 +17,7 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { userId, phone } = await req.json();
+    const { userId, phone, delayMs } = await req.json();
 
     if (!userId || !phone) {
       return new Response(JSON.stringify({ error: "Missing parameters" }), { 
@@ -25,6 +25,12 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
       });
     }
+
+    // Sleep for the configured delay before checking pending responses
+    // This ensures the debounce window has passed
+    const sleepTime = delayMs || 5000;
+    console.log(`Sleeping ${sleepTime}ms before processing for: ${phone}`);
+    await new Promise(resolve => setTimeout(resolve, sleepTime));
 
     // Check if there's a pending response that should be processed now
     const { data: pending, error: pendingError } = await supabase
