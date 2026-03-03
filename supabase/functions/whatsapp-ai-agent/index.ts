@@ -378,12 +378,56 @@ serve(async (req) => {
     const todayStr = today.toISOString().split("T")[0];
     const todayFormatted = today.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 
+    // Check if this client has upcoming appointments with reminder_sent (pending confirmation)
+    let pendingConfirmationContext = "";
+    try {
+      const { data: pendingAppointments } = await supabase
+        .from("appointments")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("phone", phone)
+        .eq("reminder_sent", true)
+        .eq("status", "scheduled")
+        .gte("appointment_date", todayStr)
+        .order("appointment_date", { ascending: true })
+        .order("appointment_time", { ascending: true })
+        .limit(3);
+
+      if (pendingAppointments && pendingAppointments.length > 0) {
+        const aptList = pendingAppointments.map((a: any) => {
+          const [h, m] = a.appointment_time.split(":");
+          const dateObj = new Date(a.appointment_date + "T00:00:00");
+          const dateFormatted = dateObj.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+          return `- ID: ${a.id} | ${a.title} em ${dateFormatted} às ${h}:${m}`;
+        }).join("\n");
+
+        pendingConfirmationContext = `
+CONTEXTO IMPORTANTE - CONFIRMAÇÃO DE AGENDAMENTO:
+Este cliente recebeu um lembrete automático sobre o(s) seguinte(s) agendamento(s) pendente(s) de confirmação:
+${aptList}
+
+REGRAS DE CONFIRMAÇÃO:
+1. Se o cliente confirmar a presença (ex: "sim", "confirmo", "vou sim", "confirmado", "ok", "pode ser", "estarei lá"), use a ferramenta confirm_appointment IMEDIATAMENTE.
+2. Se o cliente disser que NÃO pode ir (ex: "não posso", "não vou conseguir", "preciso remarcar", "cancela", "reagenda"), faça o seguinte:
+   a. Pergunte se deseja CANCELAR ou REAGENDAR
+   b. Se quiser cancelar: use cancel_appointment com a data e hora do agendamento
+   c. Se quiser reagendar: primeiro cancele o agendamento atual, depois inicie o fluxo de reagendamento (pergunte nova data/horário, verifique disponibilidade, crie novo agendamento)
+3. NÃO faça perguntas desnecessárias. Se o cliente claramente confirma ou nega, aja imediatamente.
+4. Seja empático e natural na resposta.
+`;
+      }
+    } catch (e) {
+      console.error("Error checking pending confirmations:", e);
+    }
+
     // Build system prompt with scheduling capabilities
     const systemPrompt = `Você é ${aiConfig.agent_name || "um assistente virtual"} de atendimento via WhatsApp.
 
 ${aiConfig.custom_prompt || "Seja cordial, profissional e prestativo."}
 
 ${knowledgeBase ? `Use a seguinte base de conhecimento para responder:\n\n${knowledgeBase.slice(0, 6000)}` : ""}
+
+${pendingConfirmationContext}
 
 IMPORTANTE - AGENDAMENTOS:
 Você tem acesso a ferramentas para gerenciar agendamentos. Quando o cliente:
@@ -393,6 +437,7 @@ Você tem acesso a ferramentas para gerenciar agendamentos. Quando o cliente:
 - Quiser ver seus agendamentos: Use list_appointments
 - Confirmar presença (responder "sim", "confirmo", "confirmado", "vou sim", etc.): Use confirm_appointment
 - O sistema envia lembretes automáticos. Quando o cliente responder confirmando, use confirm_appointment imediatamente.
+- Quando o cliente responder que não pode ir, ofereça reagendamento: cancele o atual e inicie novo agendamento.
 
 Hoje é ${todayFormatted} (${todayStr}).
 Ao mencionar datas, converta para o formato YYYY-MM-DD para as funções.

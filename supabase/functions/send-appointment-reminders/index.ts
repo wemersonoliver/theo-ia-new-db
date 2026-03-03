@@ -73,12 +73,9 @@ serve(async (req) => {
         let shouldSendNow = false;
 
         if (isToday) {
-          // For today's appointments: send if we're within the reminder window
           const reminderTime = aptMinutes - (hoursBefore * 60);
           
           if (reminderTime < businessStartMinutes) {
-            // Reminder time falls before business hours - should have been sent yesterday
-            // Send immediately if we're in business hours now and appointment is still ahead
             if (currentMinutes >= businessStartMinutes && currentMinutes <= businessEndMinutes && aptMinutes > currentMinutes) {
               shouldSendNow = true;
             }
@@ -86,12 +83,9 @@ serve(async (req) => {
             shouldSendNow = true;
           }
         } else if (isTomorrow) {
-          // For tomorrow's appointments: check if reminder should be sent today
           const reminderTime = aptMinutes - (hoursBefore * 60);
 
           if (reminderTime < businessStartMinutes) {
-            // Reminder falls before business hours tomorrow
-            // Send today, 2 hours before end of business
             const sendTime = businessEndMinutes - 120;
             if (currentMinutes >= sendTime && currentMinutes <= businessEndMinutes) {
               shouldSendNow = true;
@@ -127,8 +121,31 @@ serve(async (req) => {
         // Save message to conversation
         await saveMessageToConversation(supabase, userId, apt.phone, message);
 
+        // *** CRITICAL: Activate AI for this conversation so the AI handles the client response ***
+        // 1. Ensure ai_active is true on the conversation
+        await supabase
+          .from("whatsapp_conversations")
+          .update({ 
+            ai_active: true, 
+            updated_at: new Date().toISOString() 
+          })
+          .eq("user_id", userId)
+          .eq("phone", apt.phone);
+
+        // 2. Reset/activate the AI session so the AI can process the client's response
+        //    Reset messages_without_human to 0 so it doesn't hit the limit
+        await supabase
+          .from("whatsapp_ai_sessions")
+          .upsert({
+            user_id: userId,
+            phone: apt.phone,
+            status: "active",
+            messages_without_human: 0,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "user_id,phone" });
+
         totalSent++;
-        console.log(`Reminder sent for appointment ${apt.id} to ${apt.phone}`);
+        console.log(`Reminder sent for appointment ${apt.id} (${apt.title}) to ${apt.phone}. AI session activated for confirmation.`);
       }
     }
 
@@ -196,7 +213,7 @@ async function saveMessageToConversation(supabase: any, userId: string, phone: s
     from_me: true,
     content,
     type: "text",
-    sent_by: "system",
+    sent_by: "ai",
   };
 
   if (conversation) {
