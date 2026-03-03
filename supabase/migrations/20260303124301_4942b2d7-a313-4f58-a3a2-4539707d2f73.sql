@@ -1,0 +1,1 @@
+ALTER TABLE public.appointment_slots ADD CONSTRAINT appointment_slots_user_day_time_unique UNIQUE (user_id, day_of_week, start_time);
