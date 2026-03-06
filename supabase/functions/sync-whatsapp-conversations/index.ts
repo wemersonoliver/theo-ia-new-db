@@ -119,7 +119,7 @@ serve(async (req) => {
 
         // Transform messages to our format
         const formattedMessages = rawMessages
-          .filter((msg: any) => msg && (msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage || msg.message?.audioMessage || msg.message?.documentMessage))
+          .filter((msg: any) => msg && msg.key && msg.message)
           .map((msg: any) => {
             const isFromMe = msg.key?.fromMe === true;
             let content: string;
@@ -131,12 +131,19 @@ serve(async (req) => {
             } else if (msg.message?.imageMessage) {
               messageType = "image";
               content = msg.message.imageMessage.caption || "[Imagem]";
+            } else if (msg.message?.videoMessage) {
+              messageType = "video";
+              content = msg.message.videoMessage.caption || "[Vídeo]";
             } else if (msg.message?.documentMessage) {
               messageType = "document";
               content = msg.message.documentMessage.caption || `[Documento: ${msg.message.documentMessage.fileName || "arquivo"}]`;
+            } else if (msg.message?.stickerMessage) {
+              messageType = "image";
+              content = "[Sticker]";
             } else {
               content = msg.message?.conversation ||
                 msg.message?.extendedTextMessage?.text ||
+                msg.message?.templateMessage?.hydratedTemplate?.hydratedContentText ||
                 "[Mídia]";
             }
 
