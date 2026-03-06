@@ -83,6 +83,21 @@ serve(async (req) => {
           .eq("user_id", userId);
 
         console.log("WhatsApp connected for user:", userId);
+
+        // Trigger conversation sync in background (fire-and-forget)
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        fetch(`${supabaseUrl}/functions/v1/sync-whatsapp-conversations`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({ userId, instanceName }),
+        }).catch(err => {
+          console.error("Error triggering conversation sync:", err);
+        });
+        console.log("Conversation sync triggered for user:", userId);
       } else if (state === "close" || state === "disconnected") {
         await supabase
           .from("whatsapp_instances")
