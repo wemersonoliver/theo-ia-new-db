@@ -173,8 +173,7 @@ serve(async (req) => {
           .maybeSingle();
 
         if (existing && existing.messages && (existing.messages as any[]).length > 0) {
-          // Already has messages, skip to avoid duplicates
-          console.log(`Skipping ${phone} - already has ${(existing.messages as any[]).length} messages`);
+          // Already has messages, skip (conversation already synced)
           continue;
         }
 
