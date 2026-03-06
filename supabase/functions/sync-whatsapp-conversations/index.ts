@@ -94,20 +94,32 @@ serve(async (req) => {
         });
 
         if (!messagesResponse.ok) {
-          console.error(`Failed to fetch messages for ${phone}`);
+          console.error(`Failed to fetch messages for ${phone}:`, await messagesResponse.text());
           continue;
         }
 
         const messagesData = await messagesResponse.json();
-        const rawMessages = Array.isArray(messagesData) 
-          ? messagesData 
-          : messagesData?.messages || messagesData?.records || [];
+        
+        // Handle different response formats from Evolution API
+        let rawMessages: any[];
+        if (Array.isArray(messagesData)) {
+          rawMessages = messagesData;
+        } else if (messagesData?.messages?.records && Array.isArray(messagesData.messages.records)) {
+          rawMessages = messagesData.messages.records;
+        } else if (messagesData?.messages && Array.isArray(messagesData.messages)) {
+          rawMessages = messagesData.messages;
+        } else if (messagesData?.records && Array.isArray(messagesData.records)) {
+          rawMessages = messagesData.records;
+        } else {
+          console.log(`No messages found for ${phone}`);
+          rawMessages = [];
+        }
 
         if (rawMessages.length === 0) continue;
 
         // Transform messages to our format
         const formattedMessages = rawMessages
-          .filter((msg: any) => msg && (msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage || msg.message?.audioMessage || msg.message?.documentMessage))
+          .filter((msg: any) => msg && msg.key && msg.message)
           .map((msg: any) => {
             const isFromMe = msg.key?.fromMe === true;
             let content: string;
@@ -119,12 +131,19 @@ serve(async (req) => {
             } else if (msg.message?.imageMessage) {
               messageType = "image";
               content = msg.message.imageMessage.caption || "[Imagem]";
+            } else if (msg.message?.videoMessage) {
+              messageType = "video";
+              content = msg.message.videoMessage.caption || "[Vídeo]";
             } else if (msg.message?.documentMessage) {
               messageType = "document";
               content = msg.message.documentMessage.caption || `[Documento: ${msg.message.documentMessage.fileName || "arquivo"}]`;
+            } else if (msg.message?.stickerMessage) {
+              messageType = "image";
+              content = "[Sticker]";
             } else {
               content = msg.message?.conversation ||
                 msg.message?.extendedTextMessage?.text ||
+                msg.message?.templateMessage?.hydratedTemplate?.hydratedContentText ||
                 "[Mídia]";
             }
 
@@ -161,8 +180,7 @@ serve(async (req) => {
           .maybeSingle();
 
         if (existing && existing.messages && (existing.messages as any[]).length > 0) {
-          // Already has messages, skip to avoid duplicates
-          console.log(`Skipping ${phone} - already has ${(existing.messages as any[]).length} messages`);
+          // Already has messages, skip (conversation already synced)
           continue;
         }
 
