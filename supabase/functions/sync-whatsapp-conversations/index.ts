@@ -94,14 +94,32 @@ serve(async (req) => {
         });
 
         if (!messagesResponse.ok) {
-          console.error(`Failed to fetch messages for ${phone}`);
+          console.error(`Failed to fetch messages for ${phone}:`, await messagesResponse.text());
           continue;
         }
 
         const messagesData = await messagesResponse.json();
-        const rawMessages = Array.isArray(messagesData) 
-          ? messagesData 
-          : messagesData?.messages || messagesData?.records || [];
+        
+        // Handle different response formats from Evolution API
+        let rawMessages: any[];
+        if (Array.isArray(messagesData)) {
+          rawMessages = messagesData;
+        } else if (messagesData?.messages && Array.isArray(messagesData.messages)) {
+          rawMessages = messagesData.messages;
+        } else if (messagesData?.records && Array.isArray(messagesData.records)) {
+          rawMessages = messagesData.records;
+        } else if (typeof messagesData === "object" && messagesData !== null) {
+          // Try to find any array property in the response
+          const arrayProp = Object.values(messagesData).find(v => Array.isArray(v));
+          if (arrayProp) {
+            rawMessages = arrayProp as any[];
+          } else {
+            console.log(`Unexpected findMessages response for ${phone}:`, JSON.stringify(messagesData).slice(0, 300));
+            rawMessages = [];
+          }
+        } else {
+          rawMessages = [];
+        }
 
         if (rawMessages.length === 0) continue;
 
