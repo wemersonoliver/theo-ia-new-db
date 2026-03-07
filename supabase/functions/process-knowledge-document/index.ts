@@ -87,8 +87,8 @@ serve(async (req) => {
       }
     }
 
-    // Update document with extracted text
-    await supabase
+    // Update document with extracted text (use service role to bypass RLS)
+    const { error: updateError } = await serviceSupabase
       .from("knowledge_base_documents")
       .update({
         content_text: extractedText.slice(0, 50000), // Limit to 50k chars
@@ -96,6 +96,10 @@ serve(async (req) => {
       })
       .eq("user_id", userId)
       .eq("file_path", filePath);
+
+    if (updateError) {
+      console.error("Update error:", updateError);
+    }
 
     console.log(`Document processed: ${fileName}, ${extractedText.length} chars`);
 
