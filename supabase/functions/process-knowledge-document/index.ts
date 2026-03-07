@@ -57,7 +57,7 @@ serve(async (req) => {
 
     if (downloadError || !fileData) {
       console.error("Download error:", downloadError);
-      await updateDocumentStatus(supabase, userId, filePath, "error");
+      await updateDocumentStatus(serviceSupabase, userId, filePath, "error");
       return new Response(JSON.stringify({ error: "Failed to download file" }), { 
         status: 500, 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
@@ -87,8 +87,8 @@ serve(async (req) => {
       }
     }
 
-    // Update document with extracted text
-    await supabase
+    // Update document with extracted text (use service role to bypass RLS)
+    const { error: updateError } = await serviceSupabase
       .from("knowledge_base_documents")
       .update({
         content_text: extractedText.slice(0, 50000), // Limit to 50k chars
@@ -96,6 +96,10 @@ serve(async (req) => {
       })
       .eq("user_id", userId)
       .eq("file_path", filePath);
+
+    if (updateError) {
+      console.error("Update error:", updateError);
+    }
 
     console.log(`Document processed: ${fileName}, ${extractedText.length} chars`);
 
@@ -116,8 +120,8 @@ serve(async (req) => {
   }
 });
 
-async function updateDocumentStatus(supabase: any, userId: string, filePath: string, status: string) {
-  await supabase
+async function updateDocumentStatus(serviceClient: any, userId: string, filePath: string, status: string) {
+  await serviceClient
     .from("knowledge_base_documents")
     .update({ status })
     .eq("user_id", userId)
