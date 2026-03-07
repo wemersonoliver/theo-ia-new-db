@@ -102,12 +102,13 @@ function InterviewTab({
     };
   }, []);
 
-  const startLoadingAnimation = () => {
-    let idx = Math.floor(Math.random() * LOADING_MESSAGES.length);
-    setLoadingText(LOADING_MESSAGES[idx]);
+  const startLoadingAnimation = (useAnalysisMessages = false) => {
+    const msgs = useAnalysisMessages ? ANALYSIS_LOADING_MESSAGES : LOADING_MESSAGES;
+    let idx = Math.floor(Math.random() * msgs.length);
+    setLoadingText(msgs[idx]);
     loadingIntervalRef.current = setInterval(() => {
-      idx = (idx + 1) % LOADING_MESSAGES.length;
-      setLoadingText(LOADING_MESSAGES[idx]);
+      idx = (idx + 1) % msgs.length;
+      setLoadingText(msgs[idx]);
     }, 2000);
   };
 
