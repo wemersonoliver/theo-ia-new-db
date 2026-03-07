@@ -51,11 +51,28 @@ Pergunte como o agente deve se comportar:
 - Qual tom de voz? (formal, informal, descontraído, técnico)
 - Alguma expressão ou saudação característica da marca?
 
+PASSO 5 — ANÁLISE DE CONVERSAS REAIS (OBRIGATÓRIO — antes de gerar o prompt):
+Após coletar TODOS os dados obrigatórios e definir a persona, faça a seguinte pergunta:
+"Antes de gerar o prompt final, posso analisar suas conversas reais do WhatsApp para identificar padrões de atendimento, dúvidas frequentes dos seus clientes e melhorar ainda mais o treinamento da IA? 🔍"
+
+Se o usuário aceitar, faça a segunda pergunta:
+"Ótimo! Você prefere:
+1️⃣ **Indicar números específicos** — me envie entre 5 e 30 números de clientes (com DDD, separados por vírgula) para eu analisar especificamente essas conversas
+2️⃣ **Análise automática** — eu busco automaticamente suas conversas mais recentes e identifico quais são com clientes
+
+Qual opção prefere?"
+
+IMPORTANTE sobre as respostas de análise de conversas:
+- Se o usuário RECUSAR a análise, responda com: "[SKIP_ANALYSIS]" em uma linha separada, depois continue normalmente para gerar o prompt com [FINISH]
+- Se o usuário ACEITAR e escolher ANÁLISE AUTOMÁTICA ou disser algo como "automático", "opção 2", "busca automático", responda com: "[ANALYZE_AUTO]" em uma linha separada, depois aguarde o resultado da análise
+- Se o usuário ACEITAR e enviar NÚMEROS, responda com: "[ANALYZE_PHONES]" em uma linha separada, depois liste os números que ele enviou, depois aguarde o resultado da análise
+- Se o usuário aceitar mas não escolher entre as opções ainda, pergunte qual opção prefere
+
 REGRAS ABSOLUTAS:
 1. Faça EXATAMENTE UMA pergunta por vez, de forma conversacional e amigável
 2. Adapte cada pergunta com base nas respostas anteriores — seja contextual
 3. Use seu conhecimento sobre dores e dúvidas frequentes do segmento informado
-4. A entrevista deve ter NO MÍNIMO 7 perguntas e NO MÁXIMO 12
+4. A entrevista deve ter NO MÍNIMO 7 perguntas e NO MÁXIMO 12 (sem contar as de análise de conversas)
 5. NUNCA encerre antes de ter coletado TODOS os itens do checklist obrigatório
 6. Se o usuário der uma resposta vaga ou incompleta, peça para detalhar mais
 7. AO ENCERRAR: escreva exatamente a tag [FINISH] em uma linha separada, seguida IMEDIATAMENTE pelo PROMPT MESTRE COMPLETO
@@ -81,7 +98,121 @@ ESTRUTURA OBRIGATÓRIA DO PROMPT MESTRE (após [FINISH]):
 IMPORTANTE: 
 - O prompt gerado deve conter TODOS os dados coletados durante a entrevista (valores, horários, modalidades, endereço, etc.) — NÃO use placeholders genéricos
 - O prompt deve refletir FIELMENTE a intenção de uso informada pelo usuário
-- Se for pré-atendimento, o prompt NÃO deve ter linguagem de vendas agressiva`;
+- Se for pré-atendimento, o prompt NÃO deve ter linguagem de vendas agressiva
+- Se a análise de conversas foi realizada, INCORPORE os padrões reais identificados no prompt (dúvidas frequentes reais, objeções reais, informações que o atendente sempre fornece, tom real usado)`;
+
+const CONVERSATION_ANALYSIS_PROMPT = `Analise as conversas de WhatsApp abaixo de um negócio. Para cada conversa:
+1. Classifique: CONVERSA COM CLIENTE ou CONVERSA PESSOAL/IRRELEVANTE
+2. Se for com CLIENTE, extraia:
+   - Dúvidas e perguntas feitas pelo cliente
+   - Informações fornecidas pelo atendente (preços, horários, serviços, etc.)
+   - Objeções ou hesitações do cliente
+   - Produtos/serviços mencionados
+   - Tom predominante da conversa
+
+Retorne um RESUMO CONSOLIDADO apenas das conversas com clientes contendo:
+- **TOP DÚVIDAS FREQUENTES**: As perguntas mais feitas pelos clientes
+- **INFORMAÇÕES PADRÃO FORNECIDAS**: Dados que o atendente sempre informa
+- **OBJEÇÕES COMUNS**: Hesitações e objeções recorrentes
+- **PRODUTOS/SERVIÇOS MENCIONADOS**: Com preços e detalhes quando disponíveis
+- **TOM DO ATENDIMENTO**: Como a empresa costuma se comunicar
+- **PADRÕES DE ATENDIMENTO**: Fluxos comuns identificados (saudação, apresentação, fechamento)
+
+Se nenhuma conversa for relevante (todas pessoais), retorne: "Nenhuma conversa comercial identificada."
+
+CONVERSAS PARA ANÁLISE:
+`;
+
+async function fetchAndAnalyzeConversations(
+  userId: string,
+  specificPhones?: string[]
+): Promise<string | null> {
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  let query = supabaseAdmin
+    .from("whatsapp_conversations")
+    .select("phone, contact_name, messages")
+    .eq("user_id", userId)
+    .order("last_message_at", { ascending: false });
+
+  if (specificPhones && specificPhones.length > 0) {
+    query = query.in("phone", specificPhones);
+  } else {
+    query = query.limit(50);
+  }
+
+  const { data: conversations, error } = await query;
+
+  if (error) {
+    console.error("Error fetching conversations:", error);
+    return null;
+  }
+
+  if (!conversations || conversations.length === 0) {
+    return "Nenhuma conversa encontrada para análise.";
+  }
+
+  // Format conversations for analysis (limit 30 messages per conversation)
+  let conversationsText = "";
+  for (const conv of conversations) {
+    const msgs = Array.isArray(conv.messages) ? conv.messages : [];
+    const recentMsgs = msgs.slice(-30);
+
+    if (recentMsgs.length === 0) continue;
+
+    conversationsText += `\n--- CONVERSA: ${conv.contact_name || conv.phone} (${conv.phone}) ---\n`;
+    for (const msg of recentMsgs) {
+      const sender = (msg as any).from_me ? "ATENDENTE" : "CONTATO";
+      const content = (msg as any).content || "";
+      if (content.trim()) {
+        conversationsText += `${sender}: ${content}\n`;
+      }
+    }
+  }
+
+  if (!conversationsText.trim()) {
+    return "Nenhuma conversa com conteúdo encontrada.";
+  }
+
+  // Call Gemini to analyze conversations
+  const geminiBody = {
+    system_instruction: {
+      parts: [{ text: CONVERSATION_ANALYSIS_PROMPT }],
+    },
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: conversationsText }],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 4096,
+    },
+  };
+
+  const geminiRes = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(geminiBody),
+  });
+
+  if (!geminiRes.ok) {
+    console.error("Gemini analysis error:", await geminiRes.text());
+    return null;
+  }
+
+  const geminiData = await geminiRes.json();
+  const analysis = geminiData.candidates?.[0]?.content?.parts
+    ?.filter((p: any) => p.text && !p.thought)
+    ?.map((p: any) => p.text)
+    ?.join("") || "";
+
+  return analysis || null;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -114,24 +245,48 @@ serve(async (req) => {
 
     const userId = authData.claims.sub;
 
-    const { interviewId, companyName, segment, messages, userMessage } = await req.json();
+    const {
+      interviewId,
+      companyName,
+      segment,
+      messages,
+      userMessage,
+      analyzeConversations,
+      specificPhones,
+    } = await req.json();
 
     if (!GEMINI_API_KEY) {
       throw new Error("GOOGLE_GEMINI_API_KEY não configurada");
     }
 
-    // Monta o histórico de conversa para o Gemini
+    // If conversation analysis is requested, do it first
+    let conversationAnalysis: string | null = null;
+    if (analyzeConversations) {
+      console.log(
+        `Analyzing conversations for user ${userId}, specificPhones:`,
+        specificPhones || "auto"
+      );
+      conversationAnalysis = await fetchAndAnalyzeConversations(
+        userId as string,
+        specificPhones
+      );
+      console.log(
+        "Conversation analysis result length:",
+        conversationAnalysis?.length || 0
+      );
+    }
+
+    // Build conversation history for Gemini
     const contextIntro = `Empresa: "${companyName}" | Segmento: "${segment}"`;
-    
+
     const geminiContents = [];
-    
-    // Primeira mensagem do sistema como user turn (Gemini não aceita system role direto em contents)
+
     geminiContents.push({
       role: "user",
       parts: [{ text: `${contextIntro}\n\nInicie a entrevista consultiva.` }],
     });
 
-    // Adiciona histórico existente
+    // Add existing history
     for (const msg of messages) {
       geminiContents.push({
         role: msg.role === "assistant" ? "model" : "user",
@@ -139,11 +294,23 @@ serve(async (req) => {
       });
     }
 
-    // Adiciona a nova mensagem do usuário (se não for o início)
+    // Add new user message
     if (userMessage && messages.length > 0) {
       geminiContents.push({
         role: "user",
         parts: [{ text: userMessage }],
+      });
+    }
+
+    // If we have conversation analysis, inject it as context
+    if (conversationAnalysis) {
+      geminiContents.push({
+        role: "user",
+        parts: [
+          {
+            text: `[RESULTADO DA ANÁLISE DE CONVERSAS REAIS]\n\n${conversationAnalysis}\n\n---\n\nAgora, com base em TODOS os dados coletados na entrevista E nos padrões reais identificados nas conversas acima, gere o prompt mestre final com [FINISH]. Incorpore os padrões reais de atendimento, dúvidas frequentes e informações que os atendentes sempre fornecem.`,
+          },
+        ],
       });
     }
 
@@ -154,7 +321,7 @@ serve(async (req) => {
       contents: geminiContents,
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
       },
     };
 
@@ -172,24 +339,51 @@ serve(async (req) => {
 
     const geminiData = await geminiRes.json();
     const aiResponse =
-      geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      geminiData.candidates?.[0]?.content?.parts
+        ?.filter((p: any) => p.text && !p.thought)
+        ?.map((p: any) => p.text)
+        ?.join("") || "";
 
-    // Detecta se a entrevista terminou
+    // Detect special tags
     const hasFinished = aiResponse.includes("[FINISH]");
+    const requestAnalyzeAuto = aiResponse.includes("[ANALYZE_AUTO]");
+    const requestAnalyzePhones = aiResponse.includes("[ANALYZE_PHONES]");
+    const skipAnalysis = aiResponse.includes("[SKIP_ANALYSIS]");
+
     let generatedPrompt: string | null = null;
     let displayMessage = aiResponse;
 
+    // Clean tags from display message
+    displayMessage = displayMessage
+      .replace("[ANALYZE_AUTO]", "")
+      .replace("[ANALYZE_PHONES]", "")
+      .replace("[SKIP_ANALYSIS]", "")
+      .trim();
+
     if (hasFinished) {
       const parts = aiResponse.split("[FINISH]");
-      displayMessage = parts[0].trim() || "Entrevista concluída! O prompt foi gerado com sucesso.";
+      displayMessage =
+        parts[0]
+          .replace("[ANALYZE_AUTO]", "")
+          .replace("[ANALYZE_PHONES]", "")
+          .replace("[SKIP_ANALYSIS]", "")
+          .trim() || "Entrevista concluída! O prompt foi gerado com sucesso.";
       generatedPrompt = parts[1]?.trim() || "";
     }
 
-    // Atualiza o histórico no banco
+    // Update history in database
     if (interviewId) {
       const newMessages = [...messages];
       if (userMessage && messages.length > 0) {
         newMessages.push({ role: "user", content: userMessage });
+      }
+      // If analysis was injected, add a system note
+      if (conversationAnalysis && analyzeConversations) {
+        newMessages.push({
+          role: "assistant",
+          content:
+            "✅ Análise de conversas reais concluída! Incorporando padrões identificados no prompt...",
+        });
       }
       newMessages.push({ role: "assistant", content: displayMessage });
 
@@ -211,6 +405,9 @@ serve(async (req) => {
         message: displayMessage,
         finished: hasFinished,
         generatedPrompt,
+        requestAnalyzeAuto,
+        requestAnalyzePhones,
+        skipAnalysis,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
