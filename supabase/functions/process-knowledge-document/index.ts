@@ -57,7 +57,7 @@ serve(async (req) => {
 
     if (downloadError || !fileData) {
       console.error("Download error:", downloadError);
-      await updateDocumentStatus(supabase, userId, filePath, "error");
+      await updateDocumentStatus(serviceSupabase, userId, filePath, "error");
       return new Response(JSON.stringify({ error: "Failed to download file" }), { 
         status: 500, 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
