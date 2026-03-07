@@ -53,7 +53,7 @@ const cltVsTheo = [
 const faqItems = [
   { q: "Preciso ter conhecimento técnico?", a: "Não! O sistema é intuitivo e fácil de configurar. Em poucos minutos você conecta seu WhatsApp e começa a usar." },
   { q: "Funciona com qualquer tipo de negócio?", a: "Sim! Clínicas, escritórios, lojas, prestadores de serviço — qualquer negócio que atenda clientes pelo WhatsApp." },
-  { q: "E se eu quiser cancelar?", a: "Você pode cancelar a qualquer momento, sem multa ou burocracia. Nos primeiros 7 dias, é totalmente grátis." },
+  { q: "E se eu quiser cancelar?", a: "Você pode cancelar a qualquer momento, sem multa ou burocracia. Nos primeiros 30 dias, é totalmente grátis." },
   { q: "A IA substitui completamente o atendimento humano?", a: "A IA cuida do primeiro atendimento, qualificação e agendamentos. Quando necessário, transfere a conversa para um humano de forma transparente." },
   { q: "Quantos números de WhatsApp posso conectar?", a: "Você pode conectar seu número principal de WhatsApp e gerenciar todas as conversas pelo painel." },
   { q: "Como a IA aprende sobre meu negócio?", a: "Você alimenta a base de conhecimento com documentos, textos e informações sobre seus serviços. A IA usa isso para responder com precisão." },
@@ -103,7 +103,7 @@ export default function LandingPage() {
         <div className="relative mx-auto max-w-4xl text-center">
           <img src={theoLogo} alt="Theo IA" className="mx-auto mb-8 h-40 w-40 rounded-full drop-shadow-[0_0_25px_hsl(217,91%,60%,0.3)]" />
           <Badge className="mb-6 border-[hsl(217,91%,60%)]/30 bg-[hsl(217,91%,60%)]/10 text-[hsl(217,91%,60%)] hover:bg-[hsl(217,91%,60%)]/20">
-            <Zap className="mr-1 h-3 w-3" /> 7 dias grátis — sem cartão de crédito
+            <Zap className="mr-1 h-3 w-3" /> 30 dias grátis — sem cartão de crédito
           </Badge>
           <h1 className="mb-6 text-4xl font-extrabold leading-tight tracking-tight md:text-6xl">
             Seu Funcionário Digital que Trabalha{" "}
@@ -119,7 +119,7 @@ export default function LandingPage() {
            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
              <Button size="lg" asChild className="h-14 px-6 sm:px-8 text-base bg-[hsl(217,91%,60%)] hover:bg-[hsl(217,91%,50%)] w-full sm:w-auto">
                <Link to="/register">
-                 Comece Seu Teste Grátis de 7 Dias <ArrowRight className="ml-2 h-5 w-5" />
+                 Comece Seu Teste Grátis de 30 Dias <ArrowRight className="ml-2 h-5 w-5" />
                </Link>
              </Button>
            </div>
@@ -197,7 +197,7 @@ export default function LandingPage() {
           </h2>
           <Card className="relative overflow-hidden border-2 border-[hsl(217,91%,60%)] bg-[hsl(222,47%,8%)] text-white">
             <div className="absolute right-0 top-0 rounded-bl-xl bg-[hsl(142,76%,36%)] px-4 py-1.5 text-sm font-bold text-white">
-              7 DIAS GRÁTIS
+              30 DIAS GRÁTIS
             </div>
             <CardContent className="p-8 pt-12">
               <div className="mb-6 text-center">
@@ -218,7 +218,7 @@ export default function LandingPage() {
               </ul>
                <Button size="lg" asChild className="w-full h-14 text-base bg-[hsl(217,91%,60%)] hover:bg-[hsl(217,91%,50%)]">
                  <Link to="/register">
-                   Começar Agora — 7 Dias Grátis <ArrowRight className="ml-2 h-5 w-5" />
+                   Começar Agora — 30 Dias Grátis <ArrowRight className="ml-2 h-5 w-5" />
                  </Link>
                </Button>
               <p className="mt-3 text-center text-xs text-white">
@@ -284,7 +284,7 @@ export default function LandingPage() {
           </p>
            <Button size="lg" asChild className="h-14 px-6 sm:px-10 text-base bg-[hsl(217,91%,60%)] hover:bg-[hsl(217,91%,50%)] w-full sm:w-auto">
              <Link to="/register">
-               Quero Meus 7 Dias Grátis <ArrowRight className="ml-2 h-5 w-5" />
+               Quero Meus 30 Dias Grátis <ArrowRight className="ml-2 h-5 w-5" />
              </Link>
            </Button>
         </div>
