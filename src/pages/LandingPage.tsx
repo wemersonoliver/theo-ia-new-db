@@ -218,7 +218,7 @@ export default function LandingPage() {
               </ul>
                <Button size="lg" asChild className="w-full h-14 text-base bg-[hsl(217,91%,60%)] hover:bg-[hsl(217,91%,50%)]">
                  <Link to="/register">
-                   Começar Agora — 7 Dias Grátis <ArrowRight className="ml-2 h-5 w-5" />
+                   Começar Agora — 30 Dias Grátis <ArrowRight className="ml-2 h-5 w-5" />
                  </Link>
                </Button>
               <p className="mt-3 text-center text-xs text-white">
