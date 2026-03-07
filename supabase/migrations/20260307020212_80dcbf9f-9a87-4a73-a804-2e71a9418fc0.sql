@@ -1,0 +1,1 @@
+UPDATE knowledge_base_documents SET status = 'error' WHERE status = 'processing';
