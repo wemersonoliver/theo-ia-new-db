@@ -53,7 +53,7 @@ const cltVsTheo = [
 const faqItems = [
   { q: "Preciso ter conhecimento técnico?", a: "Não! O sistema é intuitivo e fácil de configurar. Em poucos minutos você conecta seu WhatsApp e começa a usar." },
   { q: "Funciona com qualquer tipo de negócio?", a: "Sim! Clínicas, escritórios, lojas, prestadores de serviço — qualquer negócio que atenda clientes pelo WhatsApp." },
-  { q: "E se eu quiser cancelar?", a: "Você pode cancelar a qualquer momento, sem multa ou burocracia. Nos primeiros 7 dias, é totalmente grátis." },
+  { q: "E se eu quiser cancelar?", a: "Você pode cancelar a qualquer momento, sem multa ou burocracia. Nos primeiros 30 dias, é totalmente grátis." },
   { q: "A IA substitui completamente o atendimento humano?", a: "A IA cuida do primeiro atendimento, qualificação e agendamentos. Quando necessário, transfere a conversa para um humano de forma transparente." },
   { q: "Quantos números de WhatsApp posso conectar?", a: "Você pode conectar seu número principal de WhatsApp e gerenciar todas as conversas pelo painel." },
   { q: "Como a IA aprende sobre meu negócio?", a: "Você alimenta a base de conhecimento com documentos, textos e informações sobre seus serviços. A IA usa isso para responder com precisão." },
