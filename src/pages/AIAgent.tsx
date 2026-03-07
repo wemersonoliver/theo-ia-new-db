@@ -121,11 +121,13 @@ function InterviewTab({
 
   const callInterviewAgent = async (
     currentMessages: InterviewMessage[],
-    userMessage?: string
+    userMessage?: string,
+    analyzeConversations?: boolean,
+    specificPhones?: string[]
   ) => {
     if (!user) return;
     setIsLoading(true);
-    startLoadingAnimation();
+    startLoadingAnimation(!!analyzeConversations);
 
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -145,6 +147,8 @@ function InterviewTab({
           segment,
           messages: currentMessages,
           userMessage,
+          analyzeConversations,
+          specificPhones,
         }),
       });
 
@@ -160,13 +164,26 @@ function InterviewTab({
       if (userMessage && currentMessages.length > 0) {
         newMessages.push({ role: "user", content: userMessage });
       }
+      // If analysis was done, add system note
+      if (analyzeConversations && !data.finished) {
+        newMessages.push({
+          role: "assistant",
+          content: "✅ Análise de conversas reais concluída! Incorporando padrões identificados no prompt...",
+        });
+      }
       newMessages.push(assistantMsg);
       setMessages(newMessages);
+
+      // Detect analysis request tags
+      if (data.requestAnalyzeAuto || data.requestAnalyzePhones) {
+        setAnalysisMode("awaiting_choice");
+      }
 
       if (data.finished) {
         setGeneratedPrompt(data.generatedPrompt || "");
         setEditablePrompt(data.generatedPrompt || "");
         setInterviewState("completed");
+        setAnalysisMode("idle");
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao chamar o agente");
