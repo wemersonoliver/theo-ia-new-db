@@ -333,6 +333,9 @@ function InterviewTab({
     setCompanyName("");
     setSegment("");
     setUserInput("");
+    setAnalysisMode("idle");
+    setPhonesInput("");
+    setPhonesError("");
   };
 
   // ─── TELA INICIAL ────────────────────────────────────────────────────────────
