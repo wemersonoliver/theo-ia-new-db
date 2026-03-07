@@ -32,6 +32,11 @@ export function useKnowledgeBase() {
       return (data || []) as KnowledgeDocument[];
     },
     enabled: !!user,
+    refetchInterval: (query) => {
+      const docs = query.state.data as KnowledgeDocument[] | undefined;
+      const hasProcessing = docs?.some((d) => d.status === "processing");
+      return hasProcessing ? 5000 : false;
+    },
   });
 
   const uploadDocument = useMutation({
