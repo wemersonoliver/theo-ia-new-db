@@ -85,6 +85,9 @@ function InterviewTab({
   const [editablePrompt, setEditablePrompt] = useState("");
   const [copied, setCopied] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [analysisMode, setAnalysisMode] = useState<"idle" | "awaiting_consent" | "awaiting_choice" | "entering_phones" | "analyzing">("idle");
+  const [phonesInput, setPhonesInput] = useState("");
+  const [phonesError, setPhonesError] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
