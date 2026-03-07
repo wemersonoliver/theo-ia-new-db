@@ -120,8 +120,8 @@ serve(async (req) => {
   }
 });
 
-async function updateDocumentStatus(supabase: any, userId: string, filePath: string, status: string) {
-  await supabase
+async function updateDocumentStatus(serviceClient: any, userId: string, filePath: string, status: string) {
+  await serviceClient
     .from("knowledge_base_documents")
     .update({ status })
     .eq("user_id", userId)
