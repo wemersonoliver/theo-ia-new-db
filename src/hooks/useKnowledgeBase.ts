@@ -38,8 +38,12 @@ export function useKnowledgeBase() {
     mutationFn: async (file: File) => {
       if (!user) throw new Error("Usuário não autenticado");
 
-      // Upload file to storage
-      const filePath = `${user.id}/${Date.now()}_${file.name}`;
+      // Sanitize file name: remove accents and special characters
+      const sanitizedName = file.name
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath = `${user.id}/${Date.now()}_${sanitizedName}`;
       const { error: uploadError } = await supabase.storage
         .from("knowledge-base")
         .upload(filePath, file);
