@@ -52,6 +52,16 @@ const LOADING_MESSAGES = [
   "Processando contexto da empresa...",
 ];
 
+const ANALYSIS_LOADING_MESSAGES = [
+  "Analisando conversas reais do WhatsApp...",
+  "Identificando padrões de atendimento...",
+  "Filtrando conversas com clientes...",
+  "Extraindo dúvidas frequentes...",
+  "Mapeando objeções e hesitações...",
+  "Analisando tom de atendimento...",
+  "Consolidando informações reais...",
+];
+
 type InterviewMessage = { role: "user" | "assistant"; content: string };
 type InterviewState = "idle" | "chat" | "completed";
 
