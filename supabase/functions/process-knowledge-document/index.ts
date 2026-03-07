@@ -87,12 +87,15 @@ serve(async (req) => {
       }
     }
 
+    // Remove null bytes that PostgreSQL cannot store
+    const cleanText = extractedText.replace(/\u0000/g, "").slice(0, 50000);
+
     // Update document with extracted text (use service role to bypass RLS)
     const { error: updateError } = await serviceSupabase
       .from("knowledge_base_documents")
       .update({
-        content_text: extractedText.slice(0, 50000), // Limit to 50k chars
-        status: extractedText ? "ready" : "error",
+        content_text: cleanText,
+        status: cleanText ? "ready" : "error",
       })
       .eq("user_id", userId)
       .eq("file_path", filePath);
