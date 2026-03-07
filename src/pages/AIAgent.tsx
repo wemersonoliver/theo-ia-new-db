@@ -239,6 +239,55 @@ function InterviewTab({
     await callInterviewAgent(messages, text);
   };
 
+  const validatePhones = (input: string): string[] | null => {
+    const phones = input
+      .split(",")
+      .map((p) => p.trim().replace(/\D/g, ""))
+      .filter((p) => p.length >= 10 && p.length <= 13);
+    
+    if (phones.length < 5) {
+      setPhonesError("Informe pelo menos 5 números válidos.");
+      return null;
+    }
+    if (phones.length > 30) {
+      setPhonesError("Máximo de 30 números permitidos.");
+      return null;
+    }
+    setPhonesError("");
+    return phones;
+  };
+
+  const handleAnalyzeAuto = async () => {
+    setAnalysisMode("analyzing");
+    // Add user choice as message
+    const updatedMessages = [
+      ...messages,
+      { role: "user" as const, content: "Prefiro análise automática das conversas mais recentes." },
+    ];
+    setMessages(updatedMessages);
+    await callInterviewAgent(updatedMessages, undefined, true);
+    setAnalysisMode("idle");
+  };
+
+  const handleAnalyzeWithPhones = async () => {
+    const phones = validatePhones(phonesInput);
+    if (!phones) return;
+    
+    setAnalysisMode("analyzing");
+    const updatedMessages = [
+      ...messages,
+      { role: "user" as const, content: `Quero que analise esses números específicos: ${phones.join(", ")}` },
+    ];
+    setMessages(updatedMessages);
+    await callInterviewAgent(updatedMessages, undefined, true, phones);
+    setAnalysisMode("idle");
+  };
+
+  const handleSkipAnalysis = async () => {
+    setAnalysisMode("idle");
+    await callInterviewAgent(messages, "Não, pode pular a análise e gerar o prompt diretamente.");
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
