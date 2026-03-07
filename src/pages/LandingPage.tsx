@@ -119,7 +119,7 @@ export default function LandingPage() {
            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
              <Button size="lg" asChild className="h-14 px-6 sm:px-8 text-base bg-[hsl(217,91%,60%)] hover:bg-[hsl(217,91%,50%)] w-full sm:w-auto">
                <Link to="/register">
-                 Comece Seu Teste Grátis de 7 Dias <ArrowRight className="ml-2 h-5 w-5" />
+                 Comece Seu Teste Grátis de 30 Dias <ArrowRight className="ml-2 h-5 w-5" />
                </Link>
              </Button>
            </div>
