@@ -539,27 +539,115 @@ function InterviewTab({
           </ScrollArea>
 
           <div className="border-t p-4">
-            <div className="flex gap-2 items-end">
-              <Textarea
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Digite sua resposta..."
-                disabled={isLoading}
-                className="flex-1 min-h-[80px] max-h-[200px] resize-y"
-                rows={3}
-              />
-              <Button
-                onClick={handleSend}
-                disabled={!userInput.trim() || isLoading}
-                size="icon"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2 text-center">
-              Enter para enviar · Shift+Enter para nova linha
-            </p>
+            {analysisMode === "awaiting_choice" ? (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-foreground">Como deseja analisar suas conversas?</p>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    onClick={() => setAnalysisMode("entering_phones")}
+                    variant="outline"
+                    className="justify-start text-left h-auto py-3"
+                  >
+                    <span className="mr-2">1️⃣</span>
+                    <span className="text-sm">Indicar números específicos de clientes</span>
+                  </Button>
+                  <Button
+                    onClick={handleAnalyzeAuto}
+                    variant="outline"
+                    className="justify-start text-left h-auto py-3"
+                    disabled={isLoading}
+                  >
+                    <span className="mr-2">2️⃣</span>
+                    <span className="text-sm">Análise automática das conversas recentes</span>
+                  </Button>
+                  <Button
+                    onClick={handleSkipAnalysis}
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground text-xs"
+                    disabled={isLoading}
+                  >
+                    Pular análise e gerar prompt diretamente
+                  </Button>
+                </div>
+              </div>
+            ) : analysisMode === "entering_phones" ? (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Números dos clientes (com DDD, separados por vírgula)</Label>
+                  <Textarea
+                    value={phonesInput}
+                    onChange={(e) => {
+                      setPhonesInput(e.target.value);
+                      setPhonesError("");
+                    }}
+                    placeholder="Ex: 11999998888, 21988887777, 31977776666..."
+                    rows={3}
+                    className="resize-none"
+                  />
+                  {phonesError && (
+                    <p className="text-xs text-destructive">{phonesError}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Mínimo 5, máximo 30 números
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleAnalyzeWithPhones}
+                    disabled={!phonesInput.trim() || isLoading}
+                    className="flex-1"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {loadingText}
+                      </>
+                    ) : (
+                      <>
+                        <Send className="mr-2 h-4 w-4" />
+                        Analisar Conversas
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setAnalysisMode("awaiting_choice");
+                      setPhonesInput("");
+                      setPhonesError("");
+                    }}
+                    disabled={isLoading}
+                  >
+                    Voltar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-2 items-end">
+                  <Textarea
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Digite sua resposta..."
+                    disabled={isLoading}
+                    className="flex-1 min-h-[80px] max-h-[200px] resize-y"
+                    rows={3}
+                  />
+                  <Button
+                    onClick={handleSend}
+                    disabled={!userInput.trim() || isLoading}
+                    size="icon"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Enter para enviar · Shift+Enter para nova linha
+                </p>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
