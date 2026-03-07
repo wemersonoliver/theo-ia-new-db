@@ -52,6 +52,16 @@ const LOADING_MESSAGES = [
   "Processando contexto da empresa...",
 ];
 
+const ANALYSIS_LOADING_MESSAGES = [
+  "Analisando conversas reais do WhatsApp...",
+  "Identificando padrões de atendimento...",
+  "Filtrando conversas com clientes...",
+  "Extraindo dúvidas frequentes...",
+  "Mapeando objeções e hesitações...",
+  "Analisando tom de atendimento...",
+  "Consolidando informações reais...",
+];
+
 type InterviewMessage = { role: "user" | "assistant"; content: string };
 type InterviewState = "idle" | "chat" | "completed";
 
@@ -75,6 +85,9 @@ function InterviewTab({
   const [editablePrompt, setEditablePrompt] = useState("");
   const [copied, setCopied] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [analysisMode, setAnalysisMode] = useState<"idle" | "awaiting_consent" | "awaiting_choice" | "entering_phones" | "analyzing">("idle");
+  const [phonesInput, setPhonesInput] = useState("");
+  const [phonesError, setPhonesError] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -89,12 +102,13 @@ function InterviewTab({
     };
   }, []);
 
-  const startLoadingAnimation = () => {
-    let idx = Math.floor(Math.random() * LOADING_MESSAGES.length);
-    setLoadingText(LOADING_MESSAGES[idx]);
+  const startLoadingAnimation = (useAnalysisMessages = false) => {
+    const msgs = useAnalysisMessages ? ANALYSIS_LOADING_MESSAGES : LOADING_MESSAGES;
+    let idx = Math.floor(Math.random() * msgs.length);
+    setLoadingText(msgs[idx]);
     loadingIntervalRef.current = setInterval(() => {
-      idx = (idx + 1) % LOADING_MESSAGES.length;
-      setLoadingText(LOADING_MESSAGES[idx]);
+      idx = (idx + 1) % msgs.length;
+      setLoadingText(msgs[idx]);
     }, 2000);
   };
 
@@ -107,11 +121,13 @@ function InterviewTab({
 
   const callInterviewAgent = async (
     currentMessages: InterviewMessage[],
-    userMessage?: string
+    userMessage?: string,
+    analyzeConversations?: boolean,
+    specificPhones?: string[]
   ) => {
     if (!user) return;
     setIsLoading(true);
-    startLoadingAnimation();
+    startLoadingAnimation(!!analyzeConversations);
 
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -131,6 +147,8 @@ function InterviewTab({
           segment,
           messages: currentMessages,
           userMessage,
+          analyzeConversations,
+          specificPhones,
         }),
       });
 
@@ -146,13 +164,26 @@ function InterviewTab({
       if (userMessage && currentMessages.length > 0) {
         newMessages.push({ role: "user", content: userMessage });
       }
+      // If analysis was done, add system note
+      if (analyzeConversations && !data.finished) {
+        newMessages.push({
+          role: "assistant",
+          content: "✅ Análise de conversas reais concluída! Incorporando padrões identificados no prompt...",
+        });
+      }
       newMessages.push(assistantMsg);
       setMessages(newMessages);
+
+      // Detect analysis request tags
+      if (data.requestAnalyzeAuto || data.requestAnalyzePhones) {
+        setAnalysisMode("awaiting_choice");
+      }
 
       if (data.finished) {
         setGeneratedPrompt(data.generatedPrompt || "");
         setEditablePrompt(data.generatedPrompt || "");
         setInterviewState("completed");
+        setAnalysisMode("idle");
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao chamar o agente");
@@ -208,6 +239,55 @@ function InterviewTab({
     await callInterviewAgent(messages, text);
   };
 
+  const validatePhones = (input: string): string[] | null => {
+    const phones = input
+      .split(",")
+      .map((p) => p.trim().replace(/\D/g, ""))
+      .filter((p) => p.length >= 10 && p.length <= 13);
+    
+    if (phones.length < 5) {
+      setPhonesError("Informe pelo menos 5 números válidos.");
+      return null;
+    }
+    if (phones.length > 30) {
+      setPhonesError("Máximo de 30 números permitidos.");
+      return null;
+    }
+    setPhonesError("");
+    return phones;
+  };
+
+  const handleAnalyzeAuto = async () => {
+    setAnalysisMode("analyzing");
+    // Add user choice as message
+    const updatedMessages = [
+      ...messages,
+      { role: "user" as const, content: "Prefiro análise automática das conversas mais recentes." },
+    ];
+    setMessages(updatedMessages);
+    await callInterviewAgent(updatedMessages, undefined, true);
+    setAnalysisMode("idle");
+  };
+
+  const handleAnalyzeWithPhones = async () => {
+    const phones = validatePhones(phonesInput);
+    if (!phones) return;
+    
+    setAnalysisMode("analyzing");
+    const updatedMessages = [
+      ...messages,
+      { role: "user" as const, content: `Quero que analise esses números específicos: ${phones.join(", ")}` },
+    ];
+    setMessages(updatedMessages);
+    await callInterviewAgent(updatedMessages, undefined, true, phones);
+    setAnalysisMode("idle");
+  };
+
+  const handleSkipAnalysis = async () => {
+    setAnalysisMode("idle");
+    await callInterviewAgent(messages, "Não, pode pular a análise e gerar o prompt diretamente.");
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -253,6 +333,9 @@ function InterviewTab({
     setCompanyName("");
     setSegment("");
     setUserInput("");
+    setAnalysisMode("idle");
+    setPhonesInput("");
+    setPhonesError("");
   };
 
   // ─── TELA INICIAL ────────────────────────────────────────────────────────────
@@ -456,27 +539,115 @@ function InterviewTab({
           </ScrollArea>
 
           <div className="border-t p-4">
-            <div className="flex gap-2 items-end">
-              <Textarea
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Digite sua resposta..."
-                disabled={isLoading}
-                className="flex-1 min-h-[80px] max-h-[200px] resize-y"
-                rows={3}
-              />
-              <Button
-                onClick={handleSend}
-                disabled={!userInput.trim() || isLoading}
-                size="icon"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2 text-center">
-              Enter para enviar · Shift+Enter para nova linha
-            </p>
+            {analysisMode === "awaiting_choice" ? (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-foreground">Como deseja analisar suas conversas?</p>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    onClick={() => setAnalysisMode("entering_phones")}
+                    variant="outline"
+                    className="justify-start text-left h-auto py-3"
+                  >
+                    <span className="mr-2">1️⃣</span>
+                    <span className="text-sm">Indicar números específicos de clientes</span>
+                  </Button>
+                  <Button
+                    onClick={handleAnalyzeAuto}
+                    variant="outline"
+                    className="justify-start text-left h-auto py-3"
+                    disabled={isLoading}
+                  >
+                    <span className="mr-2">2️⃣</span>
+                    <span className="text-sm">Análise automática das conversas recentes</span>
+                  </Button>
+                  <Button
+                    onClick={handleSkipAnalysis}
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground text-xs"
+                    disabled={isLoading}
+                  >
+                    Pular análise e gerar prompt diretamente
+                  </Button>
+                </div>
+              </div>
+            ) : analysisMode === "entering_phones" ? (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Números dos clientes (com DDD, separados por vírgula)</Label>
+                  <Textarea
+                    value={phonesInput}
+                    onChange={(e) => {
+                      setPhonesInput(e.target.value);
+                      setPhonesError("");
+                    }}
+                    placeholder="Ex: 11999998888, 21988887777, 31977776666..."
+                    rows={3}
+                    className="resize-none"
+                  />
+                  {phonesError && (
+                    <p className="text-xs text-destructive">{phonesError}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Mínimo 5, máximo 30 números
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleAnalyzeWithPhones}
+                    disabled={!phonesInput.trim() || isLoading}
+                    className="flex-1"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {loadingText}
+                      </>
+                    ) : (
+                      <>
+                        <Send className="mr-2 h-4 w-4" />
+                        Analisar Conversas
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setAnalysisMode("awaiting_choice");
+                      setPhonesInput("");
+                      setPhonesError("");
+                    }}
+                    disabled={isLoading}
+                  >
+                    Voltar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-2 items-end">
+                  <Textarea
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Digite sua resposta..."
+                    disabled={isLoading}
+                    className="flex-1 min-h-[80px] max-h-[200px] resize-y"
+                    rows={3}
+                  />
+                  <Button
+                    onClick={handleSend}
+                    disabled={!userInput.trim() || isLoading}
+                    size="icon"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Enter para enviar · Shift+Enter para nova linha
+                </p>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
