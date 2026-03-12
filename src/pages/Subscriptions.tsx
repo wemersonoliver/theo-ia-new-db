@@ -89,7 +89,7 @@ export default function Subscriptions() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 pt-6">
-            <CreditCard className="h-8 w-8 text-yellow-500" />
+            <CreditCard className="h-8 w-8 text-accent-foreground" />
             <div>
               <p className="text-2xl font-bold">{stats.pending}</p>
               <p className="text-sm text-muted-foreground">Pendentes</p>
