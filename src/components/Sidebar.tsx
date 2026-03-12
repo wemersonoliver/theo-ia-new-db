@@ -16,6 +16,7 @@ import {
   CalendarCog,
   ShieldCheck,
   Users,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
