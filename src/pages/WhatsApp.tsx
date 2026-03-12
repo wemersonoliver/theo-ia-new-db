@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
 import { Smartphone, QrCode, Loader2, RefreshCw, Power, CheckCircle2, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 export default function WhatsApp() {
@@ -12,6 +12,21 @@ export default function WhatsApp() {
   const [countdown, setCountdown] = useState(30);
   const [cachedQRCode, setCachedQRCode] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const instanceStatusRef = useRef(instance?.status);
+
+  // Keep ref in sync
+  useEffect(() => {
+    instanceStatusRef.current = instance?.status;
+  }, [instance?.status]);
+
+  // Auto-cancel connection on unmount if still in qr_ready
+  useEffect(() => {
+    return () => {
+      if (instanceStatusRef.current === "qr_ready") {
+        disconnectInstance.mutate();
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cache QR code when new one arrives
   useEffect(() => {
@@ -20,6 +35,11 @@ export default function WhatsApp() {
       setIsRefreshing(false);
     }
   }, [instance?.qr_code_base64]);
+
+  const handleCancelConnection = () => {
+    disconnectInstance.mutate();
+    setCachedQRCode(null);
+  };
 
   const handleRefreshQR = () => {
     setIsRefreshing(true);
@@ -196,19 +216,34 @@ export default function WhatsApp() {
                   </div>
                 )}
 
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={handleRefreshQR}
-                  disabled={isRefreshing}
-                >
-                  {isRefreshing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                  )}
-                  Atualizar QR
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleRefreshQR}
+                    disabled={isRefreshing}
+                  >
+                    {isRefreshing ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                    )}
+                    Atualizar QR
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    onClick={handleCancelConnection}
+                    disabled={disconnectInstance.isPending}
+                  >
+                    {disconnectInstance.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <XCircle className="mr-2 h-4 w-4" />
+                    )}
+                    Cancelar
+                  </Button>
+                </div>
               </div>
             ) : instance?.status === "connected" ? (
               <div className="py-8 text-center">
