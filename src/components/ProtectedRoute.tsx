@@ -114,7 +114,34 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 }
 
 function CheckoutScreen({ isBlocked, signOut }: { isBlocked: boolean; signOut: () => Promise<void> }) {
+  const { user } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<"monthly" | "annual" | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [verificationFailed, setVerificationFailed] = useState(false);
+
+  const SUPPORT_PHONE = "5511999999999";
+  const SUPPORT_MESSAGE = encodeURIComponent("Olá! Estou com problemas para verificar minha assinatura.");
+
+  const handleVerifyPayment = async () => {
+    if (!user) return;
+    setVerifying(true);
+    setVerificationFailed(false);
+
+    const { data } = await supabase
+      .from("subscriptions")
+      .select("status")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle();
+
+    if (data) {
+      window.location.reload();
+    } else {
+      setVerificationFailed(true);
+    }
+    setVerifying(false);
+  };
 
   const plans = [
     {
@@ -235,6 +262,47 @@ function CheckoutScreen({ isBlocked, signOut }: { isBlocked: boolean; signOut: (
               : "Selecione um plano"}
             <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
+
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full max-w-md h-12 text-base"
+            onClick={handleVerifyPayment}
+            disabled={verifying}
+          >
+            {verifying ? (
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-5 w-5" />
+            )}
+            {verifying ? "Verificando..." : "Já efetuei o pagamento"}
+          </Button>
+
+          {verificationFailed && (
+            <div className="w-full max-w-md rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-3 text-center">
+              <p className="text-sm text-muted-foreground">
+                Ainda não identificamos seu pagamento. O processamento pode levar até <strong>5 minutos</strong>. Tente novamente em instantes.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Caso o problema persista, entre em contato com nosso suporte:
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                asChild
+              >
+                <a
+                  href={`https://wa.me/${SUPPORT_PHONE}?text=${SUPPORT_MESSAGE}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <MessageCircle className="mr-2 h-4 w-4" />
+                  Falar com o Suporte
+                </a>
+              </Button>
+            </div>
+          )}
+
           <Button variant="ghost" size="sm" onClick={() => signOut()} className="text-muted-foreground">
             Sair da conta
           </Button>
