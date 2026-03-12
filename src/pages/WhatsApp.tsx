@@ -12,6 +12,21 @@ export default function WhatsApp() {
   const [countdown, setCountdown] = useState(30);
   const [cachedQRCode, setCachedQRCode] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const instanceStatusRef = useRef(instance?.status);
+
+  // Keep ref in sync
+  useEffect(() => {
+    instanceStatusRef.current = instance?.status;
+  }, [instance?.status]);
+
+  // Auto-cancel connection on unmount if still in qr_ready
+  useEffect(() => {
+    return () => {
+      if (instanceStatusRef.current === "qr_ready") {
+        disconnectInstance.mutate();
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cache QR code when new one arrives
   useEffect(() => {
@@ -20,6 +35,11 @@ export default function WhatsApp() {
       setIsRefreshing(false);
     }
   }, [instance?.qr_code_base64]);
+
+  const handleCancelConnection = () => {
+    disconnectInstance.mutate();
+    setCachedQRCode(null);
+  };
 
   const handleRefreshQR = () => {
     setIsRefreshing(true);
