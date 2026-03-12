@@ -8,6 +8,7 @@ import { MessageSquare, Smartphone, Bot, TrendingUp, PlayCircle } from "lucide-r
 import { Badge } from "@/components/ui/badge";
 import { TutorialPopup } from "@/components/TutorialPopup";
 import { Button } from "@/components/ui/button";
+import { TrialBanner } from "@/components/TrialBanner";
 
 export default function Dashboard() {
   const { instance } = useWhatsAppInstance();
