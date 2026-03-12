@@ -197,7 +197,7 @@ export default function LandingPage() {
           </h2>
           <Card className="relative overflow-hidden border-2 border-[hsl(217,91%,60%)] bg-[hsl(222,47%,8%)] text-white">
             <div className="absolute right-0 top-0 rounded-bl-xl bg-[hsl(142,76%,36%)] px-4 py-1.5 text-sm font-bold text-white">
-              30 DIAS GRÁTIS
+              15 DIAS GRÁTIS
             </div>
             <CardContent className="p-8 pt-12">
               <div className="mb-6 text-center">
