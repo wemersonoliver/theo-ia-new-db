@@ -198,7 +198,7 @@ function CheckoutScreen({ isBlocked, signOut }: { isBlocked: boolean; signOut: (
                 {plan.originalPrice && (
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground line-through">{plan.originalPrice}</span>
-                    <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
+                    <Badge variant="secondary" className="text-xs">
                       {plan.savings}
                     </Badge>
                   </div>
