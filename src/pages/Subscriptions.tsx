@@ -71,7 +71,7 @@ export default function Subscriptions() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 pt-6">
-            <CheckCircle className="h-8 w-8 text-green-500" />
+            <CheckCircle className="h-8 w-8 text-primary" />
             <div>
               <p className="text-2xl font-bold">{stats.active}</p>
               <p className="text-sm text-muted-foreground">Ativas</p>
