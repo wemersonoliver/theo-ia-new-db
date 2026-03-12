@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
 import { Smartphone, QrCode, Loader2, RefreshCw, Power, CheckCircle2, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 export default function WhatsApp() {
