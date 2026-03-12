@@ -8,6 +8,7 @@ import { MessageSquare, Smartphone, Bot, TrendingUp, PlayCircle } from "lucide-r
 import { Badge } from "@/components/ui/badge";
 import { TutorialPopup } from "@/components/TutorialPopup";
 import { Button } from "@/components/ui/button";
+import { TrialBanner } from "@/components/TrialBanner";
 
 export default function Dashboard() {
   const { instance } = useWhatsAppInstance();
@@ -68,6 +69,9 @@ export default function Dashboard() {
       title="Dashboard" 
       description="Visão geral do seu sistema de atendimento"
     >
+      
+      <TrialBanner />
+
       <TutorialPopup externalOpen={tutorialOpen} onExternalClose={() => setTutorialOpen(false)} />
       
       <div className="flex justify-end mb-4">
