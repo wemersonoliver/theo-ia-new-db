@@ -216,19 +216,34 @@ export default function WhatsApp() {
                   </div>
                 )}
 
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={handleRefreshQR}
-                  disabled={isRefreshing}
-                >
-                  {isRefreshing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                  )}
-                  Atualizar QR
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleRefreshQR}
+                    disabled={isRefreshing}
+                  >
+                    {isRefreshing ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                    )}
+                    Atualizar QR
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    onClick={handleCancelConnection}
+                    disabled={disconnectInstance.isPending}
+                  >
+                    {disconnectInstance.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <XCircle className="mr-2 h-4 w-4" />
+                    )}
+                    Cancelar
+                  </Button>
+                </div>
               </div>
             ) : instance?.status === "connected" ? (
               <div className="py-8 text-center">
