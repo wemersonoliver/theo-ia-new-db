@@ -284,7 +284,7 @@ export default function LandingPage() {
           </p>
            <Button size="lg" asChild className="h-14 px-6 sm:px-10 text-base bg-[hsl(217,91%,60%)] hover:bg-[hsl(217,91%,50%)] w-full sm:w-auto">
              <Link to="/register">
-               Quero Meus 30 Dias Grátis <ArrowRight className="ml-2 h-5 w-5" />
+               Quero Meus 15 Dias Grátis <ArrowRight className="ml-2 h-5 w-5" />
              </Link>
            </Button>
         </div>
