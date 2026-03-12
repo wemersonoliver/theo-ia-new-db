@@ -32,6 +32,7 @@ const navItems = [
   { to: "/appointments", icon: Calendar, label: "Agendamentos" },
   { to: "/appointment-settings", icon: CalendarCog, label: "Config. Horários" },
   { to: "/settings", icon: Settings, label: "Configurações" },
+  { to: "/subscriptions", icon: CreditCard, label: "Assinaturas" },
 ];
 
 interface SidebarProps {
