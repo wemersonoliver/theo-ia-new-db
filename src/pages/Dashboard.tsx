@@ -69,6 +69,9 @@ export default function Dashboard() {
       title="Dashboard" 
       description="Visão geral do seu sistema de atendimento"
     >
+      
+      <TrialBanner />
+
       <TutorialPopup externalOpen={tutorialOpen} onExternalClose={() => setTutorialOpen(false)} />
       
       <div className="flex justify-end mb-4">
