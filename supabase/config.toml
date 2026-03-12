@@ -2,3 +2,9 @@ project_id = "gljsifkjwkubxaqgxxul"
 
 [functions.sync-whatsapp-conversations]
 verify_jwt = false
+
+[functions.kiwify-webhook]
+verify_jwt = false
+
+[functions.kiwify-sync]
+verify_jwt = false
