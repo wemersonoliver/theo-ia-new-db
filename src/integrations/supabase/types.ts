@@ -314,6 +314,72 @@ export type Database = {
         }
         Relationships: []
       }
+      subscriptions: {
+        Row: {
+          amount_cents: number | null
+          cancelled_at: string | null
+          created_at: string | null
+          currency: string | null
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          expires_at: string | null
+          id: string
+          kiwify_order_id: string | null
+          kiwify_product_id: string | null
+          plan_type: string | null
+          product_name: string | null
+          raw_data: Json | null
+          refunded_at: string | null
+          started_at: string | null
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount_cents?: number | null
+          cancelled_at?: string | null
+          created_at?: string | null
+          currency?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          expires_at?: string | null
+          id?: string
+          kiwify_order_id?: string | null
+          kiwify_product_id?: string | null
+          plan_type?: string | null
+          product_name?: string | null
+          raw_data?: Json | null
+          refunded_at?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount_cents?: number | null
+          cancelled_at?: string | null
+          created_at?: string | null
+          currency?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          expires_at?: string | null
+          id?: string
+          kiwify_order_id?: string | null
+          kiwify_product_id?: string | null
+          plan_type?: string | null
+          product_name?: string | null
+          raw_data?: Json | null
+          refunded_at?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
