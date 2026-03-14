@@ -35,6 +35,7 @@ const navItems = [
   { to: "/whatsapp", icon: Smartphone, label: "WhatsApp" },
   { to: "/ai-agent", icon: Bot, label: "Agente IA" },
   { to: "/knowledge-base", icon: FileText, label: "Base de Conhecimento" },
+  { to: "/crm", icon: Kanban, label: "CRM" },
   { to: "/conversations", icon: MessageSquare, label: "Conversas" },
   { to: "/contacts", icon: Users, label: "Contatos" },
   { to: "/appointments", icon: Calendar, label: "Agendamentos" },
