@@ -22,6 +22,7 @@ import Settings from "./pages/Settings";
 import AdminUsers from "./pages/AdminUsers";
 import Subscriptions from "./pages/Subscriptions";
 import NotFound from "./pages/NotFound";
+import CRM from "./pages/CRM";
 import LandingPage from "./pages/LandingPage";
 
 const queryClient = new QueryClient();
