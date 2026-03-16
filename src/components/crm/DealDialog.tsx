@@ -26,6 +26,8 @@ interface DealDialogProps {
   stages: CRMStage[];
   deal?: CRMDeal | null;
   defaultStageId?: string;
+  defaultContactId?: string;
+  defaultTitle?: string;
   contacts?: { id: string; name: string | null; phone: string }[];
   onSave: (data: {
     title: string;
