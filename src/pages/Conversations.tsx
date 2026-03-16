@@ -10,15 +10,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useConversations, useConversation, Message } from "@/hooks/useConversations";
 import { useContacts } from "@/hooks/useContacts";
+import { useCRMPipelines } from "@/hooks/useCRMPipelines";
+import { useCRMStages } from "@/hooks/useCRMStages";
+import { useCRMDeals } from "@/hooks/useCRMDeals";
+import { DealDialog } from "@/components/crm/DealDialog";
 import { TagInput, tagClass } from "@/components/TagInput";
 import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff,
-  Mic, ImageIcon, FileText, Tag, ExternalLink,
+  Mic, ImageIcon, FileText, Tag, ExternalLink, Kanban,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useMemo } from "react";
+import { toast } from "sonner";
 
 // ── Chat messages ─────────────────────────────────────────────────────────────
 function ChatMessages({ messages, className }: { messages: Message[]; className?: string }) {
@@ -146,6 +152,55 @@ function TagPopover({ phone }: { phone: string }) {
   );
 }
 
+// ── Create Deal Button ────────────────────────────────────────────────────────
+function CreateDealButton({ phone, contactName }: { phone: string; contactName?: string | null }) {
+  const { contacts } = useContacts();
+  const { pipelines, activePipelineId } = useCRMPipelines();
+  const { stages } = useCRMStages(activePipelineId);
+  const stageIds = useMemo(() => stages.map((s) => s.id), [stages]);
+  const { createDeal } = useCRMDeals(activePipelineId, stageIds);
+  const [open, setOpen] = useState(false);
+
+  const contact = contacts.find((c) => c.phone === phone);
+  const contactsList = useMemo(
+    () => (contacts || []).map((c) => ({ id: c.id, name: c.name, phone: c.phone })),
+    [contacts]
+  );
+
+  const handleSave = async (data: any) => {
+    await createDeal(data);
+    toast.success("Negociação criada no CRM!");
+  };
+
+  if (!activePipelineId || stages.length === 0) return null;
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-1.5 shrink-0"
+        onClick={() => setOpen(true)}
+      >
+        <Kanban className="h-4 w-4" />
+        <span className="hidden sm:inline">Criar Deal</span>
+      </Button>
+
+      <DealDialog
+        open={open}
+        onOpenChange={setOpen}
+        stages={stages}
+        defaultStageId={stages[0]?.id}
+        contacts={contactsList}
+        defaultContactId={contact?.id}
+        defaultTitle={contactName ? `Deal - ${contactName}` : `Deal - ${phone}`}
+        onSave={handleSave}
+        onDelete={() => {}}
+      />
+    </>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Conversations() {
   const navigate = useNavigate();
@@ -263,6 +318,7 @@ export default function Conversations() {
                 <p className="text-xs text-muted-foreground truncate">{selectedPhone}</p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
+                {selectedPhone && <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} />}
                 {selectedPhone && <TagPopover phone={selectedPhone} />}
                 <Button
                   variant={selectedConversation?.ai_active ? "outline" : "default"}
@@ -404,6 +460,7 @@ export default function Conversations() {
 
                   {/* Action buttons */}
                   <div className="flex items-center gap-2 shrink-0">
+                    <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} />
                     <TagPopover phone={selectedPhone} />
                     <Button
                       variant={selectedConversation?.ai_active ? "outline" : "default"}
