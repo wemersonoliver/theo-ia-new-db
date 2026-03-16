@@ -41,14 +41,27 @@ interface DealDialogProps {
   onDelete?: (id: string) => void;
 }
 
-export function DealDialog({ open, onOpenChange, stages, deal, defaultStageId, contacts, onSave, onDelete }: DealDialogProps) {
-  const [title, setTitle] = useState(deal?.title || "");
+export function DealDialog({ open, onOpenChange, stages, deal, defaultStageId, defaultContactId, defaultTitle, contacts, onSave, onDelete }: DealDialogProps) {
+  const [title, setTitle] = useState(deal?.title || defaultTitle || "");
   const [stageId, setStageId] = useState(deal?.stage_id || defaultStageId || stages[0]?.id || "");
   const [valueBRL, setValueBRL] = useState(deal?.value_cents ? (deal.value_cents / 100).toFixed(2) : "");
   const [priority, setPriority] = useState(deal?.priority || "medium");
-  const [contactId, setContactId] = useState(deal?.contact_id || "none");
+  const [contactId, setContactId] = useState(deal?.contact_id || defaultContactId || "none");
   const [description, setDescription] = useState(deal?.description || "");
   const [closeDate, setCloseDate] = useState(deal?.expected_close_date || "");
+
+  // Reset form when dialog opens with new defaults
+  useEffect(() => {
+    if (open) {
+      setTitle(deal?.title || defaultTitle || "");
+      setStageId(deal?.stage_id || defaultStageId || stages[0]?.id || "");
+      setValueBRL(deal?.value_cents ? (deal.value_cents / 100).toFixed(2) : "");
+      setPriority(deal?.priority || "medium");
+      setContactId(deal?.contact_id || defaultContactId || "none");
+      setDescription(deal?.description || "");
+      setCloseDate(deal?.expected_close_date || "");
+    }
+  }, [open, deal, defaultStageId, defaultContactId, defaultTitle, stages]);
 
   const handleSave = () => {
     if (!title.trim()) return;
