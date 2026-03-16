@@ -2,11 +2,12 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { KanbanBoard } from "@/components/crm/KanbanBoard";
 import { PipelineSelector } from "@/components/crm/PipelineSelector";
 import { CRMStats } from "@/components/crm/CRMStats";
+import { CRMFilters, useFilteredDeals, type CRMFilterState } from "@/components/crm/CRMFilters";
 import { useCRMPipelines } from "@/hooks/useCRMPipelines";
 import { useCRMStages } from "@/hooks/useCRMStages";
 import { useCRMDeals } from "@/hooks/useCRMDeals";
 import { useContacts } from "@/hooks/useContacts";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 export default function CRM() {
@@ -16,10 +17,22 @@ export default function CRM() {
   const { deals, loading: dealsLoading, createDeal, updateDeal, moveDeal, deleteDeal } = useCRMDeals(activePipelineId, stageIds);
   const { contacts } = useContacts();
 
+  const [filters, setFilters] = useState<CRMFilterState>({ search: "", priorities: [], tags: [], minValue: 0, maxValue: 0 });
+
   const contactsList = useMemo(
     () => (contacts || []).map((c: any) => ({ id: c.id, name: c.name, phone: c.phone })),
     [contacts]
   );
+
+  const availableTags = useMemo(() => {
+    const set = new Set<string>();
+    deals.forEach((d) => d.tags?.forEach((t: string) => set.add(t)));
+    return Array.from(set).sort();
+  }, [deals]);
+
+  const maxDealValue = useMemo(() => Math.max(0, ...deals.map((d) => d.value_cents || 0)), [deals]);
+
+  const filteredDeals = useFilteredDeals(deals, filters);
 
   const isLoading = pipelinesLoading || stagesLoading || dealsLoading;
 
@@ -39,7 +52,14 @@ export default function CRM() {
           />
         </div>
 
-        <CRMStats deals={deals} stages={stages} />
+        <CRMFilters
+          filters={filters}
+          onChange={setFilters}
+          availableTags={availableTags}
+          maxDealValue={maxDealValue}
+        />
+
+        <CRMStats deals={filteredDeals} stages={stages} />
 
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
@@ -48,7 +68,7 @@ export default function CRM() {
         ) : (
           <KanbanBoard
             stages={stages}
-            deals={deals}
+            deals={filteredDeals}
             contacts={contactsList}
             onCreateDeal={createDeal}
             onUpdateDeal={updateDeal}
