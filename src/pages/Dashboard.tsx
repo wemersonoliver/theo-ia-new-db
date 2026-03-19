@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
 import { useConversations } from "@/hooks/useConversations";
 import { useAIConfig } from "@/hooks/useAIConfig";
+import { useAuth } from "@/lib/auth";
 import { MessageSquare, Smartphone, Bot, TrendingUp, PlayCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TutorialPopup } from "@/components/TutorialPopup";
