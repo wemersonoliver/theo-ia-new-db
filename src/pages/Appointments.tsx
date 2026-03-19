@@ -80,7 +80,7 @@ export default function Appointments() {
               }}
               modifiersStyles={{
                 hasAppointment: {
-                  backgroundColor: "hsl(142 70% 90%)",
+                  backgroundColor: "hsl(142 40% 75%)",
                   borderRadius: "6px",
                   fontWeight: 600,
                 },
