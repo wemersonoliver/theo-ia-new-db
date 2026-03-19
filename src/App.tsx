@@ -25,6 +25,7 @@ import NotFound from "./pages/NotFound";
 import CRM from "./pages/CRM";
 import Products from "./pages/Products";
 import LandingPage from "./pages/LandingPage";
+import Onboarding from "./pages/Onboarding";
 
 const queryClient = new QueryClient();
 
