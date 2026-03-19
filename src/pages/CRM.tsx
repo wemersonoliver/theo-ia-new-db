@@ -1,6 +1,7 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { KanbanBoard } from "@/components/crm/KanbanBoard";
 import { PipelineSelector } from "@/components/crm/PipelineSelector";
+import { PipelineSettingsDialog } from "@/components/crm/PipelineSettingsDialog";
 import { CRMStats } from "@/components/crm/CRMStats";
 import { CRMFilters, useFilteredDeals, type CRMFilterState } from "@/components/crm/CRMFilters";
 import { useCRMPipelines } from "@/hooks/useCRMPipelines";
@@ -12,14 +13,17 @@ import { useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 export default function CRM() {
-  const { pipelines, activePipelineId, setActivePipelineId, loading: pipelinesLoading, createPipeline } = useCRMPipelines();
-  const { stages, loading: stagesLoading } = useCRMStages(activePipelineId);
+  const { pipelines, activePipelineId, setActivePipelineId, loading: pipelinesLoading, createPipeline, renamePipeline, deletePipeline } = useCRMPipelines();
+  const { stages, loading: stagesLoading, addStage, updateStage, deleteStage } = useCRMStages(activePipelineId);
   const stageIds = useMemo(() => stages.map((s) => s.id), [stages]);
   const { deals, loading: dealsLoading, createDeal, updateDeal, moveDeal, deleteDeal } = useCRMDeals(activePipelineId, stageIds);
   const { contacts } = useContacts();
   const { products } = useProducts();
 
   const [filters, setFilters] = useState<CRMFilterState>({ search: "", priorities: [], tags: [], minValue: 0, maxValue: 0 });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const activePipeline = useMemo(() => pipelines.find((p) => p.id === activePipelineId) || null, [pipelines, activePipelineId]);
 
   const contactsList = useMemo(
     () => (contacts || []).map((c: any) => ({ id: c.id, name: c.name, phone: c.phone })),
@@ -51,6 +55,7 @@ export default function CRM() {
             activePipelineId={activePipelineId}
             onSelect={setActivePipelineId}
             onCreate={createPipeline}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         </div>
 
@@ -80,6 +85,18 @@ export default function CRM() {
           />
         )}
       </div>
+
+      <PipelineSettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        pipeline={activePipeline}
+        stages={stages}
+        onRenamePipeline={renamePipeline}
+        onDeletePipeline={deletePipeline}
+        onAddStage={addStage}
+        onUpdateStage={updateStage}
+        onDeleteStage={deleteStage}
+      />
     </DashboardLayout>
   );
 }
