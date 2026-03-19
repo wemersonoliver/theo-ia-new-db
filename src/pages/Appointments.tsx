@@ -151,8 +151,15 @@ function AppointmentCard({ appointment, onStatusChange, onDelete, formatTime }: 
     reagendado: "bg-yellow-100 text-yellow-800 border-yellow-200",
   };
 
+  const cardBg: Record<string, string> = {
+    confirmed: "border-l-4 border-l-green-500 bg-green-50 dark:bg-green-950/20",
+    completed: "border-l-4 border-l-green-500 bg-green-50 dark:bg-green-950/20",
+    cancelled: "border-l-4 border-l-red-500 bg-red-50 dark:bg-red-950/20",
+    scheduled: "border-l-4 border-l-muted-foreground/30",
+  };
+
   return (
-    <div className="flex items-start justify-between rounded-lg border p-4">
+    <div className={`flex items-start justify-between rounded-lg border p-4 ${cardBg[appointment.status] || cardBg.scheduled}`}>
       <div className="space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
           <h4 className="font-semibold">{appointment.title}</h4>
