@@ -73,15 +73,16 @@ export default function Appointments() {
               selected={selectedDate}
               onSelect={setSelectedDate}
               locale={ptBR}
-              className="rounded-md border"
+              className="rounded-md border pointer-events-auto"
               modifiers={{
                 hasAppointment: (date) =>
-                  getAppointmentDates().has(format(date, "yyyy-MM-dd")),
+                  appointmentDatesSet.has(format(date, "yyyy-MM-dd")),
               }}
               modifiersStyles={{
                 hasAppointment: {
-                  fontWeight: "bold",
-                  textDecoration: "underline",
+                  backgroundColor: "hsl(142 70% 90%)",
+                  borderRadius: "6px",
+                  fontWeight: 600,
                 },
               }}
             />
