@@ -43,6 +43,7 @@ const App = () => (
               <Route path="/register" element={<Register />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/whatsapp" element={<ProtectedRoute><WhatsApp /></ProtectedRoute>} />
               <Route path="/ai-agent" element={<ProtectedRoute><AIAgent /></ProtectedRoute>} />
