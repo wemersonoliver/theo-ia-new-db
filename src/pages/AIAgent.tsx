@@ -1424,6 +1424,11 @@ export default function AIAgent() {
         <TabsContent value="test">
           <PromptTestTab />
         </TabsContent>
+
+        {/* ── ABA FOLLOW-UP ── */}
+        <TabsContent value="followup">
+          <FollowupTab />
+        </TabsContent>
       </Tabs>
     </DashboardLayout>
   );
