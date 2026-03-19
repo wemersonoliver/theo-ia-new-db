@@ -7,6 +7,7 @@ import { useCRMPipelines } from "@/hooks/useCRMPipelines";
 import { useCRMStages } from "@/hooks/useCRMStages";
 import { useCRMDeals } from "@/hooks/useCRMDeals";
 import { useContacts } from "@/hooks/useContacts";
+import { useProducts } from "@/hooks/useProducts";
 import { useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 
