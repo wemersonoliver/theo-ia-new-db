@@ -88,5 +88,27 @@ export function useCRMPipelines() {
     }
   };
 
-  return { pipelines, activePipelineId, setActivePipelineId, loading, createPipeline, refetch: fetchPipelines };
+  const renamePipeline = async (id: string, name: string) => {
+    const { error } = await supabase.from("crm_pipelines").update({ name }).eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao renomear pipeline", variant: "destructive" });
+    } else {
+      setPipelines((prev) => prev.map((p) => (p.id === id ? { ...p, name } : p)));
+    }
+  };
+
+  const deletePipeline = async (id: string) => {
+    const { error } = await supabase.from("crm_pipelines").delete().eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao excluir pipeline", variant: "destructive" });
+    } else {
+      setPipelines((prev) => prev.filter((p) => p.id !== id));
+      if (activePipelineId === id) {
+        const remaining = pipelines.filter((p) => p.id !== id);
+        setActivePipelineId(remaining.length > 0 ? remaining[0].id : null);
+      }
+    }
+  };
+
+  return { pipelines, activePipelineId, setActivePipelineId, loading, createPipeline, renamePipeline, deletePipeline, refetch: fetchPipelines };
 }
