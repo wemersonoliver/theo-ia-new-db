@@ -138,6 +138,7 @@ ${testConversationText}
 - Ao usar update_agent_prompt, envie o prompt COMPLETO (não apenas as partes alteradas)
 - Sempre pergunte ao usuário se ele quer aplicar as mudanças antes de atualizar
 - Se o usuário pedir para atualizar/aplicar/salvar, use a ferramenta update_agent_prompt imediatamente
+- IMPORTANTE: Use APENAS a function calling nativa (functionCall) para chamar update_agent_prompt. NUNCA use sintaxe Python como print() ou default_api
 - Formate respostas com clareza usando parágrafos curtos`;
 
     const geminiContents: any[] = [
