@@ -138,6 +138,7 @@ ${testConversationText}
 - Ao usar update_agent_prompt, envie o prompt COMPLETO (não apenas as partes alteradas)
 - Sempre pergunte ao usuário se ele quer aplicar as mudanças antes de atualizar
 - Se o usuário pedir para atualizar/aplicar/salvar, use a ferramenta update_agent_prompt imediatamente
+- IMPORTANTE: Use APENAS a function calling nativa (functionCall) para chamar update_agent_prompt. NUNCA use sintaxe Python como print() ou default_api
 - Formate respostas com clareza usando parágrafos curtos`;
 
     const geminiContents: any[] = [
@@ -187,6 +188,49 @@ ${testConversationText}
       
       const candidate = geminiData.candidates?.[0];
       const content = candidate?.content;
+      const finishReason = candidate?.finishReason;
+
+      // Handle MALFORMED_FUNCTION_CALL - Gemini tried to call the function with wrong syntax
+      if (finishReason === "MALFORMED_FUNCTION_CALL") {
+        const finishMessage = candidate?.finishMessage || "";
+        console.warn("Malformed function call detected, extracting prompt from message...");
+        
+        // Try to extract the new_prompt value from the malformed call text
+        const promptMatch = finishMessage.match(/new_prompt\s*=\s*(?:'''|"""|'|")([\s\S]*?)(?:'''|"""|'|")?\s*\)?\s*\)?$/);
+        if (promptMatch?.[1] && promptMatch[1].length > 50) {
+          const extractedPrompt = promptMatch[1].replace(/\\n/g, "\n").trim();
+          console.log("Extracted prompt from malformed call, length:", extractedPrompt.length);
+          
+          const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+          const adminClient = createClient(supabaseUrl, serviceRoleKey);
+          
+          const { error: updateError } = await adminClient
+            .from("whatsapp_ai_config")
+            .upsert(
+              { user_id: userId, custom_prompt: extractedPrompt },
+              { onConflict: "user_id" }
+            );
+
+          if (!updateError) {
+            promptUpdated = true;
+            newPromptValue = extractedPrompt;
+            aiReply = "✅ Prompt atualizado com sucesso! As mudanças já estão ativas no seu agente de IA.";
+            console.log("Prompt updated from malformed call for user:", userId);
+          } else {
+            console.error("Error updating prompt from malformed call:", updateError);
+            aiReply = "Identifiquei as mudanças, mas houve um erro ao salvar. Pode tentar novamente?";
+          }
+          break;
+        }
+        
+        // Could not extract - ask Gemini to retry with proper function calling
+        geminiPayload.contents.push({
+          role: "user",
+          parts: [{ text: "Use a ferramenta update_agent_prompt corretamente para atualizar o prompt. Não use sintaxe Python, use a function calling nativa." }],
+        });
+        functionCallsProcessed++;
+        continue;
+      }
 
       if (!content?.parts) {
         console.error("No content parts in response", JSON.stringify(geminiData).slice(0, 500));
