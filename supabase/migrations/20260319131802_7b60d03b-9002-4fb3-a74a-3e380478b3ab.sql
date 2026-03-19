@@ -1,0 +1,2 @@
+INSERT INTO public.subscriptions (user_id, status, plan_type, product_name, customer_email, customer_name, started_at, amount_cents)
+VALUES ('734f3e5b-aeab-477e-b582-654359bee34b', 'active', 'tester', 'Acesso Tester', 'thays.chavess@gmail.com', 'Thays', now(), 0);
