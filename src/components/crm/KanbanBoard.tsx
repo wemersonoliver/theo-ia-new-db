@@ -14,6 +14,7 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { CRMStage } from "@/hooks/useCRMStages";
 import { CRMDeal } from "@/hooks/useCRMDeals";
+import { Product } from "@/hooks/useProducts";
 import { KanbanColumn } from "./KanbanColumn";
 import { DealCard } from "./DealCard";
 import { DealDialog } from "./DealDialog";
