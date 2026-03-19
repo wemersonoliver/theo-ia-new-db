@@ -552,6 +552,24 @@ Regras adicionais:
           createAppointmentCalled = true;
         }
         
+        // Handle send_location separately
+        if (fc.name === "send_location") {
+          const locationResult = await executeSendLocation(supabase, userId, phone, aiConfig);
+          
+          geminiPayload.contents.push(content);
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{
+              functionResponse: {
+                name: fc.name,
+                response: locationResult,
+              }
+            }]
+          });
+          functionCallsProcessed++;
+          continue;
+        }
+        
         // Execute the function
         const functionResult = await executeFunction(supabase, supabaseUrl, fc.name, {
           ...fc.args,
