@@ -33,6 +33,7 @@ import {
   FlaskConical,
   Wand2,
   MapPin,
+  Repeat,
 } from "lucide-react";
 import { LocationPicker } from "@/components/LocationPicker";
 
