@@ -139,6 +139,7 @@ export function KanbanBoard({ stages, deals, contacts, products, onCreateDeal, o
         deal={selectedDeal}
         defaultStageId={defaultStageId}
         contacts={contacts}
+        products={products}
         onSave={handleSave}
         onDelete={onDeleteDeal}
       />
