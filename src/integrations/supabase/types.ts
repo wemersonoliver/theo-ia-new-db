@@ -187,6 +187,51 @@ export type Database = {
           },
         ]
       }
+      crm_deal_products: {
+        Row: {
+          created_at: string
+          deal_id: string
+          id: string
+          product_id: string
+          quantity: number
+          unit_price_cents: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deal_id: string
+          id?: string
+          product_id: string
+          quantity?: number
+          unit_price_cents?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deal_id?: string
+          id?: string
+          product_id?: string
+          quantity?: number
+          unit_price_cents?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_deal_products_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_deal_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_deals: {
         Row: {
           contact_id: string | null
@@ -539,6 +584,45 @@ export type Database = {
           evolution_api_url?: string | null
           id?: string
           updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          price_cents: number
+          quantity: number
+          sku: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          price_cents?: number
+          quantity?: number
+          sku?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          price_cents?: number
+          quantity?: number
+          sku?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []

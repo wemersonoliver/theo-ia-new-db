@@ -7,6 +7,7 @@ import { useCRMPipelines } from "@/hooks/useCRMPipelines";
 import { useCRMStages } from "@/hooks/useCRMStages";
 import { useCRMDeals } from "@/hooks/useCRMDeals";
 import { useContacts } from "@/hooks/useContacts";
+import { useProducts } from "@/hooks/useProducts";
 import { useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -16,6 +17,7 @@ export default function CRM() {
   const stageIds = useMemo(() => stages.map((s) => s.id), [stages]);
   const { deals, loading: dealsLoading, createDeal, updateDeal, moveDeal, deleteDeal } = useCRMDeals(activePipelineId, stageIds);
   const { contacts } = useContacts();
+  const { products } = useProducts();
 
   const [filters, setFilters] = useState<CRMFilterState>({ search: "", priorities: [], tags: [], minValue: 0, maxValue: 0 });
 
@@ -70,6 +72,7 @@ export default function CRM() {
             stages={stages}
             deals={filteredDeals}
             contacts={contactsList}
+            products={products.filter(p => p.active)}
             onCreateDeal={createDeal}
             onUpdateDeal={updateDeal}
             onMoveDeal={moveDeal}

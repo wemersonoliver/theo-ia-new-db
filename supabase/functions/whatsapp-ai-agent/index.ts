@@ -382,6 +382,28 @@ serve(async (req) => {
 
     const knowledgeBase = documents?.map(d => d.content_text).filter(Boolean).join("\n\n---\n\n") || "";
 
+    // Get products catalog
+    let productsCatalog = "";
+    try {
+      const { data: userProducts } = await supabase
+        .from("products")
+        .select("name, description, price_cents, quantity, sku, active")
+        .eq("user_id", userId)
+        .eq("active", true)
+        .order("name")
+        .limit(100);
+
+      if (userProducts && userProducts.length > 0) {
+        const productsList = userProducts.map((p: any) => {
+          const price = (p.price_cents / 100).toFixed(2);
+          return `- ${p.name}: R$ ${price}${p.description ? ` | ${p.description}` : ""}${p.quantity > 0 ? ` | Estoque: ${p.quantity}` : " | Sem estoque"}${p.sku ? ` | SKU: ${p.sku}` : ""}`;
+        }).join("\n");
+        productsCatalog = `\nCATÁLOGO DE PRODUTOS/SERVIÇOS:\n${productsList}\n\nQuando o cliente perguntar sobre produtos, preços ou disponibilidade, use estas informações para responder. Se um produto está sem estoque (quantidade 0), informe que está indisponível no momento.`;
+      }
+    } catch (e) {
+      console.error("Error fetching products:", e);
+    }
+
     // Get today's date for context
     const today = new Date();
     const todayStr = today.toISOString().split("T")[0];
@@ -435,6 +457,8 @@ REGRAS DE CONFIRMAÇÃO:
 ${aiConfig.custom_prompt || "Seja cordial, profissional e prestativo."}
 
 ${knowledgeBase ? `Use a seguinte base de conhecimento para responder:\n\n${knowledgeBase.slice(0, 6000)}` : ""}
+
+${productsCatalog}
 
 ${pendingConfirmationContext}
 

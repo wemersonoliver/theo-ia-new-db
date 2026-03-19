@@ -23,6 +23,7 @@ import AdminUsers from "./pages/AdminUsers";
 import Subscriptions from "./pages/Subscriptions";
 import NotFound from "./pages/NotFound";
 import CRM from "./pages/CRM";
+import Products from "./pages/Products";
 import LandingPage from "./pages/LandingPage";
 
 const queryClient = new QueryClient();
@@ -52,6 +53,7 @@ const App = () => (
               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
               <Route path="/subscriptions" element={<ProtectedRoute><Subscriptions /></ProtectedRoute>} />
               <Route path="/crm" element={<ProtectedRoute><CRM /></ProtectedRoute>} />
+              <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
