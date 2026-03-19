@@ -72,6 +72,7 @@ export default function CRM() {
             stages={stages}
             deals={filteredDeals}
             contacts={contactsList}
+            products={products.filter(p => p.active)}
             onCreateDeal={createDeal}
             onUpdateDeal={updateDeal}
             onMoveDeal={moveDeal}
