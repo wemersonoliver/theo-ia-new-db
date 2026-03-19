@@ -26,6 +26,10 @@ export interface AIConfig {
   reminder_enabled: boolean;
   reminder_hours_before: number;
   reminder_message_template: string | null;
+  business_address: string | null;
+  business_latitude: number | null;
+  business_longitude: number | null;
+  business_location_name: string | null;
   created_at: string;
   updated_at: string;
 }

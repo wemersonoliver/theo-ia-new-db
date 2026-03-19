@@ -153,6 +153,15 @@ const schedulingTools = {
         },
         required: ["tags"]
       }
+    },
+    {
+      name: "send_location",
+      description: "Envia a localização do negócio (pin no mapa) para o cliente via WhatsApp. Use quando o cliente perguntar 'onde fica?', 'qual o endereço?', 'como chego aí?', 'me manda a localização', 'localização', 'endereço', etc.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: []
+      }
     }
   ]
 };
@@ -429,6 +438,13 @@ ${knowledgeBase ? `Use a seguinte base de conhecimento para responder:\n\n${know
 
 ${pendingConfirmationContext}
 
+${aiConfig.business_latitude && aiConfig.business_longitude ? `LOCALIZAÇÃO DO NEGÓCIO:
+Você tem a ferramenta send_location para enviar a localização do negócio como um pin no mapa do WhatsApp.
+- Endereço: ${aiConfig.business_address || "Não informado"}
+- Nome do local: ${aiConfig.business_location_name || "Não informado"}
+- Quando o cliente perguntar "onde fica?", "qual o endereço?", "como chego aí?", "me manda a localização", "localização", envie o texto com o endereço E chame send_location para enviar o pin no mapa.
+- SEMPRE use send_location quando o cliente pedir localização ou endereço, além de responder com o endereço por texto.` : ""}
+
 IMPORTANTE - AGENDAMENTOS:
 Você tem acesso a ferramentas para gerenciar agendamentos. Quando o cliente:
 - Perguntar sobre disponibilidade ou horários: Use check_available_slots
@@ -534,6 +550,24 @@ Regras adicionais:
         
         if (fc.name === "create_appointment") {
           createAppointmentCalled = true;
+        }
+        
+        // Handle send_location separately
+        if (fc.name === "send_location") {
+          const locationResult = await executeSendLocation(supabase, userId, phone, aiConfig);
+          
+          geminiPayload.contents.push(content);
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{
+              functionResponse: {
+                name: fc.name,
+                response: locationResult,
+              }
+            }]
+          });
+          functionCallsProcessed++;
+          continue;
         }
         
         // Execute the function
@@ -698,6 +732,65 @@ Regras adicionais:
     });
   }
 });
+
+async function executeSendLocation(supabase: any, userId: string, phone: string, aiConfig: any): Promise<any> {
+  if (!aiConfig.business_latitude || !aiConfig.business_longitude) {
+    return { success: false, error: "Localização do negócio não configurada." };
+  }
+
+  try {
+    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+
+    if (!evolutionUrl || !evolutionKey) {
+      return { success: false, error: "API de envio não configurada." };
+    }
+
+    const { data: instance } = await supabase
+      .from("whatsapp_instances")
+      .select("instance_name")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!instance) {
+      return { success: false, error: "Instância WhatsApp não encontrada." };
+    }
+
+    const response = await fetch(`${evolutionUrl}/message/sendLocation/${instance.instance_name}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: evolutionKey,
+      },
+      body: JSON.stringify({
+        number: phone,
+        locationMessage: {
+          name: aiConfig.business_location_name || "Nosso endereço",
+          address: aiConfig.business_address || "",
+          latitude: aiConfig.business_latitude,
+          longitude: aiConfig.business_longitude,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Evolution sendLocation error:", errText);
+      return { success: false, error: "Erro ao enviar localização." };
+    }
+
+    await response.text();
+    
+    // Save location message to conversation
+    await saveAIMessage(supabase, userId, phone, `📍 Localização enviada: ${aiConfig.business_location_name || aiConfig.business_address}`, "ai");
+    
+    console.log("Location sent to:", phone);
+    return { success: true, message: "Localização enviada com sucesso para o cliente." };
+  } catch (error) {
+    console.error("Send location error:", error);
+    return { success: false, error: "Erro ao enviar localização." };
+  }
+}
 
 async function executeFunction(supabase: any, supabaseUrl: string, name: string, args: any): Promise<any> {
   const operation = name === "check_available_slots" ? "check_availability" : name;

@@ -580,9 +580,13 @@ export type Database = {
         Row: {
           active: boolean | null
           agent_name: string | null
+          business_address: string | null
           business_days: number[] | null
           business_hours_end: string | null
           business_hours_start: string | null
+          business_latitude: number | null
+          business_location_name: string | null
+          business_longitude: number | null
           created_at: string | null
           custom_prompt: string | null
           delay_between_messages: number | null
@@ -606,9 +610,13 @@ export type Database = {
         Insert: {
           active?: boolean | null
           agent_name?: string | null
+          business_address?: string | null
           business_days?: number[] | null
           business_hours_end?: string | null
           business_hours_start?: string | null
+          business_latitude?: number | null
+          business_location_name?: string | null
+          business_longitude?: number | null
           created_at?: string | null
           custom_prompt?: string | null
           delay_between_messages?: number | null
@@ -632,9 +640,13 @@ export type Database = {
         Update: {
           active?: boolean | null
           agent_name?: string | null
+          business_address?: string | null
           business_days?: number[] | null
           business_hours_end?: string | null
           business_hours_start?: string | null
+          business_latitude?: number | null
+          business_location_name?: string | null
+          business_longitude?: number | null
           created_at?: string | null
           custom_prompt?: string | null
           delay_between_messages?: number | null

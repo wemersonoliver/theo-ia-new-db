@@ -31,7 +31,9 @@ import {
   ChevronRight,
   FlaskConical,
   Wand2,
+  MapPin,
 } from "lucide-react";
+import { LocationPicker } from "@/components/LocationPicker";
 
 const DAYS = [
   { value: 0, label: "Dom" },
@@ -1063,6 +1065,10 @@ export default function AIAgent() {
             <Sparkles className="h-3.5 w-3.5" />
             Entrevista IA
           </TabsTrigger>
+          <TabsTrigger value="location" className="min-w-fit gap-1.5">
+            <MapPin className="h-3.5 w-3.5" />
+            Localização
+          </TabsTrigger>
           <TabsTrigger value="test" className="min-w-fit gap-1.5">
             <FlaskConical className="h-3.5 w-3.5" />
             Testar Prompt
@@ -1391,6 +1397,17 @@ export default function AIAgent() {
             {saveConfig.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Salvar Configurações
           </Button>
+        </TabsContent>
+
+        {/* ── ABA LOCALIZAÇÃO ── */}
+        <TabsContent value="location" className="space-y-6">
+          <LocationPicker
+            address={config?.business_address || ""}
+            latitude={config?.business_latitude || null}
+            longitude={config?.business_longitude || null}
+            locationName={config?.business_location_name || ""}
+            onUpdate={(data) => saveConfig.mutate(data)}
+          />
         </TabsContent>
 
         {/* ── ABA ENTREVISTA IA ── */}
