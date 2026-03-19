@@ -14,10 +14,27 @@ import { Button } from "@/components/ui/button";
 import { TrialBanner } from "@/components/TrialBanner";
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const { instance } = useWhatsAppInstance();
   const { conversations } = useConversations();
   const { config } = useAIConfig();
   const [tutorialOpen, setTutorialOpen] = useState(false);
+
+  // Redirect to onboarding if not completed
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("profiles")
+      .select("onboarding_completed")
+      .eq("user_id", user.id)
+      .single()
+      .then(({ data }) => {
+        if (data && !(data as any).onboarding_completed) {
+          navigate("/onboarding", { replace: true });
+        }
+      });
+  }, [user, navigate]);
 
   const todayMessages = conversations.reduce((total, conv) => {
     const todayMsgs = (conv.messages || []).filter((msg) => {
