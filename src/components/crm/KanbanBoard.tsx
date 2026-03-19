@@ -23,13 +23,14 @@ interface KanbanBoardProps {
   stages: CRMStage[];
   deals: CRMDeal[];
   contacts: { id: string; name: string | null; phone: string }[];
+  products?: Product[];
   onCreateDeal: (deal: any) => Promise<any>;
   onUpdateDeal: (id: string, updates: any) => void;
   onMoveDeal: (dealId: string, newStageId: string, newPosition: number) => void;
   onDeleteDeal: (id: string) => void;
 }
 
-export function KanbanBoard({ stages, deals, contacts, onCreateDeal, onUpdateDeal, onMoveDeal, onDeleteDeal }: KanbanBoardProps) {
+export function KanbanBoard({ stages, deals, contacts, products, onCreateDeal, onUpdateDeal, onMoveDeal, onDeleteDeal }: KanbanBoardProps) {
   const [activeDeal, setActiveDeal] = useState<CRMDeal | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedDeal, setSelectedDeal] = useState<CRMDeal | null>(null);
