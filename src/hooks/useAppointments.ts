@@ -175,6 +175,7 @@ export function useAppointments(selectedDate?: Date) {
     appointments,
     todayAppointments,
     upcomingAppointments,
+    appointmentDates,
     isLoading,
     updateStatus,
     deleteAppointment,
