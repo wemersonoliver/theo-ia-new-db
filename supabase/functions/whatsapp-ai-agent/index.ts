@@ -438,6 +438,13 @@ ${knowledgeBase ? `Use a seguinte base de conhecimento para responder:\n\n${know
 
 ${pendingConfirmationContext}
 
+${aiConfig.business_latitude && aiConfig.business_longitude ? `LOCALIZAÇÃO DO NEGÓCIO:
+Você tem a ferramenta send_location para enviar a localização do negócio como um pin no mapa do WhatsApp.
+- Endereço: ${aiConfig.business_address || "Não informado"}
+- Nome do local: ${aiConfig.business_location_name || "Não informado"}
+- Quando o cliente perguntar "onde fica?", "qual o endereço?", "como chego aí?", "me manda a localização", "localização", envie o texto com o endereço E chame send_location para enviar o pin no mapa.
+- SEMPRE use send_location quando o cliente pedir localização ou endereço, além de responder com o endereço por texto.` : ""}
+
 IMPORTANTE - AGENDAMENTOS:
 Você tem acesso a ferramentas para gerenciar agendamentos. Quando o cliente:
 - Perguntar sobre disponibilidade ou horários: Use check_available_slots
