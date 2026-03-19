@@ -1,55 +1,66 @@
 
 
-# Plano: Sistema de Cadastro de Produtos
+# Plano: Tela de Boas-Vindas (Onboarding Guiado)
 
 ## Resumo
-Criar um módulo de produtos com CRUD completo, importação via planilha (CSV/XLSX), e vinculação aos deals do CRM. A IA poderá consultar os produtos na base de conhecimento.
+Criar um fluxo de onboarding step-by-step para novos usuarios, sem sidebar, guiando-os pelos passos essenciais antes de liberar o painel completo.
 
 ## 1. Banco de Dados
 
-**Tabela `products`:**
-- `id` (uuid, PK), `user_id` (uuid, RLS), `name` (text), `description` (text), `quantity` (int, default 0), `price_cents` (int), `sku` (text, opcional), `active` (bool, default true), `created_at`, `updated_at`
-- RLS: `auth.uid() = user_id`
+**Adicionar coluna `onboarding_completed` na tabela `profiles`:**
+- Tipo: `boolean`, default `false`
+- Quando todos os passos forem concluidos, atualizar para `true`
 
-**Tabela `crm_deal_products`** (vinculação N:N):
-- `id` (uuid, PK), `deal_id` (uuid), `product_id` (uuid), `quantity` (int, default 1), `unit_price_cents` (int), `created_at`
-- RLS: via `user_id` herdado do deal (ou coluna própria `user_id`)
+## 2. Novo Componente: `Onboarding.tsx`
 
-## 2. Nova Página: Produtos (`/products`)
+Tela fullscreen (sem sidebar/DashboardLayout) com:
+- Barra de progresso no topo mostrando o passo atual
+- Checklist lateral resumido dos passos
+- Area principal com o conteudo do passo ativo
 
-- Listagem em tabela com busca e filtro
-- Modal de criação/edição com campos: nome, descrição, quantidade, valor
-- Botão de importação via planilha (CSV parsing com `Papa Parse` ou leitura nativa)
-  - Upload de arquivo CSV
-  - Preview dos dados antes de confirmar
-  - Mapeamento automático de colunas (nome, descrição, quantidade, valor)
-- Ações: editar, excluir, ativar/desativar
+**Passos do fluxo:**
 
-## 3. Integração com CRM
+| Passo | Titulo | Comportamento |
+|-------|--------|---------------|
+| 1 | Boas-vindas | Mensagem de boas-vindas + explicacao da ferramenta + botao "Comecar" |
+| 2 | Conectar WhatsApp | Embeds do componente de QR Code existente (reutiliza logica de `WhatsApp.tsx`). Botao "Proximo" habilitado quando status = "connected" |
+| 3 | Agendamentos | Pergunta se trabalha com agendamentos. Se SIM -> mostra componente de configuracao de horarios (reutiliza `AppointmentSettings`). Se NAO -> pula para passo 4 |
+| 4 | Entrevista IA | Texto explicativo + embeds do `InterviewTab` existente. Ao concluir entrevista, avanca automaticamente |
+| 5 | Local de atendimento | Pergunta se tem local publico. Se SIM -> mostra `LocationPicker`. Se NAO -> pula |
+| 6 | Testar Prompt | Area de teste do prompt gerado (reutiliza componente de teste existente) |
+| 7 | Concluido | Tela de parabens + botao "Ir para o Painel" que marca `onboarding_completed = true` |
 
-- No `DealDialog`, adicionar seção para vincular produtos ao deal
-- Select/multiselect de produtos com quantidade e valor unitário
-- Exibir valor total dos produtos no deal card
+## 3. Logica de Redirecionamento
 
-## 4. Integração com IA
+- No `Dashboard.tsx` (ou `ProtectedRoute`), verificar `profiles.onboarding_completed`
+- Se `false`, redirecionar para `/onboarding`
+- Se `true`, exibir dashboard normal
+- Rota `/onboarding` adicionada no `App.tsx`
 
-- Na edge function `whatsapp-ai-agent`, consultar tabela `products` do usuário para que a IA possa informar sobre disponibilidade, preços e descrições
+## 4. Reutilizacao de Componentes
 
-## 5. Sidebar
-
-- Adicionar item "Produtos" com ícone `Package` no menu de navegação
+Os componentes existentes serao extraidos/adaptados para funcionar tanto standalone quanto dentro do onboarding:
+- QR Code connection de `WhatsApp.tsx`
+- Configuracao de slots de `AppointmentSettings.tsx`
+- `InterviewTab` de `AIAgent.tsx`
+- `LocationPicker` existente
+- Area de teste de prompt de `AIAgent.tsx`
 
 ## Arquivos
 
-| Arquivo | Ação |
+| Arquivo | Acao |
 |---------|------|
-| Migration SQL (2 tabelas) | Criar |
-| `src/pages/Products.tsx` | Criar |
-| `src/hooks/useProducts.ts` | Criar |
-| `src/components/products/ProductDialog.tsx` | Criar |
-| `src/components/products/ProductImport.tsx` | Criar |
-| `src/components/crm/DealDialog.tsx` | Editar (vincular produtos) |
-| `src/components/Sidebar.tsx` | Editar (novo item) |
-| `src/App.tsx` | Editar (nova rota) |
-| `supabase/functions/whatsapp-ai-agent/index.ts` | Editar (consultar produtos) |
+| Migration SQL (add `onboarding_completed` to profiles) | Criar |
+| `src/pages/Onboarding.tsx` | Criar |
+| `src/App.tsx` | Editar (nova rota `/onboarding`) |
+| `src/pages/Dashboard.tsx` | Editar (redirect se onboarding incompleto) |
+| `src/integrations/supabase/types.ts` | Atualizar (novo campo) |
+
+## Detalhes Tecnicos
+
+- Estado do passo atual gerenciado via `useState` local
+- Cada passo e um componente/secao condicional dentro de `Onboarding.tsx`
+- Respostas de sim/nao (agendamentos, local) controlam quais passos sao exibidos ou pulados
+- O progresso visual usa o componente `Progress` existente
+- A verificacao de `onboarding_completed` e feita junto com a verificacao de acesso existente no `ProtectedRoute` ou diretamente no `Dashboard`
 
