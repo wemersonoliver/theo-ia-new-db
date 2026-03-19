@@ -458,6 +458,8 @@ ${aiConfig.custom_prompt || "Seja cordial, profissional e prestativo."}
 
 ${knowledgeBase ? `Use a seguinte base de conhecimento para responder:\n\n${knowledgeBase.slice(0, 6000)}` : ""}
 
+${productsCatalog}
+
 ${pendingConfirmationContext}
 
 ${aiConfig.business_latitude && aiConfig.business_longitude ? `LOCALIZAÇÃO DO NEGÓCIO:
