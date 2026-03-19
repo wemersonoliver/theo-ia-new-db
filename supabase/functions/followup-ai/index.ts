@@ -6,6 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Max items to process per invocation to avoid timeout (each takes ~5-8s with composing)
+const MAX_ITEMS_PER_RUN = 5;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -20,12 +23,14 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Fetch all pending follow-ups that are due
+    // Fetch pending follow-ups that are due (limited to avoid timeout)
     const { data: pendingItems, error: fetchError } = await supabase
       .from("followup_tracking")
       .select("*")
       .eq("status", "pending")
-      .lte("next_scheduled_at", new Date().toISOString());
+      .lte("next_scheduled_at", new Date().toISOString())
+      .order("next_scheduled_at", { ascending: true })
+      .limit(MAX_ITEMS_PER_RUN);
 
     if (fetchError) {
       console.error("Error fetching pending follow-ups:", fetchError);
@@ -39,11 +44,23 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Processing ${pendingItems.length} follow-ups`);
+    console.log(`Processing ${pendingItems.length} follow-ups (max ${MAX_ITEMS_PER_RUN})`);
     let processed = 0;
 
     for (const item of pendingItems) {
       try {
+        // Re-check status to avoid race conditions (client might have responded between fetch and now)
+        const { data: freshItem } = await supabase
+          .from("followup_tracking")
+          .select("status")
+          .eq("id", item.id)
+          .single();
+
+        if (!freshItem || freshItem.status !== "pending") {
+          console.log(`Skipping ${item.phone}: status changed to ${freshItem?.status}`);
+          continue;
+        }
+
         // Check 3h minimum interval
         if (item.last_sent_at) {
           const lastSent = new Date(item.last_sent_at).getTime();
@@ -62,7 +79,11 @@ serve(async (req) => {
           .maybeSingle();
 
         if (!config || !config.enabled) {
-          console.log(`Follow-up disabled for user ${item.user_id}`);
+          console.log(`Follow-up disabled for user ${item.user_id}, marking declined`);
+          await supabase
+            .from("followup_tracking")
+            .update({ status: "declined" })
+            .eq("id", item.id);
           continue;
         }
 
@@ -75,7 +96,11 @@ serve(async (req) => {
           .maybeSingle();
 
         if (!conversation) {
-          console.log(`No conversation found for ${item.phone}`);
+          console.log(`No conversation found for ${item.phone}, marking declined`);
+          await supabase
+            .from("followup_tracking")
+            .update({ status: "declined" })
+            .eq("id", item.id);
           continue;
         }
 
@@ -89,7 +114,7 @@ serve(async (req) => {
           continue;
         }
 
-        // Load user's AI config for agent name and prompt context
+        // Load user's AI config for agent name
         const { data: aiConfig } = await supabase
           .from("whatsapp_ai_config")
           .select("agent_name, custom_prompt")
@@ -193,11 +218,20 @@ Responda APENAS com a mensagem a ser enviada, sem explicações.`;
         if (!geminiResponse.ok) {
           const errText = await geminiResponse.text();
           console.error("Gemini error:", errText);
+          // On rate limit, skip this item - it'll be retried next run
+          if (geminiResponse.status === 429) {
+            console.log("Gemini rate limited, stopping batch");
+            break;
+          }
           continue;
         }
 
         const geminiData = await geminiResponse.json();
-        const aiMessage = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        const aiMessage = geminiData.candidates?.[0]?.content?.parts
+          ?.filter((p: any) => p.text && !p.thoughtSignature)
+          ?.map((p: any) => p.text)
+          ?.join("")
+          ?.trim();
 
         if (!aiMessage) {
           console.error("No AI message generated for", item.phone);
@@ -216,27 +250,23 @@ Responda APENAS com a mensagem a ser enviada, sem explicações.`;
           continue;
         }
 
-        // Simulate composing (typing indicator)
-        const composingDelay = 2000 + Math.random() * 3000; // 2-5 seconds
-        try {
-          await fetch(`${evolutionUrl}/chat/presence/${instance.instance_name}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              apikey: evolutionKey,
-            },
-            body: JSON.stringify({
-              number: item.phone,
-              delay: Math.floor(composingDelay),
-              presence: "composing",
-            }),
-          });
-        } catch (e) {
-          console.error("Composing simulation failed:", e);
-        }
+        // Simulate composing (typing indicator) — fire-and-forget, don't await
+        const composingDelay = 2000 + Math.random() * 2000; // 2-4 seconds
+        fetch(`${evolutionUrl}/chat/presence/${instance.instance_name}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: evolutionKey,
+          },
+          body: JSON.stringify({
+            number: item.phone,
+            delay: Math.floor(composingDelay),
+            presence: "composing",
+          }),
+        }).catch((e) => console.error("Composing simulation failed:", e));
 
-        // Wait for composing duration
-        await new Promise((resolve) => setTimeout(resolve, composingDelay));
+        // Short delay to let composing indicator show (but not full duration)
+        await new Promise((resolve) => setTimeout(resolve, Math.min(composingDelay, 2000)));
 
         // Send message via Evolution API
         const sendResponse = await fetch(
@@ -263,28 +293,26 @@ Responda APENAS com a mensagem a ser enviada, sem explicações.`;
         console.log(`Follow-up sent to ${item.phone} (step ${item.current_step}, day ${currentDay})`);
 
         // Save the sent message in the conversation
-        if (conversation) {
-          const existingMessages = (conversation.messages as any[]) || [];
-          const followupMessage = {
-            id: crypto.randomUUID(),
-            timestamp: new Date().toISOString(),
-            from_me: true,
-            content: aiMessage,
-            type: "text",
-            sent_by: "followup_ai",
-          };
-          const updatedMessages = [...existingMessages, followupMessage];
+        const existingMessages = (conversation.messages as any[]) || [];
+        const followupMessage = {
+          id: crypto.randomUUID(),
+          timestamp: new Date().toISOString(),
+          from_me: true,
+          content: aiMessage,
+          type: "text",
+          sent_by: "followup_ai",
+        };
+        const updatedMessages = [...existingMessages, followupMessage];
 
-          await supabase
-            .from("whatsapp_conversations")
-            .update({
-              messages: updatedMessages,
-              last_message_at: new Date().toISOString(),
-              total_messages: updatedMessages.length,
-            })
-            .eq("user_id", item.user_id)
-            .eq("phone", item.phone);
-        }
+        await supabase
+          .from("whatsapp_conversations")
+          .update({
+            messages: updatedMessages,
+            last_message_at: new Date().toISOString(),
+            total_messages: updatedMessages.length,
+          })
+          .eq("user_id", item.user_id)
+          .eq("phone", item.phone);
 
         // Calculate next scheduled time
         const nextStep = item.current_step + 1;
@@ -297,27 +325,7 @@ Responda APENAS com a mensagem a ser enviada, sem explicações.`;
 
         let nextScheduledAt: string | null = null;
         if (newStatus === "pending") {
-          const isNextMorning = nextStep % 2 === 1;
-          const windowStart = isNextMorning ? config.morning_window_start : config.evening_window_start;
-          const windowEnd = isNextMorning ? config.morning_window_end : config.evening_window_end;
-
-          // If next step is in the same day (afternoon after morning), schedule today
-          // If next step starts a new day, schedule tomorrow
-          const nextDate = new Date();
-          if (!isMorning) {
-            // Current is afternoon, next is tomorrow morning
-            nextDate.setDate(nextDate.getDate() + 1);
-          }
-
-          // Random time within window
-          const [startH, startM] = windowStart.split(":").map(Number);
-          const [endH, endM] = windowEnd.split(":").map(Number);
-          const startMinutes = startH * 60 + startM;
-          const endMinutes = endH * 60 + endM;
-          const randomMinutes = startMinutes + Math.floor(Math.random() * (endMinutes - startMinutes));
-
-          nextDate.setHours(Math.floor(randomMinutes / 60), randomMinutes % 60, 0, 0);
-          nextScheduledAt = nextDate.toISOString();
+          nextScheduledAt = calculateNextSchedule(config, nextStep, isMorning);
         }
 
         // Generate context summary on first step
@@ -359,3 +367,35 @@ Responda APENAS com a mensagem a ser enviada, sem explicações.`;
     );
   }
 });
+
+function calculateNextSchedule(config: any, nextStep: number, currentIsMorning: boolean): string {
+  const isNextMorning = nextStep % 2 === 1;
+  const windowStart = isNextMorning ? config.morning_window_start : config.evening_window_start;
+  const windowEnd = isNextMorning ? config.morning_window_end : config.evening_window_end;
+
+  const nextDate = new Date();
+
+  // If current step was afternoon, next (morning) is tomorrow
+  // If current step was morning, next (afternoon) is today
+  if (!currentIsMorning) {
+    nextDate.setDate(nextDate.getDate() + 1);
+  }
+
+  const [startH, startM] = (windowStart || "08:00").split(":").map(Number);
+  const [endH, endM] = (windowEnd || "19:00").split(":").map(Number);
+  const startMinutes = startH * 60 + startM;
+  const endMinutes = endH * 60 + endM;
+
+  // Ensure we have a valid range
+  const range = Math.max(endMinutes - startMinutes, 1);
+  const randomMinutes = startMinutes + Math.floor(Math.random() * range);
+
+  nextDate.setHours(Math.floor(randomMinutes / 60), randomMinutes % 60, 0, 0);
+
+  // Safety: if scheduled in the past, push to tomorrow
+  if (nextDate.getTime() < Date.now()) {
+    nextDate.setDate(nextDate.getDate() + 1);
+  }
+
+  return nextDate.toISOString();
+}
