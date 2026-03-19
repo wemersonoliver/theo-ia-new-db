@@ -268,6 +268,35 @@ serve(async (req) => {
           continue; // Don't trigger AI for outgoing messages
         }
 
+        // Check if there's an active follow-up and mark as engaged
+        if (!isFromMe) {
+          const { data: activeFollowup } = await supabase
+            .from("followup_tracking")
+            .select("id, current_step")
+            .eq("user_id", userId)
+            .eq("phone", phone)
+            .eq("status", "pending")
+            .maybeSingle();
+
+          if (activeFollowup) {
+            const isMorningStep = activeFollowup.current_step % 2 === 1;
+            await supabase
+              .from("followup_tracking")
+              .update({
+                status: "engaged",
+                engagement_data: {
+                  engaged_at_step: activeFollowup.current_step,
+                  engaged_at_turn: isMorningStep ? "morning" : "afternoon",
+                  engaged_at: new Date().toISOString(),
+                },
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", activeFollowup.id);
+
+            console.log("Follow-up engaged by client response:", phone, "at step", activeFollowup.current_step);
+          }
+        }
+
         // Handle incoming messages
         const isMediaMessage = isImageMessage || isDocumentMessage || isStickerMessage;
         const newMessage: any = {

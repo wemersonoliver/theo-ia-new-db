@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.kiwify-sync]
 verify_jwt = false
+
+[functions.followup-ai]
+verify_jwt = false
+
+[functions.followup-check-inactive]
+verify_jwt = false
