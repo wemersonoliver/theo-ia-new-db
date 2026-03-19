@@ -1399,6 +1399,17 @@ export default function AIAgent() {
           </Button>
         </TabsContent>
 
+        {/* ── ABA LOCALIZAÇÃO ── */}
+        <TabsContent value="location" className="space-y-6">
+          <LocationPicker
+            address={config?.business_address || ""}
+            latitude={config?.business_latitude || null}
+            longitude={config?.business_longitude || null}
+            locationName={config?.business_location_name || ""}
+            onUpdate={(data) => saveConfig.mutate(data)}
+          />
+        </TabsContent>
+
         {/* ── ABA ENTREVISTA IA ── */}
         <TabsContent value="interview">
           <InterviewTab onPromptApplied={handlePromptApplied} />
