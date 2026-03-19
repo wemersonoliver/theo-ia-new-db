@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { FollowupTab } from "@/components/followup/FollowupTab";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ import {
   FlaskConical,
   Wand2,
   MapPin,
+  Repeat,
 } from "lucide-react";
 import { LocationPicker } from "@/components/LocationPicker";
 
@@ -1073,6 +1075,10 @@ export default function AIAgent() {
             <FlaskConical className="h-3.5 w-3.5" />
             Testar Prompt
           </TabsTrigger>
+          <TabsTrigger value="followup" className="min-w-fit gap-1.5">
+            <Repeat className="h-3.5 w-3.5" />
+            Follow-Up
+          </TabsTrigger>
         </TabsList>
 
         {/* ── ABA GERAL ── */}
@@ -1418,6 +1424,11 @@ export default function AIAgent() {
         {/* ── ABA TESTAR PROMPT ── */}
         <TabsContent value="test">
           <PromptTestTab />
+        </TabsContent>
+
+        {/* ── ABA FOLLOW-UP ── */}
+        <TabsContent value="followup">
+          <FollowupTab />
         </TabsContent>
       </Tabs>
     </DashboardLayout>

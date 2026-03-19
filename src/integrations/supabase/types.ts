@@ -360,6 +360,96 @@ export type Database = {
         }
         Relationships: []
       }
+      followup_config: {
+        Row: {
+          bargaining_tools: string | null
+          created_at: string | null
+          enabled: boolean
+          evening_window_end: string
+          evening_window_start: string
+          exclude_handoff: boolean
+          id: string
+          inactivity_hours: number
+          max_days: number
+          morning_window_end: string
+          morning_window_start: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          bargaining_tools?: string | null
+          created_at?: string | null
+          enabled?: boolean
+          evening_window_end?: string
+          evening_window_start?: string
+          exclude_handoff?: boolean
+          id?: string
+          inactivity_hours?: number
+          max_days?: number
+          morning_window_end?: string
+          morning_window_start?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          bargaining_tools?: string | null
+          created_at?: string | null
+          enabled?: boolean
+          evening_window_end?: string
+          evening_window_start?: string
+          exclude_handoff?: boolean
+          id?: string
+          inactivity_hours?: number
+          max_days?: number
+          morning_window_end?: string
+          morning_window_start?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      followup_tracking: {
+        Row: {
+          context_summary: string | null
+          created_at: string | null
+          current_step: number
+          engagement_data: Json | null
+          id: string
+          last_sent_at: string | null
+          next_scheduled_at: string | null
+          phone: string
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          context_summary?: string | null
+          created_at?: string | null
+          current_step?: number
+          engagement_data?: Json | null
+          id?: string
+          last_sent_at?: string | null
+          next_scheduled_at?: string | null
+          phone: string
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          context_summary?: string | null
+          created_at?: string | null
+          current_step?: number
+          engagement_data?: Json | null
+          id?: string
+          last_sent_at?: string | null
+          next_scheduled_at?: string | null
+          phone?: string
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       knowledge_base_documents: {
         Row: {
           content_text: string | null
