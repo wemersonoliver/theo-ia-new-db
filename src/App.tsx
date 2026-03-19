@@ -23,6 +23,7 @@ import AdminUsers from "./pages/AdminUsers";
 import Subscriptions from "./pages/Subscriptions";
 import NotFound from "./pages/NotFound";
 import CRM from "./pages/CRM";
+import Products from "./pages/Products";
 import LandingPage from "./pages/LandingPage";
 
 const queryClient = new QueryClient();
