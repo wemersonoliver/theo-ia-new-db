@@ -153,6 +153,15 @@ const schedulingTools = {
         },
         required: ["tags"]
       }
+    },
+    {
+      name: "send_location",
+      description: "Envia a localização do negócio (pin no mapa) para o cliente via WhatsApp. Use quando o cliente perguntar 'onde fica?', 'qual o endereço?', 'como chego aí?', 'me manda a localização', 'localização', 'endereço', etc.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: []
+      }
     }
   ]
 };
