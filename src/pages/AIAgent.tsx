@@ -1074,6 +1074,10 @@ export default function AIAgent() {
             <FlaskConical className="h-3.5 w-3.5" />
             Testar Prompt
           </TabsTrigger>
+          <TabsTrigger value="followup" className="min-w-fit gap-1.5">
+            <Repeat className="h-3.5 w-3.5" />
+            Follow-Up
+          </TabsTrigger>
         </TabsList>
 
         {/* ── ABA GERAL ── */}
