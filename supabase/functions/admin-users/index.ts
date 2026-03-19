@@ -42,19 +42,21 @@ serve(async (req) => {
       });
     }
 
-    const { action, userId, password } = await req.json();
+    const { action, userId, password, subscriptionData } = await req.json();
 
     if (action === "list_users") {
       const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
       if (error) throw error;
 
-      // Get profiles and roles
+      // Get profiles, roles and subscriptions
       const { data: profiles } = await supabaseAdmin.from("profiles").select("*");
       const { data: roles } = await supabaseAdmin.from("user_roles").select("*");
+      const { data: subscriptions } = await supabaseAdmin.from("subscriptions").select("*");
 
       const enrichedUsers = users.map((u) => {
         const profile = profiles?.find((p) => p.user_id === u.id);
         const userRoles = roles?.filter((r) => r.user_id === u.id).map((r) => r.role) || [];
+        const userSub = subscriptions?.find((s) => s.user_id === u.id && s.status === "active");
         return {
           id: u.id,
           email: u.email,
@@ -63,6 +65,13 @@ serve(async (req) => {
           created_at: u.created_at,
           last_sign_in_at: u.last_sign_in_at,
           roles: userRoles,
+          subscription: userSub ? {
+            id: userSub.id,
+            status: userSub.status,
+            plan_type: userSub.plan_type,
+            product_name: userSub.product_name,
+            expires_at: userSub.expires_at,
+          } : null,
         };
       });
 
@@ -103,6 +112,56 @@ serve(async (req) => {
       }
 
       return new Response(JSON.stringify({ success: true, is_blocked: newStatus }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "grant_subscription") {
+      if (!userId || !subscriptionData) throw new Error("userId and subscriptionData required");
+      
+      // Deactivate existing active subscriptions
+      await supabaseAdmin
+        .from("subscriptions")
+        .update({ status: "inactive" })
+        .eq("user_id", userId)
+        .eq("status", "active");
+
+      // Get user email
+      const { data: { user: targetUser } } = await supabaseAdmin.auth.admin.getUserById(userId);
+      
+      const { error } = await supabaseAdmin
+        .from("subscriptions")
+        .insert({
+          user_id: userId,
+          status: "active",
+          plan_type: subscriptionData.plan_type || "tester",
+          product_name: subscriptionData.product_name || "Acesso Tester",
+          customer_email: targetUser?.email || "",
+          customer_name: subscriptionData.customer_name || "",
+          started_at: new Date().toISOString(),
+          expires_at: subscriptionData.expires_at || null,
+          amount_cents: 0,
+        });
+      
+      if (error) throw error;
+      
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "revoke_subscription") {
+      if (!userId) throw new Error("userId required");
+      
+      const { error } = await supabaseAdmin
+        .from("subscriptions")
+        .update({ status: "inactive", cancelled_at: new Date().toISOString() })
+        .eq("user_id", userId)
+        .eq("status", "active");
+      
+      if (error) throw error;
+      
+      return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
