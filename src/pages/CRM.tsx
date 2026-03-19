@@ -17,6 +17,7 @@ export default function CRM() {
   const stageIds = useMemo(() => stages.map((s) => s.id), [stages]);
   const { deals, loading: dealsLoading, createDeal, updateDeal, moveDeal, deleteDeal } = useCRMDeals(activePipelineId, stageIds);
   const { contacts } = useContacts();
+  const { products } = useProducts();
 
   const [filters, setFilters] = useState<CRMFilterState>({ search: "", priorities: [], tags: [], minValue: 0, maxValue: 0 });
 
