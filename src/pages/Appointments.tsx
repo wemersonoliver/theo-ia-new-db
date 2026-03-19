@@ -32,7 +32,7 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
 
 export default function Appointments() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const { appointments, isLoading, updateStatus, deleteAppointment } = useAppointments(selectedDate);
+  const { appointments, appointmentDates, isLoading, updateStatus, deleteAppointment } = useAppointments(selectedDate);
 
   const formatTime = (time: string) => {
     return time.slice(0, 5);
@@ -42,13 +42,7 @@ export default function Appointments() {
     updateStatus.mutate({ id, status });
   };
 
-  const getAppointmentDates = () => {
-    const dates = new Set<string>();
-    appointments.forEach((apt) => {
-      dates.add(apt.appointment_date);
-    });
-    return dates;
-  };
+  const appointmentDatesSet = new Set(appointmentDates);
 
   const filteredAppointments = selectedDate
     ? appointments.filter(
