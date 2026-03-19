@@ -31,7 +31,9 @@ import {
   ChevronRight,
   FlaskConical,
   Wand2,
+  MapPin,
 } from "lucide-react";
+import { LocationPicker } from "@/components/LocationPicker";
 
 const DAYS = [
   { value: 0, label: "Dom" },
