@@ -19,10 +19,19 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Lock, Unlock, KeyRound, ShieldCheck, Users } from "lucide-react";
+import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
 interface AdminUser {
@@ -33,6 +42,13 @@ interface AdminUser {
   created_at: string;
   last_sign_in_at: string | null;
   roles: string[];
+  subscription: {
+    id: string;
+    status: string;
+    plan_type: string;
+    product_name: string;
+    expires_at: string | null;
+  } | null;
 }
 
 export default function AdminUsers() {
@@ -44,6 +60,9 @@ export default function AdminUsers() {
   const [passwordDialog, setPasswordDialog] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [subDialog, setSubDialog] = useState<AdminUser | null>(null);
+  const [subPlanType, setSubPlanType] = useState("tester");
+  const [subExpiry, setSubExpiry] = useState("");
 
   useEffect(() => {
     checkRole();
@@ -111,14 +130,80 @@ export default function AdminUsers() {
     setActionLoading(false);
   };
 
+  const handleGrantSubscription = async () => {
+    if (!subDialog) return;
+    setActionLoading(true);
+
+    const planLabels: Record<string, string> = {
+      tester: "Acesso Tester",
+      mensal: "Plano Mensal",
+      anual: "Plano Anual",
+      lifetime: "Acesso Vitalício",
+    };
+
+    const { error } = await supabase.functions.invoke("admin-users", {
+      body: {
+        action: "grant_subscription",
+        userId: subDialog.id,
+        subscriptionData: {
+          plan_type: subPlanType,
+          product_name: planLabels[subPlanType] || subPlanType,
+          customer_name: subDialog.full_name,
+          expires_at: subExpiry || null,
+        },
+      },
+    });
+
+    if (error) {
+      toast({ title: "Erro", description: "Falha ao conceder assinatura", variant: "destructive" });
+    } else {
+      toast({ title: "Sucesso", description: `Assinatura "${planLabels[subPlanType]}" concedida para ${subDialog.email}` });
+      setSubDialog(null);
+      setSubPlanType("tester");
+      setSubExpiry("");
+      fetchUsers();
+    }
+    setActionLoading(false);
+  };
+
+  const handleRevokeSubscription = async (userId: string) => {
+    setActionLoading(true);
+    const { error } = await supabase.functions.invoke("admin-users", {
+      body: { action: "revoke_subscription", userId },
+    });
+    if (error) {
+      toast({ title: "Erro", description: "Falha ao revogar assinatura", variant: "destructive" });
+    } else {
+      toast({ title: "Sucesso", description: "Assinatura revogada" });
+      fetchUsers();
+    }
+    setActionLoading(false);
+  };
+
   if (isSuperAdmin === false) {
     return <Navigate to="/dashboard" replace />;
   }
 
+  const getSubBadge = (u: AdminUser) => {
+    if (u.subscription) {
+      const colors: Record<string, string> = {
+        tester: "bg-blue-500/10 text-blue-600 border-blue-200",
+        mensal: "bg-green-500/10 text-green-600 border-green-200",
+        anual: "bg-purple-500/10 text-purple-600 border-purple-200",
+        lifetime: "bg-amber-500/10 text-amber-600 border-amber-200",
+      };
+      return (
+        <Badge variant="outline" className={colors[u.subscription.plan_type] || ""}>
+          {u.subscription.product_name || u.subscription.plan_type}
+        </Badge>
+      );
+    }
+    return <Badge variant="secondary" className="opacity-50">Sem assinatura</Badge>;
+  };
+
   return (
     <DashboardLayout title="Administração" description="Gerencie todos os usuários da plataforma">
       <div className="space-y-6">
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
@@ -136,76 +221,98 @@ export default function AdminUsers() {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Cadastro</TableHead>
-                    <TableHead>Último Login</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {users.map((u) => (
-                    <TableRow key={u.id}>
-                      <TableCell className="font-medium">{u.full_name || "—"}</TableCell>
-                      <TableCell>{u.email}</TableCell>
-                      <TableCell>
-                        {u.roles.map((r) => (
-                          <Badge
-                            key={r}
-                            variant={r === "super_admin" ? "default" : "secondary"}
-                            className="mr-1"
-                          >
-                            {r}
-                          </Badge>
-                        ))}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={u.is_blocked ? "destructive" : "outline"}>
-                          {u.is_blocked ? "Bloqueado" : "Ativo"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {new Date(u.created_at).toLocaleDateString("pt-BR")}
-                      </TableCell>
-                      <TableCell>
-                        {u.last_sign_in_at
-                          ? new Date(u.last_sign_in_at).toLocaleDateString("pt-BR")
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-right space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPasswordDialog(u.id)}
-                          disabled={actionLoading}
-                        >
-                          <KeyRound className="h-4 w-4" />
-                        </Button>
-                        {!u.roles.includes("super_admin") && (
-                          <Button
-                            variant={u.is_blocked ? "default" : "destructive"}
-                            size="sm"
-                            onClick={() => handleToggleBlock(u.id)}
-                            disabled={actionLoading}
-                          >
-                            {u.is_blocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                          </Button>
-                        )}
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Assinatura</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Cadastro</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {users.map((u) => (
+                      <TableRow key={u.id}>
+                        <TableCell className="font-medium">{u.full_name || "—"}</TableCell>
+                        <TableCell>{u.email}</TableCell>
+                        <TableCell>
+                          {u.roles.map((r) => (
+                            <Badge
+                              key={r}
+                              variant={r === "super_admin" ? "default" : "secondary"}
+                              className="mr-1"
+                            >
+                              {r}
+                            </Badge>
+                          ))}
+                        </TableCell>
+                        <TableCell>{getSubBadge(u)}</TableCell>
+                        <TableCell>
+                          <Badge variant={u.is_blocked ? "destructive" : "outline"}>
+                            {u.is_blocked ? "Bloqueado" : "Ativo"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {new Date(u.created_at).toLocaleDateString("pt-BR")}
+                        </TableCell>
+                        <TableCell className="text-right space-x-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSubDialog(u)}
+                            disabled={actionLoading}
+                            title="Conceder assinatura"
+                          >
+                            <CreditCard className="h-4 w-4" />
+                          </Button>
+                          {u.subscription && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRevokeSubscription(u.id)}
+                              disabled={actionLoading}
+                              title="Revogar assinatura"
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPasswordDialog(u.id)}
+                            disabled={actionLoading}
+                            title="Alterar senha"
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                          {!u.roles.includes("super_admin") && (
+                            <Button
+                              variant={u.is_blocked ? "default" : "destructive"}
+                              size="sm"
+                              onClick={() => handleToggleBlock(u.id)}
+                              disabled={actionLoading}
+                              title={u.is_blocked ? "Desbloquear" : "Bloquear"}
+                            >
+                              {u.is_blocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
       </div>
 
+      {/* Dialog Alterar Senha */}
       <Dialog open={!!passwordDialog} onOpenChange={() => { setPasswordDialog(null); setNewPassword(""); }}>
         <DialogContent>
           <DialogHeader>
@@ -222,8 +329,56 @@ export default function AdminUsers() {
               Cancelar
             </Button>
             <Button onClick={handleChangePassword} disabled={actionLoading}>
-              {actionLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Conceder Assinatura */}
+      <Dialog open={!!subDialog} onOpenChange={() => { setSubDialog(null); setSubPlanType("tester"); setSubExpiry(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Conceder Assinatura</DialogTitle>
+            <DialogDescription>
+              {subDialog?.email}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Tipo de Plano</Label>
+              <Select value={subPlanType} onValueChange={setSubPlanType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tester">🧪 Tester (gratuito)</SelectItem>
+                  <SelectItem value="mensal">📅 Mensal</SelectItem>
+                  <SelectItem value="anual">📆 Anual</SelectItem>
+                  <SelectItem value="lifetime">♾️ Vitalício</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Data de Expiração (opcional)</Label>
+              <Input
+                type="date"
+                value={subExpiry}
+                onChange={(e) => setSubExpiry(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Deixe vazio para acesso sem expiração
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setSubDialog(null); setSubPlanType("tester"); setSubExpiry(""); }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleGrantSubscription} disabled={actionLoading}>
+              {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Conceder Assinatura
             </Button>
           </DialogFooter>
         </DialogContent>
