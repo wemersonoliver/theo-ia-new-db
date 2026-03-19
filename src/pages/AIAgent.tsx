@@ -218,15 +218,15 @@ function InterviewTab({
 
       if (error) throw error;
       setInterviewId(interview.id);
-      setInterviewState("chat");
       setMessages([]);
-      setIsLoading(false);
-      stopLoadingAnimation();
 
       // Primeira chamada — sem mensagem do usuário
       await callInterviewAgent([]);
+      setInterviewState("chat");
     } catch (err) {
       toast.error("Erro ao iniciar entrevista");
+      setInterviewState("idle");
+    } finally {
       setIsLoading(false);
       stopLoadingAnimation();
     }
