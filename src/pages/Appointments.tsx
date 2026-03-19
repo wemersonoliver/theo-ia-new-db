@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppointments, Appointment } from "@/hooks/useAppointments";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { 
   Clock, 
@@ -32,7 +32,7 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
 
 export default function Appointments() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const { appointments, isLoading, updateStatus, deleteAppointment } = useAppointments(selectedDate);
+  const { appointments, appointmentDates, isLoading, updateStatus, deleteAppointment } = useAppointments(selectedDate);
 
   const formatTime = (time: string) => {
     return time.slice(0, 5);
@@ -42,13 +42,7 @@ export default function Appointments() {
     updateStatus.mutate({ id, status });
   };
 
-  const getAppointmentDates = () => {
-    const dates = new Set<string>();
-    appointments.forEach((apt) => {
-      dates.add(apt.appointment_date);
-    });
-    return dates;
-  };
+  const appointmentDatesSet = new Set(appointmentDates);
 
   const filteredAppointments = selectedDate
     ? appointments.filter(
@@ -79,15 +73,16 @@ export default function Appointments() {
               selected={selectedDate}
               onSelect={setSelectedDate}
               locale={ptBR}
-              className="rounded-md border"
+              className="rounded-md border pointer-events-auto"
               modifiers={{
                 hasAppointment: (date) =>
-                  getAppointmentDates().has(format(date, "yyyy-MM-dd")),
+                  appointmentDatesSet.has(format(date, "yyyy-MM-dd")),
               }}
               modifiersStyles={{
                 hasAppointment: {
-                  fontWeight: "bold",
-                  textDecoration: "underline",
+                  backgroundColor: "hsl(142 70% 90%)",
+                  borderRadius: "6px",
+                  fontWeight: 600,
                 },
               }}
             />

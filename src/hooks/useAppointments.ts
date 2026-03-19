@@ -98,9 +98,7 @@ export function useAppointments(selectedDate?: Date) {
     queryKey: ["appointments-upcoming", user?.id],
     queryFn: async () => {
       if (!user) return [];
-
       const today = new Date().toISOString().split("T")[0];
-
       const { data, error } = await supabase
         .from("appointments")
         .select("*")
@@ -110,13 +108,23 @@ export function useAppointments(selectedDate?: Date) {
         .order("appointment_date", { ascending: true })
         .order("appointment_time", { ascending: true })
         .limit(5);
-
-      if (error) {
-        console.error("Error fetching upcoming appointments:", error);
-        return [];
-      }
-
+      if (error) { console.error("Error fetching upcoming appointments:", error); return []; }
       return data as Appointment[];
+    },
+    enabled: !!user,
+  });
+
+  const { data: appointmentDates = [] } = useQuery({
+    queryKey: ["appointment-dates", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("appointment_date")
+        .eq("user_id", user.id)
+        .neq("status", "cancelled");
+      if (error) { console.error("Error fetching appointment dates:", error); return []; }
+      return [...new Set(data.map(d => d.appointment_date))] as string[];
     },
     enabled: !!user,
   });
@@ -167,6 +175,7 @@ export function useAppointments(selectedDate?: Date) {
     appointments,
     todayAppointments,
     upcomingAppointments,
+    appointmentDates,
     isLoading,
     updateStatus,
     deleteAppointment,
