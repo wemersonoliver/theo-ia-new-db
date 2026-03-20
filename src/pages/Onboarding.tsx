@@ -462,7 +462,7 @@ function AppointmentsConfigStep({ onNext }: { onNext: () => void }) {
   const groupedSlots = DAYS.map(day => ({ ...day, slots: slots.filter(s => s.day_of_week === day.value) }));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <Clock className="h-6 w-6 text-primary" />
@@ -473,28 +473,12 @@ function AppointmentsConfigStep({ onNext }: { onNext: () => void }) {
         </p>
       </div>
 
-      {/* Tab buttons */}
-      <div className="flex gap-2 border-b pb-2">
-        <Button
-          variant={activeTab === "types" ? "default" : "outline"}
-          size="sm"
-          className="gap-2"
-          onClick={() => setActiveTab("types")}
-        >
-          <Tag className="h-4 w-4" /> Tipos de Agendamento
-        </Button>
-        <Button
-          variant={activeTab === "slots" ? "default" : "outline"}
-          size="sm"
-          className="gap-2"
-          onClick={() => setActiveTab("slots")}
-        >
-          <Clock className="h-4 w-4" /> Horários
-        </Button>
-      </div>
-
-      {/* TYPES TAB */}
-      {activeTab === "types" && (
+      {/* TIPOS DE AGENDAMENTO */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <Tag className="h-5 w-5 text-primary" />
+          1. Tipos de Agendamento (Serviços)
+        </h3>
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
@@ -587,10 +571,14 @@ function AppointmentsConfigStep({ onNext }: { onNext: () => void }) {
             </CardContent>
           </Card>
         </div>
-      )}
+      </div>
 
-      {/* SLOTS TAB */}
-      {activeTab === "slots" && (
+      {/* HORÁRIOS */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <Clock className="h-5 w-5 text-primary" />
+          2. Dias e Horários Disponíveis
+        </h3>
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
@@ -668,7 +656,7 @@ function AppointmentsConfigStep({ onNext }: { onNext: () => void }) {
             </CardContent>
           </Card>
         </div>
-      )}
+      </div>
 
       <div className="flex justify-end">
         <Button onClick={onNext} size="lg" className="gap-2">
