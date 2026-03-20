@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import {
   Sparkles, Smartphone, QrCode, Loader2, RefreshCw, CheckCircle2, XCircle,
   Calendar, Bot, MapPin, FlaskConical, PartyPopper, ChevronRight, ArrowRight,
-  Check, Send, Copy, Clock, Plus, Trash2, Power, Wand2,
+  Check, Send, Copy, Clock, Plus, Trash2, Power, Wand2, Tag, Pencil,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
