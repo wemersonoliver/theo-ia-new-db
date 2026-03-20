@@ -56,31 +56,43 @@ export type Database = {
       appointment_types: {
         Row: {
           created_at: string | null
+          days_of_week: number[]
           description: string | null
           duration_minutes: number
+          end_time: string
           id: string
           is_active: boolean
+          max_appointments_per_slot: number
           name: string
+          start_time: string
           updated_at: string | null
           user_id: string
         }
         Insert: {
           created_at?: string | null
+          days_of_week?: number[]
           description?: string | null
           duration_minutes?: number
+          end_time?: string
           id?: string
           is_active?: boolean
+          max_appointments_per_slot?: number
           name: string
+          start_time?: string
           updated_at?: string | null
           user_id: string
         }
         Update: {
           created_at?: string | null
+          days_of_week?: number[]
           description?: string | null
           duration_minutes?: number
+          end_time?: string
           id?: string
           is_active?: boolean
+          max_appointments_per_slot?: number
           name?: string
+          start_time?: string
           updated_at?: string | null
           user_id?: string
         }
