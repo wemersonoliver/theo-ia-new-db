@@ -9,10 +9,26 @@ export interface AppointmentType {
   name: string;
   description: string | null;
   duration_minutes: number;
+  days_of_week: number[];
+  start_time: string;
+  end_time: string;
+  max_appointments_per_slot: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
+
+export type AppointmentTypeInput = {
+  id?: string;
+  name: string;
+  description?: string | null;
+  duration_minutes: number;
+  days_of_week: number[];
+  start_time: string;
+  end_time: string;
+  max_appointments_per_slot: number;
+  is_active?: boolean;
+};
 
 export function useAppointmentTypes() {
   const { user } = useAuth();
@@ -38,30 +54,30 @@ export function useAppointmentTypes() {
   });
 
   const saveType = useMutation({
-    mutationFn: async (type: { id?: string; name: string; description?: string | null; duration_minutes: number; is_active?: boolean }) => {
+    mutationFn: async (type: AppointmentTypeInput) => {
       if (!user) throw new Error("Usuário não autenticado");
+
+      const payload = {
+        name: type.name,
+        description: type.description ?? null,
+        duration_minutes: type.duration_minutes,
+        days_of_week: type.days_of_week,
+        start_time: type.start_time,
+        end_time: type.end_time,
+        max_appointments_per_slot: type.max_appointments_per_slot,
+        is_active: type.is_active ?? true,
+      };
 
       if (type.id) {
         const { error } = await supabase
           .from("appointment_types")
-          .update({
-            name: type.name,
-            description: type.description ?? null,
-            duration_minutes: type.duration_minutes,
-            is_active: type.is_active ?? true,
-          })
+          .update(payload)
           .eq("id", type.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from("appointment_types")
-          .insert({
-            user_id: user.id,
-            name: type.name,
-            description: type.description ?? null,
-            duration_minutes: type.duration_minutes,
-            is_active: type.is_active ?? true,
-          });
+          .insert({ user_id: user.id, ...payload });
         if (error) throw error;
       }
     },
@@ -78,6 +94,10 @@ export function useAppointmentTypes() {
           name: newType.name,
           description: newType.description ?? null,
           duration_minutes: newType.duration_minutes,
+          days_of_week: newType.days_of_week,
+          start_time: newType.start_time,
+          end_time: newType.end_time,
+          max_appointments_per_slot: newType.max_appointments_per_slot,
           is_active: newType.is_active ?? true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -87,14 +107,14 @@ export function useAppointmentTypes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["appointment-types"] });
-      toast.success("Tipo de agendamento salvo!");
+      toast.success("Serviço salvo!");
     },
     onError: (error, _, context) => {
       if (context?.previous) {
         queryClient.setQueryData(["appointment-types", user?.id], context.previous);
       }
       console.error("Error saving appointment type:", error);
-      toast.error("Erro ao salvar tipo de agendamento");
+      toast.error("Erro ao salvar serviço");
     },
   });
 
@@ -106,13 +126,24 @@ export function useAppointmentTypes() {
         .eq("id", id);
       if (error) throw error;
     },
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["appointment-types", user?.id] });
+      const previous = queryClient.getQueryData<AppointmentType[]>(["appointment-types", user?.id]);
+      queryClient.setQueryData<AppointmentType[]>(["appointment-types", user?.id], (old = []) =>
+        old.filter(t => t.id !== id)
+      );
+      return { previous };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["appointment-types"] });
-      toast.success("Tipo de agendamento removido!");
+      toast.success("Serviço removido!");
     },
-    onError: (error) => {
+    onError: (error, _, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["appointment-types", user?.id], context.previous);
+      }
       console.error("Error deleting appointment type:", error);
-      toast.error("Erro ao remover tipo de agendamento");
+      toast.error("Erro ao remover serviço");
     },
   });
 
@@ -124,12 +155,23 @@ export function useAppointmentTypes() {
         .eq("id", id);
       if (error) throw error;
     },
+    onMutate: async ({ id, isActive }) => {
+      await queryClient.cancelQueries({ queryKey: ["appointment-types", user?.id] });
+      const previous = queryClient.getQueryData<AppointmentType[]>(["appointment-types", user?.id]);
+      queryClient.setQueryData<AppointmentType[]>(["appointment-types", user?.id], (old = []) =>
+        old.map(t => t.id === id ? { ...t, is_active: isActive } : t)
+      );
+      return { previous };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["appointment-types"] });
     },
-    onError: (error) => {
+    onError: (error, _, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["appointment-types", user?.id], context.previous);
+      }
       console.error("Error toggling appointment type:", error);
-      toast.error("Erro ao atualizar tipo de agendamento");
+      toast.error("Erro ao atualizar serviço");
     },
   });
 
