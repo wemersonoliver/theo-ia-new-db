@@ -16,6 +16,7 @@ import { LocationPicker } from "@/components/LocationPicker";
 import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
 import { useAIConfig } from "@/hooks/useAIConfig";
 import { useAppointmentSlots } from "@/hooks/useAppointments";
+import { useAppointmentTypes } from "@/hooks/useAppointmentTypes";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
