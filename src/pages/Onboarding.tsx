@@ -403,7 +403,7 @@ function AppointmentsConfigStep({ onNext }: { onNext: () => void }) {
   const { slots, isLoading: slotsLoading, saveSlot, deleteSlot, toggleSlotActive } = useAppointmentSlots();
   const { appointmentTypes, isLoading: typesLoading, saveType, deleteType, toggleActive } = useAppointmentTypes();
 
-  const [activeTab, setActiveTab] = useState<"types" | "slots">("types");
+  
 
   const [newSlot, setNewSlot] = useState({
     days_of_week: [1] as number[],
