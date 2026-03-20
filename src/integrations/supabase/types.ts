@@ -53,10 +53,44 @@ export type Database = {
         }
         Relationships: []
       }
+      appointment_types: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          duration_minutes: number
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       appointments: {
         Row: {
           appointment_date: string
           appointment_time: string
+          appointment_type_id: string | null
           confirmed_by_client: boolean | null
           contact_name: string | null
           created_at: string | null
@@ -76,6 +110,7 @@ export type Database = {
         Insert: {
           appointment_date: string
           appointment_time: string
+          appointment_type_id?: string | null
           confirmed_by_client?: boolean | null
           contact_name?: string | null
           created_at?: string | null
@@ -95,6 +130,7 @@ export type Database = {
         Update: {
           appointment_date?: string
           appointment_time?: string
+          appointment_type_id?: string | null
           confirmed_by_client?: boolean | null
           contact_name?: string | null
           created_at?: string | null
@@ -111,7 +147,15 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "appointments_appointment_type_id_fkey"
+            columns: ["appointment_type_id"]
+            isOneToOne: false
+            referencedRelation: "appointment_types"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contacts: {
         Row: {
