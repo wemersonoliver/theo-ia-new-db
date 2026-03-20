@@ -65,11 +65,34 @@ export function useAppointmentTypes() {
         if (error) throw error;
       }
     },
+    onMutate: async (newType) => {
+      await queryClient.cancelQueries({ queryKey: ["appointment-types", user?.id] });
+      const previous = queryClient.getQueryData<AppointmentType[]>(["appointment-types", user?.id]);
+      queryClient.setQueryData<AppointmentType[]>(["appointment-types", user?.id], (old = []) => {
+        if (newType.id) {
+          return old.map(t => t.id === newType.id ? { ...t, ...newType } : t);
+        }
+        return [...old, {
+          id: crypto.randomUUID(),
+          user_id: user?.id ?? "",
+          name: newType.name,
+          description: newType.description ?? null,
+          duration_minutes: newType.duration_minutes,
+          is_active: newType.is_active ?? true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }];
+      });
+      return { previous };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["appointment-types"] });
       toast.success("Tipo de agendamento salvo!");
     },
-    onError: (error) => {
+    onError: (error, _, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["appointment-types", user?.id], context.previous);
+      }
       console.error("Error saving appointment type:", error);
       toast.error("Erro ao salvar tipo de agendamento");
     },
