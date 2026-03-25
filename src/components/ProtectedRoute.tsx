@@ -119,7 +119,7 @@ function CheckoutScreen({ isBlocked, signOut }: { isBlocked: boolean; signOut: (
   const [verifying, setVerifying] = useState(false);
   const [verificationFailed, setVerificationFailed] = useState(false);
 
-  const SUPPORT_PHONE = "5511999999999";
+  const SUPPORT_PHONE = "5547991293662";
   const SUPPORT_MESSAGE = encodeURIComponent("Olá! Estou com problemas para verificar minha assinatura.");
 
   const handleVerifyPayment = async () => {
