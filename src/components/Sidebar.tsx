@@ -46,7 +46,7 @@ const navItems = [
   { to: "/subscriptions", icon: CreditCard, label: "Assinaturas" },
 ];
 
-const SUPPORT_PHONE = "5511999999999";
+const SUPPORT_PHONE = "5547991293662";
 const SUPPORT_MESSAGE = encodeURIComponent("Olá! Preciso de suporte para o Theo IA");
 
 interface SidebarProps {

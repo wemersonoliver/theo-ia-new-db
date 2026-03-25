@@ -57,7 +57,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
 
       {/* Botão flutuante de suporte WhatsApp */}
       <a
-        href="https://wa.me/5547984863023"
+        href="https://wa.me/5547991293662"
         target="_blank"
         rel="noopener noreferrer"
         className="fixed bottom-20 right-6 z-50 flex items-center gap-2 rounded-full bg-[#25D366] px-4 py-3 text-white shadow-lg transition-transform hover:scale-105"

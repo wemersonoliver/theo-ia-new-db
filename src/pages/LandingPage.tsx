@@ -299,7 +299,7 @@ export default function LandingPage() {
 
       {/* Balão flutuante WhatsApp */}
       <a
-        href="https://wa.me/5547984863023?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20sistema%20Theo%20IA"
+        href="https://wa.me/5547991293662?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20sistema%20Theo%20IA"
         target="_blank"
         rel="noopener noreferrer"
         className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-full bg-[#25D366] pl-5 pr-6 py-3 text-white shadow-xl transition-transform hover:scale-105 animate-in slide-in-from-bottom-4 duration-500"
