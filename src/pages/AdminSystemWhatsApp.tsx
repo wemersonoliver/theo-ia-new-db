@@ -8,19 +8,11 @@ import { Smartphone, QrCode, Loader2, RefreshCw, Power, CheckCircle2, XCircle, B
 import { cn } from "@/lib/utils";
 
 export default function AdminSystemWhatsApp() {
-  const { user } = useAuth();
   const { instance, isLoading, connect, disconnect, refreshQR } = useSystemWhatsApp();
-  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
   const [countdown, setCountdown] = useState(30);
   const [cachedQRCode, setCachedQRCode] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const instanceStatusRef = useRef(instance?.status);
-
-  useEffect(() => {
-    if (!user) return;
-    supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "super_admin")
-      .then(({ data }) => setIsSuperAdmin(!!(data && data.length > 0)));
-  }, [user]);
 
   useEffect(() => { instanceStatusRef.current = instance?.status; }, [instance?.status]);
 
