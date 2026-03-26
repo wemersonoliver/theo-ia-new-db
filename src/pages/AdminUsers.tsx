@@ -165,17 +165,13 @@ export default function AdminUsers() {
     setActionLoading(false);
   };
 
-  if (isSuperAdmin === false) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
   const getSubBadge = (u: AdminUser) => {
     if (u.subscription) {
       const colors: Record<string, string> = {
-        tester: "bg-blue-500/10 text-blue-600 border-blue-200",
-        mensal: "bg-green-500/10 text-green-600 border-green-200",
-        anual: "bg-purple-500/10 text-purple-600 border-purple-200",
-        lifetime: "bg-amber-500/10 text-amber-600 border-amber-200",
+        tester: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+        mensal: "bg-green-500/10 text-green-400 border-green-500/20",
+        anual: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+        lifetime: "bg-amber-500/10 text-amber-400 border-amber-500/20",
       };
       return (
         <Badge variant="outline" className={colors[u.subscription.plan_type] || ""}>
@@ -187,15 +183,9 @@ export default function AdminUsers() {
   };
 
   return (
-    <DashboardLayout title="Administração" description="Gerencie todos os usuários da plataforma">
+    <AdminLayout title="Usuários" description="Gerencie todos os usuários da plataforma">
       <div className="space-y-6">
-        <div className="flex gap-3">
-          <Button onClick={() => navigate("/admin/system-whatsapp")} variant="outline" className="gap-2">
-            <Smartphone className="h-4 w-4" />
-            WhatsApp do Sistema
-          </Button>
-        </div>
-        <Card>
+        <Card className="border-slate-700/50 bg-slate-900/50">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
