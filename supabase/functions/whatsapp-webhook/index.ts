@@ -100,10 +100,20 @@ serve(async (req) => {
           const isFromMe = msg.key?.fromMe === true;
           const contactName = msg.pushName || null;
           
-          const content = msg.message?.conversation || 
-                         msg.message?.extendedTextMessage?.text ||
-                         msg.message?.audioMessage ? "[Áudio]" :
-                         msg.message?.imageMessage ? "[Imagem]" : "[Mídia]";
+          let content: string;
+          if (msg.message?.conversation) {
+            content = msg.message.conversation;
+          } else if (msg.message?.extendedTextMessage?.text) {
+            content = msg.message.extendedTextMessage.text;
+          } else if (msg.message?.audioMessage) {
+            content = "[Áudio]";
+          } else if (msg.message?.imageMessage) {
+            content = "[Imagem]";
+          } else if (msg.message?.documentMessage) {
+            content = "[Documento]";
+          } else {
+            content = "[Mídia]";
+          }
 
           const newMessage = {
             id: msg.key?.id || crypto.randomUUID(),
