@@ -61,6 +61,8 @@ serve(async (req) => {
           id: u.id,
           email: u.email,
           full_name: profile?.full_name || "",
+          phone: profile?.phone || "",
+          user_code: profile?.user_code || null,
           is_blocked: profile?.is_blocked || false,
           created_at: u.created_at,
           last_sign_in_at: u.last_sign_in_at,

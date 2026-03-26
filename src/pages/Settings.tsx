@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
-import { Key, User, Loader2, Sun, Moon, Bell, PlayCircle } from "lucide-react";
+import { Key, User, Loader2, Sun, Moon, Bell, PlayCircle, Hash } from "lucide-react";
 import { NotificationsTab } from "@/components/settings/NotificationsTab";
 import { TutorialTab } from "@/components/settings/TutorialTab";
 import { toast } from "sonner";
@@ -18,6 +18,7 @@ export default function Settings() {
   const { theme, setTheme } = useTheme();
   
   const [fullName, setFullName] = useState("");
+  const [userCode, setUserCode] = useState<number | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [updatingProfile, setUpdatingProfile] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
@@ -29,10 +30,13 @@ export default function Settings() {
       setLoading(true);
       const { data } = await supabase
         .from("profiles")
-        .select("full_name")
+        .select("full_name, user_code")
         .eq("user_id", user.id)
         .maybeSingle();
-      if (data) setFullName(data.full_name || "");
+      if (data) {
+        setFullName(data.full_name || "");
+        setUserCode(data.user_code ?? null);
+      }
       setLoading(false);
     };
     fetchProfile();
@@ -107,6 +111,19 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {userCode && (
+                <div className="space-y-2">
+                  <Label>Seu ID de Usuário</Label>
+                  <div className="flex items-center gap-2">
+                    <Hash className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-lg font-mono font-bold text-primary">#{userCode}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Use este ID ao entrar em contato com o suporte
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input

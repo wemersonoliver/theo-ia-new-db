@@ -31,13 +31,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle } from "lucide-react";
+import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Search } from "lucide-react";
 
 
 interface AdminUser {
   id: string;
   email: string;
   full_name: string;
+  phone: string;
+  user_code: number | null;
   is_blocked: boolean;
   created_at: string;
   last_sign_in_at: string | null;
@@ -62,6 +64,7 @@ export default function AdminUsers() {
   const [subDialog, setSubDialog] = useState<AdminUser | null>(null);
   const [subPlanType, setSubPlanType] = useState("tester");
   const [subExpiry, setSubExpiry] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     fetchUsers();
@@ -165,6 +168,18 @@ export default function AdminUsers() {
     setActionLoading(false);
   };
 
+  const filteredUsers = users.filter((u) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      (u.full_name || "").toLowerCase().includes(term) ||
+      (u.email || "").toLowerCase().includes(term) ||
+      (u.phone || "").toLowerCase().includes(term) ||
+      (u.user_code?.toString() || "").includes(term) ||
+      u.id.toLowerCase().includes(term)
+    );
+  });
+
   const getSubBadge = (u: AdminUser) => {
     if (u.subscription) {
       const colors: Record<string, string> = {
@@ -189,12 +204,23 @@ export default function AdminUsers() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Usuários Cadastrados ({users.length})
+              Usuários Cadastrados ({filteredUsers.length}{searchTerm ? ` de ${users.length}` : ""})
             </CardTitle>
-            <Button onClick={fetchUsers} variant="outline" size="sm" disabled={loading}>
-              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              Atualizar
-            </Button>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome, email, telefone ou ID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 w-[300px]"
+                />
+              </div>
+              <Button onClick={fetchUsers} variant="outline" size="sm" disabled={loading}>
+                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                Atualizar
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -206,6 +232,7 @@ export default function AdminUsers() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>ID</TableHead>
                       <TableHead>Nome</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Role</TableHead>
@@ -216,8 +243,9 @@ export default function AdminUsers() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {users.map((u) => (
+                  {filteredUsers.map((u) => (
                       <TableRow key={u.id}>
+                        <TableCell className="font-mono text-xs text-muted-foreground">#{u.user_code || "—"}</TableCell>
                         <TableCell className="font-medium">{u.full_name || "—"}</TableCell>
                         <TableCell>{u.email}</TableCell>
                         <TableCell>
