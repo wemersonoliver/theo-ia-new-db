@@ -168,6 +168,18 @@ export default function AdminUsers() {
     setActionLoading(false);
   };
 
+  const filteredUsers = users.filter((u) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      (u.full_name || "").toLowerCase().includes(term) ||
+      (u.email || "").toLowerCase().includes(term) ||
+      (u.phone || "").toLowerCase().includes(term) ||
+      (u.user_code?.toString() || "").includes(term) ||
+      u.id.toLowerCase().includes(term)
+    );
+  });
+
   const getSubBadge = (u: AdminUser) => {
     if (u.subscription) {
       const colors: Record<string, string> = {
