@@ -87,7 +87,7 @@ serve(async (req) => {
         }
       }
 
-      // Handle incoming messages for system instance (support)
+    // Handle incoming messages for system instance (support)
       if (event === "messages.upsert" || event === "MESSAGES_UPSERT") {
         const messages = data?.messages || [data];
         
@@ -99,18 +99,85 @@ serve(async (req) => {
           const phone = remoteJid.replace("@s.whatsapp.net", "");
           const isFromMe = msg.key?.fromMe === true;
           const contactName = msg.pushName || null;
+          const messageKey = msg.key;
+
+          // Detect message type
+          const isAudioMessage = !!msg.message?.audioMessage;
+          const isImageMessage = !!msg.message?.imageMessage;
+          const isDocumentMessage = !!msg.message?.documentMessage;
+          const isStickerMessage = !!msg.message?.stickerMessage;
           
           let content: string;
-          if (msg.message?.conversation) {
+          let messageType: "text" | "audio" | "image" | "document" = "text";
+
+          if (isAudioMessage) {
+            messageType = "audio";
+            try {
+              console.log("Transcribing system audio for:", phone);
+              const transcribeResponse = await fetch(
+                `${supabaseUrl}/functions/v1/transcribe-audio`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${supabaseServiceKey}`,
+                  },
+                  body: JSON.stringify({ messageKey, instanceName }),
+                }
+              );
+              if (transcribeResponse.ok) {
+                const transcribeData = await transcribeResponse.json();
+                content = transcribeData.text || "[Áudio não transcrito]";
+                console.log("System audio transcribed:", content.slice(0, 100));
+              } else {
+                console.error("System transcription failed:", await transcribeResponse.text());
+                content = "[Áudio não transcrito]";
+              }
+            } catch (error) {
+              console.error("System transcription error:", error);
+              content = "[Áudio não transcrito]";
+            }
+          } else if (isImageMessage || isDocumentMessage || isStickerMessage) {
+            messageType = isImageMessage || isStickerMessage ? "image" : "document";
+            const mediaType = isStickerMessage ? "sticker" : (isImageMessage ? "image" : "document");
+            const caption = msg.message?.imageMessage?.caption || msg.message?.documentMessage?.caption || "";
+            try {
+              console.log("Processing system OCR for:", phone, mediaType);
+              const ocrResponse = await fetch(
+                `${supabaseUrl}/functions/v1/process-image-ocr`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${supabaseServiceKey}`,
+                  },
+                  body: JSON.stringify({ messageKey, instanceName, mediaType }),
+                }
+              );
+              if (ocrResponse.ok) {
+                const ocrData = await ocrResponse.json();
+                const ocrText = ocrData.text || "";
+                const label = mediaType === "document" ? "Documento" : "Imagem";
+                if (caption && ocrText) {
+                  content = `[${label}] ${caption}\n\nConteúdo extraído:\n${ocrText}`;
+                } else if (ocrText) {
+                  content = `[${label}] Conteúdo extraído:\n${ocrText}`;
+                } else if (caption) {
+                  content = `[${label}] ${caption}`;
+                } else {
+                  content = `[${label} sem texto identificável]`;
+                }
+              } else {
+                content = caption ? `[Imagem] ${caption}` : "[Mídia não processada]";
+              }
+            } catch (error) {
+              console.error("System OCR error:", error);
+              content = "[Mídia não processada]";
+            }
+          } else if (msg.message?.conversation) {
             content = msg.message.conversation;
           } else if (msg.message?.extendedTextMessage?.text) {
             content = msg.message.extendedTextMessage.text;
-          } else if (msg.message?.audioMessage) {
-            content = "[Áudio]";
-          } else if (msg.message?.imageMessage) {
-            content = "[Imagem]";
-          } else if (msg.message?.documentMessage) {
-            content = "[Documento]";
           } else {
             content = "[Mídia]";
           }
@@ -120,7 +187,7 @@ serve(async (req) => {
             timestamp: new Date().toISOString(),
             from_me: isFromMe,
             content,
-            type: "text",
+            type: messageType,
             sent_by: isFromMe ? "human" : "human",
           };
 
@@ -142,7 +209,7 @@ serve(async (req) => {
               updated_at: new Date().toISOString(),
             };
             if (contactName) updateData.contact_name = contactName;
-            if (isFromMe) updateData.ai_active = false; // Human took over
+            if (isFromMe) updateData.ai_active = false;
 
             await supabase
               .from("system_whatsapp_conversations")
@@ -168,8 +235,7 @@ serve(async (req) => {
               });
 
             if (!isFromMe) {
-              const messageContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "[Mídia]";
-              triggerSupportAI(phone, messageContent).catch(err =>
+              triggerSupportAI(phone, content).catch(err =>
                 console.error("Error triggering support AI:", err)
               );
             }
