@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_notification_contacts: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          name: string | null
+          phone: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name?: string | null
+          phone: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name?: string | null
+          phone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       appointment_slots: {
         Row: {
           created_at: string | null

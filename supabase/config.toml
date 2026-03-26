@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.manage-system-whatsapp]
 verify_jwt = false
+
+[functions.support-ai-agent]
+verify_jwt = false
