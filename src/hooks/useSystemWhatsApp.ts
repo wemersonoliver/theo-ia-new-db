@@ -20,8 +20,8 @@ export function useSystemWhatsApp() {
   const { data: instance, isLoading } = useQuery({
     queryKey: ["system-whatsapp-instance"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("system_whatsapp_instance" as any)
+      const { data, error } = await (supabase as any)
+        .from("system_whatsapp_instance")
         .select("*")
         .limit(1)
         .maybeSingle();
