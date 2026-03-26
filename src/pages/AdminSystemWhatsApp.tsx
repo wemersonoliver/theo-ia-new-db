@@ -1,12 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { DashboardLayout } from "@/components/DashboardLayout";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useSystemWhatsApp } from "@/hooks/useSystemWhatsApp";
-import { useAuth } from "@/lib/auth";
-import { supabase } from "@/integrations/supabase/client";
-import { Navigate } from "react-router-dom";
 import { Smartphone, QrCode, Loader2, RefreshCw, Power, CheckCircle2, XCircle, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 
