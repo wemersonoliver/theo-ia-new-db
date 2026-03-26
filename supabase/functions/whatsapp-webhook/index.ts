@@ -100,16 +100,26 @@ serve(async (req) => {
           const isFromMe = msg.key?.fromMe === true;
           const contactName = msg.pushName || null;
           
-          const content = msg.message?.conversation || 
-                         msg.message?.extendedTextMessage?.text ||
-                         msg.message?.audioMessage ? "[Áudio]" :
-                         msg.message?.imageMessage ? "[Imagem]" : "[Mídia]";
+          let content: string;
+          if (msg.message?.conversation) {
+            content = msg.message.conversation;
+          } else if (msg.message?.extendedTextMessage?.text) {
+            content = msg.message.extendedTextMessage.text;
+          } else if (msg.message?.audioMessage) {
+            content = "[Áudio]";
+          } else if (msg.message?.imageMessage) {
+            content = "[Imagem]";
+          } else if (msg.message?.documentMessage) {
+            content = "[Documento]";
+          } else {
+            content = "[Mídia]";
+          }
 
           const newMessage = {
             id: msg.key?.id || crypto.randomUUID(),
             timestamp: new Date().toISOString(),
             from_me: isFromMe,
-            content: typeof content === 'string' ? content : (msg.message?.conversation || msg.message?.extendedTextMessage?.text || "[Mídia]"),
+            content,
             type: "text",
             sent_by: isFromMe ? "human" : "human",
           };
@@ -141,8 +151,7 @@ serve(async (req) => {
 
             // Trigger support AI if not from me and AI is active
             if (!isFromMe && conv.ai_active) {
-              const messageContent = typeof content === 'string' ? content : (msg.message?.conversation || msg.message?.extendedTextMessage?.text || "[Mídia]");
-              triggerSupportAI(phone, messageContent).catch(err => 
+              triggerSupportAI(phone, content).catch(err => 
                 console.error("Error triggering support AI:", err)
               );
             }
