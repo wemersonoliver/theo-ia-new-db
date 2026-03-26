@@ -10,6 +10,7 @@ export interface WhatsAppInstance {
   instance_name: string;
   status: "pending" | "qr_ready" | "connected" | "disconnected";
   qr_code_base64: string | null;
+  pairing_code: string | null;
   phone_number: string | null;
   profile_name: string | null;
   last_sync_at: string | null;
@@ -37,40 +38,32 @@ export function useWhatsAppInstance() {
     enabled: !!user,
   });
 
-  // Subscribe to realtime updates
   useEffect(() => {
     if (!user) return;
-
     const channel = supabase
       .channel("whatsapp-instance-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "whatsapp_instances",
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["whatsapp-instance", user.id] });
-        }
-      )
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "whatsapp_instances",
+        filter: `user_id=eq.${user.id}`,
+      }, () => {
+        queryClient.invalidateQueries({ queryKey: ["whatsapp-instance", user.id] });
+      })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [user, queryClient]);
 
   const createInstance = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("create-whatsapp-instance");
+    mutationFn: async (phoneNumber?: string | void) => {
+      const { data, error } = await supabase.functions.invoke("create-whatsapp-instance", {
+        body: phoneNumber ? { phoneNumber } : {},
+      });
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp-instance", user?.id] });
-      toast.success("Instância criada! Escaneie o QR Code para conectar.");
+      toast.success("Instância criada! Conecte seu WhatsApp.");
     },
     onError: (error: Error) => {
       toast.error(`Erro ao criar instância: ${error.message}`);
@@ -93,8 +86,10 @@ export function useWhatsAppInstance() {
   });
 
   const refreshQRCode = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("refresh-whatsapp-qrcode");
+    mutationFn: async (phoneNumber?: string | void) => {
+      const { data, error } = await supabase.functions.invoke("refresh-whatsapp-qrcode", {
+        body: phoneNumber ? { phoneNumber } : {},
+      });
       if (error) throw error;
       return data;
     },
