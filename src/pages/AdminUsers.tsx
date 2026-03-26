@@ -64,22 +64,8 @@ export default function AdminUsers() {
   const [subExpiry, setSubExpiry] = useState("");
 
   useEffect(() => {
-    checkRole();
+    fetchUsers();
   }, [user]);
-
-  const checkRole = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("role", "super_admin");
-
-    const isAdmin = (data && data.length > 0) || false;
-    setIsSuperAdmin(isAdmin);
-    if (isAdmin) fetchUsers();
-    else setLoading(false);
-  };
 
   const fetchUsers = async () => {
     setLoading(true);
