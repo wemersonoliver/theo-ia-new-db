@@ -206,6 +206,12 @@ export default function AdminUsers() {
   return (
     <DashboardLayout title="Administração" description="Gerencie todos os usuários da plataforma">
       <div className="space-y-6">
+        <div className="flex gap-3">
+          <Button onClick={() => navigate("/admin/system-whatsapp")} variant="outline" className="gap-2">
+            <Smartphone className="h-4 w-4" />
+            WhatsApp do Sistema
+          </Button>
+        </div>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
