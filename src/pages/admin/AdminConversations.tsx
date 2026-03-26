@@ -8,7 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSystemConversations, useSystemConversation } from "@/hooks/useSystemConversations";
 import type { Message } from "@/hooks/useConversations";
 import {
-  MessageSquare, Send, Loader2, User, Bot, Power, PowerOff, Mic, ImageIcon, FileText,
+  MessageSquare, Send, Loader2, User, Bot, Power, PowerOff, Mic, ImageIcon, FileText, Trash2,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";

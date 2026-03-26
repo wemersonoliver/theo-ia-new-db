@@ -61,6 +61,21 @@ export function useSystemConversations() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const deleteConversation = useMutation({
+    mutationFn: async (phone: string) => {
+      const { error } = await (supabase as any)
+        .from("system_whatsapp_conversations")
+        .delete()
+        .eq("phone", phone);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-conversations"] });
+      toast.success("Conversa excluída!");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const sendMessage = useMutation({
     mutationFn: async ({ phone, content }: { phone: string; content: string }) => {
       const { data, error } = await supabase.functions.invoke("send-whatsapp-message", {
@@ -75,7 +90,7 @@ export function useSystemConversations() {
     onError: (e: Error) => toast.error(`Erro ao enviar: ${e.message}`),
   });
 
-  return { conversations: conversations || [], isLoading, toggleAI, sendMessage };
+  return { conversations: conversations || [], isLoading, toggleAI, sendMessage, deleteConversation };
 }
 
 export function useSystemConversation(phone: string) {
