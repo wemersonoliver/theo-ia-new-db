@@ -10,6 +10,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
+  MessageSquare,
+  Bot,
+  Ticket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
