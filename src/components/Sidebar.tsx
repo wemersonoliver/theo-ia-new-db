@@ -38,7 +38,7 @@ const navItems = [
   { to: "/ai-agent", icon: Bot, label: "Agente IA" },
   { to: "/knowledge-base", icon: FileText, label: "Base de Conhecimento" },
   { to: "/crm", icon: Kanban, label: "CRM" },
-  { to: "/products", icon: Package, label: "Produtos" },
+  // { to: "/products", icon: Package, label: "Produtos" }, // Oculto temporariamente - futura atualização
   { to: "/conversations", icon: MessageSquare, label: "Conversas" },
   { to: "/contacts", icon: Users, label: "Contatos" },
   { to: "/appointments", icon: Calendar, label: "Agendamentos" },
