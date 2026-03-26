@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { DashboardLayout } from "@/components/DashboardLayout";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -32,8 +31,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Smartphone } from "lucide-react";
-import { Navigate } from "react-router-dom";
+import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle } from "lucide-react";
+
 
 interface AdminUser {
   id: string;
@@ -54,11 +53,9 @@ interface AdminUser {
 
 export default function AdminUsers() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const { toast } = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
   const [passwordDialog, setPasswordDialog] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
@@ -67,22 +64,8 @@ export default function AdminUsers() {
   const [subExpiry, setSubExpiry] = useState("");
 
   useEffect(() => {
-    checkRole();
+    fetchUsers();
   }, [user]);
-
-  const checkRole = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("role", "super_admin");
-
-    const isAdmin = (data && data.length > 0) || false;
-    setIsSuperAdmin(isAdmin);
-    if (isAdmin) fetchUsers();
-    else setLoading(false);
-  };
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -182,17 +165,13 @@ export default function AdminUsers() {
     setActionLoading(false);
   };
 
-  if (isSuperAdmin === false) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
   const getSubBadge = (u: AdminUser) => {
     if (u.subscription) {
       const colors: Record<string, string> = {
-        tester: "bg-blue-500/10 text-blue-600 border-blue-200",
-        mensal: "bg-green-500/10 text-green-600 border-green-200",
-        anual: "bg-purple-500/10 text-purple-600 border-purple-200",
-        lifetime: "bg-amber-500/10 text-amber-600 border-amber-200",
+        tester: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+        mensal: "bg-green-500/10 text-green-400 border-green-500/20",
+        anual: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+        lifetime: "bg-amber-500/10 text-amber-400 border-amber-500/20",
       };
       return (
         <Badge variant="outline" className={colors[u.subscription.plan_type] || ""}>
@@ -204,15 +183,9 @@ export default function AdminUsers() {
   };
 
   return (
-    <DashboardLayout title="Administração" description="Gerencie todos os usuários da plataforma">
+    <AdminLayout title="Usuários" description="Gerencie todos os usuários da plataforma">
       <div className="space-y-6">
-        <div className="flex gap-3">
-          <Button onClick={() => navigate("/admin/system-whatsapp")} variant="outline" className="gap-2">
-            <Smartphone className="h-4 w-4" />
-            WhatsApp do Sistema
-          </Button>
-        </div>
-        <Card>
+        <Card className="border-slate-700/50 bg-slate-900/50">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
@@ -391,6 +364,6 @@ export default function AdminUsers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </AdminLayout>
   );
 }

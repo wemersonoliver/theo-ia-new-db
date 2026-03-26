@@ -1,29 +1,18 @@
 import { useState, useEffect, useRef } from "react";
-import { DashboardLayout } from "@/components/DashboardLayout";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useSystemWhatsApp } from "@/hooks/useSystemWhatsApp";
-import { useAuth } from "@/lib/auth";
-import { supabase } from "@/integrations/supabase/client";
-import { Navigate } from "react-router-dom";
 import { Smartphone, QrCode, Loader2, RefreshCw, Power, CheckCircle2, XCircle, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function AdminSystemWhatsApp() {
-  const { user } = useAuth();
   const { instance, isLoading, connect, disconnect, refreshQR } = useSystemWhatsApp();
-  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
   const [countdown, setCountdown] = useState(30);
   const [cachedQRCode, setCachedQRCode] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const instanceStatusRef = useRef(instance?.status);
-
-  useEffect(() => {
-    if (!user) return;
-    supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "super_admin")
-      .then(({ data }) => setIsSuperAdmin(!!(data && data.length > 0)));
-  }, [user]);
 
   useEffect(() => { instanceStatusRef.current = instance?.status; }, [instance?.status]);
 
@@ -63,8 +52,6 @@ export default function AdminSystemWhatsApp() {
     return () => clearInterval(timer);
   }, [instance?.status, instance?.qr_code_base64, cachedQRCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (isSuperAdmin === null) return null;
-  if (!isSuperAdmin) return <Navigate to="/dashboard" />;
 
   const handleCancelConnection = () => { disconnect.mutate(); setCachedQRCode(null); };
   const handleRefreshQR = () => { setIsRefreshing(true); refreshQR.mutate(); setCountdown(30); };
@@ -80,16 +67,16 @@ export default function AdminSystemWhatsApp() {
 
   if (isLoading) {
     return (
-      <DashboardLayout title="WhatsApp do Sistema" description="Gerencie o WhatsApp de notificações">
+      <AdminLayout title="WhatsApp do Sistema" description="Gerencie o WhatsApp de notificações">
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <Loader2 className="h-8 w-8 animate-spin text-slate-500" />
         </div>
-      </DashboardLayout>
+      </AdminLayout>
     );
   }
 
   return (
-    <DashboardLayout title="WhatsApp do Sistema" description="WhatsApp para notificações da plataforma">
+    <AdminLayout title="WhatsApp do Sistema" description="WhatsApp para notificações da plataforma">
       <div className="space-y-4">
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="flex items-center gap-3 py-4">
@@ -205,6 +192,6 @@ export default function AdminSystemWhatsApp() {
           </Card>
         </div>
       </div>
-    </DashboardLayout>
+    </AdminLayout>
   );
 }

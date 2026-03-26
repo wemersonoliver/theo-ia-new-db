@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/lib/auth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -19,14 +19,19 @@ import Contacts from "./pages/Contacts";
 import Appointments from "./pages/Appointments";
 import AppointmentSettings from "./pages/AppointmentSettings";
 import Settings from "./pages/Settings";
-import AdminUsers from "./pages/AdminUsers";
-import AdminSystemWhatsApp from "./pages/AdminSystemWhatsApp";
 import Subscriptions from "./pages/Subscriptions";
 import NotFound from "./pages/NotFound";
 import CRM from "./pages/CRM";
 import Products from "./pages/Products";
 import LandingPage from "./pages/LandingPage";
 import Onboarding from "./pages/Onboarding";
+
+// Admin pages
+import AdminLogin from "./pages/admin/AdminLogin";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminLogs from "./pages/admin/AdminLogs";
+import AdminUsers from "./pages/AdminUsers";
+import AdminSystemWhatsApp from "./pages/AdminSystemWhatsApp";
 
 const queryClient = new QueryClient();
 
@@ -57,8 +62,15 @@ const App = () => (
               <Route path="/subscriptions" element={<ProtectedRoute><Subscriptions /></ProtectedRoute>} />
               <Route path="/crm" element={<ProtectedRoute><CRM /></ProtectedRoute>} />
               <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
-              <Route path="/admin" element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
-              <Route path="/admin/system-whatsapp" element={<ProtectedRoute><AdminSystemWhatsApp /></ProtectedRoute>} />
+
+              {/* Admin Panel */}
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/users" element={<AdminUsers />} />
+              <Route path="/admin/system-whatsapp" element={<AdminSystemWhatsApp />} />
+              <Route path="/admin/logs" element={<AdminLogs />} />
+              <Route path="/admin" element={<AdminLogin />} />
+
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
