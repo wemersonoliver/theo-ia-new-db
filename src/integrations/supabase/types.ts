@@ -788,6 +788,143 @@ export type Database = {
         }
         Relationships: []
       }
+      support_ticket_messages: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          sender_id: string
+          sender_type: string
+          ticket_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          sender_id: string
+          sender_type?: string
+          ticket_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          sender_id?: string
+          sender_type?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_ticket_messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_tickets: {
+        Row: {
+          admin_notes: string | null
+          closed_at: string | null
+          created_at: string | null
+          description: string
+          id: string
+          priority: string
+          status: string
+          subject: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          closed_at?: string | null
+          created_at?: string | null
+          description: string
+          id?: string
+          priority?: string
+          status?: string
+          subject: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          admin_notes?: string | null
+          closed_at?: string | null
+          created_at?: string | null
+          description?: string
+          id?: string
+          priority?: string
+          status?: string
+          subject?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      system_ai_config: {
+        Row: {
+          active: boolean | null
+          agent_name: string | null
+          created_at: string | null
+          custom_prompt: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          agent_name?: string | null
+          created_at?: string | null
+          custom_prompt?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          agent_name?: string | null
+          created_at?: string | null
+          custom_prompt?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      system_whatsapp_conversations: {
+        Row: {
+          ai_active: boolean | null
+          contact_name: string | null
+          created_at: string | null
+          id: string
+          last_message_at: string | null
+          messages: Json | null
+          phone: string
+          total_messages: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          ai_active?: boolean | null
+          contact_name?: string | null
+          created_at?: string | null
+          id?: string
+          last_message_at?: string | null
+          messages?: Json | null
+          phone: string
+          total_messages?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          ai_active?: boolean | null
+          contact_name?: string | null
+          created_at?: string | null
+          id?: string
+          last_message_at?: string | null
+          messages?: Json | null
+          phone?: string
+          total_messages?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       system_whatsapp_instance: {
         Row: {
           created_at: string | null
