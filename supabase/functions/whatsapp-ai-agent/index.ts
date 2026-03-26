@@ -987,7 +987,6 @@ async function saveAIMessage(supabase: any, userId: string, phone: string, conte
 
 async function notifyHandoff(supabase: any, userId: string, clientPhone: string, clientName: string | null) {
   try {
-    // Try to get the name from conversation if not provided
     let displayName = clientName || null;
     if (!displayName) {
       const { data: conv } = await supabase
@@ -1009,11 +1008,43 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
 
     const message = `🔔 *Transferência de Atendimento*\n\nUm cliente precisa de atendimento humano.\n\n👤 *Nome:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n⏰ *Horário:* ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
 
-    for (const contact of notifContacts) {
-      await sendWhatsAppMessage(supabase, userId, contact.phone, message);
+    // Try system WhatsApp instance first, fall back to user's instance
+    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+    if (!evolutionUrl || !evolutionKey) return;
+
+    let instanceName: string | null = null;
+
+    // Check system instance
+    const { data: sysInstance } = await supabase
+      .from("system_whatsapp_instance")
+      .select("instance_name, status")
+      .limit(1)
+      .maybeSingle();
+
+    if (sysInstance && sysInstance.status === "connected") {
+      instanceName = sysInstance.instance_name;
+    } else {
+      // Fallback to user's instance
+      const { data: userInstance } = await supabase
+        .from("whatsapp_instances")
+        .select("instance_name")
+        .eq("user_id", userId)
+        .maybeSingle();
+      instanceName = userInstance?.instance_name || null;
     }
 
-    console.log(`Handoff notification sent to ${notifContacts.length} contacts`);
+    if (!instanceName) return;
+
+    for (const contact of notifContacts) {
+      await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: evolutionKey },
+        body: JSON.stringify({ number: contact.phone, text: message }),
+      });
+    }
+
+    console.log(`Handoff notification sent to ${notifContacts.length} contacts via ${sysInstance?.status === "connected" ? "system" : "user"} instance`);
   } catch (error) {
     console.error("Error sending handoff notifications:", error);
   }
