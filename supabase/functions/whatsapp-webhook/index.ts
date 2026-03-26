@@ -52,7 +52,7 @@ serve(async (req) => {
       });
     }
 
-    // Handle system instance events (QR and connection only)
+    // Handle system instance events
     if (sysInstanceData) {
       if (event === "qrcode.updated" || event === "QRCODE_UPDATED") {
         const qrCode = data?.qrcode?.base64 || data?.base64;
@@ -84,6 +84,89 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
           }).eq("id", sysInstanceData.id);
           console.log("System WhatsApp disconnected");
+        }
+      }
+
+      // Handle incoming messages for system instance (support)
+      if (event === "messages.upsert" || event === "MESSAGES_UPSERT") {
+        const messages = data?.messages || [data];
+        
+        for (const msg of messages) {
+          if (!msg) continue;
+          const remoteJid = msg.key?.remoteJid;
+          if (!remoteJid || remoteJid.includes("@g.us")) continue;
+
+          const phone = remoteJid.replace("@s.whatsapp.net", "");
+          const isFromMe = msg.key?.fromMe === true;
+          const contactName = msg.pushName || null;
+          
+          const content = msg.message?.conversation || 
+                         msg.message?.extendedTextMessage?.text ||
+                         msg.message?.audioMessage ? "[Áudio]" :
+                         msg.message?.imageMessage ? "[Imagem]" : "[Mídia]";
+
+          const newMessage = {
+            id: msg.key?.id || crypto.randomUUID(),
+            timestamp: new Date().toISOString(),
+            from_me: isFromMe,
+            content: typeof content === 'string' ? content : (msg.message?.conversation || msg.message?.extendedTextMessage?.text || "[Mídia]"),
+            type: "text",
+            sent_by: isFromMe ? "human" : "human",
+          };
+
+          // Get or create system conversation
+          const { data: conv } = await supabase
+            .from("system_whatsapp_conversations")
+            .select("id, messages, ai_active")
+            .eq("phone", phone)
+            .maybeSingle();
+
+          if (conv) {
+            const existingMessages = conv.messages || [];
+            const updatedMessages = [...existingMessages, newMessage];
+            
+            const updateData: any = {
+              messages: updatedMessages,
+              last_message_at: new Date().toISOString(),
+              total_messages: updatedMessages.length,
+              updated_at: new Date().toISOString(),
+            };
+            if (contactName) updateData.contact_name = contactName;
+            if (isFromMe) updateData.ai_active = false; // Human took over
+
+            await supabase
+              .from("system_whatsapp_conversations")
+              .update(updateData)
+              .eq("id", conv.id);
+
+            // Trigger support AI if not from me and AI is active
+            if (!isFromMe && conv.ai_active) {
+              const messageContent = typeof content === 'string' ? content : (msg.message?.conversation || msg.message?.extendedTextMessage?.text || "[Mídia]");
+              triggerSupportAI(phone, messageContent).catch(err => 
+                console.error("Error triggering support AI:", err)
+              );
+            }
+          } else {
+            await supabase
+              .from("system_whatsapp_conversations")
+              .insert({
+                phone,
+                contact_name: contactName,
+                messages: [newMessage],
+                last_message_at: new Date().toISOString(),
+                total_messages: 1,
+                ai_active: !isFromMe,
+              });
+
+            if (!isFromMe) {
+              const messageContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "[Mídia]";
+              triggerSupportAI(phone, messageContent).catch(err =>
+                console.error("Error triggering support AI:", err)
+              );
+            }
+          }
+
+          console.log("System message saved:", phone, isFromMe ? "(outgoing)" : "(incoming)");
         }
       }
 
