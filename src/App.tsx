@@ -73,6 +73,9 @@ const App = () => (
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin/users" element={<AdminUsers />} />
               <Route path="/admin/system-whatsapp" element={<AdminSystemWhatsApp />} />
+              <Route path="/admin/conversations" element={<AdminConversations />} />
+              <Route path="/admin/ai-config" element={<AdminAIConfig />} />
+              <Route path="/admin/support" element={<AdminSupport />} />
               <Route path="/admin/logs" element={<AdminLogs />} />
               <Route path="/admin" element={<AdminLogin />} />
 
