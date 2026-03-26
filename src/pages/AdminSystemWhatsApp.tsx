@@ -76,7 +76,7 @@ export default function AdminSystemWhatsApp() {
   }
 
   return (
-    <DashboardLayout title="WhatsApp do Sistema" description="WhatsApp para notificações da plataforma">
+    <AdminLayout title="WhatsApp do Sistema" description="WhatsApp para notificações da plataforma">
       <div className="space-y-4">
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="flex items-center gap-3 py-4">
