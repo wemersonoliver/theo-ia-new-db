@@ -588,3 +588,19 @@ async function triggerAIResponse(supabase: any, userId: string, phone: string, m
     console.error("Error triggering AI:", error);
   }
 }
+
+async function triggerSupportAI(phone: string, messageContent: string) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  console.log(`Triggering support AI for ${phone}`);
+
+  await fetch(`${supabaseUrl}/functions/v1/support-ai-agent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${serviceKey}`,
+    },
+    body: JSON.stringify({ phone, messageContent }),
+  });
+}
