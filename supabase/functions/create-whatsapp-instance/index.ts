@@ -135,6 +135,8 @@ serve(async (req) => {
       ? `${evolutionUrl}/instance/connect/${instanceName}?number=${phoneNumber}`
       : `${evolutionUrl}/instance/connect/${instanceName}`;
 
+    console.log("Connecting with URL:", connectUrl, "phoneNumber:", phoneNumber);
+
     const connectResponse = await fetch(connectUrl, {
       headers: { apikey: evolutionKey },
     });
@@ -148,9 +150,12 @@ serve(async (req) => {
     }
 
     const connectData = await connectResponse.json();
+    console.log("Evolution API connect response keys:", Object.keys(connectData));
+    console.log("pairingCode:", connectData.pairingCode);
+    
     const qrCodeRaw = connectData.base64 || connectData.qrcode?.base64 || connectData.qrcode || null;
     const qrCodeBase64 = extractBase64(qrCodeRaw);
-    const pairingCode = connectData.pairingCode || null;
+    const pairingCode = connectData.pairingCode || connectData.code?.pairingCode || null;
 
     await supabase.from("whatsapp_instances").upsert({
       user_id: userId, instance_name: instanceName,

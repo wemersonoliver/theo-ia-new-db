@@ -108,6 +108,8 @@ serve(async (req) => {
       ? `${evolutionUrl}/instance/connect/${instance.instance_name}?number=${phoneNumber}`
       : `${evolutionUrl}/instance/connect/${instance.instance_name}`;
 
+    console.log("Connecting with URL:", connectUrl, "phoneNumber:", phoneNumber);
+
     const connectResponse = await fetch(connectUrl, {
       headers: { apikey: evolutionKey },
     });
@@ -121,9 +123,13 @@ serve(async (req) => {
     }
 
     const connectData = await connectResponse.json();
+    console.log("Evolution API response keys:", Object.keys(connectData));
+    console.log("pairingCode:", connectData.pairingCode);
+    console.log("code:", connectData.code);
+    
     const qrCodeRaw = connectData.base64 || connectData.qrcode?.base64 || connectData.qrcode || null;
     const qrCodeBase64 = extractBase64(qrCodeRaw);
-    const pairingCode = connectData.pairingCode || null;
+    const pairingCode = connectData.pairingCode || connectData.code?.pairingCode || null;
 
     if (!qrCodeBase64 && !pairingCode) {
       return new Response(JSON.stringify({
