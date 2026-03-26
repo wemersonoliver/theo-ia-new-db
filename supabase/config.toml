@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.followup-check-inactive]
 verify_jwt = false
+
+[functions.manage-system-whatsapp]
+verify_jwt = false
