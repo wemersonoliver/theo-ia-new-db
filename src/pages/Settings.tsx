@@ -30,10 +30,13 @@ export default function Settings() {
       setLoading(true);
       const { data } = await supabase
         .from("profiles")
-        .select("full_name")
+        .select("full_name, user_code")
         .eq("user_id", user.id)
         .maybeSingle();
-      if (data) setFullName(data.full_name || "");
+      if (data) {
+        setFullName(data.full_name || "");
+        setUserCode(data.user_code ?? null);
+      }
       setLoading(false);
     };
     fetchProfile();
