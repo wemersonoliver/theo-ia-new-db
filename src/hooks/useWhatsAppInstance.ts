@@ -54,7 +54,7 @@ export function useWhatsAppInstance() {
   }, [user, queryClient]);
 
   const createInstance = useMutation({
-    mutationFn: async (phoneNumber?: string) => {
+    mutationFn: async (phoneNumber?: string | void) => {
       const { data, error } = await supabase.functions.invoke("create-whatsapp-instance", {
         body: phoneNumber ? { phoneNumber } : {},
       });
