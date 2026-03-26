@@ -86,7 +86,7 @@ export function useWhatsAppInstance() {
   });
 
   const refreshQRCode = useMutation({
-    mutationFn: async (phoneNumber?: string) => {
+    mutationFn: async (phoneNumber?: string | void) => {
       const { data, error } = await supabase.functions.invoke("refresh-whatsapp-qrcode", {
         body: phoneNumber ? { phoneNumber } : {},
       });
