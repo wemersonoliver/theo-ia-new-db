@@ -721,6 +721,7 @@ export type Database = {
           onboarding_completed: boolean
           phone: string | null
           updated_at: string | null
+          user_code: number
           user_id: string
         }
         Insert: {
@@ -733,6 +734,7 @@ export type Database = {
           onboarding_completed?: boolean
           phone?: string | null
           updated_at?: string | null
+          user_code?: number
           user_id: string
         }
         Update: {
@@ -745,6 +747,7 @@ export type Database = {
           onboarding_completed?: boolean
           phone?: string | null
           updated_at?: string | null
+          user_code?: number
           user_id?: string
         }
         Relationships: []
