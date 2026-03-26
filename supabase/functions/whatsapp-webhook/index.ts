@@ -119,7 +119,7 @@ serve(async (req) => {
             id: msg.key?.id || crypto.randomUUID(),
             timestamp: new Date().toISOString(),
             from_me: isFromMe,
-            content: typeof content === 'string' ? content : (msg.message?.conversation || msg.message?.extendedTextMessage?.text || "[Mídia]"),
+            content,
             type: "text",
             sent_by: isFromMe ? "human" : "human",
           };
