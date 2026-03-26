@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
-import { Key, User, Loader2, Sun, Moon, Bell, PlayCircle } from "lucide-react";
+import { Key, User, Loader2, Sun, Moon, Bell, PlayCircle, Hash } from "lucide-react";
 import { NotificationsTab } from "@/components/settings/NotificationsTab";
 import { TutorialTab } from "@/components/settings/TutorialTab";
 import { toast } from "sonner";
