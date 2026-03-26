@@ -28,6 +28,7 @@ export function useSystemWhatsApp() {
       if (error) throw error;
       return data as SystemWhatsAppInstance | null;
     },
+    refetchInterval: 5000, // Poll every 5 seconds for QR/status updates
   });
 
   const connect = useMutation({
