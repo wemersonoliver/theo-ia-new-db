@@ -128,15 +128,31 @@ export default function AdminConversations() {
                     <CardTitle className="text-sm text-white">{selectedConv?.contact_name || selectedPhone}</CardTitle>
                     <p className="text-xs text-slate-500">{selectedPhone}</p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => toggleAI.mutate({ phone: selectedPhone, active: !selectedConv?.ai_active })}
-                    disabled={toggleAI.isPending}
-                    className="border-slate-700 text-slate-300 hover:bg-slate-800 gap-2"
-                  >
-                    {selectedConv?.ai_active ? <><PowerOff className="h-4 w-4" /> Assumir</> : <><Power className="h-4 w-4" /> Reativar IA</>}
-                  </Button>
+                   <div className="flex items-center gap-2">
+                     <Button
+                       variant="outline"
+                       size="sm"
+                       onClick={() => toggleAI.mutate({ phone: selectedPhone, active: !selectedConv?.ai_active })}
+                       disabled={toggleAI.isPending}
+                       className="border-slate-700 text-slate-300 hover:bg-slate-800 gap-2"
+                     >
+                       {selectedConv?.ai_active ? <><PowerOff className="h-4 w-4" /> Assumir</> : <><Power className="h-4 w-4" /> Reativar IA</>}
+                     </Button>
+                     <Button
+                       variant="outline"
+                       size="sm"
+                       onClick={() => {
+                         if (confirm("Excluir esta conversa? Isso apagará todo o histórico.")) {
+                           deleteConversation.mutate(selectedPhone);
+                           setSelectedPhone(null);
+                         }
+                       }}
+                       disabled={deleteConversation.isPending}
+                       className="border-red-900/50 text-red-400 hover:bg-red-950/30 hover:text-red-300 gap-2"
+                     >
+                       <Trash2 className="h-4 w-4" /> Excluir
+                     </Button>
+                   </div>
                 </div>
               </CardHeader>
               <CardContent className="flex h-[calc(100vh-310px)] flex-col p-0">
