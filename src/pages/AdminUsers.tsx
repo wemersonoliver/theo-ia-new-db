@@ -64,6 +64,7 @@ export default function AdminUsers() {
   const [subDialog, setSubDialog] = useState<AdminUser | null>(null);
   const [subPlanType, setSubPlanType] = useState("tester");
   const [subExpiry, setSubExpiry] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     fetchUsers();
