@@ -31,15 +31,62 @@ serve(async (req) => {
       });
     }
 
-    // Find the instance owner
+    // Find the instance owner (user instance or system instance)
     const { data: instanceData } = await supabase
       .from("whatsapp_instances")
       .select("user_id, id")
       .eq("instance_name", instanceName)
       .maybeSingle();
 
-    if (!instanceData) {
+    // Check if it's the system notification instance
+    const { data: sysInstanceData } = await supabase
+      .from("system_whatsapp_instance")
+      .select("id")
+      .eq("instance_name", instanceName)
+      .maybeSingle();
+
+    if (!instanceData && !sysInstanceData) {
       console.log("Instance not found:", instanceName);
+      return new Response(JSON.stringify({ ok: true }), { 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
+    }
+
+    // Handle system instance events (QR and connection only)
+    if (sysInstanceData) {
+      if (event === "qrcode.updated" || event === "QRCODE_UPDATED") {
+        const qrCode = data?.qrcode?.base64 || data?.base64;
+        await supabase.from("system_whatsapp_instance").update({
+          status: "qr_ready",
+          qr_code_base64: qrCode,
+          updated_at: new Date().toISOString(),
+        }).eq("id", sysInstanceData.id);
+        console.log("System QR Code updated");
+      }
+
+      if (event === "connection.update" || event === "CONNECTION_UPDATE") {
+        const state = data?.state || data?.status;
+        if (state === "open" || state === "connected") {
+          const phoneNumber = data?.pushName ? null : data?.wid?.split("@")[0];
+          const profileName = data?.pushName || null;
+          await supabase.from("system_whatsapp_instance").update({
+            status: "connected",
+            qr_code_base64: null,
+            phone_number: phoneNumber,
+            profile_name: profileName,
+            updated_at: new Date().toISOString(),
+          }).eq("id", sysInstanceData.id);
+          console.log("System WhatsApp connected");
+        } else if (state === "close" || state === "disconnected") {
+          await supabase.from("system_whatsapp_instance").update({
+            status: "disconnected",
+            qr_code_base64: null,
+            updated_at: new Date().toISOString(),
+          }).eq("id", sysInstanceData.id);
+          console.log("System WhatsApp disconnected");
+        }
+      }
+
       return new Response(JSON.stringify({ ok: true }), { 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
       });

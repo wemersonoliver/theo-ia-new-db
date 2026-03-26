@@ -788,6 +788,42 @@ export type Database = {
         }
         Relationships: []
       }
+      system_whatsapp_instance: {
+        Row: {
+          created_at: string | null
+          id: string
+          instance_name: string
+          last_sync_at: string | null
+          phone_number: string | null
+          profile_name: string | null
+          qr_code_base64: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          instance_name: string
+          last_sync_at?: string | null
+          phone_number?: string | null
+          profile_name?: string | null
+          qr_code_base64?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          instance_name?: string
+          last_sync_at?: string | null
+          phone_number?: string | null
+          profile_name?: string | null
+          qr_code_base64?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null

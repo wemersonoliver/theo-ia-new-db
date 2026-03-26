@@ -20,6 +20,7 @@ import Appointments from "./pages/Appointments";
 import AppointmentSettings from "./pages/AppointmentSettings";
 import Settings from "./pages/Settings";
 import AdminUsers from "./pages/AdminUsers";
+import AdminSystemWhatsApp from "./pages/AdminSystemWhatsApp";
 import Subscriptions from "./pages/Subscriptions";
 import NotFound from "./pages/NotFound";
 import CRM from "./pages/CRM";
@@ -57,6 +58,7 @@ const App = () => (
               <Route path="/crm" element={<ProtectedRoute><CRM /></ProtectedRoute>} />
               <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
+              <Route path="/admin/system-whatsapp" element={<ProtectedRoute><AdminSystemWhatsApp /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

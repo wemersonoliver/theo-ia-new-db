@@ -453,7 +453,6 @@ function formatDate(dateStr: string): string {
 
 async function notifyAppointment(supabase: any, userId: string, contactName: string | null, clientPhone: string, date: string, time: string, title: string) {
   try {
-    // Try to get the name from conversation if not provided
     let displayName = contactName || null;
     if (!displayName) {
       const { data: conv } = await supabase
@@ -477,26 +476,40 @@ async function notifyAppointment(supabase: any, userId: string, contactName: str
 
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-
     if (!evolutionUrl || !evolutionKey) return;
 
-    const { data: instance } = await supabase
-      .from("whatsapp_instances")
-      .select("instance_name")
-      .eq("user_id", userId)
+    let instanceName: string | null = null;
+
+    // Check system instance first
+    const { data: sysInstance } = await supabase
+      .from("system_whatsapp_instance")
+      .select("instance_name, status")
+      .limit(1)
       .maybeSingle();
 
-    if (!instance) return;
+    if (sysInstance && sysInstance.status === "connected") {
+      instanceName = sysInstance.instance_name;
+    } else {
+      // Fallback to user's instance
+      const { data: userInstance } = await supabase
+        .from("whatsapp_instances")
+        .select("instance_name")
+        .eq("user_id", userId)
+        .maybeSingle();
+      instanceName = userInstance?.instance_name || null;
+    }
+
+    if (!instanceName) return;
 
     for (const contact of notifContacts) {
-      await fetch(`${evolutionUrl}/message/sendText/${instance.instance_name}`, {
+      await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: evolutionKey },
         body: JSON.stringify({ number: contact.phone, text: message }),
       });
     }
 
-    console.log(`Appointment notification sent to ${notifContacts.length} contacts`);
+    console.log(`Appointment notification sent to ${notifContacts.length} contacts via ${sysInstance?.status === "connected" ? "system" : "user"} instance`);
   } catch (error) {
     console.error("Error sending appointment notifications:", error);
   }

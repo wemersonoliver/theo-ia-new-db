@@ -1,0 +1,210 @@
+import { useState, useEffect, useRef } from "react";
+import { DashboardLayout } from "@/components/DashboardLayout";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useSystemWhatsApp } from "@/hooks/useSystemWhatsApp";
+import { useAuth } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
+import { Navigate } from "react-router-dom";
+import { Smartphone, QrCode, Loader2, RefreshCw, Power, CheckCircle2, XCircle, Bell } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+export default function AdminSystemWhatsApp() {
+  const { user } = useAuth();
+  const { instance, isLoading, connect, disconnect, refreshQR } = useSystemWhatsApp();
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
+  const [countdown, setCountdown] = useState(30);
+  const [cachedQRCode, setCachedQRCode] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const instanceStatusRef = useRef(instance?.status);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "super_admin")
+      .then(({ data }) => setIsSuperAdmin(!!(data && data.length > 0)));
+  }, [user]);
+
+  useEffect(() => { instanceStatusRef.current = instance?.status; }, [instance?.status]);
+
+  useEffect(() => {
+    return () => {
+      if (instanceStatusRef.current === "qr_ready") {
+        disconnect.mutate();
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (instance?.qr_code_base64) {
+      setCachedQRCode(instance.qr_code_base64);
+      setIsRefreshing(false);
+    }
+  }, [instance?.qr_code_base64]);
+
+  // Poll for updates when QR is showing
+  useEffect(() => {
+    if (instance?.status !== "qr_ready") return;
+    const interval = setInterval(() => {
+      refreshQR.mutate();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [instance?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const hasQR = Boolean(cachedQRCode || instance?.qr_code_base64);
+    if (instance?.status !== "qr_ready" || !hasQR) { setCountdown(30); setIsRefreshing(false); return; }
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) { setIsRefreshing(true); refreshQR.mutate(); return 30; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [instance?.status, instance?.qr_code_base64, cachedQRCode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (isSuperAdmin === null) return null;
+  if (!isSuperAdmin) return <Navigate to="/dashboard" />;
+
+  const handleCancelConnection = () => { disconnect.mutate(); setCachedQRCode(null); };
+  const handleRefreshQR = () => { setIsRefreshing(true); refreshQR.mutate(); setCountdown(30); };
+
+  const getStatusBadge = () => {
+    switch (instance?.status) {
+      case "connected": return <Badge className="bg-accent text-accent-foreground"><CheckCircle2 className="mr-1 h-3 w-3" /> Conectado</Badge>;
+      case "qr_ready": return <Badge variant="outline" className="text-warning"><QrCode className="mr-1 h-3 w-3" /> Aguardando QR</Badge>;
+      case "disconnected": return <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3" /> Desconectado</Badge>;
+      default: return <Badge variant="secondary">Não Configurado</Badge>;
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout title="WhatsApp do Sistema" description="Gerencie o WhatsApp de notificações">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  return (
+    <DashboardLayout title="WhatsApp do Sistema" description="WhatsApp para notificações da plataforma">
+      <div className="space-y-4">
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="flex items-center gap-3 py-4">
+            <Bell className="h-5 w-5 text-primary" />
+            <p className="text-sm">
+              Este WhatsApp é usado exclusivamente para enviar notificações do sistema (agendamentos, transferências de atendimento, etc.) para todos os usuários da plataforma.
+            </p>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Smartphone className="h-5 w-5" />
+                    Status da Conexão
+                  </CardTitle>
+                  <CardDescription>WhatsApp de notificações do sistema</CardDescription>
+                </div>
+                {getStatusBadge()}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {instance?.status === "connected" && (
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Número:</span>
+                    <span className="font-medium">{instance.phone_number || "N/A"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Nome do Perfil:</span>
+                    <span className="font-medium">{instance.profile_name || "N/A"}</span>
+                  </div>
+                  <Button variant="destructive" className="mt-4 w-full" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>
+                    {disconnect.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Power className="mr-2 h-4 w-4" />}
+                    Desconectar
+                  </Button>
+                </div>
+              )}
+              {instance?.status === "disconnected" && (
+                <Button className="w-full" onClick={() => connect.mutate()} disabled={connect.isPending}>
+                  {connect.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Reconectar
+                </Button>
+              )}
+              {!instance && (
+                <Button className="w-full" onClick={() => connect.mutate()} disabled={connect.isPending}>
+                  {connect.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Smartphone className="mr-2 h-4 w-4" />}
+                  Conectar WhatsApp do Sistema
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><QrCode className="h-5 w-5" /> QR Code</CardTitle>
+              <CardDescription>Escaneie com o WhatsApp de notificações</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center justify-center">
+              {instance?.status === "qr_ready" ? (
+                <div className="space-y-4 text-center">
+                  {(cachedQRCode || instance.qr_code_base64) ? (
+                    <>
+                      <div className="relative rounded-lg border bg-white p-4">
+                        <img
+                          src={`data:image/png;base64,${cachedQRCode || instance.qr_code_base64}`}
+                          alt="QR Code"
+                          className={cn("h-64 w-64 transition-opacity duration-300", isRefreshing && "opacity-50")}
+                        />
+                        {isRefreshing && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        QR Code expira em <span className="font-bold text-primary">{countdown}s</span>
+                      </p>
+                    </>
+                  ) : (
+                    <div className="space-y-3 py-6">
+                      <Loader2 className="mx-auto h-10 w-10 animate-spin text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Gerando novo QR Code...</p>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={isRefreshing}>
+                      {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                      Atualizar QR
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={handleCancelConnection} disabled={disconnect.isPending}>
+                      {disconnect.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              ) : instance?.status === "connected" ? (
+                <div className="py-8 text-center">
+                  <CheckCircle2 className="mx-auto h-16 w-16 text-accent" />
+                  <p className="mt-4 text-lg font-medium">WhatsApp Conectado!</p>
+                  <p className="text-sm text-muted-foreground">Notificações serão enviadas por este número</p>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-muted-foreground">
+                  <QrCode className="mx-auto h-16 w-16 opacity-30" />
+                  <p className="mt-4">Clique em "Conectar WhatsApp do Sistema" para gerar o QR Code</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}

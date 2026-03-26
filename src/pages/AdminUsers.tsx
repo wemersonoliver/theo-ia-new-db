@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -31,7 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle } from "lucide-react";
+import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Smartphone } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
 interface AdminUser {
@@ -53,6 +54,7 @@ interface AdminUser {
 
 export default function AdminUsers() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -204,6 +206,12 @@ export default function AdminUsers() {
   return (
     <DashboardLayout title="Administração" description="Gerencie todos os usuários da plataforma">
       <div className="space-y-6">
+        <div className="flex gap-3">
+          <Button onClick={() => navigate("/admin/system-whatsapp")} variant="outline" className="gap-2">
+            <Smartphone className="h-4 w-4" />
+            WhatsApp do Sistema
+          </Button>
+        </div>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
