@@ -111,6 +111,19 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {userCode && (
+                <div className="space-y-2">
+                  <Label>Seu ID de Usuário</Label>
+                  <div className="flex items-center gap-2">
+                    <Hash className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-lg font-mono font-bold text-primary">#{userCode}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Use este ID ao entrar em contato com o suporte
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
