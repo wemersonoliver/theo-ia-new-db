@@ -20,6 +20,7 @@ import Appointments from "./pages/Appointments";
 import AppointmentSettings from "./pages/AppointmentSettings";
 import Settings from "./pages/Settings";
 import AdminUsers from "./pages/AdminUsers";
+import AdminSystemWhatsApp from "./pages/AdminSystemWhatsApp";
 import Subscriptions from "./pages/Subscriptions";
 import NotFound from "./pages/NotFound";
 import CRM from "./pages/CRM";
