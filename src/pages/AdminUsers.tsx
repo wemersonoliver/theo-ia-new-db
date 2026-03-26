@@ -204,12 +204,23 @@ export default function AdminUsers() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Usuários Cadastrados ({users.length})
+              Usuários Cadastrados ({filteredUsers.length}{searchTerm ? ` de ${users.length}` : ""})
             </CardTitle>
-            <Button onClick={fetchUsers} variant="outline" size="sm" disabled={loading}>
-              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              Atualizar
-            </Button>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome, email, telefone ou ID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 w-[300px]"
+                />
+              </div>
+              <Button onClick={fetchUsers} variant="outline" size="sm" disabled={loading}>
+                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                Atualizar
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (
