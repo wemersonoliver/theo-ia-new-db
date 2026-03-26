@@ -45,6 +45,7 @@ const navItems = [
   { to: "/appointment-settings", icon: CalendarCog, label: "Config. Horários" },
   { to: "/settings", icon: Settings, label: "Configurações" },
   { to: "/subscriptions", icon: CreditCard, label: "Assinaturas" },
+  { to: "/support", icon: Ticket, label: "Suporte" },
 ];
 
 const SUPPORT_PHONE = "5547991293662";
