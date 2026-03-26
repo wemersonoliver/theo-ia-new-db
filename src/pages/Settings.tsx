@@ -18,6 +18,7 @@ export default function Settings() {
   const { theme, setTheme } = useTheme();
   
   const [fullName, setFullName] = useState("");
+  const [userCode, setUserCode] = useState<number | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [updatingProfile, setUpdatingProfile] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
