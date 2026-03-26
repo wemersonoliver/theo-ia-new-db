@@ -50,7 +50,7 @@ function ChatMessages({ messages }: { messages: Message[] }) {
 }
 
 export default function AdminConversations() {
-  const { conversations, isLoading, toggleAI, sendMessage } = useSystemConversations();
+  const { conversations, isLoading, toggleAI, sendMessage, deleteConversation } = useSystemConversations();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const { messages } = useSystemConversation(selectedPhone || "");
