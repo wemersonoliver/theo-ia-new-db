@@ -76,13 +76,11 @@ serve(async (req) => {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: evolutionKey },
         body: JSON.stringify({
-          webhook: {
-            enabled: true,
-            url: webhookUrl,
-            byEvents: true,
-            base64: true,
-            events: webhookEvents,
-          },
+          enabled: true,
+          url: webhookUrl,
+          events: webhookEvents,
+          webhookByEvents: true,
+          webhookBase64: true,
         }),
       });
 
@@ -154,6 +152,7 @@ serve(async (req) => {
         }
 
         const createData = await createResponse.json();
+        await syncWebhook();
         const qrCodeRaw = createData.qrcode?.base64 || createData.base64 || createData.qrcode || null;
         const qrCodeBase64 = extractBase64(qrCodeRaw);
 
