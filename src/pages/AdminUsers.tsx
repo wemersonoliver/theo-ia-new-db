@@ -364,6 +364,6 @@ export default function AdminUsers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </AdminLayout>
   );
 }
