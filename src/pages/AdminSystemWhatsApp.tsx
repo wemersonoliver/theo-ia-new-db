@@ -52,8 +52,6 @@ export default function AdminSystemWhatsApp() {
     return () => clearInterval(timer);
   }, [instance?.status, instance?.qr_code_base64, cachedQRCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (isSuperAdmin === null) return null;
-  if (!isSuperAdmin) return <Navigate to="/dashboard" />;
 
   const handleCancelConnection = () => { disconnect.mutate(); setCachedQRCode(null); };
   const handleRefreshQR = () => { setIsRefreshing(true); refreshQR.mutate(); setCountdown(30); };
