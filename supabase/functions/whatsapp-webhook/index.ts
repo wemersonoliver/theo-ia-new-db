@@ -151,8 +151,7 @@ serve(async (req) => {
 
             // Trigger support AI if not from me and AI is active
             if (!isFromMe && conv.ai_active) {
-              const messageContent = typeof content === 'string' ? content : (msg.message?.conversation || msg.message?.extendedTextMessage?.text || "[Mídia]");
-              triggerSupportAI(phone, messageContent).catch(err => 
+              triggerSupportAI(phone, content).catch(err => 
                 console.error("Error triggering support AI:", err)
               );
             }
