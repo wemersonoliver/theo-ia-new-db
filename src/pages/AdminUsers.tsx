@@ -38,6 +38,8 @@ interface AdminUser {
   id: string;
   email: string;
   full_name: string;
+  phone: string;
+  user_code: number | null;
   is_blocked: boolean;
   created_at: string;
   last_sign_in_at: string | null;
