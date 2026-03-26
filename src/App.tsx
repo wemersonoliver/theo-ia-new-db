@@ -25,6 +25,7 @@ import CRM from "./pages/CRM";
 import Products from "./pages/Products";
 import LandingPage from "./pages/LandingPage";
 import Onboarding from "./pages/Onboarding";
+import Support from "./pages/Support";
 
 // Admin pages
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -32,6 +33,9 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminLogs from "./pages/admin/AdminLogs";
 import AdminUsers from "./pages/AdminUsers";
 import AdminSystemWhatsApp from "./pages/AdminSystemWhatsApp";
+import AdminConversations from "./pages/admin/AdminConversations";
+import AdminAIConfig from "./pages/admin/AdminAIConfig";
+import AdminSupport from "./pages/admin/AdminSupport";
 
 const queryClient = new QueryClient();
 
