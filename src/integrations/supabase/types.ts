@@ -1189,6 +1189,7 @@ export type Database = {
           id: string
           instance_name: string
           last_sync_at: string | null
+          pairing_code: string | null
           phone_number: string | null
           profile_name: string | null
           qr_code_base64: string | null
@@ -1201,6 +1202,7 @@ export type Database = {
           id?: string
           instance_name: string
           last_sync_at?: string | null
+          pairing_code?: string | null
           phone_number?: string | null
           profile_name?: string | null
           qr_code_base64?: string | null
@@ -1213,6 +1215,7 @@ export type Database = {
           id?: string
           instance_name?: string
           last_sync_at?: string | null
+          pairing_code?: string | null
           phone_number?: string | null
           profile_name?: string | null
           qr_code_base64?: string | null
