@@ -192,6 +192,6 @@ export default function AdminSystemWhatsApp() {
           </Card>
         </div>
       </div>
-    </DashboardLayout>
+    </AdminLayout>
   );
 }
