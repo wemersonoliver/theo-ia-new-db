@@ -1,91 +1,49 @@
 
 
-# Plano: Super Agente de Suporte + Sistema de Notificações Admin
+## Plano: Conectar WhatsApp com Codigo de Pareamento
 
-## Visão Geral
+### Contexto
+A Evolution API suporta conexao via **pairing code** atraves do endpoint `GET /instance/connect/{instance}?number={phone}`. Quando o parametro `number` e passado, a API retorna um `pairingCode` (codigo de 8 digitos) alem do QR code. O usuario digita esse codigo no WhatsApp do celular em vez de escanear o QR.
 
-Criar a Edge Function `support-ai-agent` usando a chave `GOOGLE_GEMINI_API_KEY` já existente, com function calling para consultar o banco de dados. Quando o agente não souber responder, transfere para humano e notifica os contatos cadastrados pelos administradores com um resumo da conversa. Adicionar tela de gestão de contatos de notificação no painel admin.
+### O que sera feito
 
-## Arquitetura
+**1. Atualizar a Edge Function `create-whatsapp-instance`**
+- Aceitar um parametro opcional `phoneNumber` no body da requisicao
+- Quando `phoneNumber` for fornecido, passar como query param `?number={phone}` nas chamadas ao endpoint `/instance/connect/` da Evolution API
+- Retornar o campo `pairingCode` na resposta junto com o QR code
+- Salvar o `pairing_code` no banco (nova coluna na tabela `whatsapp_instances`)
 
-```text
-WhatsApp (instância sistema) → webhook → support-ai-agent
-  → Gemini (GOOGLE_GEMINI_API_KEY) com tools de DB
-  → Se não sabe: transfer_to_human
-    → Busca contatos de notificação (admin_notification_contacts)
-    → Envia resumo da conversa via WhatsApp para cada contato
-```
+**2. Migrar banco de dados**
+- Adicionar coluna `pairing_code TEXT` na tabela `whatsapp_instances` (nullable)
 
-## Etapa 1: Migração de Banco
+**3. Atualizar o hook `useWhatsAppInstance`**
+- Adicionar `pairing_code` ao tipo `WhatsAppInstance`
+- Atualizar `createInstance` para aceitar parametro opcional `phoneNumber`
 
-Criar tabela `admin_notification_contacts` para contatos que recebem notificações de suporte (separada da `notification_contacts` que é por usuário):
+**4. Atualizar a pagina `WhatsApp.tsx`**
+- Adicionar tabs/toggle na tela de conexao: "QR Code" e "Conectar com Codigo"
+- Na aba "Conectar com Codigo":
+  - Input para o usuario digitar seu numero de telefone (com codigo do pais)
+  - Botao "Gerar Codigo"
+  - Exibicao do codigo de 8 digitos em formato grande e legivel (estilo OTP)
+  - Countdown de expiracao (~60s) com auto-refresh
+- Manter a aba QR Code com o comportamento atual
 
-- `id`, `phone`, `name`, `active`, `created_at`, `updated_at`
-- RLS: apenas `super_admin` gerencia
-- Sem `user_id` pois é global do sistema
+**5. Atualizar a Edge Function `refresh-whatsapp-qrcode`**
+- Tambem aceitar `phoneNumber` para regenerar o pairing code quando necessario
 
-## Etapa 2: Edge Function `support-ai-agent`
+### Detalhes Tecnicos
 
-Nova função que:
-- Usa `GOOGLE_GEMINI_API_KEY` (Gemini 2.5 Flash) com function calling
-- Usa `SUPABASE_SERVICE_ROLE_KEY` para queries no banco
-- Recebe `phone` e `messageContent` do webhook
+- Endpoint Evolution API: `GET /instance/connect/{instanceName}?number=5511999999999`
+- Resposta inclui: `{ pairingCode: "ABCD1234", base64: "...", code: "..." }`
+- O pairing code expira rapido (~60s), entao o refresh automatico sera importante
+- A coluna `pairing_code` sera limpa quando o status mudar para `connected`
 
-**Tools disponíveis:**
-
-| Tool | Descrição |
-|------|-----------|
-| `lookup_user` | Busca usuário por telefone (profiles, subscriptions) |
-| `check_subscription` | Verifica assinatura e status de pagamento |
-| `get_user_ai_config` | Lê configuração de IA do usuário |
-| `update_user_ai_config` | Atualiza prompt, horários, nome do agente |
-| `list_user_products` | Lista produtos cadastrados |
-| `create_product` | Cria produto para o usuário |
-| `update_product` | Atualiza produto existente |
-| `get_whatsapp_status` | Verifica status da instância WhatsApp |
-| `update_business_hours` | Altera horário de atendimento |
-| `update_followup_config` | Configura follow-up automático |
-| `list_appointments` | Lista agendamentos |
-| `get_crm_summary` | Resume pipeline/deals do CRM |
-| `transfer_to_human` | Marca conversa para atendimento humano, notifica contatos com resumo |
-
-**Prompt do sistema:** Descrição completa do Theo IA (todas funcionalidades), tom profissional, regras de segurança (confirmar ações destrutivas), identificação do usuário por telefone.
-
-**Lógica de transferência:**
-1. Marca `ai_active = false` na `system_whatsapp_conversations`
-2. Gera resumo da conversa com Gemini
-3. Busca contatos em `admin_notification_contacts`
-4. Envia mensagem com resumo via instância do sistema
-
-## Etapa 3: Atualizar Webhook
-
-Modificar `whatsapp-webhook/index.ts`:
-- Quando recebe `messages.upsert` da instância do sistema:
-  - Salvar mensagem em `system_whatsapp_conversations`
-  - Verificar `system_ai_config.active`
-  - Se ativo e `ai_active` da conversa = true: chamar `support-ai-agent`
-
-## Etapa 4: UI Admin - Contatos de Notificação
-
-Nova aba/seção na página `AdminAIConfig.tsx` ou nova página para gerenciar `admin_notification_contacts`:
-- Formulário para adicionar telefone + nome
-- Lista com toggle ativo/inativo
-- Botão de remover
-
-**Hook:** `useAdminNotificationContacts.ts`
-
-## Etapa 5: Config.toml
-
-Adicionar `support-ai-agent` com `verify_jwt = false`.
-
-## Arquivos
-
-| Ação | Arquivo |
-|------|---------|
-| Criar | `supabase/functions/support-ai-agent/index.ts` |
-| Criar | `src/hooks/useAdminNotificationContacts.ts` |
-| Criar | Migração para `admin_notification_contacts` |
-| Editar | `supabase/functions/whatsapp-webhook/index.ts` (rotear msgs sistema) |
-| Editar | `supabase/config.toml` |
-| Editar | `src/pages/admin/AdminAIConfig.tsx` (adicionar seção contatos) |
+### Arquivos alterados
+- `supabase/migrations/` — nova migracao (coluna `pairing_code`)
+- `supabase/functions/create-whatsapp-instance/index.ts`
+- `supabase/functions/refresh-whatsapp-qrcode/index.ts`
+- `src/hooks/useWhatsAppInstance.ts`
+- `src/pages/WhatsApp.tsx`
+- `src/integrations/supabase/types.ts` (auto-atualizado)
 
