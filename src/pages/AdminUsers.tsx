@@ -243,8 +243,9 @@ export default function AdminUsers() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {users.map((u) => (
+                  {filteredUsers.map((u) => (
                       <TableRow key={u.id}>
+                        <TableCell className="font-mono text-xs text-muted-foreground">#{u.user_code || "—"}</TableCell>
                         <TableCell className="font-medium">{u.full_name || "—"}</TableCell>
                         <TableCell>{u.email}</TableCell>
                         <TableCell>
