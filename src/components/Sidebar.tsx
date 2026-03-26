@@ -74,7 +74,7 @@ export function Sidebar({ mobile, onNavigate }: SidebarProps) {
   }, [user]);
 
   const allNavItems = isSuperAdmin
-    ? [...navItems, { to: "/admin", icon: ShieldCheck, label: "Administração" }]
+    ? [...navItems, { to: "/admin/dashboard", icon: ShieldCheck, label: "Administração" }]
     : navItems;
 
   const showFull = mobile || !collapsed;
