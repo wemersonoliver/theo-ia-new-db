@@ -25,6 +25,7 @@ import CRM from "./pages/CRM";
 import Products from "./pages/Products";
 import LandingPage from "./pages/LandingPage";
 import Onboarding from "./pages/Onboarding";
+import Support from "./pages/Support";
 
 // Admin pages
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -32,6 +33,9 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminLogs from "./pages/admin/AdminLogs";
 import AdminUsers from "./pages/AdminUsers";
 import AdminSystemWhatsApp from "./pages/AdminSystemWhatsApp";
+import AdminConversations from "./pages/admin/AdminConversations";
+import AdminAIConfig from "./pages/admin/AdminAIConfig";
+import AdminSupport from "./pages/admin/AdminSupport";
 
 const queryClient = new QueryClient();
 
@@ -62,12 +66,16 @@ const App = () => (
               <Route path="/subscriptions" element={<ProtectedRoute><Subscriptions /></ProtectedRoute>} />
               <Route path="/crm" element={<ProtectedRoute><CRM /></ProtectedRoute>} />
               <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
+              <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
 
               {/* Admin Panel */}
               <Route path="/admin/login" element={<AdminLogin />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin/users" element={<AdminUsers />} />
               <Route path="/admin/system-whatsapp" element={<AdminSystemWhatsApp />} />
+              <Route path="/admin/conversations" element={<AdminConversations />} />
+              <Route path="/admin/ai-config" element={<AdminAIConfig />} />
+              <Route path="/admin/support" element={<AdminSupport />} />
               <Route path="/admin/logs" element={<AdminLogs />} />
               <Route path="/admin" element={<AdminLogin />} />
 

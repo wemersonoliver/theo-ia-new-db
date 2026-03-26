@@ -10,6 +10,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
+  MessageSquare,
+  Bot,
+  Ticket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -19,6 +22,9 @@ const adminNavItems = [
   { to: "/admin/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/admin/users", icon: Users, label: "Usuários" },
   { to: "/admin/system-whatsapp", icon: Smartphone, label: "WhatsApp Sistema" },
+  { to: "/admin/conversations", icon: MessageSquare, label: "Conversas" },
+  { to: "/admin/ai-config", icon: Bot, label: "IA Suporte" },
+  { to: "/admin/support", icon: Ticket, label: "Suporte" },
   { to: "/admin/logs", icon: ScrollText, label: "Logs" },
 ];
 
