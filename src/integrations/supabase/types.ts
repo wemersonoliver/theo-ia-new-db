@@ -647,6 +647,7 @@ export type Database = {
       onboarding_tutorial_videos: {
         Row: {
           created_at: string
+          file_path: string | null
           id: string
           step_key: string
           updated_at: string
@@ -654,6 +655,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          file_path?: string | null
           id?: string
           step_key: string
           updated_at?: string
@@ -661,6 +663,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          file_path?: string | null
           id?: string
           step_key?: string
           updated_at?: string
