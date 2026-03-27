@@ -844,6 +844,7 @@ function LocationStep({ onNext }: { onNext: () => void }) {
 
   return (
     <div className="space-y-6">
+      <OnboardingVideo stepKey="location" />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <MapPin className="h-6 w-6 text-primary" />
