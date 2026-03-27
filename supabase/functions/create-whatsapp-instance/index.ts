@@ -133,6 +133,22 @@ serve(async (req) => {
             success: true, message: "WhatsApp já está conectado", status: "connected"
           }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
+
+        // If phoneNumber provided and instance exists but not connected,
+        // we need to delete and recreate with number for pairing code to work
+        if (phoneNumber) {
+          console.log("Phone number provided, deleting existing instance to recreate with number");
+          try {
+            await fetch(`${evolutionUrl}/instance/delete/${instanceName}`, {
+              method: "DELETE",
+              headers: { apikey: evolutionKey },
+            });
+            await new Promise(r => setTimeout(r, 2000));
+            instanceExists = false;
+          } catch (e) {
+            console.log("Delete failed, will try connect anyway:", e);
+          }
+        }
       } else {
         await checkResponse.text();
       }
@@ -143,6 +159,7 @@ serve(async (req) => {
     // Create instance if it doesn't exist
     if (!instanceExists) {
       const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
+      console.log("Creating instance:", instanceName, "with number:", phoneNumber);
       const createResponse = await fetch(`${evolutionUrl}/instance/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: evolutionKey },
@@ -166,6 +183,9 @@ serve(async (req) => {
       }
 
       const createData = await createResponse.json();
+      console.log("Create response keys:", Object.keys(createData));
+      console.log("qrcode keys:", createData.qrcode ? Object.keys(createData.qrcode) : "no qrcode");
+      console.log("qrcode.pairingCode:", createData.qrcode?.pairingCode);
       const qrCodeRaw = createData.qrcode?.base64 || createData.base64 || createData.qrcode || null;
       const qrCodeBase64 = extractBase64(qrCodeRaw);
       let pairingCode = extractPairingCode(createData);
