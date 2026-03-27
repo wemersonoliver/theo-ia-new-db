@@ -806,6 +806,7 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
 function LocationQuestionStep({ onAnswer }: { onAnswer: (yes: boolean) => void }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-8">
+      <OnboardingVideo stepKey="location_question" />
       <div className="space-y-4">
         <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
           <MapPin className="h-8 w-8 text-primary" />
