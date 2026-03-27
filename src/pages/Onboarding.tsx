@@ -215,6 +215,7 @@ export default function Onboarding() {
 function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8">
+      <OnboardingVideo stepKey="welcome" />
       <div className="space-y-4">
         <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
           <Sparkles className="h-10 w-10 text-primary" />
