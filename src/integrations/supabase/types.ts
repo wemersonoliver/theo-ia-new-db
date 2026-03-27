@@ -644,6 +644,30 @@ export type Database = {
         }
         Relationships: []
       }
+      onboarding_tutorial_videos: {
+        Row: {
+          created_at: string
+          id: string
+          step_key: string
+          updated_at: string
+          video_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          step_key: string
+          updated_at?: string
+          video_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          step_key?: string
+          updated_at?: string
+          video_url?: string | null
+        }
+        Relationships: []
+      }
       platform_settings: {
         Row: {
           created_at: string | null
