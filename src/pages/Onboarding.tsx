@@ -294,6 +294,7 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
 
   return (
     <div className="space-y-6">
+      <OnboardingVideo stepKey="whatsapp" />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <Smartphone className="h-6 w-6 text-primary" />
