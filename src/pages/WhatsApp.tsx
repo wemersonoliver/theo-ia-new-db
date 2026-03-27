@@ -54,30 +54,37 @@ export default function WhatsApp() {
   const handleRefreshQR = () => {
     setIsRefreshing(true);
     if (connectionMode === "code" && phoneInput) {
+      setCachedPairingCode(null);
       refreshQRCode.mutate(phoneInput);
     } else {
       refreshQRCode.mutate();
+      setCountdown(30);
     }
-    setCountdown(30);
   };
 
   const handleConnectWithCode = () => {
     if (!phoneInput) return;
-    if (!instance) {
+    setIsRefreshing(true);
+    setCachedPairingCode(null);
+
+    if (!instance || instance.status === "disconnected") {
       createInstance.mutate(phoneInput);
     } else {
       refreshQRCode.mutate(phoneInput);
     }
-    setCountdown(60);
   };
 
   // Auto-refresh countdown
   useEffect(() => {
     const hasQRCode = Boolean(cachedQRCode || instance?.qr_code_base64);
-    const hasPairingCode = Boolean(cachedPairingCode || instance?.pairing_code);
 
-    if (instance?.status !== "qr_ready" || (!hasQRCode && !hasPairingCode)) {
-      setCountdown(connectionMode === "code" ? 60 : 30);
+    if (connectionMode === "code") {
+      setIsRefreshing(false);
+      return;
+    }
+
+    if (instance?.status !== "qr_ready" || !hasQRCode) {
+      setCountdown(30);
       setIsRefreshing(false);
       return;
     }
@@ -86,19 +93,15 @@ export default function WhatsApp() {
       setCountdown((prev) => {
         if (prev <= 1) {
           setIsRefreshing(true);
-          if (connectionMode === "code" && phoneInput) {
-            refreshQRCode.mutate(phoneInput);
-          } else {
-            refreshQRCode.mutate();
-          }
-          return connectionMode === "code" ? 60 : 30;
+          refreshQRCode.mutate();
+          return 30;
         }
         return prev - 1;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [instance?.status, instance?.qr_code_base64, instance?.pairing_code, cachedQRCode, cachedPairingCode, refreshQRCode, connectionMode, phoneInput]);
+  }, [instance?.status, instance?.qr_code_base64, cachedQRCode, refreshQRCode, connectionMode]);
 
   const getStatusBadge = () => {
     switch (instance?.status) {
@@ -332,7 +335,7 @@ export default function WhatsApp() {
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          Código expira em <span className="font-bold text-primary">{countdown}s</span>
+                          O código não é atualizado automaticamente. Se falhar, clique em <span className="font-medium text-foreground">Novo Código</span>.
                         </p>
 
                         <div className="flex gap-2 justify-center">
