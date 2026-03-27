@@ -44,6 +44,11 @@ export function useWhatsAppInstance() {
       return data as WhatsAppInstance | null;
     },
     enabled: !!user,
+    refetchInterval: (query) => {
+      const status = (query.state.data as WhatsAppInstance | null | undefined)?.status;
+      return status === "pending" || status === "qr_ready" ? 2500 : false;
+    },
+    refetchIntervalInBackground: true,
   });
 
   useEffect(() => {

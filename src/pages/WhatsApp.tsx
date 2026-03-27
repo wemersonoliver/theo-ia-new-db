@@ -45,6 +45,24 @@ export default function WhatsApp() {
     }
   }, [instance?.pairing_code]);
 
+  useEffect(() => {
+    if (instance?.status === "connected") {
+      setCachedQRCode(null);
+      setCachedPairingCode(null);
+      setIsRefreshing(false);
+      setCountdown(30);
+      setPhoneInput("");
+      return;
+    }
+
+    if (instance?.status === "disconnected") {
+      setCachedQRCode(null);
+      setCachedPairingCode(null);
+      setIsRefreshing(false);
+      setCountdown(30);
+    }
+  }, [instance?.status]);
+
   const handleCancelConnection = () => {
     disconnectInstance.mutate();
     setCachedQRCode(null);
