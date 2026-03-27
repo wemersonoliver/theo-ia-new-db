@@ -14,6 +14,57 @@ function extractBase64(qrCode: string | null | undefined): string | null {
   return qrCode;
 }
 
+function extractPairingCode(payload: Record<string, any> | null | undefined): string | null {
+  const raw = payload?.pairingCode || payload?.qrcode?.pairingCode || payload?.code?.pairingCode || null;
+  if (typeof raw !== "string") return null;
+
+  if (raw.includes("@") || raw.includes(",")) {
+    return null;
+  }
+
+  const normalized = raw.replace(/[^A-Za-z0-9]/g, "").trim().toUpperCase();
+  if (normalized.length < 6 || normalized.length > 12) {
+    return null;
+  }
+
+  return normalized;
+}
+
+async function connectInstance(
+  evolutionUrl: string,
+  evolutionKey: string,
+  instanceName: string,
+  phoneNumber?: string | null,
+) {
+  const connectUrl = phoneNumber
+    ? `${evolutionUrl}/instance/connect/${instanceName}?number=${encodeURIComponent(phoneNumber)}`
+    : `${evolutionUrl}/instance/connect/${instanceName}`;
+
+  console.log("Connecting with URL:", connectUrl, "phoneNumber:", phoneNumber);
+
+  const connectResponse = await fetch(connectUrl, {
+    headers: { apikey: evolutionKey },
+  });
+
+  if (!connectResponse.ok) {
+    const errorText = await connectResponse.text();
+    console.error("Evolution API connect error:", errorText);
+    throw new Error("Erro ao conectar instância");
+  }
+
+  const connectData = await connectResponse.json();
+  console.log("Evolution API connect response keys:", Object.keys(connectData));
+  console.log("pairingCode:", connectData.pairingCode);
+  console.log("code:", connectData.code);
+
+  const qrCodeRaw = connectData.base64 || connectData.qrcode?.base64 || connectData.qrcode || null;
+
+  return {
+    qrCodeBase64: extractBase64(qrCodeRaw),
+    pairingCode: extractPairingCode(connectData),
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -97,6 +148,7 @@ serve(async (req) => {
         headers: { "Content-Type": "application/json", apikey: evolutionKey },
         body: JSON.stringify({
           instanceName, qrcode: true, integration: "WHATSAPP-BAILEYS",
+          ...(phoneNumber ? { number: phoneNumber } : {}),
           webhook: {
             url: webhookUrl, byEvents: true, base64: true,
             events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
@@ -116,46 +168,35 @@ serve(async (req) => {
       const createData = await createResponse.json();
       const qrCodeRaw = createData.qrcode?.base64 || createData.base64 || createData.qrcode || null;
       const qrCodeBase64 = extractBase64(qrCodeRaw);
-      const pairingCode = createData.pairingCode || null;
+      let pairingCode = extractPairingCode(createData);
+      let resolvedQrCodeBase64 = qrCodeBase64;
+
+      if (phoneNumber && !pairingCode) {
+        const connectionData = await connectInstance(evolutionUrl, evolutionKey, instanceName, phoneNumber);
+        pairingCode = connectionData.pairingCode;
+        resolvedQrCodeBase64 = connectionData.qrCodeBase64 || resolvedQrCodeBase64;
+      }
 
       await supabase.from("whatsapp_instances").upsert({
         user_id: userId, instance_name: instanceName,
-        status: qrCodeBase64 ? "qr_ready" : "pending",
-        qr_code_base64: qrCodeBase64, pairing_code: pairingCode,
+        status: resolvedQrCodeBase64 || pairingCode ? "qr_ready" : "pending",
+        qr_code_base64: resolvedQrCodeBase64, pairing_code: pairingCode,
         updated_at: new Date().toISOString(),
       }, { onConflict: "user_id" });
 
       return new Response(JSON.stringify({ 
-        success: true, qrCode: qrCodeBase64, pairingCode, status: qrCodeBase64 ? "qr_ready" : "pending"
+        success: !phoneNumber || !!pairingCode,
+        qrCode: resolvedQrCodeBase64,
+        pairingCode,
+        status: resolvedQrCodeBase64 || pairingCode ? "qr_ready" : "pending",
+        message: phoneNumber && !pairingCode
+          ? "Sua Evolution API não retornou um pairing code válido. Use QR Code ou revise a configuração da Evolution API."
+          : undefined,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Instance exists but not connected — get QR/pairing code
-    const connectUrl = phoneNumber
-      ? `${evolutionUrl}/instance/connect/${instanceName}?number=${phoneNumber}`
-      : `${evolutionUrl}/instance/connect/${instanceName}`;
-
-    console.log("Connecting with URL:", connectUrl, "phoneNumber:", phoneNumber);
-
-    const connectResponse = await fetch(connectUrl, {
-      headers: { apikey: evolutionKey },
-    });
-
-    if (!connectResponse.ok) {
-      const errorText = await connectResponse.text();
-      console.error("Evolution API connect error:", errorText);
-      return new Response(JSON.stringify({ error: "Erro ao conectar instância" }), { 
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
-    }
-
-    const connectData = await connectResponse.json();
-    console.log("Evolution API connect response keys:", Object.keys(connectData));
-    console.log("pairingCode:", connectData.pairingCode);
-    
-    const qrCodeRaw = connectData.base64 || connectData.qrcode?.base64 || connectData.qrcode || null;
-    const qrCodeBase64 = extractBase64(qrCodeRaw);
-    const pairingCode = connectData.pairingCode || connectData.code?.pairingCode || null;
+    const { qrCodeBase64, pairingCode } = await connectInstance(evolutionUrl, evolutionKey, instanceName, phoneNumber);
 
     await supabase.from("whatsapp_instances").upsert({
       user_id: userId, instance_name: instanceName,
@@ -164,7 +205,13 @@ serve(async (req) => {
     }, { onConflict: "user_id" });
 
     return new Response(JSON.stringify({ 
-      success: true, qrCode: qrCodeBase64, pairingCode, status: "qr_ready"
+      success: !phoneNumber || !!pairingCode,
+      qrCode: qrCodeBase64,
+      pairingCode,
+      status: "qr_ready",
+      message: phoneNumber && !pairingCode
+        ? "Sua Evolution API não retornou um pairing code válido. Use QR Code ou revise a configuração da Evolution API."
+        : undefined,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error) {

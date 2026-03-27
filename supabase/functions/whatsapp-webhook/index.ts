@@ -6,6 +6,22 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function extractPairingCode(payload: Record<string, any> | null | undefined): string | null {
+  const raw = payload?.pairingCode || payload?.qrcode?.pairingCode || payload?.code?.pairingCode || null;
+  if (typeof raw !== "string") return null;
+
+  if (raw.includes("@") || raw.includes(",")) {
+    return null;
+  }
+
+  const normalized = raw.replace(/[^A-Za-z0-9]/g, "").trim().toUpperCase();
+  if (normalized.length < 6 || normalized.length > 12) {
+    return null;
+  }
+
+  return normalized;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -255,14 +271,18 @@ serve(async (req) => {
     // Handle different events
     if (event === "qrcode.updated" || event === "QRCODE_UPDATED") {
       const qrCode = data?.qrcode?.base64 || data?.base64;
+      const pairingCode = extractPairingCode(data);
+      const updatePayload: Record<string, unknown> = {
+        status: "qr_ready",
+        updated_at: new Date().toISOString(),
+      };
+
+      if (qrCode) updatePayload.qr_code_base64 = qrCode;
+      if (pairingCode) updatePayload.pairing_code = pairingCode;
       
       await supabase
         .from("whatsapp_instances")
-        .update({
-          status: "qr_ready",
-          qr_code_base64: qrCode,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq("user_id", userId);
 
       console.log("QR Code updated for user:", userId);
@@ -281,6 +301,7 @@ serve(async (req) => {
           .update({
             status: "connected",
             qr_code_base64: null,
+            pairing_code: null,
             phone_number: phoneNumber,
             profile_name: profileName,
             updated_at: new Date().toISOString(),
@@ -309,6 +330,7 @@ serve(async (req) => {
           .update({
             status: "disconnected",
             qr_code_base64: null,
+            pairing_code: null,
             updated_at: new Date().toISOString(),
           })
           .eq("user_id", userId);

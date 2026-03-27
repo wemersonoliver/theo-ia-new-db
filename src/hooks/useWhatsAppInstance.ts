@@ -18,6 +18,14 @@ export interface WhatsAppInstance {
   updated_at: string;
 }
 
+interface WhatsAppConnectionResponse {
+  success: boolean;
+  message?: string;
+  qrCode?: string | null;
+  pairingCode?: string | null;
+  status?: WhatsAppInstance["status"];
+}
+
 export function useWhatsAppInstance() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -59,10 +67,20 @@ export function useWhatsAppInstance() {
         body: phoneNumber ? { phoneNumber } : {},
       });
       if (error) throw error;
-      return data;
+      return data as WhatsAppConnectionResponse;
     },
-    onSuccess: () => {
+    onSuccess: (data, phoneNumber) => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp-instance", user?.id] });
+
+      if (phoneNumber) {
+        if (data?.pairingCode) {
+          toast.success("Código de conexão gerado com sucesso.");
+        } else {
+          toast.error(data?.message || "Não foi possível gerar um código válido de conexão.");
+        }
+        return;
+      }
+
       toast.success("Instância criada! Conecte seu WhatsApp.");
     },
     onError: (error: Error) => {
@@ -91,13 +109,21 @@ export function useWhatsAppInstance() {
         body: phoneNumber ? { phoneNumber } : {},
       });
       if (error) throw error;
-      return data;
+      return data as WhatsAppConnectionResponse;
     },
-    onSuccess: () => {
+    onSuccess: (data, phoneNumber) => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp-instance", user?.id] });
+
+      if (!phoneNumber) return;
+
+      if (data?.pairingCode) {
+        toast.success("Novo código de conexão gerado.");
+      } else {
+        toast.error(data?.message || "Não foi possível gerar um código válido de conexão.");
+      }
     },
     onError: (error: Error) => {
-      toast.error(`Erro ao atualizar QR Code: ${error.message}`);
+      toast.error(`Erro ao atualizar conexão: ${error.message}`);
     },
   });
 

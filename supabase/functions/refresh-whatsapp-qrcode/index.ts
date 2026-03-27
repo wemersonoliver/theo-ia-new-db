@@ -14,6 +14,22 @@ function extractBase64(qrCode: string | null | undefined): string | null {
   return qrCode;
 }
 
+function extractPairingCode(payload: Record<string, any> | null | undefined): string | null {
+  const raw = payload?.pairingCode || payload?.qrcode?.pairingCode || payload?.code?.pairingCode || null;
+  if (typeof raw !== "string") return null;
+
+  if (raw.includes("@") || raw.includes(",")) {
+    return null;
+  }
+
+  const normalized = raw.replace(/[^A-Za-z0-9]/g, "").trim().toUpperCase();
+  if (normalized.length < 6 || normalized.length > 12) {
+    return null;
+  }
+
+  return normalized;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -129,7 +145,7 @@ serve(async (req) => {
     
     const qrCodeRaw = connectData.base64 || connectData.qrcode?.base64 || connectData.qrcode || null;
     const qrCodeBase64 = extractBase64(qrCodeRaw);
-    const pairingCode = connectData.pairingCode || connectData.code?.pairingCode || null;
+    const pairingCode = extractPairingCode(connectData);
 
     if (!qrCodeBase64 && !pairingCode) {
       return new Response(JSON.stringify({
@@ -143,7 +159,12 @@ serve(async (req) => {
     }).eq("user_id", userId);
 
     return new Response(JSON.stringify({ 
-      success: true, qrCode: qrCodeBase64, pairingCode
+      success: !phoneNumber || !!pairingCode,
+      qrCode: qrCodeBase64,
+      pairingCode,
+      message: phoneNumber && !pairingCode
+        ? "Sua Evolution API não retornou um pairing code válido. Use QR Code ou revise a configuração da Evolution API."
+        : undefined,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error) {
