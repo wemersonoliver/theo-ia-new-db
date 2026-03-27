@@ -44,14 +44,18 @@ serve(async (req) => {
         .eq("instance_name", instanceName);
       results.push({ step: "db_delete", error: dbErr?.message || null });
 
+      // Step 2.5: Wait for deletion to propagate
+      await new Promise(r => setTimeout(r, 3000));
+
       // Step 3: Create instance WITH number
-      console.log("Step 3: Creating instance with number:", phoneNumber);
+      const newInstanceName = instanceName + "_v2";
+      console.log("Step 3: Creating instance", newInstanceName, "with number:", phoneNumber);
       const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
       const createResp = await fetch(`${evolutionUrl}/instance/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: evolutionKey },
         body: JSON.stringify({
-          instanceName,
+          instanceName: newInstanceName,
           qrcode: true,
           number: phoneNumber || undefined,
           integration: "WHATSAPP-BAILEYS",
@@ -80,7 +84,7 @@ serve(async (req) => {
       await new Promise(r => setTimeout(r, 2000));
       console.log("Step 4: Connecting with number:", phoneNumber);
       const connectResp = await fetch(
-        `${evolutionUrl}/instance/connect/${instanceName}?number=${phoneNumber}`,
+        `${evolutionUrl}/instance/connect/${newInstanceName}?number=${phoneNumber}`,
         { headers: { apikey: evolutionKey } }
       );
       const connectData = await connectResp.json();
@@ -99,7 +103,7 @@ serve(async (req) => {
       await new Promise(r => setTimeout(r, 1000));
       console.log("Step 5: Connecting WITHOUT number");
       const connectResp2 = await fetch(
-        `${evolutionUrl}/instance/connect/${instanceName}`,
+        `${evolutionUrl}/instance/connect/${newInstanceName}`,
         { headers: { apikey: evolutionKey } }
       );
       const connectData2 = await connectResp2.json();
@@ -123,7 +127,7 @@ serve(async (req) => {
 
       await supabase.from("whatsapp_instances").upsert({
         user_id: "c7dac31d-2b13-41d6-a336-c2dac28568cd",
-        instance_name: instanceName,
+        instance_name: newInstanceName,
         status: qrBase64 || pairingCode ? "qr_ready" : "pending",
         qr_code_base64: qrBase64,
         pairing_code: pairingCode,
