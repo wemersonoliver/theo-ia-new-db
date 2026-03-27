@@ -634,7 +634,7 @@ async function triggerAIResponse(supabase: any, userId: string, phone: string, m
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     
     // If delay is configured, use the debounce system
-    const delay = delaySeconds ?? 5;
+    const delay = delaySeconds ?? 35;
     
     if (delay > 0) {
       const scheduledAt = new Date(Date.now() + delay * 1000).toISOString();
