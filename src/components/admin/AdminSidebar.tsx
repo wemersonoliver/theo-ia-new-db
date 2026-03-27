@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Bot,
   Ticket,
+  Video,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
