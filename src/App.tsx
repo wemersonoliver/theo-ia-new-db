@@ -36,6 +36,7 @@ import AdminSystemWhatsApp from "./pages/AdminSystemWhatsApp";
 import AdminConversations from "./pages/admin/AdminConversations";
 import AdminAIConfig from "./pages/admin/AdminAIConfig";
 import AdminSupport from "./pages/admin/AdminSupport";
+import AdminTutorialVideos from "./pages/admin/AdminTutorialVideos";
 
 const queryClient = new QueryClient();
 
