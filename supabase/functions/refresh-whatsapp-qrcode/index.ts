@@ -86,6 +86,70 @@ serve(async (req) => {
       });
     }
 
+    // If phoneNumber provided for pairing code, we need to delete and recreate
+    // the instance with number for Evolution API to return a valid pairingCode
+    if (phoneNumber) {
+      console.log("Phone number provided, deleting and recreating instance for pairing code");
+      
+      // Delete existing instance
+      try {
+        await fetch(`${evolutionUrl}/instance/delete/${instance.instance_name}`, {
+          method: "DELETE",
+          headers: { apikey: evolutionKey },
+        });
+        await new Promise(r => setTimeout(r, 2000));
+      } catch (e) {
+        console.log("Delete failed:", e);
+      }
+
+      // Recreate with number
+      const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
+      const createResp = await fetch(`${evolutionUrl}/instance/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: evolutionKey },
+        body: JSON.stringify({
+          instanceName: instance.instance_name,
+          qrcode: true,
+          number: phoneNumber,
+          integration: "WHATSAPP-BAILEYS",
+          webhook: {
+            url: webhookUrl, byEvents: true, base64: true,
+            events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
+          },
+          settings: { syncFullHistory: true, rejectCall: false, groupsIgnore: true },
+        }),
+      });
+
+      if (createResp.ok) {
+        const createData = await createResp.json();
+        console.log("Recreate response keys:", Object.keys(createData));
+        console.log("qrcode.pairingCode:", createData.qrcode?.pairingCode);
+
+        const qrCodeRaw = createData.qrcode?.base64 || createData.base64 || null;
+        const qrCodeBase64 = extractBase64(qrCodeRaw);
+        const pairingCode = extractPairingCode(createData);
+
+        await supabase.from("whatsapp_instances").update({
+          status: "qr_ready",
+          qr_code_base64: qrCodeBase64,
+          pairing_code: pairingCode,
+          updated_at: new Date().toISOString(),
+        }).eq("user_id", userId);
+
+        return new Response(JSON.stringify({
+          success: !!pairingCode,
+          qrCode: qrCodeBase64,
+          pairingCode,
+          message: !pairingCode
+            ? "Não foi possível gerar código de pareamento. Tente QR Code."
+            : undefined,
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      } else {
+        const errText = await createResp.text();
+        console.error("Recreate failed:", errText);
+      }
+    }
+
     // Check real connection state
     let evolutionState: string | null = null;
     try {
