@@ -457,7 +457,7 @@ function AppointmentsConfigStep({ onNext }: { onNext: () => void }) {
 
   return (
     <div className="space-y-6">
-      <OnboardingVideo stepKey="appointments_config" />
+      <OnboardingVideo stepKey="appointments" />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <Clock className="h-6 w-6 text-primary" />
