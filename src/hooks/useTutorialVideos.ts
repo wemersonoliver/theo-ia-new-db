@@ -19,7 +19,7 @@ export function useTutorialVideos() {
         .select("*")
         .order("step_key");
       if (error) throw error;
-      return (data || []) as TutorialVideo[];
+      return (data || []) as unknown as TutorialVideo[];
     },
   });
 
