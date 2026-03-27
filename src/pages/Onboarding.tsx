@@ -18,6 +18,7 @@ import { useAIConfig } from "@/hooks/useAIConfig";
 import { useAppointmentTypes } from "@/hooks/useAppointmentTypes";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { OnboardingVideo } from "@/components/OnboardingVideo";
 import {
   Sparkles, Smartphone, QrCode, Loader2, RefreshCw, CheckCircle2, XCircle,
   Calendar, Bot, MapPin, FlaskConical, PartyPopper, ChevronRight, ArrowRight,
