@@ -28,7 +28,7 @@ serve(async (req) => {
 
     // Sleep for the configured delay before checking pending responses
     // This ensures the debounce window has passed
-    const sleepTime = delayMs || 5000;
+    const sleepTime = delayMs || 35000;
     console.log(`Sleeping ${sleepTime}ms before processing for: ${phone}`);
     await new Promise(resolve => setTimeout(resolve, sleepTime));
 
