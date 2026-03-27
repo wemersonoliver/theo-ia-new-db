@@ -18,6 +18,7 @@ import { useAIConfig } from "@/hooks/useAIConfig";
 import { useAppointmentTypes } from "@/hooks/useAppointmentTypes";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { OnboardingVideo } from "@/components/OnboardingVideo";
 import {
   Sparkles, Smartphone, QrCode, Loader2, RefreshCw, CheckCircle2, XCircle,
   Calendar, Bot, MapPin, FlaskConical, PartyPopper, ChevronRight, ArrowRight,
@@ -214,6 +215,7 @@ export default function Onboarding() {
 function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8">
+      <OnboardingVideo stepKey="welcome" />
       <div className="space-y-4">
         <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
           <Sparkles className="h-10 w-10 text-primary" />
@@ -292,6 +294,7 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
 
   return (
     <div className="space-y-6">
+      <OnboardingVideo stepKey="whatsapp" />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <Smartphone className="h-6 w-6 text-primary" />
@@ -374,6 +377,7 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
 function AppointmentsQuestionStep({ onAnswer }: { onAnswer: (yes: boolean) => void }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-8">
+      <OnboardingVideo stepKey="appointments_question" />
       <div className="space-y-4">
         <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
           <Calendar className="h-8 w-8 text-primary" />
@@ -453,6 +457,7 @@ function AppointmentsConfigStep({ onNext }: { onNext: () => void }) {
 
   return (
     <div className="space-y-6">
+      <OnboardingVideo stepKey="appointments_config" />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <Clock className="h-6 w-6 text-primary" />
@@ -693,6 +698,7 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
 
   return (
     <div className="space-y-6">
+      <OnboardingVideo stepKey="interview" />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <Bot className="h-6 w-6 text-primary" />
@@ -800,6 +806,7 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
 function LocationQuestionStep({ onAnswer }: { onAnswer: (yes: boolean) => void }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-8">
+      <OnboardingVideo stepKey="location_question" />
       <div className="space-y-4">
         <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
           <MapPin className="h-8 w-8 text-primary" />
@@ -837,6 +844,7 @@ function LocationStep({ onNext }: { onNext: () => void }) {
 
   return (
     <div className="space-y-6">
+      <OnboardingVideo stepKey="location" />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <MapPin className="h-6 w-6 text-primary" />
@@ -901,6 +909,7 @@ function TestPromptStep({ onNext }: { onNext: () => void }) {
 
   return (
     <div className="space-y-6">
+      <OnboardingVideo stepKey="test_prompt" />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <FlaskConical className="h-6 w-6 text-primary" />

@@ -36,6 +36,7 @@ import AdminSystemWhatsApp from "./pages/AdminSystemWhatsApp";
 import AdminConversations from "./pages/admin/AdminConversations";
 import AdminAIConfig from "./pages/admin/AdminAIConfig";
 import AdminSupport from "./pages/admin/AdminSupport";
+import AdminTutorialVideos from "./pages/admin/AdminTutorialVideos";
 
 const queryClient = new QueryClient();
 
@@ -76,6 +77,7 @@ const App = () => (
               <Route path="/admin/conversations" element={<AdminConversations />} />
               <Route path="/admin/ai-config" element={<AdminAIConfig />} />
               <Route path="/admin/support" element={<AdminSupport />} />
+              <Route path="/admin/tutorial-videos" element={<AdminTutorialVideos />} />
               <Route path="/admin/logs" element={<AdminLogs />} />
               <Route path="/admin" element={<AdminLogin />} />
 
