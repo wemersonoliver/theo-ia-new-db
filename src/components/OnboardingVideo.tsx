@@ -17,6 +17,9 @@ export function OnboardingVideo({ stepKey }: OnboardingVideoProps) {
           <video
             src={video.url}
             controls
+            autoPlay
+            muted
+            playsInline
             className="absolute inset-0 w-full h-full object-contain"
           />
         </div>
