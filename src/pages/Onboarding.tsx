@@ -176,7 +176,7 @@ export default function Onboarding() {
 
         {/* Main Content */}
         <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-          <div className="max-w-3xl mx-auto">
+          <div className={cn("mx-auto", currentStep === "test_prompt" ? "max-w-6xl" : "max-w-3xl")}>
             {currentStep === "welcome" && (
               <WelcomeStep onNext={() => goToStep("whatsapp")} />
             )}
@@ -872,23 +872,32 @@ function LocationStep({ onNext }: { onNext: () => void }) {
   );
 }
 
-// ─── STEP 8: TEST PROMPT ────────────────────────────────────────────────────────
+// ─── STEP 8: TEST PROMPT (Dual Panel - Test + AI Generator) ─────────────────
 function TestPromptStep({ onNext }: { onNext: () => void }) {
   const { user } = useAuth();
-  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+  // Test chat state
+  const [testMessages, setTestMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [testInput, setTestInput] = useState("");
+  const [testLoading, setTestLoading] = useState(false);
+  const testEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSend = async () => {
-    const text = input.trim();
-    if (!text || loading || !user) return;
-    setInput("");
-    const newMsgs = [...messages, { role: "user" as const, content: text }];
-    setMessages(newMsgs);
-    setLoading(true);
+  // Generator chat state
+  const [genMessages, setGenMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [genInput, setGenInput] = useState("");
+  const [genLoading, setGenLoading] = useState(false);
+  const genEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { testEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [testMessages, testLoading]);
+  useEffect(() => { genEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [genMessages, genLoading]);
+
+  const handleTestSend = async () => {
+    const text = testInput.trim();
+    if (!text || testLoading || !user) return;
+    setTestInput("");
+    const newMsgs = [...testMessages, { role: "user" as const, content: text }];
+    setTestMessages(newMsgs);
+    setTestLoading(true);
     try {
       const { data: sd } = await supabase.auth.getSession();
       const token = sd.session?.access_token;
@@ -896,16 +905,127 @@ function TestPromptStep({ onNext }: { onNext: () => void }) {
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/test-ai-prompt`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ messages, userMessage: text }),
+        body: JSON.stringify({ messages: testMessages, userMessage: text }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro");
-      setMessages([...newMsgs, { role: "assistant", content: data.message }]);
+      setTestMessages([...newMsgs, { role: "assistant", content: data.message }]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao testar");
-      setMessages(messages);
-    } finally { setLoading(false); }
+      setTestMessages(testMessages);
+    } finally { setTestLoading(false); }
   };
+
+  const handleGenSend = async () => {
+    const text = genInput.trim();
+    if (!text || genLoading || !user) return;
+    setGenInput("");
+    const newMsgs = [...genMessages, { role: "user" as const, content: text }];
+    setGenMessages(newMsgs);
+    setGenLoading(true);
+    try {
+      const { data: sd } = await supabase.auth.getSession();
+      const token = sd.session?.access_token;
+      if (!token) throw new Error("Não autenticado");
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/prompt-generator-ai`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ messages: genMessages, userMessage: text, testConversation: testMessages }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro");
+      setGenMessages([...newMsgs, { role: "assistant", content: data.message }]);
+      if (data.promptUpdated) {
+        toast.success("✅ Prompt atualizado! Reinicie a conversa de teste para ver as mudanças.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao chamar gerador");
+      setGenMessages(genMessages);
+    } finally { setGenLoading(false); }
+  };
+
+  const renderChatPanel = (
+    title: string,
+    subtitle: string,
+    Icon: any,
+    msgs: { role: string; content: string }[],
+    input: string,
+    setInput: (v: string) => void,
+    onSend: () => void,
+    onRestart: () => void,
+    loading: boolean,
+    endRef: React.RefObject<HTMLDivElement>,
+    placeholder: string,
+    EmptyIcon: any,
+    emptyTitle: string,
+    emptyDesc: string,
+    accentClass: string,
+  ) => (
+    <Card className="flex flex-col" style={{ maxHeight: "500px" }}>
+      <CardHeader className="pb-3 shrink-0">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <Icon className={`h-4 w-4 ${accentClass}`} />
+              {title}
+            </CardTitle>
+            <CardDescription className="text-xs mt-1">{subtitle}</CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={onRestart} className="gap-1.5 h-7 text-xs">
+            <RefreshCw className="h-3 w-3" />
+            Reiniciar
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0 flex flex-col flex-1 min-h-0 overflow-hidden">
+        <ScrollArea className="flex-1 px-4">
+          <div className="space-y-3 py-3">
+            {msgs.length === 0 && !loading && (
+              <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                <EmptyIcon className="h-8 w-8 mb-2 opacity-30" />
+                <p className="text-xs font-medium">{emptyTitle}</p>
+                <p className="text-xs mt-1 max-w-xs">{emptyDesc}</p>
+              </div>
+            )}
+            {msgs.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={cn(
+                  "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap",
+                  msg.role === "user" ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm"
+                )}>
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            {loading && (
+              <div className="flex justify-start">
+                <div className="bg-muted rounded-2xl rounded-bl-sm px-3 py-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span className="animate-pulse">Gerando resposta...</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={endRef} />
+          </div>
+        </ScrollArea>
+        <div className="border-t p-3 shrink-0">
+          <div className="flex gap-2">
+            <Textarea
+              value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
+              placeholder={placeholder} disabled={loading}
+              className="flex-1 min-h-[50px] resize-none text-sm" rows={2}
+            />
+            <Button onClick={onSend} disabled={!input.trim() || loading} size="icon" className="self-end h-8 w-8">
+              <Send className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="space-y-6">
@@ -913,62 +1033,37 @@ function TestPromptStep({ onNext }: { onNext: () => void }) {
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <FlaskConical className="h-6 w-6 text-primary" />
-          Testar seu Agente IA
+          Testar e Ajustar seu Agente IA
         </h2>
         <p className="text-muted-foreground">
-          Simule uma conversa como se fosse um cliente. Veja como a IA responderá com o prompt que acabamos de criar.
+          Teste o atendimento à esquerda e use a IA à direita para analisar e ajustar o prompt em tempo real.
         </p>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[400px] px-4">
-            <div className="space-y-4 py-4">
-              {messages.length === 0 && !loading && (
-                <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                  <FlaskConical className="h-10 w-10 mb-3 opacity-30" />
-                  <p className="text-sm font-medium">Simulador de Atendimento</p>
-                  <p className="text-xs mt-1">Envie uma mensagem como se fosse um cliente.</p>
-                </div>
-              )}
-              {messages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={cn(
-                    "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap",
-                    msg.role === "user" ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm"
-                  )}>
-                    {msg.content}
-                  </div>
-                </div>
-              ))}
-              {loading && (
-                <div className="flex justify-start">
-                  <div className="bg-muted rounded-2xl rounded-bl-sm px-4 py-3">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span className="animate-pulse">Gerando resposta...</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div ref={endRef} />
-            </div>
-          </ScrollArea>
-          <div className="border-t p-4">
-            <div className="flex gap-2">
-              <Textarea
-                value={input} onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                placeholder="Ex: Oi, quero saber os preços..." disabled={loading}
-                className="flex-1 min-h-[60px] resize-none" rows={2}
-              />
-              <Button onClick={handleSend} disabled={!input.trim() || loading} size="icon" className="self-end">
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {renderChatPanel(
+          "Simulador de Atendimento",
+          "Teste como um cliente",
+          FlaskConical,
+          testMessages, testInput, setTestInput, handleTestSend,
+          () => { setTestMessages([]); setTestInput(""); toast.success("Conversa reiniciada!"); },
+          testLoading, testEndRef,
+          "Escreva como um cliente faria...",
+          FlaskConical, "Simulador de Atendimento", "Envie uma mensagem como se fosse um cliente.",
+          "text-primary"
+        )}
+        {renderChatPanel(
+          "IA Geradora de Prompt",
+          "Analise e ajuste o prompt",
+          Wand2,
+          genMessages, genInput, setGenInput, handleGenSend,
+          () => { setGenMessages([]); setGenInput(""); toast.success("Conversa reiniciada!"); },
+          genLoading, genEndRef,
+          "Peça análises ou ajustes no prompt...",
+          Wand2, "Consultor de Prompt", "Converse para analisar o teste e atualizar o prompt.",
+          "text-warning"
+        )}
+      </div>
 
       <div className="flex justify-end">
         <Button onClick={onNext} size="lg" className="gap-2">
