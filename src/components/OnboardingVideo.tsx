@@ -12,7 +12,7 @@ export function OnboardingVideo({ stepKey }: OnboardingVideoProps) {
 
   if (video.type === "file") {
     return (
-      <div className="mb-6">
+      <div className="mb-6 w-full">
         <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted border">
           <video
             src={video.url}
