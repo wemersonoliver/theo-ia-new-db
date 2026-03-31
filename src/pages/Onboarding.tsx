@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { AudioRecordButton } from "@/components/AudioRecordButton";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -772,6 +773,10 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
                   disabled={isLoading}
                   className="flex-1 min-h-[60px] resize-none"
                   rows={2}
+                />
+                <AudioRecordButton
+                  onTranscription={(text) => setUserInput(prev => prev ? prev + " " + text : text)}
+                  disabled={isLoading}
                 />
                 <Button onClick={handleSend} disabled={!userInput.trim() || isLoading} size="icon" className="self-end">
                   <Send className="h-4 w-4" />

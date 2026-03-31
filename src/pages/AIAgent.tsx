@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { AudioRecordButton } from "@/components/AudioRecordButton";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { FollowupTab } from "@/components/followup/FollowupTab";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -638,6 +639,10 @@ function InterviewTab({
                     disabled={isLoading}
                     className="flex-1 min-h-[80px] max-h-[200px] resize-y"
                     rows={3}
+                  />
+                  <AudioRecordButton
+                    onTranscription={(text) => setUserInput(prev => prev ? prev + " " + text : text)}
+                    disabled={isLoading}
                   />
                   <Button
                     onClick={handleSend}

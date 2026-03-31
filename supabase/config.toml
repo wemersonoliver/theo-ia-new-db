@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.support-ai-agent]
 verify_jwt = false
+
+[functions.transcribe-browser-audio]
+verify_jwt = false
