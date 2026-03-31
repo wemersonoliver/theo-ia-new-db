@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { AudioRecordButton } from "@/components/AudioRecordButton";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { FollowupTab } from "@/components/followup/FollowupTab";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

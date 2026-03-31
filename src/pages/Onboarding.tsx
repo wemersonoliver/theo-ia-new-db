@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { AudioRecordButton } from "@/components/AudioRecordButton";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
