@@ -1,49 +1,41 @@
 
 
-## Plano: Conectar WhatsApp com Codigo de Pareamento
+## Plan: Add Voice Input to Interview Chat
 
-### Contexto
-A Evolution API suporta conexao via **pairing code** atraves do endpoint `GET /instance/connect/{instance}?number={phone}`. Quando o parametro `number` e passado, a API retorna um `pairingCode` (codigo de 8 digitos) alem do QR code. O usuario digita esse codigo no WhatsApp do celular em vez de escanear o QR.
+### Problem
+The interview chat (both in Onboarding and AIAgent pages) only supports text input. Users want to respond via voice, with audio automatically transcribed and sent as text.
 
-### O que sera feito
+### Approach
+1. **New Edge Function** (`transcribe-browser-audio`): Receives base64-encoded audio from the browser, sends it to Groq Whisper API for transcription, and returns the text. The existing `transcribe-audio` function is tied to Evolution API/WhatsApp and cannot be reused.
 
-**1. Atualizar a Edge Function `create-whatsapp-instance`**
-- Aceitar um parametro opcional `phoneNumber` no body da requisicao
-- Quando `phoneNumber` for fornecido, passar como query param `?number={phone}` nas chamadas ao endpoint `/instance/connect/` da Evolution API
-- Retornar o campo `pairingCode` na resposta junto com o QR code
-- Salvar o `pairing_code` no banco (nova coluna na tabela `whatsapp_instances`)
+2. **Reusable `AudioRecordButton` component**: A microphone button that uses the browser's `MediaRecorder` API to capture audio, converts to base64, calls the new edge function, and returns transcribed text via a callback.
 
-**2. Migrar banco de dados**
-- Adicionar coluna `pairing_code TEXT` na tabela `whatsapp_instances` (nullable)
+3. **Integrate into both interview UIs**: Add the mic button next to the send button in `AIAgent.tsx` (line ~642) and `Onboarding.tsx` (line ~776). On transcription complete, the text is inserted into the input field (or sent directly).
 
-**3. Atualizar o hook `useWhatsAppInstance`**
-- Adicionar `pairing_code` ao tipo `WhatsAppInstance`
-- Atualizar `createInstance` para aceitar parametro opcional `phoneNumber`
+### Technical Details
 
-**4. Atualizar a pagina `WhatsApp.tsx`**
-- Adicionar tabs/toggle na tela de conexao: "QR Code" e "Conectar com Codigo"
-- Na aba "Conectar com Codigo":
-  - Input para o usuario digitar seu numero de telefone (com codigo do pais)
-  - Botao "Gerar Codigo"
-  - Exibicao do codigo de 8 digitos em formato grande e legivel (estilo OTP)
-  - Countdown de expiracao (~60s) com auto-refresh
-- Manter a aba QR Code com o comportamento atual
+**New file: `supabase/functions/transcribe-browser-audio/index.ts`**
+- Accepts `{ audio: string (base64), mimeType: string }`
+- Sends to Groq Whisper (`whisper-large-v3-turbo`, language `pt`)
+- Uses existing `GROQ_API_KEY` secret
+- Returns `{ text: string }`
 
-**5. Atualizar a Edge Function `refresh-whatsapp-qrcode`**
-- Tambem aceitar `phoneNumber` para regenerar o pairing code quando necessario
+**New file: `src/components/AudioRecordButton.tsx`**
+- States: idle → recording → transcribing
+- Uses `navigator.mediaDevices.getUserMedia` + `MediaRecorder`
+- On stop: converts blob to base64, calls edge function
+- Props: `onTranscription(text: string)`, `disabled: boolean`
+- Visual: Mic icon (idle), pulsing red mic (recording), spinner (transcribing)
 
-### Detalhes Tecnicos
+**Modified: `src/pages/AIAgent.tsx`**
+- Import `AudioRecordButton`
+- Add next to Send button in the chat input area (~line 642)
+- `onTranscription` sets `userInput` with the transcribed text
 
-- Endpoint Evolution API: `GET /instance/connect/{instanceName}?number=5511999999999`
-- Resposta inclui: `{ pairingCode: "ABCD1234", base64: "...", code: "..." }`
-- O pairing code expira rapido (~60s), entao o refresh automatico sera importante
-- A coluna `pairing_code` sera limpa quando o status mudar para `connected`
+**Modified: `src/pages/Onboarding.tsx`**
+- Same pattern — add mic button next to Send in interview chat (~line 776)
+- `onTranscription` sets `userInput` with the transcribed text
 
-### Arquivos alterados
-- `supabase/migrations/` — nova migracao (coluna `pairing_code`)
-- `supabase/functions/create-whatsapp-instance/index.ts`
-- `supabase/functions/refresh-whatsapp-qrcode/index.ts`
-- `src/hooks/useWhatsAppInstance.ts`
-- `src/pages/WhatsApp.tsx`
-- `src/integrations/supabase/types.ts` (auto-atualizado)
+**Config: `supabase/config.toml`**
+- Add `[functions.transcribe-browser-audio]` with `verify_jwt = false`
 
