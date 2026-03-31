@@ -773,6 +773,10 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
                   className="flex-1 min-h-[60px] resize-none"
                   rows={2}
                 />
+                <AudioRecordButton
+                  onTranscription={(text) => setUserInput(prev => prev ? prev + " " + text : text)}
+                  disabled={isLoading}
+                />
                 <Button onClick={handleSend} disabled={!userInput.trim() || isLoading} size="icon" className="self-end">
                   <Send className="h-4 w-4" />
                 </Button>

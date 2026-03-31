@@ -639,6 +639,10 @@ function InterviewTab({
                     className="flex-1 min-h-[80px] max-h-[200px] resize-y"
                     rows={3}
                   />
+                  <AudioRecordButton
+                    onTranscription={(text) => setUserInput(prev => prev ? prev + " " + text : text)}
+                    disabled={isLoading}
+                  />
                   <Button
                     onClick={handleSend}
                     disabled={!userInput.trim() || isLoading}
