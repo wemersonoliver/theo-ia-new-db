@@ -134,9 +134,14 @@ export default function Onboarding() {
         <div className="max-w-4xl mx-auto space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium text-foreground">Configuração Inicial</span>
-            <span className="text-muted-foreground">
-              {currentIndex + 1} de {visibleSteps.length} passos
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-muted-foreground">
+                {currentIndex + 1} de {visibleSteps.length} passos
+              </span>
+              <Button variant="ghost" size="sm" onClick={handleFinish} className="text-muted-foreground hover:text-foreground">
+                Pular
+              </Button>
+            </div>
           </div>
           <Progress value={progressPercent} className="h-2" />
         </div>
