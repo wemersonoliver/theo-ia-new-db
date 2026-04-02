@@ -294,6 +294,13 @@ serve(async (req) => {
       // Notify registered contacts about handoff
       await notifyHandoff(supabase, userId, phone, contactName);
 
+      // Move CRM deal to "Atendimento humano"
+      try {
+        await moveCRMDealToHumanStage(supabase, userId, phone);
+      } catch (e) {
+        console.error("Error moving CRM deal on handoff:", e);
+      }
+
       return new Response(JSON.stringify({ skipped: true, reason: "Message limit reached" }), { 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
       });
