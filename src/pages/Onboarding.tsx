@@ -114,6 +114,13 @@ export default function Onboarding() {
 
   const handleFinish = async () => {
     if (!user) return;
+
+    // Activate AI agent automatically
+    await supabase
+      .from("whatsapp_ai_config")
+      .update({ active: true } as any)
+      .eq("user_id", user.id);
+
     const { error } = await supabase
       .from("profiles")
       .update({ onboarding_completed: true } as any)
@@ -123,7 +130,7 @@ export default function Onboarding() {
       toast.error("Erro ao finalizar configuração");
       return;
     }
-    toast.success("Configuração concluída! Bem-vindo ao painel!");
+    toast.success("Configuração concluída! Agente IA ativado e pronto para uso!");
     navigate("/dashboard");
   };
 
