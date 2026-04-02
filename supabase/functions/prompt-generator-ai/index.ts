@@ -171,9 +171,10 @@ ${testConversationText}
     }
 
     const geminiPayload: any = {
+      system_instruction: { parts: [{ text: systemPrompt }] },
       contents: geminiContents,
       tools: [updatePromptTool],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
+      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
     };
 
     let aiReply = "";
