@@ -324,6 +324,12 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
   }, [instance?.status, instance?.qr_code_base64, cachedQRCode, refreshQRCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isConnected = instance?.status === "connected";
+  const qrCodeValue = cachedQRCode || instance?.qr_code_base64 || null;
+  const qrImageSrc = qrCodeValue
+    ? qrCodeValue.startsWith("data:image")
+      ? qrCodeValue
+      : `data:image/png;base64,${qrCodeValue}`
+    : null;
 
   return (
     <div className="space-y-6">
@@ -352,11 +358,11 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
             </div>
           ) : instance?.status === "qr_ready" ? (
             <div className="space-y-4 text-center">
-              {(cachedQRCode || instance.qr_code_base64) ? (
+              {qrImageSrc ? (
                 <>
                   <div className="relative rounded-lg border bg-white p-4 inline-block">
                     <img
-                      src={`data:image/png;base64,${cachedQRCode || instance.qr_code_base64}`}
+                      src={qrImageSrc}
                       alt="QR Code"
                       className={cn("h-64 w-64 transition-opacity", isRefreshing && "opacity-50")}
                     />
