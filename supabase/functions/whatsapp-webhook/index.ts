@@ -601,6 +601,13 @@ serve(async (req) => {
               ai_active: shouldActivateAI,
             });
 
+          // Create CRM deal in "Atendimento IA" stage for new conversations
+          try {
+            await createCRMDealForNewConversation(supabase, userId, phone, contactName);
+          } catch (e) {
+            console.error("Error creating CRM deal:", e);
+          }
+
           if (shouldActivateAI) {
             console.log("AI activated for new conversation:", phone);
             const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
