@@ -12,12 +12,12 @@ export interface CRMPipeline {
 }
 
 const DEFAULT_STAGES = [
-  { name: "Novo Lead", position: 0, color: "#6366f1" },
-  { name: "Qualificado", position: 1, color: "#8b5cf6" },
-  { name: "Proposta", position: 2, color: "#f59e0b" },
-  { name: "Negociação", position: 3, color: "#f97316" },
-  { name: "Fechado/Ganho", position: 4, color: "#22c55e" },
-  { name: "Perdido", position: 5, color: "#ef4444" },
+  { name: "Atendimento IA", position: 0, color: "#6366f1" },
+  { name: "Atendimento humano", position: 1, color: "#8b5cf6" },
+  { name: "Agendamento Realizado", position: 2, color: "#f59e0b" },
+  { name: "Agendamento Confirmado", position: 3, color: "#f97316" },
+  { name: "Compareceu", position: 4, color: "#22c55e" },
+  { name: "Venda realizada", position: 5, color: "#6366f1" },
 ];
 
 export function useCRMPipelines() {
