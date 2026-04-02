@@ -171,17 +171,30 @@ serve(async (req) => {
         const targetDate = new Date(date);
         const dayOfWeek = targetDate.getDay();
 
-        // Get slot config for this day/time to know max capacity
-        const { data: slotConfig } = await supabase
-          .from("appointment_slots")
+        // Get max capacity - try appointment_types first, fallback to appointment_slots
+        let maxPerSlot = 1;
+        
+        const { data: typeConfig } = await supabase
+          .from("appointment_types")
           .select("max_appointments_per_slot")
           .eq("user_id", userId)
-          .eq("day_of_week", dayOfWeek)
           .eq("is_active", true)
           .limit(1)
           .maybeSingle();
 
-        const maxPerSlot = slotConfig?.max_appointments_per_slot || 1;
+        if (typeConfig) {
+          maxPerSlot = typeConfig.max_appointments_per_slot || 1;
+        } else {
+          const { data: slotConfig } = await supabase
+            .from("appointment_slots")
+            .select("max_appointments_per_slot")
+            .eq("user_id", userId)
+            .eq("day_of_week", dayOfWeek)
+            .eq("is_active", true)
+            .limit(1)
+            .maybeSingle();
+          maxPerSlot = slotConfig?.max_appointments_per_slot || 1;
+        }
 
         // Count existing appointments at this time
         const { data: existingAtTime, error: countError } = await supabase
