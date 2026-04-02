@@ -490,6 +490,13 @@ serve(async (req) => {
               })
               .eq("id", conversation.id);
 
+            // Move CRM deal to "Atendimento humano" when human responds
+            try {
+              await moveCRMDealToHumanStage(supabase, userId, phone);
+            } catch (e) {
+              console.error("Error moving CRM deal to human stage:", e);
+            }
+
             console.log("Outgoing message saved, AI disabled:", phone);
           }
           continue; // Don't trigger AI for outgoing messages
