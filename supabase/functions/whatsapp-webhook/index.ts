@@ -715,3 +715,140 @@ async function triggerSupportAI(phone: string, messageContent: string) {
     body: JSON.stringify({ phone, messageContent }),
   });
 }
+
+const DEFAULT_CRM_STAGES = [
+  { name: "Atendimento IA", position: 0, color: "#6366f1" },
+  { name: "Atendimento humano", position: 1, color: "#8b5cf6" },
+  { name: "Agendamento Realizado", position: 2, color: "#f59e0b" },
+  { name: "Agendamento Confirmado", position: 3, color: "#f97316" },
+  { name: "Compareceu", position: 4, color: "#22c55e" },
+  { name: "Venda realizada", position: 5, color: "#6366f1" },
+];
+
+async function ensureCRMPipeline(supabase: any, userId: string): Promise<{ pipelineId: string; stages: any[] }> {
+  const { data: pipelines } = await supabase
+    .from("crm_pipelines")
+    .select("id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  let pipelineId: string;
+
+  if (pipelines && pipelines.length > 0) {
+    pipelineId = pipelines[0].id;
+  } else {
+    const { data: newPipeline } = await supabase
+      .from("crm_pipelines")
+      .insert({ user_id: userId, name: "Vendas" })
+      .select("id")
+      .single();
+
+    if (!newPipeline) throw new Error("Failed to create pipeline");
+    pipelineId = newPipeline.id;
+
+    const stages = DEFAULT_CRM_STAGES.map((s) => ({
+      ...s,
+      pipeline_id: pipelineId,
+      user_id: userId,
+    }));
+    await supabase.from("crm_stages").insert(stages);
+  }
+
+  const { data: stagesData } = await supabase
+    .from("crm_stages")
+    .select("id, name, position")
+    .eq("pipeline_id", pipelineId)
+    .order("position", { ascending: true });
+
+  return { pipelineId, stages: stagesData || [] };
+}
+
+async function createCRMDealForNewConversation(supabase: any, userId: string, phone: string, contactName: string | null) {
+  const { stages } = await ensureCRMPipeline(supabase, userId);
+  
+  const aiStage = stages.find((s: any) => s.name === "Atendimento IA") || stages[0];
+  if (!aiStage) return;
+
+  const { data: contact } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("phone", phone)
+    .maybeSingle();
+
+  if (contact) {
+    const stageIds = stages.map((s: any) => s.id);
+    const { data: existingDeals } = await supabase
+      .from("crm_deals")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("contact_id", contact.id)
+      .in("stage_id", stageIds)
+      .is("won_at", null)
+      .is("lost_at", null)
+      .limit(1);
+
+    if (existingDeals && existingDeals.length > 0) {
+      console.log("CRM deal already exists for contact:", phone);
+      return;
+    }
+  }
+
+  const { count } = await supabase
+    .from("crm_deals")
+    .select("id", { count: "exact", head: true })
+    .eq("stage_id", aiStage.id)
+    .eq("user_id", userId);
+
+  const dealData: any = {
+    user_id: userId,
+    stage_id: aiStage.id,
+    title: contactName || phone,
+    position: count || 0,
+    priority: "medium",
+    tags: ["whatsapp"],
+  };
+
+  if (contact) {
+    dealData.contact_id = contact.id;
+  }
+
+  await supabase.from("crm_deals").insert(dealData);
+  console.log("CRM deal created for new conversation:", phone);
+}
+
+async function moveCRMDealToHumanStage(supabase: any, userId: string, phone: string) {
+  const { stages } = await ensureCRMPipeline(supabase, userId);
+  
+  const aiStage = stages.find((s: any) => s.name === "Atendimento IA") || stages[0];
+  const humanStage = stages.find((s: any) => s.name === "Atendimento humano") || stages[1];
+  if (!aiStage || !humanStage) return;
+
+  const { data: contact } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("phone", phone)
+    .maybeSingle();
+
+  if (!contact) return;
+
+  const { data: deals } = await supabase
+    .from("crm_deals")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("contact_id", contact.id)
+    .eq("stage_id", aiStage.id)
+    .is("won_at", null)
+    .is("lost_at", null)
+    .limit(1);
+
+  if (deals && deals.length > 0) {
+    await supabase
+      .from("crm_deals")
+      .update({ stage_id: humanStage.id, updated_at: new Date().toISOString() })
+      .eq("id", deals[0].id);
+    console.log("CRM deal moved to Atendimento humano:", phone);
+  }
+}
