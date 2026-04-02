@@ -1056,3 +1056,53 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
     console.error("Error sending handoff notifications:", error);
   }
 }
+
+async function moveCRMDealToHumanStage(supabase: any, userId: string, phone: string) {
+  // Get user's first pipeline
+  const { data: pipelines } = await supabase
+    .from("crm_pipelines")
+    .select("id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  if (!pipelines || pipelines.length === 0) return;
+
+  const { data: stages } = await supabase
+    .from("crm_stages")
+    .select("id, name")
+    .eq("pipeline_id", pipelines[0].id)
+    .order("position", { ascending: true });
+
+  if (!stages || stages.length < 2) return;
+
+  const aiStage = stages.find((s: any) => s.name === "Atendimento IA") || stages[0];
+  const humanStage = stages.find((s: any) => s.name === "Atendimento humano") || stages[1];
+
+  const { data: contact } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("phone", phone)
+    .maybeSingle();
+
+  if (!contact) return;
+
+  const { data: deals } = await supabase
+    .from("crm_deals")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("contact_id", contact.id)
+    .eq("stage_id", aiStage.id)
+    .is("won_at", null)
+    .is("lost_at", null)
+    .limit(1);
+
+  if (deals && deals.length > 0) {
+    await supabase
+      .from("crm_deals")
+      .update({ stage_id: humanStage.id, updated_at: new Date().toISOString() })
+      .eq("id", deals[0].id);
+    console.log("CRM deal moved to Atendimento humano on handoff:", phone);
+  }
+}
