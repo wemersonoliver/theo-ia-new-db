@@ -141,17 +141,7 @@ ${testConversationText}
 - IMPORTANTE: Use APENAS a function calling nativa (functionCall) para chamar update_agent_prompt. NUNCA use sintaxe Python como print() ou default_api
 - Formate respostas com clareza usando parágrafos curtos`;
 
-    const geminiContents: any[] = [
-      { role: "user", parts: [{ text: systemPrompt }] },
-      {
-        role: "model",
-        parts: [
-          {
-            text: "Entendido! Sou seu consultor de prompts. Posso analisar a conversa de teste ao lado, sugerir melhorias e atualizar o prompt diretamente quando você aprovar. Como posso ajudar?",
-          },
-        ],
-      },
-    ];
+    const geminiContents: any[] = [];
 
     // Add message history
     for (const msg of messages || []) {
@@ -159,6 +149,21 @@ ${testConversationText}
         role: msg.role === "assistant" ? "model" : "user",
         parts: [{ text: msg.content }],
       });
+    }
+
+    // If no history, add initial greeting
+    if (geminiContents.length === 0) {
+      geminiContents.push(
+        { role: "user", parts: [{ text: "Olá, quero ajustar meu prompt." }] },
+        {
+          role: "model",
+          parts: [
+            {
+              text: "Olá! Sou seu consultor de prompts. Estou com acesso ao prompt atual do seu agente e posso analisar a conversa de teste ao lado, sugerir melhorias e atualizar o prompt diretamente quando você aprovar. Como posso ajudar?",
+            },
+          ],
+        },
+      );
     }
 
     if (userMessage) {
