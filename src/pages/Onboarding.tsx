@@ -265,6 +265,7 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
   const [countdown, setCountdown] = useState(30);
   const [cachedQRCode, setCachedQRCode] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const instanceStatusRef = useRef(instance?.status);
 
   useEffect(() => { instanceStatusRef.current = instance?.status; }, [instance?.status]);
@@ -281,20 +282,46 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
     if (instance?.qr_code_base64) {
       setCachedQRCode(instance.qr_code_base64);
       setIsRefreshing(false);
+      setRefreshFailed(false);
     }
   }, [instance?.qr_code_base64]);
+
+  // If instance is qr_ready but has no QR code (stale from previous session), auto-refresh once
+  useEffect(() => {
+    if (instance?.status === "qr_ready" && !instance?.qr_code_base64 && !cachedQRCode && !isRefreshing && !refreshFailed) {
+      setIsRefreshing(true);
+      refreshQRCode.mutate(undefined, {
+        onError: () => {
+          setIsRefreshing(false);
+          setRefreshFailed(true);
+          // Instance doesn't exist in Evolution API anymore, disconnect to allow reconnection
+          disconnectInstance.mutate();
+        },
+      });
+    }
+  }, [instance?.status, instance?.qr_code_base64, cachedQRCode, isRefreshing, refreshFailed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const hasQR = Boolean(cachedQRCode || instance?.qr_code_base64);
     if (instance?.status !== "qr_ready" || !hasQR) { setCountdown(30); setIsRefreshing(false); return; }
     const timer = setInterval(() => {
       setCountdown(prev => {
-        if (prev <= 1) { setIsRefreshing(true); refreshQRCode.mutate(); return 30; }
+        if (prev <= 1) {
+          setIsRefreshing(true);
+          refreshQRCode.mutate(undefined, {
+            onError: () => {
+              setIsRefreshing(false);
+              setRefreshFailed(true);
+              disconnectInstance.mutate();
+            },
+          });
+          return 30;
+        }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [instance?.status, instance?.qr_code_base64, cachedQRCode, refreshQRCode]);
+  }, [instance?.status, instance?.qr_code_base64, cachedQRCode, refreshQRCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isConnected = instance?.status === "connected";
 
