@@ -79,6 +79,7 @@ const App = () => (
               <Route path="/admin/ai-config" element={<AdminAIConfig />} />
               <Route path="/admin/support" element={<AdminSupport />} />
               <Route path="/admin/tutorial-videos" element={<AdminTutorialVideos />} />
+              <Route path="/admin/notifications" element={<AdminNotifications />} />
               <Route path="/admin/logs" element={<AdminLogs />} />
               <Route path="/admin" element={<AdminLogin />} />
 

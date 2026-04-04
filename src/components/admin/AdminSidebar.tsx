@@ -28,6 +28,7 @@ const adminNavItems = [
   { to: "/admin/ai-config", icon: Bot, label: "IA Suporte" },
   { to: "/admin/support", icon: Ticket, label: "Suporte" },
   { to: "/admin/tutorial-videos", icon: Video, label: "Vídeos Tutoriais" },
+  { to: "/admin/notifications", icon: Bell, label: "Notificações" },
   { to: "/admin/logs", icon: ScrollText, label: "Logs" },
 ];
 
