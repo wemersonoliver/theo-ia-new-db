@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from "@/components/ui/separator";
 import { Loader2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Register() {
   const [fullName, setFullName] = useState("");
@@ -35,6 +36,10 @@ export default function Register() {
       if (typeof window !== 'undefined' && (window as any).fbq) {
         (window as any).fbq('track', 'StartTrial');
       }
+      // Fire-and-forget notification to admins
+      supabase.functions.invoke("notify-new-user", {
+        body: { full_name: fullName, email },
+      }).catch(() => {});
       toast.success("Conta criada com sucesso!");
       navigate("/dashboard");
     }
