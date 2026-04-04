@@ -47,6 +47,7 @@ export function useConversations() {
       })) as Conversation[];
     },
     enabled: !!user,
+    refetchInterval: 5000,
   });
 
   // Subscribe to realtime updates
