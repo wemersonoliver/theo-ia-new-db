@@ -974,9 +974,9 @@ export default function AIAgent() {
       setFormData({
         agent_name: config.agent_name || "Assistente Virtual",
         custom_prompt: config.custom_prompt || "",
-        business_hours_start: config.business_hours_start || "08:00",
-        business_hours_end: config.business_hours_end || "18:00",
-        business_days: config.business_days || [1, 2, 3, 4, 5],
+        business_hours_start: config.business_hours_start || "00:00",
+        business_hours_end: config.business_hours_end || "23:59",
+        business_days: config.business_days || [0, 1, 2, 3, 4, 5, 6],
         out_of_hours_message: config.out_of_hours_message || "",
         handoff_message: config.handoff_message || "",
         max_messages_without_human: config.max_messages_without_human || 10,
