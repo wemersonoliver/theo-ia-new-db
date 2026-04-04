@@ -47,6 +47,7 @@ export function useConversations() {
       })) as Conversation[];
     },
     enabled: !!user,
+    refetchInterval: 5000,
   });
 
   // Subscribe to realtime updates
@@ -142,6 +143,7 @@ export function useConversation(phone: string) {
       } as Conversation;
     },
     enabled: !!user && !!phone,
+    refetchInterval: 3000,
   });
 
   // Subscribe to realtime updates for this specific conversation

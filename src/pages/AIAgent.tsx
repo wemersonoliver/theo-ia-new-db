@@ -952,9 +952,9 @@ export default function AIAgent() {
   const [formData, setFormData] = useState({
     agent_name: "Assistente Virtual",
     custom_prompt: "",
-    business_hours_start: "08:00",
-    business_hours_end: "18:00",
-    business_days: [1, 2, 3, 4, 5],
+    business_hours_start: "00:00",
+    business_hours_end: "23:59",
+    business_days: [0, 1, 2, 3, 4, 5, 6],
     out_of_hours_message: "Olá! Estou fora do horário de atendimento. Retornarei em breve!",
     handoff_message: "Um momento, vou transferir você para um atendente.",
     max_messages_without_human: 10,
@@ -974,9 +974,9 @@ export default function AIAgent() {
       setFormData({
         agent_name: config.agent_name || "Assistente Virtual",
         custom_prompt: config.custom_prompt || "",
-        business_hours_start: config.business_hours_start || "08:00",
-        business_hours_end: config.business_hours_end || "18:00",
-        business_days: config.business_days || [1, 2, 3, 4, 5],
+        business_hours_start: config.business_hours_start || "00:00",
+        business_hours_end: config.business_hours_end || "23:59",
+        business_days: config.business_days || [0, 1, 2, 3, 4, 5, 6],
         out_of_hours_message: config.out_of_hours_message || "",
         handoff_message: config.handoff_message || "",
         max_messages_without_human: config.max_messages_without_human || 10,
@@ -1187,6 +1187,38 @@ export default function AIAgent() {
               <CardDescription>Define quando o agente responde automaticamente</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Botão 24h */}
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <Label className="text-sm font-medium">Atendimento 24 horas</Label>
+                  <p className="text-xs text-muted-foreground">Agente responde a qualquer hora, todos os dias</p>
+                </div>
+                <Switch
+                  checked={
+                    formData.business_hours_start === "00:00" &&
+                    formData.business_hours_end === "23:59" &&
+                    formData.business_days.length === 7
+                  }
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setFormData({
+                        ...formData,
+                        business_hours_start: "00:00",
+                        business_hours_end: "23:59",
+                        business_days: [0, 1, 2, 3, 4, 5, 6],
+                      });
+                    } else {
+                      setFormData({
+                        ...formData,
+                        business_hours_start: "08:00",
+                        business_hours_end: "18:00",
+                        business_days: [1, 2, 3, 4, 5],
+                      });
+                    }
+                  }}
+                />
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="hours_start">Início</Label>
