@@ -952,9 +952,9 @@ export default function AIAgent() {
   const [formData, setFormData] = useState({
     agent_name: "Assistente Virtual",
     custom_prompt: "",
-    business_hours_start: "08:00",
-    business_hours_end: "18:00",
-    business_days: [1, 2, 3, 4, 5],
+    business_hours_start: "00:00",
+    business_hours_end: "23:59",
+    business_days: [0, 1, 2, 3, 4, 5, 6],
     out_of_hours_message: "Olá! Estou fora do horário de atendimento. Retornarei em breve!",
     handoff_message: "Um momento, vou transferir você para um atendente.",
     max_messages_without_human: 10,
