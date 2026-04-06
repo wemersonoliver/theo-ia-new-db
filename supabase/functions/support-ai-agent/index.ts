@@ -627,6 +627,118 @@ async function notifyAdminContacts(supabase: any, clientPhone: string, summary: 
   }
 }
 
+const MAX_SUPPORT_MESSAGE_CHARS = 220;
+
+function splitByWordLength(text: string, maxChars = MAX_SUPPORT_MESSAGE_CHARS): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    if (word.length > maxChars) {
+      if (current) {
+        chunks.push(current.trim());
+        current = "";
+      }
+
+      for (let i = 0; i < word.length; i += maxChars) {
+        chunks.push(word.slice(i, i + maxChars));
+      }
+      continue;
+    }
+
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxChars) {
+      chunks.push(current.trim());
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) {
+    chunks.push(current.trim());
+  }
+
+  return chunks;
+}
+
+function splitLongSupportBlock(block: string, maxChars = MAX_SUPPORT_MESSAGE_CHARS): string[] {
+  const normalized = block.replace(/\s+/g, " ").trim();
+  if (!normalized) return [];
+  if (normalized.length <= maxChars) return [normalized];
+
+  const sentenceParts = normalized
+    .split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý0-9*•-])/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const granularParts = (sentenceParts.length > 1 ? sentenceParts : [normalized]).flatMap((part) => {
+    if (part.length <= maxChars) return [part];
+
+    const clauseParts = part
+      .split(/(?<=[,;:])\s+/u)
+      .map((clause) => clause.trim())
+      .filter(Boolean);
+
+    return clauseParts.length > 1 ? clauseParts : splitByWordLength(part, maxChars);
+  });
+
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const part of granularParts) {
+    if (part.length > maxChars) {
+      if (current) {
+        chunks.push(current.trim());
+        current = "";
+      }
+
+      chunks.push(...splitByWordLength(part, maxChars));
+      continue;
+    }
+
+    const next = current ? `${current} ${part}` : part;
+    if (next.length > maxChars) {
+      if (current) chunks.push(current.trim());
+      current = part;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) {
+    chunks.push(current.trim());
+  }
+
+  return chunks;
+}
+
+function splitSupportResponseIntoBlocks(text: string): string[] {
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  if (!normalized) return [];
+
+  const baseBlocks = normalized
+    .split(/\n\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  const sourceBlocks = baseBlocks.length > 0 ? baseBlocks : [normalized];
+
+  return sourceBlocks.flatMap((block) => {
+    const lineBlocks = block
+      .split(/\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (lineBlocks.length > 1) {
+      return lineBlocks.flatMap((line) => splitLongSupportBlock(line));
+    }
+
+    return splitLongSupportBlock(block);
+  });
+}
+
 async function callGeminiWithTools(
   apiKey: string,
   systemPrompt: string,
@@ -797,11 +909,8 @@ serve(async (req) => {
 
     console.log(`AI response for ${phone}: ${aiResponse.slice(0, 200)}`);
 
-    // Split AI response into message blocks (by double newline)
-    const messageBlocks = aiResponse
-      .split(/\n\n+/)
-      .map((b: string) => b.trim())
-      .filter((b: string) => b.length > 0);
+    // Split AI response into message blocks with hard fallback for long paragraphs
+    const messageBlocks = splitSupportResponseIntoBlocks(aiResponse);
 
     // Save ALL blocks as individual messages in conversation
     const newMessages = messageBlocks.map((block: string) => ({
