@@ -20,14 +20,14 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header");
 
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user: caller }, error: authError } = await userClient.auth.getUser(token);
-    if (authError || !caller) {
+
+    const authClient = createClient(supabaseUrl, anonKey);
+    const { data: claimsData, error: authError } = await authClient.auth.getClaims(token);
+    const callerId = claimsData?.claims?.sub;
+
+    if (authError || !callerId || typeof callerId !== "string") {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -38,7 +38,7 @@ serve(async (req) => {
     const { data: roleData } = await supabaseAdmin
       .from("user_roles")
       .select("role")
-      .eq("user_id", caller.id)
+      .eq("user_id", callerId)
       .eq("role", "super_admin")
       .maybeSingle();
 
