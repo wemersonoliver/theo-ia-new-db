@@ -51,19 +51,31 @@ function ChatMessages({ messages }: { messages: Message[] }) {
 }
 
 export default function AdminConversations() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { conversations, isLoading, toggleAI, sendMessage, deleteConversation } = useSystemConversations();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const { messages } = useSystemConversation(selectedPhone || "");
+  const [startSent, setStartSent] = useState(false);
 
-  // Auto-select phone from query param
+  // Auto-select phone and send greeting from CRM
   useEffect(() => {
     const phoneParam = searchParams.get("phone");
+    const shouldStart = searchParams.get("start") === "true";
     if (phoneParam && !selectedPhone) {
       setSelectedPhone(phoneParam);
     }
-  }, [searchParams, selectedPhone]);
+    if (phoneParam && shouldStart && !startSent) {
+      setStartSent(true);
+      sendMessage.mutateAsync({ phone: phoneParam, content: "Olá! Aqui é a equipe Theo IA. Como posso te ajudar?" }).then(() => {
+        // Remove start param after sending
+        setSearchParams(prev => {
+          prev.delete("start");
+          return prev;
+        }, { replace: true });
+      });
+    }
+  }, [searchParams, selectedPhone, startSent]);
 
   const selectedConv = conversations.find((c) => c.phone === selectedPhone);
 
