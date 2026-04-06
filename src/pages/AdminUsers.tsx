@@ -235,6 +235,7 @@ export default function AdminUsers() {
                       <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">ID</TableHead>
                       <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Nome</TableHead>
                       <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Email</TableHead>
+                      <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Telefone</TableHead>
                       <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Role</TableHead>
                       <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Assinatura</TableHead>
                       <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Status</TableHead>
@@ -248,6 +249,7 @@ export default function AdminUsers() {
                         <TableCell className="font-mono text-xs text-amber-400/80 py-3">#{u.user_code || "—"}</TableCell>
                         <TableCell className="font-medium text-slate-100 py-3">{u.full_name || "—"}</TableCell>
                         <TableCell className="text-slate-300 py-3">{u.email}</TableCell>
+                        <TableCell className="text-slate-300 py-3 font-mono text-xs">{u.phone || "—"}</TableCell>
                         <TableCell>
                           {u.roles.map((r) => (
                             <Badge
