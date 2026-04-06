@@ -12,8 +12,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { AdminCRMDeal } from "@/hooks/useAdminCRMDeals";
 import { AdminCRMStage } from "@/hooks/useAdminCRMStages";
-import { CheckCircle2, XCircle, Mail, Phone } from "lucide-react";
+import { CheckCircle2, XCircle, Mail, Phone, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 interface AdminDealDialogProps {
   open: boolean;
