@@ -38,6 +38,7 @@ import AdminAIConfig from "./pages/admin/AdminAIConfig";
 import AdminSupport from "./pages/admin/AdminSupport";
 import AdminTutorialVideos from "./pages/admin/AdminTutorialVideos";
 import AdminNotifications from "./pages/admin/AdminNotifications";
+import AdminCRM from "./pages/admin/AdminCRM";
 
 const queryClient = new QueryClient();
 
@@ -81,6 +82,7 @@ const App = () => (
               <Route path="/admin/tutorial-videos" element={<AdminTutorialVideos />} />
               <Route path="/admin/notifications" element={<AdminNotifications />} />
               <Route path="/admin/logs" element={<AdminLogs />} />
+              <Route path="/admin/crm" element={<AdminCRM />} />
               <Route path="/admin" element={<AdminLogin />} />
 
               <Route path="*" element={<NotFound />} />

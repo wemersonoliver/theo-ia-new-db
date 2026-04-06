@@ -15,6 +15,7 @@ import {
   Ticket,
   Video,
   Bell,
+  Kanban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -22,6 +23,7 @@ import theoLogo from "@/assets/logo_theo_ia.png";
 
 const adminNavItems = [
   { to: "/admin/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/admin/crm", icon: Kanban, label: "CRM" },
   { to: "/admin/users", icon: Users, label: "Usuários" },
   { to: "/admin/system-whatsapp", icon: Smartphone, label: "WhatsApp Sistema" },
   { to: "/admin/conversations", icon: MessageSquare, label: "Conversas" },
