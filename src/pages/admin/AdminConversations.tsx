@@ -64,7 +64,6 @@ export default function AdminConversations() {
       setSelectedPhone(phoneParam);
     }
   }, [searchParams, selectedPhone]);
-  const { messages } = useSystemConversation(selectedPhone || "");
 
   const selectedConv = conversations.find((c) => c.phone === selectedPhone);
 
