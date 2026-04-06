@@ -43,7 +43,7 @@ export default function AdminCRM() {
             </div>
           </div>
           <PipelineSelector
-            pipelines={pipelines}
+            pipelines={pipelines as any}
             activePipelineId={activePipelineId}
             onSelect={setActivePipelineId}
             onCreate={createPipeline}
@@ -70,8 +70,8 @@ export default function AdminCRM() {
       <PipelineSettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
-        pipeline={activePipeline}
-        stages={stages}
+        pipeline={activePipeline as any}
+        stages={stages as any}
         onRenamePipeline={renamePipeline}
         onDeletePipeline={deletePipeline}
         onAddStage={addStage}
