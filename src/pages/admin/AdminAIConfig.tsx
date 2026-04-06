@@ -98,6 +98,7 @@ export default function AdminAIConfig() {
               />
             </div>
 
+            <Button
               onClick={handleSave}
               disabled={upsertConfig.isPending}
               className="bg-amber-500 hover:bg-amber-600 text-black gap-2"
