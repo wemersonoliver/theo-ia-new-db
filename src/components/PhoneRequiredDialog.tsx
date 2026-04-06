@@ -41,7 +41,7 @@ export function PhoneRequiredDialog({ open, userId, onPhoneSaved }: PhoneRequire
 
   return (
     <Dialog open={open}>
-      <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()} hideCloseButton>
+      <DialogContent className="sm:max-w-md [&>button]:hidden" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
             <Phone className="h-6 w-6 text-primary" />
