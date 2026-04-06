@@ -14,14 +14,18 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
     // Verify caller is super_admin
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header");
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user: caller }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    const { data: { user: caller }, error: authError } = await userClient.auth.getUser();
     if (authError || !caller) throw new Error("Unauthorized");
 
     // Check super_admin role
