@@ -305,6 +305,15 @@ export default function AdminUsers() {
                           <Button
                             variant="outline"
                             size="sm"
+                            onClick={() => openEditDialog(u)}
+                            disabled={actionLoading}
+                            title="Editar perfil"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => setSubDialog(u)}
                             disabled={actionLoading}
                             title="Conceder assinatura"
