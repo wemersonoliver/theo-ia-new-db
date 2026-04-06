@@ -97,7 +97,7 @@ serve(async (req) => {
     }
 
     // Send message via Evolution API
-    const sendResponse = await fetch(`${evolutionUrl}/message/sendText/${instance.instance_name}`, {
+    const sendResponse = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
