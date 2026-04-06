@@ -38,7 +38,7 @@ serve(async (req) => {
     }
 
     const userId = claimsData.user.id;
-    const { phone, content } = await req.json();
+    const { phone, content, system } = await req.json();
 
     if (!phone || !content) {
       return new Response(JSON.stringify({ error: "Phone and content required" }), { 
@@ -47,18 +47,41 @@ serve(async (req) => {
       });
     }
 
-    // Get user's instance
-    const { data: instance } = await supabase
-      .from("whatsapp_instances")
-      .select("instance_name, status")
-      .eq("user_id", userId)
-      .maybeSingle();
+    let instanceName: string;
 
-    if (!instance || instance.status !== "connected") {
-      return new Response(JSON.stringify({ error: "WhatsApp não está conectado" }), { 
-        status: 400, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+    if (system) {
+      // Use system WhatsApp instance (admin/support)
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const { data: sysInstance } = await supabaseAdmin
+        .from("system_whatsapp_instance")
+        .select("instance_name, status")
+        .maybeSingle();
+
+      if (!sysInstance || sysInstance.status !== "connected") {
+        return new Response(JSON.stringify({ error: "WhatsApp do sistema não está conectado" }), { 
+          status: 400, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        });
+      }
+      instanceName = sysInstance.instance_name;
+    } else {
+      // Use user's own instance
+      const { data: instance } = await supabase
+        .from("whatsapp_instances")
+        .select("instance_name, status")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (!instance || instance.status !== "connected") {
+        return new Response(JSON.stringify({ error: "WhatsApp não está conectado" }), { 
+          status: 400, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        });
+      }
+      instanceName = instance.instance_name;
     }
 
     // Get Evolution API from global secrets
