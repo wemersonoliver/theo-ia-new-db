@@ -25,8 +25,14 @@ serve(async (req) => {
     });
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-    const { data: { user: caller }, error: authError } = await userClient.auth.getUser();
-    if (authError || !caller) throw new Error("Unauthorized");
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user: caller }, error: authError } = await userClient.auth.getUser(token);
+    if (authError || !caller) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Check super_admin role
     const { data: roleData } = await supabaseAdmin
