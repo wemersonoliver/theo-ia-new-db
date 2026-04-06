@@ -703,17 +703,37 @@ async function triggerAIResponse(supabase: any, userId: string, phone: string, m
 async function triggerSupportAI(phone: string, messageContent: string) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, serviceKey);
 
-  console.log(`Triggering support AI for ${phone}`);
+  console.log(`Scheduling support AI for ${phone} (debounce)`);
 
-  await fetch(`${supabaseUrl}/functions/v1/support-ai-agent`, {
+  // Get delay from system_ai_config
+  const { data: aiConfig } = await supabase
+    .from("system_ai_config")
+    .select("response_delay_seconds")
+    .limit(1)
+    .maybeSingle();
+
+  const delaySeconds = aiConfig?.response_delay_seconds ?? 35;
+  const scheduledAt = new Date(Date.now() + delaySeconds * 1000).toISOString();
+
+  // Upsert pending response (resets timer on each new message)
+  await supabase
+    .from("system_pending_responses")
+    .upsert(
+      { phone, scheduled_at: scheduledAt, processed: false, updated_at: new Date().toISOString() },
+      { onConflict: "phone" }
+    );
+
+  // Fire-and-forget the delayed processor
+  fetch(`${supabaseUrl}/functions/v1/process-pending-support-ai`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${serviceKey}`,
     },
-    body: JSON.stringify({ phone, messageContent }),
-  });
+    body: JSON.stringify({ phone, delayMs: delaySeconds * 1000 }),
+  }).catch(err => console.error("Error calling process-pending-support-ai:", err));
 }
 
 const DEFAULT_CRM_STAGES = [

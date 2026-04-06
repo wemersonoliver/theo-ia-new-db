@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useSystemAIConfig } from "@/hooks/useSystemAIConfig";
 import { useAdminNotificationContacts } from "@/hooks/useAdminNotificationContacts";
-import { Bot, Save, Loader2, Plus, Trash2, Bell } from "lucide-react";
+import { Bot, Save, Loader2, Plus, Trash2, Bell, Clock } from "lucide-react";
 
 export default function AdminAIConfig() {
   const { config, isLoading, upsertConfig } = useSystemAIConfig();
@@ -16,6 +16,7 @@ export default function AdminAIConfig() {
   const [agentName, setAgentName] = useState("");
   const [prompt, setPrompt] = useState("");
   const [active, setActive] = useState(false);
+  const [responseDelay, setResponseDelay] = useState(35);
   const [newPhone, setNewPhone] = useState("");
   const [newName, setNewName] = useState("");
 
@@ -24,11 +25,12 @@ export default function AdminAIConfig() {
       setAgentName(config.agent_name || "");
       setPrompt(config.custom_prompt || "");
       setActive(config.active);
+      setResponseDelay((config as any).response_delay_seconds ?? 35);
     }
   }, [config]);
 
   const handleSave = () => {
-    upsertConfig.mutate({ agent_name: agentName, custom_prompt: prompt, active });
+    upsertConfig.mutate({ agent_name: agentName, custom_prompt: prompt, active, response_delay_seconds: responseDelay } as any);
   };
 
   const handleAddContact = () => {
@@ -75,6 +77,24 @@ export default function AdminAIConfig() {
                 placeholder="Instruções adicionais para o agente de suporte..."
                 rows={15}
                 className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-500 font-mono text-sm"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-slate-200 flex items-center gap-2">
+                <Clock className="h-4 w-4 text-amber-400" />
+                Tempo de Espera antes de Responder (segundos)
+              </Label>
+              <p className="text-xs text-slate-500">
+                Tempo que a IA aguarda antes de responder, permitindo que o cliente termine de digitar várias mensagens.
+              </p>
+              <Input
+                type="number"
+                min={5}
+                max={120}
+                value={responseDelay}
+                onChange={(e) => setResponseDelay(Number(e.target.value))}
+                className="bg-slate-800 border-slate-700 text-slate-200 w-32"
               />
             </div>
 

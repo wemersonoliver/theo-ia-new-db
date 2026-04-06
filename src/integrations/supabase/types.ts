@@ -926,6 +926,7 @@ export type Database = {
           created_at: string | null
           custom_prompt: string | null
           id: string
+          response_delay_seconds: number
           updated_at: string | null
         }
         Insert: {
@@ -934,6 +935,7 @@ export type Database = {
           created_at?: string | null
           custom_prompt?: string | null
           id?: string
+          response_delay_seconds?: number
           updated_at?: string | null
         }
         Update: {
@@ -942,6 +944,34 @@ export type Database = {
           created_at?: string | null
           custom_prompt?: string | null
           id?: string
+          response_delay_seconds?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      system_pending_responses: {
+        Row: {
+          created_at: string | null
+          id: string
+          phone: string
+          processed: boolean | null
+          scheduled_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          phone: string
+          processed?: boolean | null
+          scheduled_at: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          phone?: string
+          processed?: boolean | null
+          scheduled_at?: string
           updated_at?: string | null
         }
         Relationships: []
