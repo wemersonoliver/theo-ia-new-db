@@ -38,7 +38,7 @@ serve(async (req) => {
     }
 
     const userId = claimsData.user.id;
-    const { phone, content } = await req.json();
+    const { phone, content, system } = await req.json();
 
     if (!phone || !content) {
       return new Response(JSON.stringify({ error: "Phone and content required" }), { 
@@ -47,18 +47,41 @@ serve(async (req) => {
       });
     }
 
-    // Get user's instance
-    const { data: instance } = await supabase
-      .from("whatsapp_instances")
-      .select("instance_name, status")
-      .eq("user_id", userId)
-      .maybeSingle();
+    let instanceName: string;
 
-    if (!instance || instance.status !== "connected") {
-      return new Response(JSON.stringify({ error: "WhatsApp não está conectado" }), { 
-        status: 400, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+    if (system) {
+      // Use system WhatsApp instance (admin/support)
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const { data: sysInstance } = await supabaseAdmin
+        .from("system_whatsapp_instance")
+        .select("instance_name, status")
+        .maybeSingle();
+
+      if (!sysInstance || sysInstance.status !== "connected") {
+        return new Response(JSON.stringify({ error: "WhatsApp do sistema não está conectado" }), { 
+          status: 400, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        });
+      }
+      instanceName = sysInstance.instance_name;
+    } else {
+      // Use user's own instance
+      const { data: instance } = await supabase
+        .from("whatsapp_instances")
+        .select("instance_name, status")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (!instance || instance.status !== "connected") {
+        return new Response(JSON.stringify({ error: "WhatsApp não está conectado" }), { 
+          status: 400, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        });
+      }
+      instanceName = instance.instance_name;
     }
 
     // Get Evolution API from global secrets
@@ -74,7 +97,7 @@ serve(async (req) => {
     }
 
     // Send message via Evolution API
-    const sendResponse = await fetch(`${evolutionUrl}/message/sendText/${instance.instance_name}`, {
+    const sendResponse = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -97,14 +120,6 @@ serve(async (req) => {
 
     await sendResponse.text(); // Consume response
 
-    // Save message to conversation
-    const { data: conversation } = await supabase
-      .from("whatsapp_conversations")
-      .select("id, messages")
-      .eq("user_id", userId)
-      .eq("phone", phone)
-      .maybeSingle();
-
     const newMessage = {
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
@@ -114,44 +129,90 @@ serve(async (req) => {
       sent_by: "human",
     };
 
-    if (conversation) {
-      const existingMessages = conversation.messages || [];
-      const updatedMessages = [...existingMessages, newMessage];
+    if (system) {
+      // Save to system conversations
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
 
-      await supabase
-        .from("whatsapp_conversations")
-        .update({
-          messages: updatedMessages,
-          last_message_at: new Date().toISOString(),
-          total_messages: updatedMessages.length,
-          ai_active: false, // Disable AI when human sends
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", conversation.id);
+      const { data: conversation } = await supabaseAdmin
+        .from("system_whatsapp_conversations")
+        .select("id, messages")
+        .eq("phone", phone)
+        .maybeSingle();
+
+      if (conversation) {
+        const existingMessages = (conversation.messages as any[]) || [];
+        const updatedMessages = [...existingMessages, newMessage];
+        await supabaseAdmin
+          .from("system_whatsapp_conversations")
+          .update({
+            messages: updatedMessages,
+            last_message_at: new Date().toISOString(),
+            total_messages: updatedMessages.length,
+            ai_active: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", conversation.id);
+      } else {
+        await supabaseAdmin
+          .from("system_whatsapp_conversations")
+          .insert({
+            phone,
+            messages: [newMessage],
+            last_message_at: new Date().toISOString(),
+            total_messages: 1,
+            ai_active: false,
+          });
+      }
     } else {
-      await supabase
+      // Save to user conversations
+      const { data: conversation } = await supabase
         .from("whatsapp_conversations")
-        .insert({
+        .select("id, messages")
+        .eq("user_id", userId)
+        .eq("phone", phone)
+        .maybeSingle();
+
+      if (conversation) {
+        const existingMessages = (conversation.messages as any[]) || [];
+        const updatedMessages = [...existingMessages, newMessage];
+        await supabase
+          .from("whatsapp_conversations")
+          .update({
+            messages: updatedMessages,
+            last_message_at: new Date().toISOString(),
+            total_messages: updatedMessages.length,
+            ai_active: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", conversation.id);
+      } else {
+        await supabase
+          .from("whatsapp_conversations")
+          .insert({
+            user_id: userId,
+            phone,
+            messages: [newMessage],
+            last_message_at: new Date().toISOString(),
+            total_messages: 1,
+            ai_active: false,
+          });
+      }
+
+      // Mark AI session as handed off
+      await supabase
+        .from("whatsapp_ai_sessions")
+        .upsert({
           user_id: userId,
           phone,
-          messages: [newMessage],
-          last_message_at: new Date().toISOString(),
-          total_messages: 1,
-          ai_active: false,
-        });
+          status: "handed_off",
+          last_human_message_at: new Date().toISOString(),
+          handed_off_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,phone" });
     }
-
-    // Mark AI session as handed off
-    await supabase
-      .from("whatsapp_ai_sessions")
-      .upsert({
-        user_id: userId,
-        phone,
-        status: "handed_off",
-        last_human_message_at: new Date().toISOString(),
-        handed_off_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "user_id,phone" });
 
     return new Response(JSON.stringify({ success: true }), { 
       headers: { ...corsHeaders, "Content-Type": "application/json" } 
