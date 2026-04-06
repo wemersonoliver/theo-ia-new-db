@@ -16,6 +16,7 @@ export default function AdminAIConfig() {
   const [agentName, setAgentName] = useState("");
   const [prompt, setPrompt] = useState("");
   const [active, setActive] = useState(false);
+  const [responseDelay, setResponseDelay] = useState(35);
   const [newPhone, setNewPhone] = useState("");
   const [newName, setNewName] = useState("");
 
@@ -24,11 +25,12 @@ export default function AdminAIConfig() {
       setAgentName(config.agent_name || "");
       setPrompt(config.custom_prompt || "");
       setActive(config.active);
+      setResponseDelay((config as any).response_delay_seconds ?? 35);
     }
   }, [config]);
 
   const handleSave = () => {
-    upsertConfig.mutate({ agent_name: agentName, custom_prompt: prompt, active });
+    upsertConfig.mutate({ agent_name: agentName, custom_prompt: prompt, active, response_delay_seconds: responseDelay } as any);
   };
 
   const handleAddContact = () => {
