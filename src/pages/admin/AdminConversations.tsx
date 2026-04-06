@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -50,10 +51,19 @@ function ChatMessages({ messages }: { messages: Message[] }) {
 }
 
 export default function AdminConversations() {
+  const [searchParams] = useSearchParams();
   const { conversations, isLoading, toggleAI, sendMessage, deleteConversation } = useSystemConversations();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const { messages } = useSystemConversation(selectedPhone || "");
+
+  // Auto-select phone from query param
+  useEffect(() => {
+    const phoneParam = searchParams.get("phone");
+    if (phoneParam && !selectedPhone) {
+      setSelectedPhone(phoneParam);
+    }
+  }, [searchParams, selectedPhone]);
 
   const selectedConv = conversations.find((c) => c.phone === selectedPhone);
 

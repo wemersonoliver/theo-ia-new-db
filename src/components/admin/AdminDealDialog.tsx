@@ -12,8 +12,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { AdminCRMDeal } from "@/hooks/useAdminCRMDeals";
 import { AdminCRMStage } from "@/hooks/useAdminCRMStages";
-import { CheckCircle2, XCircle, Mail, Phone } from "lucide-react";
+import { CheckCircle2, XCircle, Mail, Phone, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 interface AdminDealDialogProps {
   open: boolean;
@@ -26,6 +27,7 @@ interface AdminDealDialogProps {
 }
 
 export function AdminDealDialog({ open, onOpenChange, stages, deal, defaultStageId, onSave, onDelete }: AdminDealDialogProps) {
+  const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [stageId, setStageId] = useState("");
   const [priority, setPriority] = useState("medium");
@@ -91,6 +93,19 @@ export function AdminDealDialog({ open, onOpenChange, stages, deal, defaultStage
                 </Badge>
               )}
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 w-full gap-2 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+              onClick={() => {
+                const phone = deal.user_phone;
+                onOpenChange(false);
+                navigate("/admin/conversations" + (phone ? `?phone=${encodeURIComponent(phone)}` : ""));
+              }}
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              Iniciar Conversa via Suporte
+            </Button>
           </div>
         )}
 
