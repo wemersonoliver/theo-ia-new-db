@@ -172,6 +172,33 @@ export default function AdminUsers() {
     setActionLoading(false);
   };
 
+  const openEditDialog = (u: AdminUser) => {
+    setEditDialog(u);
+    setEditName(u.full_name || "");
+    setEditEmail(u.email || "");
+    setEditPhone(u.phone || "");
+  };
+
+  const handleUpdateProfile = async () => {
+    if (!editDialog) return;
+    setActionLoading(true);
+    const { error } = await supabase.functions.invoke("admin-users", {
+      body: {
+        action: "update_profile",
+        userId: editDialog.id,
+        profileData: { full_name: editName, email: editEmail, phone: editPhone },
+      },
+    });
+    if (error) {
+      toast({ title: "Erro", description: "Falha ao atualizar perfil", variant: "destructive" });
+    } else {
+      toast({ title: "Sucesso", description: "Perfil atualizado com sucesso" });
+      setEditDialog(null);
+      fetchUsers();
+    }
+    setActionLoading(false);
+  };
+
   const filteredUsers = users.filter((u) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
