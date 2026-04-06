@@ -803,17 +803,23 @@ serve(async (req) => {
 
     console.log(`AI response for ${phone}: ${aiResponse.slice(0, 200)}`);
 
-    // Save AI response to conversation
-    const aiMessage = {
+    // Split AI response into message blocks (by double newline)
+    const messageBlocks = aiResponse
+      .split(/\n\n+/)
+      .map((b: string) => b.trim())
+      .filter((b: string) => b.length > 0);
+
+    // Save ALL blocks as individual messages in conversation
+    const newMessages = messageBlocks.map((block: string) => ({
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       from_me: true,
-      content: aiResponse,
+      content: block,
       type: "text",
       sent_by: "ai",
-    };
+    }));
 
-    const updatedMessages = [...history, aiMessage];
+    const updatedMessages = [...history, ...newMessages];
 
     await supabase
       .from("system_whatsapp_conversations")
@@ -825,7 +831,7 @@ serve(async (req) => {
       })
       .eq("phone", phone);
 
-    // Send response via WhatsApp
+    // Send each block as a separate WhatsApp message
     const { data: sysInstance } = await supabase
       .from("system_whatsapp_instance")
       .select("instance_name")
@@ -836,12 +842,7 @@ serve(async (req) => {
       const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")!;
       const evolutionKey = Deno.env.get("EVOLUTION_API_KEY")!;
 
-      // Split long messages
-      const messages = aiResponse.length > 4000
-        ? aiResponse.match(/.{1,4000}/gs) || [aiResponse]
-        : [aiResponse];
-
-      for (const msgPart of messages) {
+      for (let i = 0; i < messageBlocks.length; i++) {
         await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
           method: "POST",
           headers: {
@@ -850,12 +851,14 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             number: phone,
-            text: msgPart,
+            text: messageBlocks[i],
           }),
         });
 
-        if (messages.length > 1) {
-          await new Promise(r => setTimeout(r, 1500));
+        // Delay between blocks to simulate typing
+        if (i < messageBlocks.length - 1) {
+          const delay = Math.min(messageBlocks[i].length * 30, 3000);
+          await new Promise(r => setTimeout(r, Math.max(delay, 800)));
         }
       }
     }
