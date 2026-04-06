@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useSystemAIConfig } from "@/hooks/useSystemAIConfig";
 import { useAdminNotificationContacts } from "@/hooks/useAdminNotificationContacts";
-import { Bot, Save, Loader2, Plus, Trash2, Bell } from "lucide-react";
+import { Bot, Save, Loader2, Plus, Trash2, Bell, Clock } from "lucide-react";
 
 export default function AdminAIConfig() {
   const { config, isLoading, upsertConfig } = useSystemAIConfig();
@@ -80,7 +80,24 @@ export default function AdminAIConfig() {
               />
             </div>
 
-            <Button
+            <div className="space-y-2">
+              <Label className="text-slate-200 flex items-center gap-2">
+                <Clock className="h-4 w-4 text-amber-400" />
+                Tempo de Espera antes de Responder (segundos)
+              </Label>
+              <p className="text-xs text-slate-500">
+                Tempo que a IA aguarda antes de responder, permitindo que o cliente termine de digitar várias mensagens.
+              </p>
+              <Input
+                type="number"
+                min={5}
+                max={120}
+                value={responseDelay}
+                onChange={(e) => setResponseDelay(Number(e.target.value))}
+                className="bg-slate-800 border-slate-700 text-slate-200 w-32"
+              />
+            </div>
+
               onClick={handleSave}
               disabled={upsertConfig.isPending}
               className="bg-amber-500 hover:bg-amber-600 text-black gap-2"
