@@ -51,9 +51,19 @@ function ChatMessages({ messages }: { messages: Message[] }) {
 }
 
 export default function AdminConversations() {
+  const [searchParams] = useSearchParams();
   const { conversations, isLoading, toggleAI, sendMessage, deleteConversation } = useSystemConversations();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
+  const { messages } = useSystemConversation(selectedPhone || "");
+
+  // Auto-select phone from query param
+  useEffect(() => {
+    const phoneParam = searchParams.get("phone");
+    if (phoneParam && !selectedPhone) {
+      setSelectedPhone(phoneParam);
+    }
+  }, [searchParams, selectedPhone]);
   const { messages } = useSystemConversation(selectedPhone || "");
 
   const selectedConv = conversations.find((c) => c.phone === selectedPhone);
