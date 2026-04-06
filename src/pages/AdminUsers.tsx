@@ -200,7 +200,7 @@ export default function AdminUsers() {
   return (
     <AdminLayout title="Usuários" description="Gerencie todos os usuários da plataforma">
       <div className="space-y-6">
-        <Card className="border-slate-700/50 bg-slate-900/50">
+        <Card className="border-slate-700/50 bg-slate-900/50 shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
@@ -231,23 +231,23 @@ export default function AdminUsers() {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Assinatura</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Cadastro</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
+                    <TableRow className="border-slate-700/50 hover:bg-transparent">
+                      <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">ID</TableHead>
+                      <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Nome</TableHead>
+                      <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Email</TableHead>
+                      <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Role</TableHead>
+                      <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Assinatura</TableHead>
+                      <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Status</TableHead>
+                      <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Cadastro</TableHead>
+                      <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                   {filteredUsers.map((u) => (
-                      <TableRow key={u.id}>
-                        <TableCell className="font-mono text-xs text-muted-foreground">#{u.user_code || "—"}</TableCell>
-                        <TableCell className="font-medium">{u.full_name || "—"}</TableCell>
-                        <TableCell>{u.email}</TableCell>
+                      <TableRow key={u.id} className="border-slate-700/50 hover:bg-slate-800/50">
+                        <TableCell className="font-mono text-xs text-amber-400/80 py-3">#{u.user_code || "—"}</TableCell>
+                        <TableCell className="font-medium text-slate-100 py-3">{u.full_name || "—"}</TableCell>
+                        <TableCell className="text-slate-300 py-3">{u.email}</TableCell>
                         <TableCell>
                           {u.roles.map((r) => (
                             <Badge
@@ -259,16 +259,16 @@ export default function AdminUsers() {
                             </Badge>
                           ))}
                         </TableCell>
-                        <TableCell>{getSubBadge(u)}</TableCell>
-                        <TableCell>
-                          <Badge variant={u.is_blocked ? "destructive" : "outline"}>
+                        <TableCell className="py-3">{getSubBadge(u)}</TableCell>
+                        <TableCell className="py-3">
+                          <Badge variant={u.is_blocked ? "destructive" : "outline"} className={!u.is_blocked ? "border-emerald-500/30 text-emerald-400" : ""}>
                             {u.is_blocked ? "Bloqueado" : "Ativo"}
                           </Badge>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-slate-400 py-3">
                           {new Date(u.created_at).toLocaleDateString("pt-BR")}
                         </TableCell>
-                        <TableCell className="text-right space-x-1">
+                        <TableCell className="text-right space-x-1 py-3">
                           <Button
                             variant="outline"
                             size="sm"
