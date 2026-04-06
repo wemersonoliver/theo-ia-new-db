@@ -49,7 +49,7 @@ serve(async (req) => {
       });
     }
 
-    const { action, userId, password, subscriptionData } = await req.json();
+    const { action, userId, password, subscriptionData, profileData } = await req.json();
 
     if (action === "list_users") {
       const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
