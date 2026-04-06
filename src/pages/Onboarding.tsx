@@ -24,6 +24,7 @@ import {
   Sparkles, Smartphone, QrCode, Loader2, RefreshCw, CheckCircle2, XCircle,
   Calendar, Bot, MapPin, FlaskConical, PartyPopper, ChevronRight, ArrowRight,
   Check, Send, Copy, Clock, Plus, Trash2, Power, Wand2, Tag, Pencil,
+  MessageCircle,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
