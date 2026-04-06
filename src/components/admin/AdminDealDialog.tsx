@@ -93,19 +93,24 @@ export function AdminDealDialog({ open, onOpenChange, stages, deal, defaultStage
                 </Badge>
               )}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2 w-full gap-2 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-              onClick={() => {
-                const phone = deal.user_phone;
-                onOpenChange(false);
-                navigate("/admin/conversations" + (phone ? `?phone=${encodeURIComponent(phone)}` : ""));
-              }}
-            >
-              <MessageSquare className="h-3.5 w-3.5" />
-              Iniciar Conversa via Suporte
-            </Button>
+            {deal.user_phone ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 w-full gap-2 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                onClick={() => {
+                  onOpenChange(false);
+                  navigate(`/admin/conversations?phone=${encodeURIComponent(deal.user_phone!)}&start=true`);
+                }}
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Iniciar Conversa via Suporte
+              </Button>
+            ) : (
+              <p className="mt-2 text-xs text-slate-500 text-center">
+                Sem telefone cadastrado — não é possível iniciar conversa
+              </p>
+            )}
           </div>
         )}
 
