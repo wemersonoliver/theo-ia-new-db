@@ -14,6 +14,136 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_crm_deals: {
+        Row: {
+          created_at: string
+          description: string | null
+          expected_close_date: string | null
+          id: string
+          lost_at: string | null
+          lost_reason: string | null
+          onboarding_completed: boolean
+          position: number
+          priority: string
+          stage_id: string
+          subscription_plan: string | null
+          subscription_status: string | null
+          tags: string[]
+          title: string
+          updated_at: string
+          user_ref_id: string | null
+          value_cents: number | null
+          won_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          expected_close_date?: string | null
+          id?: string
+          lost_at?: string | null
+          lost_reason?: string | null
+          onboarding_completed?: boolean
+          position?: number
+          priority?: string
+          stage_id: string
+          subscription_plan?: string | null
+          subscription_status?: string | null
+          tags?: string[]
+          title: string
+          updated_at?: string
+          user_ref_id?: string | null
+          value_cents?: number | null
+          won_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          expected_close_date?: string | null
+          id?: string
+          lost_at?: string | null
+          lost_reason?: string | null
+          onboarding_completed?: boolean
+          position?: number
+          priority?: string
+          stage_id?: string
+          subscription_plan?: string | null
+          subscription_status?: string | null
+          tags?: string[]
+          title?: string
+          updated_at?: string
+          user_ref_id?: string | null
+          value_cents?: number | null
+          won_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_crm_deals_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "admin_crm_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_crm_pipelines: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      admin_crm_stages: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+          pipeline_id: string
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          pipeline_id: string
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          pipeline_id?: string
+          position?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_crm_stages_pipeline_id_fkey"
+            columns: ["pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "admin_crm_pipelines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_notification_contacts: {
         Row: {
           active: boolean
