@@ -49,7 +49,7 @@ serve(async (req) => {
       });
     }
 
-    const { action, userId, password, subscriptionData } = await req.json();
+    const { action, userId, password, subscriptionData, profileData } = await req.json();
 
     if (action === "list_users") {
       const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
@@ -169,6 +169,32 @@ serve(async (req) => {
         .eq("status", "active");
       
       if (error) throw error;
+      
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "update_profile") {
+      if (!userId || !profileData) throw new Error("userId and profileData required");
+      
+      const updates: Record<string, unknown> = {};
+      if (profileData.full_name !== undefined) updates.full_name = profileData.full_name;
+      if (profileData.phone !== undefined) updates.phone = profileData.phone;
+      if (profileData.email !== undefined) updates.email = profileData.email;
+      
+      if (Object.keys(updates).length > 0) {
+        const { error } = await supabaseAdmin
+          .from("profiles")
+          .update(updates)
+          .eq("user_id", userId);
+        if (error) throw error;
+      }
+
+      // Also update email in auth if changed
+      if (profileData.email) {
+        await supabaseAdmin.auth.admin.updateUserById(userId, { email: profileData.email });
+      }
       
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Search } from "lucide-react";
+import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Search, Pencil } from "lucide-react";
 
 
 interface AdminUser {
@@ -65,6 +65,10 @@ export default function AdminUsers() {
   const [subPlanType, setSubPlanType] = useState("tester");
   const [subExpiry, setSubExpiry] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [editDialog, setEditDialog] = useState<AdminUser | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
 
   useEffect(() => {
     fetchUsers();
@@ -163,6 +167,33 @@ export default function AdminUsers() {
       toast({ title: "Erro", description: "Falha ao revogar assinatura", variant: "destructive" });
     } else {
       toast({ title: "Sucesso", description: "Assinatura revogada" });
+      fetchUsers();
+    }
+    setActionLoading(false);
+  };
+
+  const openEditDialog = (u: AdminUser) => {
+    setEditDialog(u);
+    setEditName(u.full_name || "");
+    setEditEmail(u.email || "");
+    setEditPhone(u.phone || "");
+  };
+
+  const handleUpdateProfile = async () => {
+    if (!editDialog) return;
+    setActionLoading(true);
+    const { error } = await supabase.functions.invoke("admin-users", {
+      body: {
+        action: "update_profile",
+        userId: editDialog.id,
+        profileData: { full_name: editName, email: editEmail, phone: editPhone },
+      },
+    });
+    if (error) {
+      toast({ title: "Erro", description: "Falha ao atualizar perfil", variant: "destructive" });
+    } else {
+      toast({ title: "Sucesso", description: "Perfil atualizado com sucesso" });
+      setEditDialog(null);
       fetchUsers();
     }
     setActionLoading(false);
@@ -271,6 +302,15 @@ export default function AdminUsers() {
                           {new Date(u.created_at).toLocaleDateString("pt-BR")}
                         </TableCell>
                         <TableCell className="text-right space-x-1 py-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEditDialog(u)}
+                            disabled={actionLoading}
+                            title="Editar perfil"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
@@ -390,6 +430,54 @@ export default function AdminUsers() {
             <Button onClick={handleGrantSubscription} disabled={actionLoading}>
               {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Conceder Assinatura
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Editar Perfil */}
+      <Dialog open={!!editDialog} onOpenChange={() => setEditDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Usuário</DialogTitle>
+            <DialogDescription>
+              {editDialog?.email} (#{editDialog?.user_code || "—"})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome Completo</Label>
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Nome do usuário"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                placeholder="email@exemplo.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Telefone</Label>
+              <Input
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+                placeholder="5511999999999"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialog(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleUpdateProfile} disabled={actionLoading}>
+              {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Salvar Alterações
             </Button>
           </DialogFooter>
         </DialogContent>
