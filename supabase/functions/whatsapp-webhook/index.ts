@@ -224,7 +224,7 @@ serve(async (req) => {
               total_messages: updatedMessages.length,
               updated_at: new Date().toISOString(),
             };
-            if (contactName) updateData.contact_name = contactName;
+            if (contactName && !isFromMe) updateData.contact_name = contactName;
             if (isFromMe) updateData.ai_active = false;
 
             await supabase
