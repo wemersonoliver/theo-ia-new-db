@@ -27,6 +27,7 @@ interface AdminDealDialogProps {
 }
 
 export function AdminDealDialog({ open, onOpenChange, stages, deal, defaultStageId, onSave, onDelete }: AdminDealDialogProps) {
+  const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [stageId, setStageId] = useState("");
   const [priority, setPriority] = useState("medium");
