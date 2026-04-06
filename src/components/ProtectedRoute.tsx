@@ -6,6 +6,7 @@ import { Loader2, AlertTriangle, Crown, Clock, CheckCircle2, ArrowRight, Refresh
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PhoneRequiredDialog } from "@/components/PhoneRequiredDialog";
 
 const TRIAL_DAYS = 15;
 
@@ -21,6 +22,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
+  const [needsPhone, setNeedsPhone] = useState(false);
 
   useEffect(() => {
     const checkAccess = async () => {
@@ -60,9 +62,14 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       // Check if user is blocked
       const { data: profile } = await supabase
         .from("profiles")
-        .select("is_blocked, created_at")
+        .select("is_blocked, created_at, phone")
         .eq("user_id", user.id)
         .maybeSingle();
+
+      // Check if phone is missing
+      if (!profile?.phone) {
+        setNeedsPhone(true);
+      }
 
       if (profile?.is_blocked) {
         setIsBlocked(true);
@@ -110,7 +117,18 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <CheckoutScreen isBlocked={isBlocked} signOut={signOut} />;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {needsPhone && user && (
+        <PhoneRequiredDialog
+          open={needsPhone}
+          userId={user.id}
+          onPhoneSaved={() => setNeedsPhone(false)}
+        />
+      )}
+      {children}
+    </>
+  );
 }
 
 function CheckoutScreen({ isBlocked, signOut }: { isBlocked: boolean; signOut: () => Promise<void> }) {
