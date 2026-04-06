@@ -100,7 +100,7 @@ export function AdminDealDialog({ open, onOpenChange, stages, deal, defaultStage
                 className="mt-2 w-full gap-2 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
                 onClick={() => {
                   onOpenChange(false);
-                  navigate(`/admin/conversations?phone=${encodeURIComponent(deal.user_phone!)}&start=true`);
+                  navigate(`/admin/conversations?phone=${encodeURIComponent(deal.user_phone!)}`);
                 }}
               >
                 <MessageSquare className="h-3.5 w-3.5" />
