@@ -24,6 +24,7 @@ import {
   Sparkles, Smartphone, QrCode, Loader2, RefreshCw, CheckCircle2, XCircle,
   Calendar, Bot, MapPin, FlaskConical, PartyPopper, ChevronRight, ArrowRight,
   Check, Send, Copy, Clock, Plus, Trash2, Power, Wand2, Tag, Pencil,
+  MessageCircle,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -220,6 +221,17 @@ export default function Onboarding() {
           </div>
         </main>
       </div>
+
+      {/* Floating Support Button */}
+      <a
+        href="https://wa.me/5547991293662?text=Olá! Preciso de ajuda durante a configuração inicial."
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-green-600 hover:bg-green-700 text-white px-4 py-3 shadow-lg transition-all hover:scale-105"
+      >
+        <MessageCircle className="h-5 w-5" />
+        <span className="text-sm font-medium hidden sm:inline">Precisa de ajuda?</span>
+      </a>
     </div>
   );
 }
