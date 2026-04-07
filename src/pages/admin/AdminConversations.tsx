@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -170,13 +171,14 @@ export default function AdminConversations() {
                 <ChatMessages messages={messages} />
                 <div className="border-t border-slate-800 p-4">
                   <div className="flex gap-2">
-                    <Input
+                    <Textarea
                       value={messageInput}
                       onChange={(e) => setMessageInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                      placeholder="Mensagem..."
+                      placeholder="Mensagem... (Shift+Enter para quebra de linha)"
                       disabled={sendMessage.isPending}
-                      className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-500"
+                      rows={3}
+                      className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-500 resize-y min-h-[60px] max-h-[200px]"
                     />
                     <Button
                       onClick={handleSend}
