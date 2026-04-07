@@ -96,6 +96,12 @@ serve(async (req) => {
       });
     }
 
+    // Normalize phone: ensure country code 55 for Brazilian numbers
+    let normalizedPhone = phone.replace(/\D/g, "");
+    if (normalizedPhone.length === 10 || normalizedPhone.length === 11) {
+      normalizedPhone = "55" + normalizedPhone;
+    }
+
     // Send message via Evolution API
     const sendResponse = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
       method: "POST",
@@ -104,7 +110,7 @@ serve(async (req) => {
         apikey: evolutionKey,
       },
       body: JSON.stringify({
-        number: phone,
+        number: normalizedPhone,
         text: content,
       }),
     });
