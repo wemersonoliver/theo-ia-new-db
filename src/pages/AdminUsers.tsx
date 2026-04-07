@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Search, Pencil } from "lucide-react";
+import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Search, Pencil, Trash2 } from "lucide-react";
 
 
 interface AdminUser {
@@ -69,6 +69,7 @@ export default function AdminUsers() {
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [deleteDialog, setDeleteDialog] = useState<AdminUser | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -194,6 +195,22 @@ export default function AdminUsers() {
     } else {
       toast({ title: "Sucesso", description: "Perfil atualizado com sucesso" });
       setEditDialog(null);
+      fetchUsers();
+    }
+    setActionLoading(false);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteDialog) return;
+    setActionLoading(true);
+    const { error } = await supabase.functions.invoke("admin-users", {
+      body: { action: "delete_user", userId: deleteDialog.id },
+    });
+    if (error) {
+      toast({ title: "Erro", description: "Falha ao excluir usuário", variant: "destructive" });
+    } else {
+      toast({ title: "Sucesso", description: `Usuário ${deleteDialog.email} excluído permanentemente` });
+      setDeleteDialog(null);
       fetchUsers();
     }
     setActionLoading(false);
@@ -342,15 +359,26 @@ export default function AdminUsers() {
                             <KeyRound className="h-4 w-4" />
                           </Button>
                           {!u.roles.includes("super_admin") && (
-                            <Button
-                              variant={u.is_blocked ? "default" : "destructive"}
-                              size="sm"
-                              onClick={() => handleToggleBlock(u.id)}
-                              disabled={actionLoading}
-                              title={u.is_blocked ? "Desbloquear" : "Bloquear"}
-                            >
-                              {u.is_blocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                            </Button>
+                            <>
+                              <Button
+                                variant={u.is_blocked ? "default" : "destructive"}
+                                size="sm"
+                                onClick={() => handleToggleBlock(u.id)}
+                                disabled={actionLoading}
+                                title={u.is_blocked ? "Desbloquear" : "Bloquear"}
+                              >
+                                {u.is_blocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => setDeleteDialog(u)}
+                                disabled={actionLoading}
+                                title="Excluir usuário"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
                           )}
                         </TableCell>
                       </TableRow>
@@ -478,6 +506,31 @@ export default function AdminUsers() {
             <Button onClick={handleUpdateProfile} disabled={actionLoading}>
               {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Salvar Alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Excluir Usuário */}
+      <Dialog open={!!deleteDialog} onOpenChange={() => setDeleteDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir Usuário Permanentemente</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir o usuário <strong>{deleteDialog?.full_name || deleteDialog?.email}</strong>?
+              <br /><br />
+              <span className="text-destructive font-semibold">
+                Esta ação é irreversível. Todos os dados do usuário serão permanentemente removidos, incluindo conversas, agendamentos, contatos, configurações e CRM.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialog(null)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteUser} disabled={actionLoading}>
+              {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Excluir Permanentemente
             </Button>
           </DialogFooter>
         </DialogContent>
