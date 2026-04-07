@@ -84,8 +84,9 @@ export function useSystemConversations() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (_, { phone }) => {
       queryClient.invalidateQueries({ queryKey: ["system-conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["system-conversation", phone] });
     },
     onError: (e: Error) => toast.error(`Erro ao enviar: ${e.message}`),
   });
