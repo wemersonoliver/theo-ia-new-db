@@ -145,7 +145,7 @@ serve(async (req) => {
       const { data: conversation } = await supabaseAdmin
         .from("system_whatsapp_conversations")
         .select("id, messages")
-        .eq("phone", phone)
+        .eq("phone", normalizedPhone)
         .maybeSingle();
 
       if (conversation) {
