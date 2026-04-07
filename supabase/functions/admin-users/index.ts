@@ -201,6 +201,75 @@ serve(async (req) => {
       });
     }
 
+    if (action === "delete_user") {
+      if (!userId) throw new Error("userId required");
+      
+      // Prevent deleting super_admins
+      const { data: targetRole } = await supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "super_admin")
+        .maybeSingle();
+      
+      if (targetRole) {
+        throw new Error("Não é possível excluir um super administrador");
+      }
+
+      // Delete related data in order
+      await supabaseAdmin.from("subscriptions").delete().eq("user_id", userId);
+      await supabaseAdmin.from("whatsapp_ai_sessions").delete().eq("user_id", userId);
+      await supabaseAdmin.from("whatsapp_pending_responses").delete().eq("user_id", userId);
+      await supabaseAdmin.from("whatsapp_conversations").delete().eq("user_id", userId);
+      await supabaseAdmin.from("whatsapp_ai_config").delete().eq("user_id", userId);
+      await supabaseAdmin.from("whatsapp_instances").delete().eq("user_id", userId);
+      await supabaseAdmin.from("notification_contacts").delete().eq("user_id", userId);
+      await supabaseAdmin.from("knowledge_base_documents").delete().eq("user_id", userId);
+      await supabaseAdmin.from("platform_settings").delete().eq("user_id", userId);
+      await supabaseAdmin.from("contacts").delete().eq("user_id", userId);
+      await supabaseAdmin.from("followup_config").delete().eq("user_id", userId);
+      await supabaseAdmin.from("followup_tracking").delete().eq("user_id", userId);
+      await supabaseAdmin.from("entrevistas_config").delete().eq("user_id", userId);
+      await supabaseAdmin.from("appointment_slots").delete().eq("user_id", userId);
+      await supabaseAdmin.from("appointment_types").delete().eq("user_id", userId);
+      await supabaseAdmin.from("appointments").delete().eq("user_id", userId);
+      await supabaseAdmin.from("products").delete().eq("user_id", userId);
+      
+      // Delete CRM data
+      const { data: deals } = await supabaseAdmin.from("crm_deals").select("id").eq("user_id", userId);
+      if (deals && deals.length > 0) {
+        const dealIds = deals.map(d => d.id);
+        await supabaseAdmin.from("crm_deal_products").delete().in("deal_id", dealIds);
+        await supabaseAdmin.from("crm_activities").delete().in("deal_id", dealIds);
+      }
+      await supabaseAdmin.from("crm_deals").delete().eq("user_id", userId);
+      await supabaseAdmin.from("crm_stages").delete().eq("user_id", userId);
+      await supabaseAdmin.from("crm_pipelines").delete().eq("user_id", userId);
+
+      // Delete admin CRM deal referencing this user
+      await supabaseAdmin.from("admin_crm_deals").delete().eq("user_ref_id", userId);
+
+      // Delete support tickets
+      const { data: tickets } = await supabaseAdmin.from("support_tickets").select("id").eq("user_id", userId);
+      if (tickets && tickets.length > 0) {
+        const ticketIds = tickets.map(t => t.id);
+        await supabaseAdmin.from("support_ticket_messages").delete().in("ticket_id", ticketIds);
+      }
+      await supabaseAdmin.from("support_tickets").delete().eq("user_id", userId);
+
+      // Delete role and profile
+      await supabaseAdmin.from("user_roles").delete().eq("user_id", userId);
+      await supabaseAdmin.from("profiles").delete().eq("user_id", userId);
+
+      // Finally delete auth user
+      const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     throw new Error("Invalid action");
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
