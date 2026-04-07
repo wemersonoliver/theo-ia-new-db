@@ -145,7 +145,7 @@ serve(async (req) => {
       const { data: conversation } = await supabaseAdmin
         .from("system_whatsapp_conversations")
         .select("id, messages")
-        .eq("phone", phone)
+        .eq("phone", normalizedPhone)
         .maybeSingle();
 
       if (conversation) {
@@ -165,7 +165,7 @@ serve(async (req) => {
         await supabaseAdmin
           .from("system_whatsapp_conversations")
           .insert({
-            phone,
+            phone: normalizedPhone,
             messages: [newMessage],
             last_message_at: new Date().toISOString(),
             total_messages: 1,
@@ -178,7 +178,7 @@ serve(async (req) => {
         .from("whatsapp_conversations")
         .select("id, messages")
         .eq("user_id", userId)
-        .eq("phone", phone)
+        .eq("phone", normalizedPhone)
         .maybeSingle();
 
       if (conversation) {
@@ -199,7 +199,7 @@ serve(async (req) => {
           .from("whatsapp_conversations")
           .insert({
             user_id: userId,
-            phone,
+            phone: normalizedPhone,
             messages: [newMessage],
             last_message_at: new Date().toISOString(),
             total_messages: 1,
@@ -212,7 +212,7 @@ serve(async (req) => {
         .from("whatsapp_ai_sessions")
         .upsert({
           user_id: userId,
-          phone,
+          phone: normalizedPhone,
           status: "handed_off",
           last_human_message_at: new Date().toISOString(),
           handed_off_at: new Date().toISOString(),
