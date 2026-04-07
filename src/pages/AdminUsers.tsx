@@ -200,6 +200,22 @@ export default function AdminUsers() {
     setActionLoading(false);
   };
 
+  const handleDeleteUser = async () => {
+    if (!deleteDialog) return;
+    setActionLoading(true);
+    const { error } = await supabase.functions.invoke("admin-users", {
+      body: { action: "delete_user", userId: deleteDialog.id },
+    });
+    if (error) {
+      toast({ title: "Erro", description: "Falha ao excluir usuário", variant: "destructive" });
+    } else {
+      toast({ title: "Sucesso", description: `Usuário ${deleteDialog.email} excluído permanentemente` });
+      setDeleteDialog(null);
+      fetchUsers();
+    }
+    setActionLoading(false);
+  };
+
   const filteredUsers = users.filter((u) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
