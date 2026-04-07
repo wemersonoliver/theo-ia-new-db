@@ -359,15 +359,26 @@ export default function AdminUsers() {
                             <KeyRound className="h-4 w-4" />
                           </Button>
                           {!u.roles.includes("super_admin") && (
-                            <Button
-                              variant={u.is_blocked ? "default" : "destructive"}
-                              size="sm"
-                              onClick={() => handleToggleBlock(u.id)}
-                              disabled={actionLoading}
-                              title={u.is_blocked ? "Desbloquear" : "Bloquear"}
-                            >
-                              {u.is_blocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                            </Button>
+                            <>
+                              <Button
+                                variant={u.is_blocked ? "default" : "destructive"}
+                                size="sm"
+                                onClick={() => handleToggleBlock(u.id)}
+                                disabled={actionLoading}
+                                title={u.is_blocked ? "Desbloquear" : "Bloquear"}
+                              >
+                                {u.is_blocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => setDeleteDialog(u)}
+                                disabled={actionLoading}
+                                title="Excluir usuário"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
                           )}
                         </TableCell>
                       </TableRow>
