@@ -510,6 +510,31 @@ export default function AdminUsers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog Excluir Usuário */}
+      <Dialog open={!!deleteDialog} onOpenChange={() => setDeleteDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir Usuário Permanentemente</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir o usuário <strong>{deleteDialog?.full_name || deleteDialog?.email}</strong>?
+              <br /><br />
+              <span className="text-destructive font-semibold">
+                Esta ação é irreversível. Todos os dados do usuário serão permanentemente removidos, incluindo conversas, agendamentos, contatos, configurações e CRM.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialog(null)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteUser} disabled={actionLoading}>
+              {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Excluir Permanentemente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
