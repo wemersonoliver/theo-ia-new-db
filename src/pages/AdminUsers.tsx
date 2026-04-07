@@ -69,6 +69,7 @@ export default function AdminUsers() {
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [deleteDialog, setDeleteDialog] = useState<AdminUser | null>(null);
 
   useEffect(() => {
     fetchUsers();
