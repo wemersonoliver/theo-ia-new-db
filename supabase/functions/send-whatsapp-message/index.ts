@@ -212,7 +212,7 @@ serve(async (req) => {
         .from("whatsapp_ai_sessions")
         .upsert({
           user_id: userId,
-          phone,
+          phone: normalizedPhone,
           status: "handed_off",
           last_human_message_at: new Date().toISOString(),
           handed_off_at: new Date().toISOString(),
