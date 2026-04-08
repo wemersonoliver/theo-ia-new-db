@@ -129,6 +129,27 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Vídeo Demonstração */}
+      <section className="px-4 py-16">
+        <div className="mx-auto max-w-4xl text-center">
+          <h2 className="mb-4 text-3xl font-bold md:text-4xl">
+            Veja o Theo IA <span className="text-[hsl(217,91%,60%)]">em ação</span>
+          </h2>
+          <p className="mx-auto mb-8 max-w-2xl text-white">
+            Assista como o Theo IA automatiza o atendimento e transforma seu WhatsApp em uma máquina de vendas.
+          </p>
+          <div className="relative mx-auto w-full aspect-video rounded-2xl overflow-hidden border-2 border-[hsl(217,91%,60%)]/30 shadow-2xl shadow-[hsl(217,91%,60%)]/10">
+            <iframe
+              src="https://www.youtube.com/embed/XekoWzM4CPM"
+              title="Demonstração Theo IA"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="absolute inset-0 w-full h-full"
+            />
+          </div>
+        </div>
+      </section>
+
        {/* Problema vs Solução */}
        <section className="px-4 py-20">
          <div className="mx-auto max-w-5xl">
