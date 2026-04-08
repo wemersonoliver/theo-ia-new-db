@@ -12,6 +12,7 @@ Deno.serve(async (req) => {
 
   try {
     const { full_name, email } = await req.json();
+    console.log("notify-new-user called:", { full_name, email });
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -19,16 +20,23 @@ Deno.serve(async (req) => {
     );
 
     // Get active notification contacts
-    const { data: contacts } = await supabase
+    const { data: contacts, error: contactsError } = await supabase
       .from("admin_notification_contacts")
       .select("phone")
       .eq("active", true);
 
+    if (contactsError) {
+      console.error("Error fetching contacts:", contactsError);
+    }
+
     if (!contacts || contacts.length === 0) {
+      console.log("No active contacts found");
       return new Response(JSON.stringify({ message: "No active contacts" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log(`Found ${contacts.length} active contacts`);
 
     // Get system WhatsApp instance
     const { data: instances } = await supabase
@@ -39,13 +47,18 @@ Deno.serve(async (req) => {
 
     const instance = instances?.[0];
     if (!instance) {
+      console.log("No connected system instance");
       return new Response(JSON.stringify({ message: "No connected system instance" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")!;
+    console.log("Using instance:", instance.instance_name);
+
+    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")!.replace(/\/+$/, "");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY")!;
+
+    console.log("Evolution URL:", evolutionUrl);
 
     const now = new Date();
     const dateStr = now.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -53,10 +66,15 @@ Deno.serve(async (req) => {
 
     const message = `🆕 *Novo usuário cadastrado!*\n\n📋 *Nome:* ${full_name || "Não informado"}\n📧 *Email:* ${email || "Não informado"}\n📅 *Data:* ${dateStr} às ${timeStr}`;
 
+    let sent = 0;
+
     // Send to all active contacts
-    const results = await Promise.allSettled(
-      contacts.map((c) =>
-        fetch(`${evolutionUrl}/message/sendText/${instance.instance_name}`, {
+    for (const c of contacts) {
+      try {
+        const url = `${evolutionUrl}/message/sendText/${instance.instance_name}`;
+        console.log(`Sending to ${c.phone} via ${url}`);
+
+        const res = await fetch(url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -66,11 +84,20 @@ Deno.serve(async (req) => {
             number: c.phone,
             text: message,
           }),
-        })
-      )
-    );
+        });
 
-    const sent = results.filter((r) => r.status === "fulfilled").length;
+        const body = await res.text();
+        console.log(`Response for ${c.phone}: status=${res.status}, body=${body}`);
+
+        if (res.ok) {
+          sent++;
+        }
+      } catch (err) {
+        console.error(`Failed to send to ${c.phone}:`, err);
+      }
+    }
+
+    console.log(`Sent ${sent}/${contacts.length}`);
 
     return new Response(JSON.stringify({ sent, total: contacts.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
