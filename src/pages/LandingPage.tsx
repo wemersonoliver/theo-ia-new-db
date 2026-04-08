@@ -133,10 +133,10 @@ export default function LandingPage() {
       <section className="px-4 py-16">
         <div className="mx-auto max-w-4xl text-center">
           <h2 className="mb-4 text-3xl font-bold md:text-4xl">
-            Veja o Theo IA <span className="text-[hsl(217,91%,60%)]">em ação</span>
+            Configure em <span className="text-[hsl(217,91%,60%)]">poucos passos</span>
           </h2>
-          <p className="mx-auto mb-8 max-w-2xl text-white">
-            Assista como o Theo IA automatiza o atendimento e transforma seu WhatsApp em uma máquina de vendas.
+          <p className="mx-auto mb-8 max-w-2xl text-lg text-slate-300">
+            Veja como é fácil configurar o sistema. Em poucos minutos você já tem um agente inteligente atendendo seus clientes <strong className="text-white">24 horas por dia, 7 dias por semana</strong>.
           </p>
           <div className="relative mx-auto w-full aspect-video rounded-2xl overflow-hidden border-2 border-[hsl(217,91%,60%)]/30 shadow-2xl shadow-[hsl(217,91%,60%)]/10">
             <iframe
