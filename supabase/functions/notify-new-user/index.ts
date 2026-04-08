@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
 
     console.log("Using instance:", instance.instance_name);
 
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")!;
+    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")!.replace(/\/+$/, "");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY")!;
 
     console.log("Evolution URL:", evolutionUrl);
