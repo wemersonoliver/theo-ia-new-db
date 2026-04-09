@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { toFunctionError } from "@/lib/supabase-function-error";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
@@ -71,7 +72,7 @@ export function useWhatsAppInstance() {
       const { data, error } = await supabase.functions.invoke("create-whatsapp-instance", {
         body: phoneNumber ? { phoneNumber } : {},
       });
-      if (error) throw error;
+      if (error) throw await toFunctionError(error);
       return data as WhatsAppConnectionResponse;
     },
     onSuccess: (data, phoneNumber) => {
@@ -96,7 +97,7 @@ export function useWhatsAppInstance() {
   const disconnectInstance = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("disconnect-whatsapp-instance");
-      if (error) throw error;
+      if (error) throw await toFunctionError(error);
       return data;
     },
     onSuccess: () => {
@@ -113,7 +114,7 @@ export function useWhatsAppInstance() {
       const { data, error } = await supabase.functions.invoke("refresh-whatsapp-qrcode", {
         body: phoneNumber ? { phoneNumber } : {},
       });
-      if (error) throw error;
+      if (error) throw await toFunctionError(error);
       return data as WhatsAppConnectionResponse;
     },
     onSuccess: (data, phoneNumber) => {
