@@ -59,6 +59,13 @@ Deno.serve(async (req) => {
     const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY")!;
 
+    if (!evolutionUrl || !evolutionKey) {
+      return new Response(JSON.stringify({ error: "Evolution API não configurada" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     console.log("Evolution URL:", evolutionUrl);
 
     const now = new Date();
@@ -76,7 +83,7 @@ Deno.serve(async (req) => {
         console.log(`Sending to ${c.phone} via ${url}`);
 
         const res = await evolutionRequest({
-          evolutionUrl: evolutionUrl!,
+          evolutionUrl,
           evolutionKey,
           path: `/message/sendText/${instance.instance_name}`,
           method: "POST",

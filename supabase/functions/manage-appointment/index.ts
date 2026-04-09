@@ -573,7 +573,7 @@ async function notifyAppointment(supabase: any, userId: string, contactName: str
       });
 
       if (!sendResponse.ok) {
-        console.error("Error sending appointment notification:", getEvolutionErrorMessage(sendResponse, "Falha ao enviar notificação de agendamento"), sendResponse.diagnostics);
+        console.error("Error sending appointment notification:", getEvolutionErrorMessage(sendResponse, "Falha ao enviar notificação de agendamento"), sendResponse);
       }
     }
 
