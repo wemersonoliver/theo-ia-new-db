@@ -1,68 +1,126 @@
 
+Diagnóstico confirmado
 
-## Plano: Sistema de Notificação Admin para Novos Usuários
+- O erro que está acontecendo agora é este:
+  - frontend: `POST /functions/v1/create-whatsapp-instance` retorna `500`
+  - corpo visto na rede: `{"error":"Erro ao criar instância WhatsApp"}`
+  - log da Edge Function: `Evolution API create error: {"status":401,"error":"Unauthorized","response":{"message":"Unauthorized"}}`
+- Em outras palavras: a Edge Function está sendo chamada corretamente, mas o servidor novo da Evolution está recusando a autenticação ao tentar criar a instância.
 
-### Objetivo
-Criar um sistema que notifica via WhatsApp (instância do sistema) quando um novo usuário se cadastra na plataforma. Inclui uma página admin dedicada para gerenciar os contatos de notificação.
+O que isso prova
 
-### Como funciona
+- Não é erro de tela, React ou rota.
+- Não é falha de login do usuário no Supabase, porque a função executa até o ponto de tentar criar a instância.
+- Não é mais o mesmo problema de `/manager` que gerava rota inválida; agora o servidor está respondendo com `401 Unauthorized`, então a chamada chega nele.
+- O problema atual está na integração com a Evolution API do servidor novo.
 
-1. **Nova página Admin: Notificações** (`/admin/notifications`)
-   - Exibe lista de contatos cadastrados na tabela `admin_notification_contacts` (já existente)
-   - Formulário para adicionar/remover números
-   - Toggle ativo/inativo por contato
+Causa mais provável
 
-2. **Trigger de banco de dados** que dispara quando um novo usuário é criado
-   - Cria uma function `notify_new_user_registration()` que chama uma Edge Function via `pg_net` (HTTP request)
-   - Trigger `AFTER INSERT ON auth.users` que invoca essa function
+- O servidor novo não está aceitando o formato de autenticação que o projeto usa hoje.
+- Hoje quase todas as funções enviam só o header:
+  - `apikey: EVOLUTION_API_KEY`
+- Se o novo servidor exigir:
+  - `Authorization: Bearer ...`
+  - ou os dois headers ao mesmo tempo
+  - ou uma chave diferente/escopo diferente
+  então todas as funções de WhatsApp passam a falhar.
+- Isso explica por que está quebrando tanto no painel comum quanto no fluxo de suporte/sistema: ambos dependem da mesma URL/chave e do mesmo padrão de autenticação.
 
-3. **Nova Edge Function: `notify-new-user`**
-   - Recebida pelo trigger via webhook interno
-   - Busca os contatos ativos em `admin_notification_contacts`
-   - Busca a instância do sistema (`system_whatsapp_instance`)
-   - Envia mensagem via Evolution API para cada contato ativo com dados do novo usuário (nome, email, data)
+Evidências no código
 
-### Alterações técnicas
+- `supabase/functions/create-whatsapp-instance/index.ts`
+  - chama `POST ${evolutionUrl}/instance/create`
+  - usa apenas `apikey`
+  - quando falha, devolve erro genérico para o frontend
+- `supabase/functions/manage-system-whatsapp/index.ts`
+  - já normaliza a URL melhor
+  - mas também usa apenas `apikey`
+- `supabase/functions/refresh-whatsapp-qrcode/index.ts`
+- `supabase/functions/disconnect-whatsapp-instance/index.ts`
+- `supabase/functions/send-whatsapp-message/index.ts`
+- `supabase/functions/manage-appointment/index.ts`
+- `supabase/functions/notify-new-user/index.ts`
+  - todas seguem o mesmo padrão e podem falhar no novo servidor pelo mesmo motivo
 
-**Migração SQL:**
-- Criar function + trigger em `auth.users` que faz HTTP POST para a Edge Function `notify-new-user` usando `pg_net` ou `net.http_post`
+Problema secundário que está atrapalhando o diagnóstico
 
-**Nota:** Como não podemos usar `pg_net` diretamente (extensão pode não estar habilitada), a abordagem alternativa será:
-- Modificar a function `handle_new_user()` existente (que já é trigger em `auth.users`) para, além de criar o perfil, inserir um registro em uma nova tabela `admin_notifications_queue`
-- Uma Edge Function periódica ou a própria lógica no webhook processaria a fila
+- O frontend recebe um erro genérico porque as Edge Functions retornam `4xx/5xx`.
+- Com isso, o `supabase.functions.invoke()` tende a mostrar só “non-2xx status code”, escondendo o detalhe real.
+- Então hoje o usuário vê “erro ao criar instância”, mas o erro verdadeiro é o `401 Unauthorized` da Evolution.
 
-**Abordagem mais simples e confiável:**
-- Modificar a Edge Function `admin-users` para incluir a ação de notificação, OU
-- Alterar o trigger `handle_new_user()` para também chamar a notificação via `pg_net`
+Plano de correção
 
-**Abordagem recomendada (sem depender de pg_net):**
-- Adicionar lógica de notificação diretamente na Edge Function `whatsapp-webhook` ou criar uma edge function `notify-new-user` chamada pelo frontend no momento do registro
+1. Padronizar a integração com a Evolution
+- Criar um helper compartilhado para:
+  - normalizar `EVOLUTION_API_URL`
+  - montar headers de autenticação
+  - testar fallback de auth:
+    - só `apikey`
+    - só `Authorization: Bearer`
+    - ambos
+  - fazer parse seguro da resposta
+  - registrar diagnóstico útil
 
-**Melhor abordagem:** Modificar o fluxo de registro no frontend (`Register.tsx`) para, após signup bem-sucedido, invocar uma nova Edge Function `notify-new-user` que envia as notificações.
+2. Corrigir primeiro os fluxos críticos de conexão
+- Aplicar o helper em:
+  - `create-whatsapp-instance`
+  - `manage-system-whatsapp`
+  - `refresh-whatsapp-qrcode`
+  - `disconnect-whatsapp-instance`
 
-### Arquivos a criar/modificar
+3. Corrigir os demais fluxos que também dependem da Evolution
+- Aplicar o mesmo padrão em:
+  - `send-whatsapp-message`
+  - `manage-appointment`
+  - `notify-new-user`
+  - demais funções que hoje usam só `apikey`
+- Isso evita “corrigir criação” e continuar quebrado no envio de mensagens/notificações.
 
-1. **`src/pages/admin/AdminNotifications.tsx`** — Nova página com gestão de contatos (reutilizando `useAdminNotificationContacts`)
+4. Melhorar o retorno de erro para o frontend
+- Fazer as Edge Functions responderem com JSON estruturado, por exemplo:
+  - `ok: false`
+  - `error: "Evolution API unauthorized"`
+  - `diagnostics: { endpoint, status, auth_mode }`
+- Preferir retorno legível ao frontend para não esconder o erro real.
 
-2. **`src/components/admin/AdminSidebar.tsx`** — Adicionar item "Notificações" no menu com ícone `Bell`
+5. Ajustar os hooks do frontend
+- `src/hooks/useWhatsAppInstance.ts`
+- `src/hooks/useSystemWhatsApp.ts`
+- Exibir a mensagem real retornada pela função, em vez de apenas “non-2xx”.
 
-3. **`src/App.tsx`** — Adicionar rota `/admin/notifications`
+6. Validar ponta a ponta
+- Testar:
+  - criar instância em `/whatsapp`
+  - reconectar no admin/sistema
+  - atualizar QR
+  - desconectar
+  - envio de mensagem após conexão
+- Objetivo: garantir que o novo servidor não quebre outros fluxos além da criação.
 
-4. **`supabase/functions/notify-new-user/index.ts`** — Nova Edge Function:
-   - Recebe dados do novo usuário
-   - Busca contatos ativos em `admin_notification_contacts`
-   - Busca instância sistema em `system_whatsapp_instance`
-   - Envia mensagem via Evolution API
+Conclusão prática
 
-5. **`supabase/config.toml`** — Adicionar `verify_jwt = false` para `notify-new-user`
+- O erro real atual é: `401 Unauthorized` da Evolution API no endpoint de criação de instância.
+- A causa mais provável é incompatibilidade entre o novo servidor e o formato de autenticação usado hoje.
+- A correção certa não é mexer só em uma função; é padronizar a autenticação e o diagnóstico em todas as funções que falam com a Evolution.
 
-6. **`src/pages/Register.tsx`** — Após registro bem-sucedido, invocar `notify-new-user` em background (fire-and-forget)
+Detalhes técnicos
 
-### Mensagem de notificação
+```text
+Frontend (/whatsapp)
+  -> create-whatsapp-instance
+  -> fetch EVOLUTION_API_URL + EVOLUTION_API_KEY
+  -> POST /instance/create
+  -> Evolution responde 401 Unauthorized
+  -> Edge Function converte para 500 genérico
+  -> frontend mostra erro genérico
 ```
-🆕 Novo usuário cadastrado!
-📋 Nome: {full_name}
-📧 Email: {email}
-📅 Data: {data_formatada}
-```
 
+Arquivos principais envolvidos:
+- `src/hooks/useWhatsAppInstance.ts`
+- `src/hooks/useSystemWhatsApp.ts`
+- `supabase/functions/create-whatsapp-instance/index.ts`
+- `supabase/functions/manage-system-whatsapp/index.ts`
+- `supabase/functions/refresh-whatsapp-qrcode/index.ts`
+- `supabase/functions/disconnect-whatsapp-instance/index.ts`
+
+Quando você aprovar, eu sigo implementando essa correção de forma centralizada para o WhatsApp comum e o WhatsApp do sistema.
