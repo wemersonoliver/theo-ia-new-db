@@ -1,10 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+const jsonResponse = (body: Record<string, unknown>, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 
 function extractBase64(qrCode: string | null | undefined): string | null {
   if (!qrCode) return null;
@@ -38,9 +45,7 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { 
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
     // Parse optional phoneNumber from body
@@ -59,9 +64,7 @@ serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
     const { data: claimsData, error: claimsError } = await supabase.auth.getUser(token);
     if (claimsError || !claimsData.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { 
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
     const userId = claimsData.user.id;
@@ -73,17 +76,13 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!instance) {
-      return new Response(JSON.stringify({ error: "Nenhuma instância encontrada" }), { 
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      return jsonResponse({ error: "Nenhuma instância encontrada" }, 404);
     }
 
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+    const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
     if (!evolutionUrl || !evolutionKey) {
-      return new Response(JSON.stringify({ error: "Erro de configuração do servidor" }), { 
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      return jsonResponse({ error: "Erro de configuração do servidor" }, 500);
     }
 
     // If phoneNumber provided for pairing code, we need to delete and recreate
@@ -93,9 +92,11 @@ serve(async (req) => {
       
       // Delete existing instance
       try {
-        await fetch(`${evolutionUrl}/instance/delete/${instance.instance_name}`, {
+        await evolutionRequest({
+          evolutionUrl,
+          evolutionKey,
+          path: `/instance/delete/${instance.instance_name}`,
           method: "DELETE",
-          headers: { apikey: evolutionKey },
         });
         await new Promise(r => setTimeout(r, 2000));
       } catch (e) {
@@ -104,9 +105,12 @@ serve(async (req) => {
 
       // Recreate with number
       const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
-      const createResp = await fetch(`${evolutionUrl}/instance/create`, {
+      const createResp = await evolutionRequest({
+        evolutionUrl,
+        evolutionKey,
+        path: "/instance/create",
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: evolutionKey },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           instanceName: instance.instance_name,
           qrcode: true,
@@ -121,7 +125,7 @@ serve(async (req) => {
       });
 
       if (createResp.ok) {
-        const createData = await createResp.json();
+        const createData = createResp.data ?? {};
         console.log("Recreate response keys:", Object.keys(createData));
         console.log("qrcode.pairingCode:", createData.qrcode?.pairingCode);
 
@@ -136,31 +140,35 @@ serve(async (req) => {
           updated_at: new Date().toISOString(),
         }).eq("user_id", userId);
 
-        return new Response(JSON.stringify({
+        return jsonResponse({
           success: !!pairingCode,
           qrCode: qrCodeBase64,
           pairingCode,
           message: !pairingCode
             ? "Não foi possível gerar código de pareamento. Tente QR Code."
             : undefined,
-        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        });
       } else {
-        const errText = await createResp.text();
-        console.error("Recreate failed:", errText);
+        console.error("Recreate failed:", createResp);
+        return jsonResponse(buildEvolutionErrorPayload(createResp, "Erro ao recriar instância para gerar código de pareamento"), 502);
       }
     }
 
     // Check real connection state
     let evolutionState: string | null = null;
     try {
-      const stateResponse = await fetch(`${evolutionUrl}/instance/connectionState/${instance.instance_name}`, {
-        headers: { apikey: evolutionKey },
+      const stateResponse = await evolutionRequest({
+        evolutionUrl,
+        evolutionKey,
+        path: `/instance/connectionState/${instance.instance_name}`,
       });
       if (stateResponse.ok) {
-        const stateData = await stateResponse.json();
+        const stateData = stateResponse.data ?? {};
         evolutionState = String(
           stateData?.state ?? stateData?.status ?? stateData?.instance?.state ?? stateData?.instance?.status ?? ""
         ).toLowerCase();
+      } else if (stateResponse.status !== 404) {
+        return jsonResponse(buildEvolutionErrorPayload(stateResponse, "Erro ao consultar estado da instância"), 502);
       }
     } catch (e) {
       console.log("connectionState check failed:", e);
@@ -172,15 +180,15 @@ serve(async (req) => {
         updated_at: new Date().toISOString(),
       }).eq("user_id", userId);
 
-      return new Response(JSON.stringify({
+      return jsonResponse({
         success: true, connected: true, message: "WhatsApp já está conectado"
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      });
     }
 
     if (instance.status === "connected") {
-      return new Response(JSON.stringify({
+      return jsonResponse({
         success: true, connected: true, message: "WhatsApp já está conectado"
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      });
     }
 
     // Get new QR code / pairing code
@@ -190,19 +198,18 @@ serve(async (req) => {
 
     console.log("Connecting with URL:", connectUrl, "phoneNumber:", phoneNumber);
 
-    const connectResponse = await fetch(connectUrl, {
-      headers: { apikey: evolutionKey },
+    const connectResponse = await evolutionRequest({
+      evolutionUrl,
+      evolutionKey,
+      path: connectUrl.replace(evolutionUrl, ""),
     });
 
     if (!connectResponse.ok) {
-      const errorText = await connectResponse.text();
-      console.error("Evolution API error:", errorText);
-      return new Response(JSON.stringify({ error: "Erro ao obter QR Code" }), { 
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      console.error("Evolution API error:", connectResponse);
+      return jsonResponse(buildEvolutionErrorPayload(connectResponse, "Erro ao obter QR Code"), 502);
     }
 
-    const connectData = await connectResponse.json();
+    const connectData = connectResponse.data ?? {};
     console.log("Evolution API response keys:", Object.keys(connectData));
     console.log("pairingCode:", connectData.pairingCode);
     console.log("code:", connectData.code);
@@ -212,9 +219,9 @@ serve(async (req) => {
     const pairingCode = extractPairingCode(connectData);
 
     if (!qrCodeBase64 && !pairingCode) {
-      return new Response(JSON.stringify({
+      return jsonResponse({
         success: false, message: "QR Code indisponível no momento"
-      }), { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }, 202);
     }
 
     await supabase.from("whatsapp_instances").update({
@@ -222,20 +229,18 @@ serve(async (req) => {
       updated_at: new Date().toISOString(),
     }).eq("user_id", userId);
 
-    return new Response(JSON.stringify({ 
+    return jsonResponse({ 
       success: !phoneNumber || !!pairingCode,
       qrCode: qrCodeBase64,
       pairingCode,
       message: phoneNumber && !pairingCode
         ? "Sua Evolution API não retornou um pairing code válido. Use QR Code ou revise a configuração da Evolution API."
         : undefined,
-    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    });
 
   } catch (error) {
     console.error("Error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: message }), { 
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } 
-    });
+    return jsonResponse({ error: message }, 500);
   }
 });

@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { evolutionRequest, getEvolutionErrorMessage, normalizeEvolutionUrl } from "../_evolution.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,7 +56,7 @@ Deno.serve(async (req) => {
 
     console.log("Using instance:", instance.instance_name);
 
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")!.replace(/\/+$/, "");
+    const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY")!;
 
     console.log("Evolution URL:", evolutionUrl);
@@ -74,11 +75,13 @@ Deno.serve(async (req) => {
         const url = `${evolutionUrl}/message/sendText/${instance.instance_name}`;
         console.log(`Sending to ${c.phone} via ${url}`);
 
-        const res = await fetch(url, {
+        const res = await evolutionRequest({
+          evolutionUrl: evolutionUrl!,
+          evolutionKey,
+          path: `/message/sendText/${instance.instance_name}`,
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            apikey: evolutionKey,
           },
           body: JSON.stringify({
             number: c.phone,
@@ -86,11 +89,12 @@ Deno.serve(async (req) => {
           }),
         });
 
-        const body = await res.text();
-        console.log(`Response for ${c.phone}: status=${res.status}, body=${body}`);
+        console.log(`Response for ${c.phone}: status=${res.status}, body=${res.text}`);
 
         if (res.ok) {
           sent++;
+        } else {
+          console.error(`Failed to send to ${c.phone}:`, getEvolutionErrorMessage(res, "Falha ao enviar notificação"));
         }
       } catch (err) {
         console.error(`Failed to send to ${c.phone}:`, err);

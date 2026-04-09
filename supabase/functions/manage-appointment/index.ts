@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { evolutionRequest, getEvolutionErrorMessage, normalizeEvolutionUrl } from "../_evolution.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -534,7 +535,7 @@ async function notifyAppointment(supabase: any, userId: string, contactName: str
 
     const message = `📅 *Novo Agendamento*\n\n👤 *Cliente:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n📋 *Serviço:* ${title}\n🗓️ *Data:* ${formatDate(date)}\n⏰ *Horário:* ${time}`;
 
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+    const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
     if (!evolutionUrl || !evolutionKey) return;
 
@@ -562,11 +563,18 @@ async function notifyAppointment(supabase: any, userId: string, contactName: str
     if (!instanceName) return;
 
     for (const contact of notifContacts) {
-      await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
+      const sendResponse = await evolutionRequest({
+        evolutionUrl,
+        evolutionKey,
+        path: `/message/sendText/${instanceName}`,
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: evolutionKey },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ number: contact.phone, text: message }),
       });
+
+      if (!sendResponse.ok) {
+        console.error("Error sending appointment notification:", getEvolutionErrorMessage(sendResponse, "Falha ao enviar notificação de agendamento"), sendResponse.diagnostics);
+      }
     }
 
     console.log(`Appointment notification sent to ${notifContacts.length} contacts via ${sysInstance?.status === "connected" ? "system" : "user"} instance`);

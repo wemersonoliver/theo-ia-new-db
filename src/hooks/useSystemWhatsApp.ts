@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { toFunctionError } from "@/lib/supabase-function-error";
 import { toast } from "sonner";
 
 export interface SystemWhatsAppInstance {
@@ -36,7 +37,7 @@ export function useSystemWhatsApp() {
       const { data, error } = await supabase.functions.invoke("manage-system-whatsapp", {
         body: { action: "connect" },
       });
-      if (error) throw error;
+      if (error) throw await toFunctionError(error);
       return data;
     },
     onSuccess: () => {
@@ -53,7 +54,7 @@ export function useSystemWhatsApp() {
       const { data, error } = await supabase.functions.invoke("manage-system-whatsapp", {
         body: { action: "disconnect" },
       });
-      if (error) throw error;
+      if (error) throw await toFunctionError(error);
       return data;
     },
     onSuccess: () => {
@@ -70,7 +71,7 @@ export function useSystemWhatsApp() {
       const { data, error } = await supabase.functions.invoke("manage-system-whatsapp", {
         body: { action: "refresh_qr" },
       });
-      if (error) throw error;
+      if (error) throw await toFunctionError(error);
       return data;
     },
     onSuccess: () => {

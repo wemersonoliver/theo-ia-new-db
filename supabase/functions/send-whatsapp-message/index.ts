@@ -1,10 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+const jsonResponse = (body: Record<string, unknown>, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -14,10 +21,7 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { 
-        status: 401, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -31,20 +35,14 @@ serve(async (req) => {
     const { data: claimsData, error: claimsError } = await supabase.auth.getUser(token);
     
     if (claimsError || !claimsData.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { 
-        status: 401, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
     const userId = claimsData.user.id;
     const { phone, content, system } = await req.json();
 
     if (!phone || !content) {
-      return new Response(JSON.stringify({ error: "Phone and content required" }), { 
-        status: 400, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      return jsonResponse({ error: "Phone and content required" }, 400);
     }
 
     let instanceName: string;
@@ -61,10 +59,7 @@ serve(async (req) => {
         .maybeSingle();
 
       if (!sysInstance || sysInstance.status !== "connected") {
-        return new Response(JSON.stringify({ error: "WhatsApp do sistema não está conectado" }), { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        });
+        return jsonResponse({ error: "WhatsApp do sistema não está conectado" }, 400);
       }
       instanceName = sysInstance.instance_name;
     } else {
@@ -76,24 +71,18 @@ serve(async (req) => {
         .maybeSingle();
 
       if (!instance || instance.status !== "connected") {
-        return new Response(JSON.stringify({ error: "WhatsApp não está conectado" }), { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        });
+        return jsonResponse({ error: "WhatsApp não está conectado" }, 400);
       }
       instanceName = instance.instance_name;
     }
 
     // Get Evolution API from global secrets
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+    const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
 
     if (!evolutionUrl || !evolutionKey) {
       console.error("Evolution API not configured in secrets");
-      return new Response(JSON.stringify({ error: "Erro de configuração do servidor" }), { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      return jsonResponse({ error: "Erro de configuração do servidor" }, 500);
     }
 
     // Normalize phone: ensure country code 55 for Brazilian numbers
@@ -103,11 +92,13 @@ serve(async (req) => {
     }
 
     // Send message via Evolution API
-    const sendResponse = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
+    const sendResponse = await evolutionRequest({
+      evolutionUrl,
+      evolutionKey,
+      path: `/message/sendText/${instanceName}`,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        apikey: evolutionKey,
       },
       body: JSON.stringify({
         number: normalizedPhone,
@@ -116,15 +107,9 @@ serve(async (req) => {
     });
 
     if (!sendResponse.ok) {
-      const errorText = await sendResponse.text();
-      console.error("Evolution send error:", errorText);
-      return new Response(JSON.stringify({ error: "Erro ao enviar mensagem" }), { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      console.error("Evolution send error:", sendResponse);
+      return jsonResponse(buildEvolutionErrorPayload(sendResponse, "Erro ao enviar mensagem"), 502);
     }
-
-    await sendResponse.text(); // Consume response
 
     const newMessage = {
       id: crypto.randomUUID(),
@@ -220,16 +205,11 @@ serve(async (req) => {
         }, { onConflict: "user_id,phone" });
     }
 
-    return new Response(JSON.stringify({ success: true }), { 
-      headers: { ...corsHeaders, "Content-Type": "application/json" } 
-    });
+    return jsonResponse({ success: true });
 
   } catch (error) {
     console.error("Error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: message }), { 
-      status: 500, 
-      headers: { ...corsHeaders, "Content-Type": "application/json" } 
-    });
+    return jsonResponse({ error: message }, 500);
   }
 });

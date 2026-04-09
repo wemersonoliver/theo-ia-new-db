@@ -222,10 +222,11 @@ serve(async (req) => {
     }
 
     // Instance exists but not connected — get QR/pairing code
-    const { qrCodeBase64, pairingCode } = await connectInstance(evolutionUrl, evolutionKey, instanceName, phoneNumber);
-    if (qrCodeBase64 === undefined && pairingCode === undefined) {
-      return jsonResponse({ error: "Erro ao conectar instância WhatsApp" }, 502);
+    const connectionData = await connectInstance(evolutionUrl, evolutionKey, instanceName, phoneNumber);
+    if (!connectionData.ok) {
+      return jsonResponse(buildEvolutionErrorPayload(connectionData, "Erro ao conectar instância WhatsApp"), 502);
     }
+    const { qrCodeBase64, pairingCode } = connectionData;
 
     await supabase.from("whatsapp_instances").upsert({
       user_id: userId, instance_name: instanceName,
