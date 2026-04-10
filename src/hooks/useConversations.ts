@@ -9,7 +9,7 @@ export interface Message {
   timestamp: string;
   from_me: boolean;
   content: string;
-  type: "text" | "image" | "audio" | "video" | "document";
+  type: "text" | "image" | "audio" | "video" | "document" | "context_summary";
   sent_by: "human" | "ai" | "ai_first_contact";
 }
 
