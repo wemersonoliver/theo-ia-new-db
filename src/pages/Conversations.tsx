@@ -16,8 +16,12 @@ import { useCRMDeals } from "@/hooks/useCRMDeals";
 import { DealDialog } from "@/components/crm/DealDialog";
 import { TagInput, tagClass } from "@/components/TagInput";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff,
-  Mic, ImageIcon, FileText, Tag, ExternalLink, Kanban,
+  Mic, ImageIcon, FileText, Tag, ExternalLink, Kanban, CheckCircle, Trash2,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -39,7 +43,7 @@ function ChatMessages({ messages, className }: { messages: Message[]; className?
   return (
     <ScrollArea className={cn("flex-1", className)} ref={scrollRef}>
       <div className="space-y-3 p-3">
-        {messages.map((msg, index) => (
+        {messages.filter(msg => msg.type !== "context_summary").map((msg, index) => (
           <div
             key={msg.id || index}
             className={cn("flex", msg.from_me ? "justify-end" : "justify-start")}
@@ -204,7 +208,7 @@ function CreateDealButton({ phone, contactName }: { phone: string; contactName?:
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Conversations() {
   const navigate = useNavigate();
-  const { conversations, isLoading, sendMessage, toggleAI } = useConversations();
+  const { conversations, isLoading, sendMessage, toggleAI, finishConversation, deleteConversation } = useConversations();
   const [searchParams] = useSearchParams();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
@@ -320,6 +324,54 @@ export default function Conversations() {
               <div className="flex items-center gap-1.5 shrink-0">
                 {selectedPhone && <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} />}
                 {selectedPhone && <TagPopover phone={selectedPhone} />}
+                {selectedPhone && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-1.5">
+                        <CheckCircle className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Finalizar conversa?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          As mensagens serão limpas, mas um resumo será salvo. Quando o lead entrar em contato novamente, a IA o reconhecerá pelo nome.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => {
+                          finishConversation.mutate({ phone: selectedPhone! });
+                          setSelectedPhone(null);
+                        }}>Finalizar</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                {selectedPhone && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          A conversa será removida permanentemente. O lead será tratado como novo contato no próximo atendimento.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => {
+                          deleteConversation.mutate({ phone: selectedPhone! });
+                          setSelectedPhone(null);
+                        }}>Excluir</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
                 <Button
                   variant={selectedConversation?.ai_active ? "outline" : "default"}
                   size="sm"
@@ -458,10 +510,55 @@ export default function Conversations() {
                     <p className="text-sm text-muted-foreground">{selectedPhone}</p>
                   </div>
 
-                  {/* Action buttons */}
                   <div className="flex items-center gap-2 shrink-0">
                     <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} />
                     <TagPopover phone={selectedPhone} />
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1.5">
+                          <CheckCircle className="h-4 w-4" />
+                          <span className="hidden xl:inline">Finalizar</span>
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Finalizar conversa?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            As mensagens serão limpas, mas um resumo será salvo. Quando o lead entrar em contato novamente, a IA o reconhecerá pelo nome.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => {
+                            finishConversation.mutate({ phone: selectedPhone });
+                            setSelectedPhone(null);
+                          }}>Finalizar</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                          <span className="hidden xl:inline">Excluir</span>
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            A conversa será removida permanentemente. O lead será tratado como novo contato no próximo atendimento.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => {
+                            deleteConversation.mutate({ phone: selectedPhone });
+                            setSelectedPhone(null);
+                          }}>Excluir</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                     <Button
                       variant={selectedConversation?.ai_active ? "outline" : "default"}
                       size="sm"
