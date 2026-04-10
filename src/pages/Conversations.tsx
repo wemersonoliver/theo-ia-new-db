@@ -43,7 +43,7 @@ function ChatMessages({ messages, className }: { messages: Message[]; className?
   return (
     <ScrollArea className={cn("flex-1", className)} ref={scrollRef}>
       <div className="space-y-3 p-3">
-        {messages.map((msg, index) => (
+        {messages.filter(msg => msg.type !== "context_summary").map((msg, index) => (
           <div
             key={msg.id || index}
             className={cn("flex", msg.from_me ? "justify-end" : "justify-start")}
