@@ -460,10 +460,28 @@ REGRAS DE CONFIRMAÇÃO:
       console.error("Error checking pending confirmations:", e);
     }
 
+    // Build returning client context
+    let returningClientContext = "";
+    if (contextSummary && contactName) {
+      returningClientContext = `
+CONTEXTO IMPORTANTE - CLIENTE RETORNANDO:
+Este cliente já foi atendido anteriormente. ${contextSummary.content}
+INSTRUÇÃO: Cumprimente o cliente pelo nome "${contactName}" de forma calorosa, demonstrando que se lembra dele. Diga algo como "Olá ${contactName}, que bom tê-lo(a) aqui novamente! Em que posso ajudá-lo(a) hoje?". Use o resumo acima para contextualizar o atendimento se relevante.
+`;
+    } else if (contextSummary) {
+      returningClientContext = `
+CONTEXTO IMPORTANTE - CLIENTE RETORNANDO:
+Este cliente já foi atendido anteriormente. ${contextSummary.content}
+INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra dele. Use o resumo acima para contextualizar se relevante.
+`;
+    }
+
     // Build system prompt with scheduling capabilities
     const systemPrompt = `Você é ${aiConfig.agent_name || "um assistente virtual"} de atendimento via WhatsApp.
 
 ${aiConfig.custom_prompt || "Seja cordial, profissional e prestativo."}
+
+${returningClientContext}
 
 ${knowledgeBase ? `Use a seguinte base de conhecimento para responder:\n\n${knowledgeBase.slice(0, 6000)}` : ""}
 
