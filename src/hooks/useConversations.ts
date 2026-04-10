@@ -112,11 +112,99 @@ export function useConversations() {
     },
   });
 
+  const finishConversation = useMutation({
+    mutationFn: async ({ phone }: { phone: string }) => {
+      if (!user) throw new Error("Usuário não autenticado");
+
+      // Get current conversation to build summary
+      const { data: conv } = await supabase
+        .from("whatsapp_conversations")
+        .select("messages, contact_name")
+        .eq("user_id", user.id)
+        .eq("phone", phone)
+        .maybeSingle();
+
+      const msgs = (conv?.messages as unknown as Message[]) || [];
+      const lastMsgs = msgs.filter(m => m.type !== "context_summary").slice(-5);
+      const summaryContent = lastMsgs.map(m => `${m.from_me ? "Atendente" : "Cliente"}: ${m.content}`).join("\n");
+      const contactName = conv?.contact_name || phone;
+      const now = new Date().toISOString();
+
+      const summaryMessage = {
+        id: `summary-${Date.now()}`,
+        type: "context_summary",
+        content: `Resumo do último atendimento de ${contactName} em ${new Date().toLocaleDateString("pt-BR")}:\n${summaryContent}`,
+        timestamp: now,
+        from_me: true,
+        sent_by: "ai",
+      };
+
+      // Update conversation: keep only summary, reset counters
+      const { error: convError } = await supabase
+        .from("whatsapp_conversations")
+        .update({
+          messages: [summaryMessage],
+          total_messages: 0,
+          ai_active: true,
+          updated_at: now,
+        })
+        .eq("user_id", user.id)
+        .eq("phone", phone);
+
+      if (convError) throw convError;
+
+      // Delete AI session
+      await supabase
+        .from("whatsapp_ai_sessions")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("phone", phone);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      toast.success("Conversa finalizada! O lead será reconhecido no próximo contato.");
+    },
+    onError: (error: Error) => {
+      toast.error(`Erro ao finalizar: ${error.message}`);
+    },
+  });
+
+  const deleteConversation = useMutation({
+    mutationFn: async ({ phone }: { phone: string }) => {
+      if (!user) throw new Error("Usuário não autenticado");
+
+      const { error: convError } = await supabase
+        .from("whatsapp_conversations")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("phone", phone);
+
+      if (convError) throw convError;
+
+      await supabase
+        .from("whatsapp_ai_sessions")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("phone", phone);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      toast.success("Conversa excluída com sucesso.");
+    },
+    onError: (error: Error) => {
+      toast.error(`Erro ao excluir: ${error.message}`);
+    },
+  });
+
   return {
     conversations: conversations || [],
     isLoading,
     sendMessage,
     toggleAI,
+    finishConversation,
+    deleteConversation,
   };
 }
 

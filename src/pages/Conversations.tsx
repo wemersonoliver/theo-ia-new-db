@@ -16,8 +16,12 @@ import { useCRMDeals } from "@/hooks/useCRMDeals";
 import { DealDialog } from "@/components/crm/DealDialog";
 import { TagInput, tagClass } from "@/components/TagInput";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff,
-  Mic, ImageIcon, FileText, Tag, ExternalLink, Kanban,
+  Mic, ImageIcon, FileText, Tag, ExternalLink, Kanban, CheckCircle, Trash2,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -204,7 +208,7 @@ function CreateDealButton({ phone, contactName }: { phone: string; contactName?:
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Conversations() {
   const navigate = useNavigate();
-  const { conversations, isLoading, sendMessage, toggleAI } = useConversations();
+  const { conversations, isLoading, sendMessage, toggleAI, finishConversation, deleteConversation } = useConversations();
   const [searchParams] = useSearchParams();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
