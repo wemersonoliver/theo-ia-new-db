@@ -314,7 +314,9 @@ serve(async (req) => {
       .eq("phone", phone)
       .maybeSingle();
 
-    const recentMessages = (conversation?.messages || []).slice(-10);
+    const allMessages = conversation?.messages || [];
+    const contextSummary = (allMessages as any[]).find((m: any) => m.type === "context_summary");
+    const recentMessages = (allMessages as any[]).filter((m: any) => m.type !== "context_summary").slice(-10);
 
     // Check if the last incoming message has media for vision analysis
     let mediaBase64: string | null = null;
