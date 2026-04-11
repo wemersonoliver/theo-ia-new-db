@@ -99,20 +99,57 @@ serve(async (req) => {
     const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
 
     const syncWebhook = async () => {
-      const webhookResponse = await evolutionRequest({
+      // Try the flat payload first (Evolution v1), then wrapped (Evolution v2)
+      const flatPayload = {
+        enabled: true,
+        url: webhookUrl,
+        events: WEBHOOK_EVENTS,
+        webhookByEvents: true,
+        webhookBase64: true,
+      };
+
+      let webhookResponse = await evolutionRequest({
         evolutionUrl,
         evolutionKey,
         path: `/webhook/set/${SYSTEM_INSTANCE_NAME}`,
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          enabled: true,
-          url: webhookUrl,
-          events: WEBHOOK_EVENTS,
-          webhookByEvents: true,
-          webhookBase64: true,
-        }),
+        body: JSON.stringify(flatPayload),
       });
+
+      // If 400 with "requires property webhook", try wrapped payload
+      if (!webhookResponse.ok && webhookResponse.status === 400) {
+        console.log("Flat webhook payload failed, trying wrapped payload...");
+        webhookResponse = await evolutionRequest({
+          evolutionUrl,
+          evolutionKey,
+          path: `/webhook/set/${SYSTEM_INSTANCE_NAME}`,
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ webhook: flatPayload }),
+        });
+      }
+
+      // If still failing, try instance update endpoint
+      if (!webhookResponse.ok && webhookResponse.status === 400) {
+        console.log("Wrapped webhook payload failed, trying instance update...");
+        webhookResponse = await evolutionRequest({
+          evolutionUrl,
+          evolutionKey,
+          path: `/instance/update/${SYSTEM_INSTANCE_NAME}`,
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            webhook: {
+              enabled: true,
+              url: webhookUrl,
+              byEvents: true,
+              base64: true,
+              events: WEBHOOK_EVENTS,
+            },
+          }),
+        });
+      }
 
       if (!webhookResponse.ok) {
         return webhookResponse;
