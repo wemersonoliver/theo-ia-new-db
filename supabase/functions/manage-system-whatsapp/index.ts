@@ -253,6 +253,7 @@ serve(async (req) => {
         return jsonResponse({ error: "Nenhuma instância encontrada" }, 404);
       }
 
+      // Try logout, but also try delete - treat 404 as success (instance doesn't exist on server)
       const logoutResponse = await evolutionRequest({
         evolutionUrl,
         evolutionKey,
@@ -260,19 +261,24 @@ serve(async (req) => {
         method: "DELETE",
       });
 
-      if (!logoutResponse.ok) {
-        return jsonResponse(buildEvolutionErrorPayload(logoutResponse, "Erro ao desconectar instância do sistema"), 502);
+      if (!logoutResponse.ok && logoutResponse.status !== 404) {
+        // If logout fails with non-404, try deleting the instance instead
+        const deleteResponse = await evolutionRequest({
+          evolutionUrl,
+          evolutionKey,
+          path: `/instance/delete/${sysInstance.instance_name}`,
+          method: "DELETE",
+        });
+
+        if (!deleteResponse.ok && deleteResponse.status !== 404) {
+          return jsonResponse(buildEvolutionErrorPayload(deleteResponse, "Erro ao desconectar instância do sistema"), 502);
+        }
       }
 
+      // Always clean up the database record
       await supabase
         .from("system_whatsapp_instance")
-        .update({
-          status: "disconnected",
-          qr_code_base64: null,
-          phone_number: null,
-          profile_name: null,
-          updated_at: new Date().toISOString(),
-        })
+        .delete()
         .eq("id", sysInstance.id);
 
       return jsonResponse({ success: true });
