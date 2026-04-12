@@ -47,7 +47,7 @@ export default function Register() {
         body: { full_name: fullName, email },
       }).catch(() => {});
       toast.success("Conta criada com sucesso!");
-      navigate("/dashboard");
+      navigate("/onboarding");
     }
     setLoading(false);
   };
