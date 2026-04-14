@@ -142,7 +142,6 @@ export default function AdminAIConfig() {
                 </div>
               )}
             </div>
-            </div>
 
             <Button
               onClick={handleSave}
