@@ -20,6 +20,11 @@ serve(async (req) => {
       throw new Error("ELEVENLABS_API_KEY not configured");
     }
 
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
     const { text, voiceId, userId, phone, source } = await req.json();
 
     if (!text || !phone) {
@@ -29,10 +34,42 @@ serve(async (req) => {
       });
     }
 
+    const resolvedSource = source || "support";
     const resolvedVoiceId = voiceId || DEFAULT_VOICE_ID;
     const charactersCount = text.length;
+    const costCents = Math.ceil((charactersCount / 1000) * 24); // ~$0.24/1000 chars
 
-    console.log(`TTS request: ${charactersCount} chars, voice=${resolvedVoiceId}, phone=${phone}`);
+    // For user_agent source, check credits
+    if (resolvedSource === "user_agent" && userId) {
+      const { data: credits } = await supabase
+        .from("ai_credits")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (!credits) {
+        return new Response(JSON.stringify({ error: "no_credits", message: "Créditos de voz não configurados para este usuário" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (!credits.voice_enabled) {
+        return new Response(JSON.stringify({ error: "voice_disabled", message: "Voz não habilitada para este usuário" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (credits.balance_cents < costCents) {
+        return new Response(JSON.stringify({ error: "insufficient_credits", message: "Créditos insuficientes", balance: credits.balance_cents, required: costCents }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    console.log(`TTS request: ${charactersCount} chars, voice=${resolvedVoiceId}, phone=${phone}, source=${resolvedSource}`);
 
     const ttsResponse = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${resolvedVoiceId}?output_format=mp3_44100_128`,
@@ -64,24 +101,50 @@ serve(async (req) => {
     const audioBuffer = await ttsResponse.arrayBuffer();
     const audioBase64 = base64Encode(audioBuffer);
 
-    // Track usage
-    const costCents = Math.ceil((charactersCount / 1000) * 24); // ~$0.24/1000 chars
-
+    // Track usage in ai_voice_usage
     try {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
-
       await supabase.from("ai_voice_usage").insert({
         user_id: userId || null,
         phone,
         characters_count: charactersCount,
         cost_cents: costCents,
-        source: source || "support",
+        source: resolvedSource,
       });
     } catch (trackErr) {
       console.error("Failed to track voice usage:", trackErr);
+    }
+
+    // Deduct credits for user_agent source
+    if (resolvedSource === "user_agent" && userId) {
+      try {
+        const { data: currentCredits } = await supabase
+          .from("ai_credits")
+          .select("balance_cents, total_consumed_cents")
+          .eq("user_id", userId)
+          .single();
+
+        if (currentCredits) {
+          const newBalance = currentCredits.balance_cents - costCents;
+          const newConsumed = currentCredits.total_consumed_cents + costCents;
+
+          await supabase
+            .from("ai_credits")
+            .update({ balance_cents: newBalance, total_consumed_cents: newConsumed })
+            .eq("user_id", userId);
+
+          // Record transaction
+          await supabase.from("ai_credit_transactions").insert({
+            user_id: userId,
+            type: "debit",
+            amount_cents: costCents,
+            balance_after_cents: newBalance,
+            description: `TTS: ${charactersCount} caracteres`,
+            reference_id: phone,
+          });
+        }
+      } catch (creditErr) {
+        console.error("Failed to deduct credits:", creditErr);
+      }
     }
 
     console.log(`TTS generated: ${audioBase64.length} base64 chars, cost=${costCents} cents`);
