@@ -39,6 +39,7 @@ import AdminSupport from "./pages/admin/AdminSupport";
 import AdminTutorialVideos from "./pages/admin/AdminTutorialVideos";
 import AdminNotifications from "./pages/admin/AdminNotifications";
 import AdminCRM from "./pages/admin/AdminCRM";
+import AdminVoiceCosts from "./pages/admin/AdminVoiceCosts";
 
 const queryClient = new QueryClient();
 
@@ -83,6 +84,7 @@ const App = () => (
               <Route path="/admin/notifications" element={<AdminNotifications />} />
               <Route path="/admin/logs" element={<AdminLogs />} />
               <Route path="/admin/crm" element={<AdminCRM />} />
+              <Route path="/admin/voice-costs" element={<AdminVoiceCosts />} />
               <Route path="/admin" element={<AdminLogin />} />
 
               <Route path="*" element={<NotFound />} />

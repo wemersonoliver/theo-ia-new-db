@@ -945,7 +945,12 @@ serve(async (req) => {
       const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")!;
       const evolutionKey = Deno.env.get("EVOLUTION_API_KEY")!;
 
+      // Check if voice is enabled
+      const voiceEnabled = sysConfig.voice_enabled === true;
+      const voiceId = sysConfig.voice_id || undefined;
+
       for (let i = 0; i < messageBlocks.length; i++) {
+        // Send text message
         await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
           method: "POST",
           headers: {
@@ -957,6 +962,53 @@ serve(async (req) => {
             text: messageBlocks[i],
           }),
         });
+
+        // Send audio for short important messages (greetings, key responses, farewells)
+        // Only for blocks <= 300 chars to avoid long audio
+        if (voiceEnabled && messageBlocks[i].length <= 300 && messageBlocks[i].length >= 10) {
+          try {
+            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+            const ttsRes = await fetch(`${supabaseUrl}/functions/v1/elevenlabs-tts`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${serviceKey}`,
+              },
+              body: JSON.stringify({
+                text: messageBlocks[i],
+                voiceId,
+                phone,
+                source: "support",
+              }),
+            });
+
+            if (ttsRes.ok) {
+              const { audioBase64 } = await ttsRes.json();
+
+              if (audioBase64) {
+                // Send audio via Evolution API
+                await fetch(`${evolutionUrl}/message/sendWhatsAppAudio/${sysInstance.instance_name}`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "apikey": evolutionKey,
+                  },
+                  body: JSON.stringify({
+                    number: phone,
+                    audio: `data:audio/mpeg;base64,${audioBase64}`,
+                  }),
+                });
+                console.log(`Audio sent for block ${i} (${messageBlocks[i].length} chars)`);
+              }
+            } else {
+              console.error(`TTS failed for block ${i}:`, await ttsRes.text());
+            }
+          } catch (ttsErr) {
+            console.error(`TTS error for block ${i}:`, ttsErr);
+          }
+        }
 
         // Delay between blocks to simulate typing
         if (i < messageBlocks.length - 1) {

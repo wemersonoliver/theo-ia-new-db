@@ -171,6 +171,36 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_voice_usage: {
+        Row: {
+          characters_count: number
+          cost_cents: number
+          created_at: string
+          id: string
+          phone: string
+          source: string
+          user_id: string | null
+        }
+        Insert: {
+          characters_count: number
+          cost_cents?: number
+          created_at?: string
+          id?: string
+          phone: string
+          source?: string
+          user_id?: string | null
+        }
+        Update: {
+          characters_count?: number
+          cost_cents?: number
+          created_at?: string
+          id?: string
+          phone?: string
+          source?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       appointment_slots: {
         Row: {
           created_at: string | null
@@ -1058,6 +1088,8 @@ export type Database = {
           id: string
           response_delay_seconds: number
           updated_at: string | null
+          voice_enabled: boolean
+          voice_id: string | null
         }
         Insert: {
           active?: boolean | null
@@ -1067,6 +1099,8 @@ export type Database = {
           id?: string
           response_delay_seconds?: number
           updated_at?: string | null
+          voice_enabled?: boolean
+          voice_id?: string | null
         }
         Update: {
           active?: boolean | null
@@ -1076,6 +1110,8 @@ export type Database = {
           id?: string
           response_delay_seconds?: number
           updated_at?: string | null
+          voice_enabled?: boolean
+          voice_id?: string | null
         }
         Relationships: []
       }

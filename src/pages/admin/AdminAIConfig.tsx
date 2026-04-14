@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useSystemAIConfig } from "@/hooks/useSystemAIConfig";
 import { useAdminNotificationContacts } from "@/hooks/useAdminNotificationContacts";
-import { Bot, Save, Loader2, Plus, Trash2, Bell, Clock } from "lucide-react";
+import { Bot, Save, Loader2, Plus, Trash2, Bell, Clock, Volume2 } from "lucide-react";
 
 export default function AdminAIConfig() {
   const { config, isLoading, upsertConfig } = useSystemAIConfig();
@@ -17,6 +17,8 @@ export default function AdminAIConfig() {
   const [prompt, setPrompt] = useState("");
   const [active, setActive] = useState(false);
   const [responseDelay, setResponseDelay] = useState(35);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceId, setVoiceId] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newName, setNewName] = useState("");
 
@@ -25,12 +27,21 @@ export default function AdminAIConfig() {
       setAgentName(config.agent_name || "");
       setPrompt(config.custom_prompt || "");
       setActive(config.active);
-      setResponseDelay((config as any).response_delay_seconds ?? 35);
+      setResponseDelay(config.response_delay_seconds ?? 35);
+      setVoiceEnabled(config.voice_enabled ?? false);
+      setVoiceId(config.voice_id || "");
     }
   }, [config]);
 
   const handleSave = () => {
-    upsertConfig.mutate({ agent_name: agentName, custom_prompt: prompt, active, response_delay_seconds: responseDelay } as any);
+    upsertConfig.mutate({
+      agent_name: agentName,
+      custom_prompt: prompt,
+      active,
+      response_delay_seconds: responseDelay,
+      voice_enabled: voiceEnabled,
+      voice_id: voiceId || null,
+    } as any);
   };
 
   const handleAddContact = () => {
@@ -95,7 +106,41 @@ export default function AdminAIConfig() {
                 value={responseDelay}
                 onChange={(e) => setResponseDelay(Number(e.target.value))}
                 className="bg-slate-800 border-slate-700 text-slate-200 w-32"
-              />
+            />
+            </div>
+
+            {/* Voice TTS Section */}
+            <div className="border-t border-slate-700 pt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-slate-200 flex items-center gap-2">
+                    <Volume2 className="h-4 w-4 text-amber-400" />
+                    Respostas por Voz (ElevenLabs)
+                  </Label>
+                  <p className="text-xs text-slate-500">
+                    Enviar áudio junto com as mensagens de texto no WhatsApp. Mensagens curtas (até 300 caracteres) serão enviadas também como áudio.
+                  </p>
+                </div>
+                <Switch checked={voiceEnabled} onCheckedChange={setVoiceEnabled} />
+              </div>
+
+              {voiceEnabled && (
+                <div className="space-y-2">
+                  <Label className="text-slate-200">ID da Voz (ElevenLabs)</Label>
+                  <p className="text-xs text-slate-500">
+                    Deixe em branco para usar a voz padrão (Roger). Encontre vozes em{" "}
+                    <a href="https://elevenlabs.io/voice-library" target="_blank" rel="noopener noreferrer" className="text-amber-400 underline">
+                      ElevenLabs Voice Library
+                    </a>
+                  </p>
+                  <Input
+                    value={voiceId}
+                    onChange={(e) => setVoiceId(e.target.value)}
+                    placeholder="CwhRBWXzGAHq8TQ4Fs17 (Roger - padrão)"
+                    className="bg-slate-800 border-slate-700 text-slate-200 font-mono text-sm"
+                  />
+                </div>
+              )}
             </div>
 
             <Button
