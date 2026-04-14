@@ -7,6 +7,9 @@ export interface SystemAIConfig {
   custom_prompt: string | null;
   agent_name: string | null;
   active: boolean;
+  voice_enabled: boolean;
+  voice_id: string | null;
+  response_delay_seconds: number;
   created_at: string;
   updated_at: string;
 }

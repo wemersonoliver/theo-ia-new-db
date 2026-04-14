@@ -16,6 +16,7 @@ import {
   Video,
   Bell,
   Kanban,
+  DollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -28,6 +29,7 @@ const adminNavItems = [
   { to: "/admin/system-whatsapp", icon: Smartphone, label: "WhatsApp Sistema" },
   { to: "/admin/conversations", icon: MessageSquare, label: "Conversas" },
   { to: "/admin/ai-config", icon: Bot, label: "IA Suporte" },
+  { to: "/admin/voice-costs", icon: DollarSign, label: "Custos de Voz IA" },
   { to: "/admin/support", icon: Ticket, label: "Suporte" },
   { to: "/admin/tutorial-videos", icon: Video, label: "Vídeos Tutoriais" },
   { to: "/admin/notifications", icon: Bell, label: "Notificações" },
