@@ -950,9 +950,6 @@ serve(async (req) => {
 
     console.log(`AI response for ${phone}: ${aiResponse.slice(0, 200)}`);
 
-    // Split AI response into message blocks with hard fallback for long paragraphs
-    const messageBlocks = splitSupportResponseIntoBlocks(aiResponse, respondWithAudio);
-
     // Determine response mode: mirror the input type
     const voiceEnabled = sysConfig.voice_enabled === true;
     const voiceId = sysConfig.voice_id || undefined;
@@ -963,6 +960,9 @@ serve(async (req) => {
       style: sysConfig.voice_style ?? 0.3,
     };
     const respondWithAudio = voiceEnabled && inputType === "audio";
+
+    // Split AI response into message blocks with hard fallback for long paragraphs
+    const messageBlocks = splitSupportResponseIntoBlocks(aiResponse, respondWithAudio);
 
     // Save ALL blocks as individual messages in conversation
     // Use actual type that will be sent
