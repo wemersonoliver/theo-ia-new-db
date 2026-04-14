@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { useSystemAIConfig } from "@/hooks/useSystemAIConfig";
 import { useAdminNotificationContacts } from "@/hooks/useAdminNotificationContacts";
 import { Bot, Save, Loader2, Plus, Trash2, Bell, Clock, Volume2 } from "lucide-react";
@@ -150,6 +151,50 @@ export default function AdminAIConfig() {
                     onChange={(e) => setVoiceId(e.target.value)}
                     placeholder="CwhRBWXzGAHq8TQ4Fs17 (Roger - padrão)"
                     className="bg-slate-800 border-slate-700 text-slate-200 font-mono text-sm"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-slate-200">Velocidade da Fala: {voiceSpeed.toFixed(1)}x</Label>
+                  <p className="text-xs text-slate-500">0.7 = mais lento, 1.0 = normal, 1.2 = mais rápido</p>
+                  <Slider
+                    value={[voiceSpeed]}
+                    onValueChange={([v]) => setVoiceSpeed(v)}
+                    min={0.7} max={1.2} step={0.1}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-slate-200">Estabilidade: {voiceStability.toFixed(2)}</Label>
+                  <p className="text-xs text-slate-500">Menor = mais expressiva/variável, maior = mais consistente</p>
+                  <Slider
+                    value={[voiceStability]}
+                    onValueChange={([v]) => setVoiceStability(v)}
+                    min={0} max={1} step={0.05}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-slate-200">Similaridade: {voiceSimilarityBoost.toFixed(2)}</Label>
+                  <p className="text-xs text-slate-500">Quão próximo da voz original</p>
+                  <Slider
+                    value={[voiceSimilarityBoost]}
+                    onValueChange={([v]) => setVoiceSimilarityBoost(v)}
+                    min={0} max={1} step={0.05}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-slate-200">Estilo: {voiceStyle.toFixed(2)}</Label>
+                  <p className="text-xs text-slate-500">Maior = mais estilizado/expressivo</p>
+                  <Slider
+                    value={[voiceStyle]}
+                    onValueChange={([v]) => setVoiceStyle(v)}
+                    min={0} max={1} step={0.05}
+                    className="w-full"
                   />
                 </div>
               )}
