@@ -117,9 +117,9 @@ export default function AdminAIConfig() {
                     <Volume2 className="h-4 w-4 text-amber-400" />
                     Respostas por Voz (ElevenLabs)
                   </Label>
-                  <p className="text-xs text-slate-500">
-                    Enviar áudio junto com as mensagens de texto no WhatsApp. Mensagens curtas (até 300 caracteres) serão enviadas também como áudio.
-                  </p>
+                   <p className="text-xs text-slate-500">
+                     Quando ativado, a IA espelha o formato da mensagem do cliente: se ele enviar áudio, responde com áudio. Se enviar texto, responde com texto.
+                   </p>
                 </div>
                 <Switch checked={voiceEnabled} onCheckedChange={setVoiceEnabled} />
               </div>
