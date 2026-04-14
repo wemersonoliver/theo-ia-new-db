@@ -171,6 +171,72 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_credit_transactions: {
+        Row: {
+          amount_cents: number
+          balance_after_cents: number
+          created_at: string
+          description: string | null
+          id: string
+          reference_id: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount_cents: number
+          balance_after_cents?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          reference_id?: string | null
+          type?: string
+          user_id: string
+        }
+        Update: {
+          amount_cents?: number
+          balance_after_cents?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          reference_id?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_credits: {
+        Row: {
+          balance_cents: number
+          created_at: string
+          id: string
+          total_added_cents: number
+          total_consumed_cents: number
+          updated_at: string
+          user_id: string
+          voice_enabled: boolean
+        }
+        Insert: {
+          balance_cents?: number
+          created_at?: string
+          id?: string
+          total_added_cents?: number
+          total_consumed_cents?: number
+          updated_at?: string
+          user_id: string
+          voice_enabled?: boolean
+        }
+        Update: {
+          balance_cents?: number
+          created_at?: string
+          id?: string
+          total_added_cents?: number
+          total_consumed_cents?: number
+          updated_at?: string
+          user_id?: string
+          voice_enabled?: boolean
+        }
+        Relationships: []
+      }
       ai_voice_usage: {
         Row: {
           characters_count: number
