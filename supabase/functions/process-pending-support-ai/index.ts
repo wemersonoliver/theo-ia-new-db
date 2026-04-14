@@ -89,17 +89,23 @@ serve(async (req) => {
     const messages = conversation.messages || [];
     const recentIncoming = messages
       .filter((m: any) => !m.from_me)
-      .slice(-5)
+      .slice(-5);
+    
+    const recentContent = recentIncoming
       .map((m: any) => m.content)
       .join("\n");
 
-    if (!recentIncoming) {
+    if (!recentContent) {
       return new Response(JSON.stringify({ skipped: true, reason: "No incoming messages" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("Triggering support AI for:", phone);
+    // Detect if the LAST incoming message was audio
+    const lastIncoming = recentIncoming[recentIncoming.length - 1];
+    const inputType = lastIncoming?.type === "audio" ? "audio" : "text";
+
+    console.log(`Triggering support AI for: ${phone} (inputType: ${inputType})`);
 
     const aiResponse = await fetch(`${supabaseUrl}/functions/v1/support-ai-agent`, {
       method: "POST",
@@ -107,7 +113,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${supabaseServiceKey}`,
       },
-      body: JSON.stringify({ phone, messageContent: recentIncoming }),
+      body: JSON.stringify({ phone, messageContent: recentContent, inputType }),
     });
 
     const aiResult = await aiResponse.json();
