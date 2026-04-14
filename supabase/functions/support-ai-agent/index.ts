@@ -857,7 +857,7 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { phone, messageContent } = await req.json();
+    const { phone, messageContent, inputType } = await req.json();
 
     if (!phone || !messageContent) {
       return new Response(JSON.stringify({ error: "phone and messageContent required" }), {
