@@ -715,9 +715,14 @@ function splitLongSupportBlock(block: string, maxChars = MAX_SUPPORT_MESSAGE_CHA
   return chunks;
 }
 
-function splitSupportResponseIntoBlocks(text: string): string[] {
+function splitSupportResponseIntoBlocks(text: string, forAudio = false): string[] {
   const normalized = text.replace(/\r\n/g, "\n").trim();
   if (!normalized) return [];
+
+  // For audio: merge everything into larger blocks (~40s of speech ≈ 600 chars)
+  if (forAudio) {
+    return splitForAudioBlocks(normalized, 600);
+  }
 
   const baseBlocks = normalized
     .split(/\n\n+/)
@@ -738,6 +743,41 @@ function splitSupportResponseIntoBlocks(text: string): string[] {
 
     return splitLongSupportBlock(block);
   });
+}
+
+/**
+ * Split text into audio-friendly blocks of up to maxChars (~40s of speech).
+ * Merges small paragraphs together and splits on sentence boundaries.
+ */
+function splitForAudioBlocks(text: string, maxChars: number): string[] {
+  // Remove formatting that doesn't make sense in audio (emoji bullet points are ok)
+  const cleaned = text
+    .replace(/\*\*/g, "")
+    .replace(/\n\n+/g, "\n")
+    .replace(/\n/g, ". ")
+    .replace(/\.\s*\./g, ".")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (cleaned.length <= maxChars) return [cleaned];
+
+  // Split by sentences
+  const sentences = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const sentence of sentences) {
+    const next = current ? `${current} ${sentence}` : sentence;
+    if (next.length > maxChars && current) {
+      chunks.push(current.trim());
+      current = sentence;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) chunks.push(current.trim());
+  return chunks.length > 0 ? chunks : [cleaned];
 }
 
 async function callGeminiWithTools(
@@ -911,7 +951,7 @@ serve(async (req) => {
     console.log(`AI response for ${phone}: ${aiResponse.slice(0, 200)}`);
 
     // Split AI response into message blocks with hard fallback for long paragraphs
-    const messageBlocks = splitSupportResponseIntoBlocks(aiResponse);
+    const messageBlocks = splitSupportResponseIntoBlocks(aiResponse, respondWithAudio);
 
     // Determine response mode: mirror the input type
     const voiceEnabled = sysConfig.voice_enabled === true;
