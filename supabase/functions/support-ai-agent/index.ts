@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { evolutionRequest } from "../_evolution.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -912,13 +913,19 @@ serve(async (req) => {
     // Split AI response into message blocks with hard fallback for long paragraphs
     const messageBlocks = splitSupportResponseIntoBlocks(aiResponse);
 
+    // Determine response mode: mirror the input type
+    const voiceEnabled = sysConfig.voice_enabled === true;
+    const voiceId = sysConfig.voice_id || undefined;
+    const respondWithAudio = voiceEnabled && inputType === "audio";
+
     // Save ALL blocks as individual messages in conversation
+    // Use actual type that will be sent
     const newMessages = messageBlocks.map((block: string) => ({
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       from_me: true,
       content: block,
-      type: "text",
+      type: respondWithAudio ? "audio" : "text",
       sent_by: "ai",
     }));
 
@@ -945,23 +952,17 @@ serve(async (req) => {
       const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")!;
       const evolutionKey = Deno.env.get("EVOLUTION_API_KEY")!;
 
-      // Determine response mode: mirror the input type
-      const voiceEnabled = sysConfig.voice_enabled === true;
-      const voiceId = sysConfig.voice_id || undefined;
-      const respondWithAudio = voiceEnabled && inputType === "audio";
-
       for (let i = 0; i < messageBlocks.length; i++) {
-        if (respondWithAudio) {
-          // AUDIO MODE: send audio only (no text)
-          try {
-            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-            const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        let sentAsAudio = false;
 
+        if (respondWithAudio) {
+          // AUDIO MODE: generate TTS then send via Evolution
+          try {
             const ttsRes = await fetch(`${supabaseUrl}/functions/v1/elevenlabs-tts`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${serviceKey}`,
+                "Authorization": `Bearer ${supabaseServiceKey}`,
               },
               body: JSON.stringify({
                 text: messageBlocks[i],
@@ -974,49 +975,62 @@ serve(async (req) => {
             if (ttsRes.ok) {
               const { audioBase64 } = await ttsRes.json();
               if (audioBase64) {
-                await fetch(`${evolutionUrl}/message/sendWhatsAppAudio/${sysInstance.instance_name}`, {
+                // Use evolution helper with auth fallback
+                const audioResult = await evolutionRequest({
+                  evolutionUrl,
+                  evolutionKey,
+                  path: `/message/sendWhatsAppAudio/${sysInstance.instance_name}`,
                   method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "apikey": evolutionKey,
-                  },
+                  headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     number: phone,
                     audio: `data:audio/mpeg;base64,${audioBase64}`,
                   }),
                 });
-                console.log(`Audio-only sent for block ${i} (${messageBlocks[i].length} chars)`);
+
+                if (audioResult.ok) {
+                  sentAsAudio = true;
+                  console.log(`Audio sent for block ${i} (${messageBlocks[i].length} chars)`);
+                } else {
+                  console.error(`Evolution audio send failed (${audioResult.status}):`, audioResult.text?.slice(0, 200));
+                }
               }
             } else {
-              // Fallback to text if TTS fails
-              console.error(`TTS failed, falling back to text for block ${i}`);
-              await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "apikey": evolutionKey },
-                body: JSON.stringify({ number: phone, text: messageBlocks[i] }),
-              });
+              const errText = await ttsRes.text();
+              console.error(`TTS failed for block ${i}:`, errText.slice(0, 200));
             }
           } catch (ttsErr) {
-            console.error(`TTS error, falling back to text for block ${i}:`, ttsErr);
-            await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "apikey": evolutionKey },
-              body: JSON.stringify({ number: phone, text: messageBlocks[i] }),
-            });
+            console.error(`TTS error for block ${i}:`, ttsErr);
           }
-        } else {
-          // TEXT MODE: send text only
-          await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
+        }
+
+        if (!sentAsAudio) {
+          // TEXT MODE or fallback: send text via Evolution helper
+          const textResult = await evolutionRequest({
+            evolutionUrl,
+            evolutionKey,
+            path: `/message/sendText/${sysInstance.instance_name}`,
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": evolutionKey,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               number: phone,
               text: messageBlocks[i],
             }),
           });
+
+          if (!textResult.ok) {
+            console.error(`Text send failed for block ${i} (${textResult.status}):`, textResult.text?.slice(0, 200));
+          }
+
+          // If we intended audio but fell back to text, update the message type
+          if (respondWithAudio) {
+            console.log(`Fallback to text for block ${i}`);
+            // Update the specific message type in DB
+            const msgIndex = history.length + i;
+            if (updatedMessages[msgIndex]) {
+              updatedMessages[msgIndex].type = "text";
+            }
+          }
         }
 
         // Delay between blocks to simulate typing
@@ -1024,6 +1038,17 @@ serve(async (req) => {
           const delay = Math.min(messageBlocks[i].length * 30, 3000);
           await new Promise(r => setTimeout(r, Math.max(delay, 800)));
         }
+      }
+
+      // If any fallbacks happened, update the conversation with corrected types
+      if (respondWithAudio) {
+        await supabase
+          .from("system_whatsapp_conversations")
+          .update({
+            messages: updatedMessages,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("phone", phone);
       }
     }
 
