@@ -40,6 +40,8 @@ import AdminTutorialVideos from "./pages/admin/AdminTutorialVideos";
 import AdminNotifications from "./pages/admin/AdminNotifications";
 import AdminCRM from "./pages/admin/AdminCRM";
 import AdminVoiceCosts from "./pages/admin/AdminVoiceCosts";
+import AdminCreditsManager from "./pages/admin/AdminCreditsManager";
+import UserCredits from "./pages/UserCredits";
 
 const queryClient = new QueryClient();
 
@@ -71,6 +73,7 @@ const App = () => (
               <Route path="/crm" element={<ProtectedRoute><CRM /></ProtectedRoute>} />
               {/* <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} /> */}{/* Oculto temporariamente */}
               <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
+              <Route path="/credits" element={<ProtectedRoute><UserCredits /></ProtectedRoute>} />
 
               {/* Admin Panel */}
               <Route path="/admin/login" element={<AdminLogin />} />
@@ -85,6 +88,7 @@ const App = () => (
               <Route path="/admin/logs" element={<AdminLogs />} />
               <Route path="/admin/crm" element={<AdminCRM />} />
               <Route path="/admin/voice-costs" element={<AdminVoiceCosts />} />
+              <Route path="/admin/credits" element={<AdminCreditsManager />} />
               <Route path="/admin" element={<AdminLogin />} />
 
               <Route path="*" element={<NotFound />} />
