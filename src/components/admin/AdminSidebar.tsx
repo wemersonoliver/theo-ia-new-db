@@ -30,6 +30,7 @@ const adminNavItems = [
   { to: "/admin/conversations", icon: MessageSquare, label: "Conversas" },
   { to: "/admin/ai-config", icon: Bot, label: "IA Suporte" },
   { to: "/admin/voice-costs", icon: DollarSign, label: "Custos de Voz IA" },
+  { to: "/admin/credits", icon: Users, label: "Créditos Usuários" },
   { to: "/admin/support", icon: Ticket, label: "Suporte" },
   { to: "/admin/tutorial-videos", icon: Video, label: "Vídeos Tutoriais" },
   { to: "/admin/notifications", icon: Bell, label: "Notificações" },
