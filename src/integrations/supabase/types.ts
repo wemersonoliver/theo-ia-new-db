@@ -1156,6 +1156,10 @@ export type Database = {
           updated_at: string | null
           voice_enabled: boolean
           voice_id: string | null
+          voice_similarity_boost: number | null
+          voice_speed: number | null
+          voice_stability: number | null
+          voice_style: number | null
         }
         Insert: {
           active?: boolean | null
@@ -1167,6 +1171,10 @@ export type Database = {
           updated_at?: string | null
           voice_enabled?: boolean
           voice_id?: string | null
+          voice_similarity_boost?: number | null
+          voice_speed?: number | null
+          voice_stability?: number | null
+          voice_style?: number | null
         }
         Update: {
           active?: boolean | null
@@ -1178,6 +1186,10 @@ export type Database = {
           updated_at?: string | null
           voice_enabled?: boolean
           voice_id?: string | null
+          voice_similarity_boost?: number | null
+          voice_speed?: number | null
+          voice_stability?: number | null
+          voice_style?: number | null
         }
         Relationships: []
       }
