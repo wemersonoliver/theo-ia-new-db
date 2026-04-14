@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { useSystemAIConfig } from "@/hooks/useSystemAIConfig";
 import { useAdminNotificationContacts } from "@/hooks/useAdminNotificationContacts";
 import { Bot, Save, Loader2, Plus, Trash2, Bell, Clock, Volume2 } from "lucide-react";
@@ -19,6 +20,10 @@ export default function AdminAIConfig() {
   const [responseDelay, setResponseDelay] = useState(35);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceId, setVoiceId] = useState("");
+  const [voiceSpeed, setVoiceSpeed] = useState(1.0);
+  const [voiceStability, setVoiceStability] = useState(0.5);
+  const [voiceSimilarityBoost, setVoiceSimilarityBoost] = useState(0.75);
+  const [voiceStyle, setVoiceStyle] = useState(0.3);
   const [newPhone, setNewPhone] = useState("");
   const [newName, setNewName] = useState("");
 
@@ -30,6 +35,10 @@ export default function AdminAIConfig() {
       setResponseDelay(config.response_delay_seconds ?? 35);
       setVoiceEnabled(config.voice_enabled ?? false);
       setVoiceId(config.voice_id || "");
+      setVoiceSpeed(config.voice_speed ?? 1.0);
+      setVoiceStability(config.voice_stability ?? 0.5);
+      setVoiceSimilarityBoost(config.voice_similarity_boost ?? 0.75);
+      setVoiceStyle(config.voice_style ?? 0.3);
     }
   }, [config]);
 
@@ -41,6 +50,10 @@ export default function AdminAIConfig() {
       response_delay_seconds: responseDelay,
       voice_enabled: voiceEnabled,
       voice_id: voiceId || null,
+      voice_speed: voiceSpeed,
+      voice_stability: voiceStability,
+      voice_similarity_boost: voiceSimilarityBoost,
+      voice_style: voiceStyle,
     } as any);
   };
 
@@ -125,20 +138,66 @@ export default function AdminAIConfig() {
               </div>
 
               {voiceEnabled && (
-                <div className="space-y-2">
-                  <Label className="text-slate-200">ID da Voz (ElevenLabs)</Label>
-                  <p className="text-xs text-slate-500">
-                    Deixe em branco para usar a voz padrão (Roger). Encontre vozes em{" "}
-                    <a href="https://elevenlabs.io/voice-library" target="_blank" rel="noopener noreferrer" className="text-amber-400 underline">
-                      ElevenLabs Voice Library
-                    </a>
-                  </p>
-                  <Input
-                    value={voiceId}
-                    onChange={(e) => setVoiceId(e.target.value)}
-                    placeholder="CwhRBWXzGAHq8TQ4Fs17 (Roger - padrão)"
-                    className="bg-slate-800 border-slate-700 text-slate-200 font-mono text-sm"
-                  />
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-slate-200">ID da Voz (ElevenLabs)</Label>
+                    <p className="text-xs text-slate-500">
+                      Deixe em branco para usar a voz padrão (Roger). Encontre vozes em{" "}
+                      <a href="https://elevenlabs.io/voice-library" target="_blank" rel="noopener noreferrer" className="text-amber-400 underline">
+                        ElevenLabs Voice Library
+                      </a>
+                    </p>
+                    <Input
+                      value={voiceId}
+                      onChange={(e) => setVoiceId(e.target.value)}
+                      placeholder="CwhRBWXzGAHq8TQ4Fs17 (Roger - padrão)"
+                      className="bg-slate-800 border-slate-700 text-slate-200 font-mono text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-slate-200">Velocidade da Fala: {voiceSpeed.toFixed(1)}x</Label>
+                    <p className="text-xs text-slate-500">0.7 = mais lento, 1.0 = normal, 1.2 = mais rápido</p>
+                    <Slider
+                      value={[voiceSpeed]}
+                      onValueChange={([v]) => setVoiceSpeed(v)}
+                      min={0.7} max={1.2} step={0.1}
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-slate-200">Estabilidade: {voiceStability.toFixed(2)}</Label>
+                    <p className="text-xs text-slate-500">Menor = mais expressiva/variável, maior = mais consistente</p>
+                    <Slider
+                      value={[voiceStability]}
+                      onValueChange={([v]) => setVoiceStability(v)}
+                      min={0} max={1} step={0.05}
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-slate-200">Similaridade: {voiceSimilarityBoost.toFixed(2)}</Label>
+                    <p className="text-xs text-slate-500">Quão próximo da voz original</p>
+                    <Slider
+                      value={[voiceSimilarityBoost]}
+                      onValueChange={([v]) => setVoiceSimilarityBoost(v)}
+                      min={0} max={1} step={0.05}
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-slate-200">Estilo: {voiceStyle.toFixed(2)}</Label>
+                    <p className="text-xs text-slate-500">Maior = mais estilizado/expressivo</p>
+                    <Slider
+                      value={[voiceStyle]}
+                      onValueChange={([v]) => setVoiceStyle(v)}
+                      min={0} max={1} step={0.05}
+                      className="w-full"
+                    />
+                  </div>
                 </div>
               )}
             </div>

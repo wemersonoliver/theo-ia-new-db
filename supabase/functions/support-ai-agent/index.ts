@@ -956,6 +956,12 @@ serve(async (req) => {
     // Determine response mode: mirror the input type
     const voiceEnabled = sysConfig.voice_enabled === true;
     const voiceId = sysConfig.voice_id || undefined;
+    const voiceSettings = {
+      speed: sysConfig.voice_speed ?? 1.0,
+      stability: sysConfig.voice_stability ?? 0.5,
+      similarity_boost: sysConfig.voice_similarity_boost ?? 0.75,
+      style: sysConfig.voice_style ?? 0.3,
+    };
     const respondWithAudio = voiceEnabled && inputType === "audio";
 
     // Save ALL blocks as individual messages in conversation
@@ -1009,6 +1015,7 @@ serve(async (req) => {
                 voiceId,
                 phone,
                 source: "support",
+                voiceSettings,
               }),
             });
 
