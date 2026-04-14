@@ -9,6 +9,10 @@ export interface SystemAIConfig {
   active: boolean;
   voice_enabled: boolean;
   voice_id: string | null;
+  voice_speed: number;
+  voice_stability: number;
+  voice_similarity_boost: number;
+  voice_style: number;
   response_delay_seconds: number;
   created_at: string;
   updated_at: string;

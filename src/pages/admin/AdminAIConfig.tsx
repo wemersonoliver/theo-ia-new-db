@@ -19,6 +19,10 @@ export default function AdminAIConfig() {
   const [responseDelay, setResponseDelay] = useState(35);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceId, setVoiceId] = useState("");
+  const [voiceSpeed, setVoiceSpeed] = useState(1.0);
+  const [voiceStability, setVoiceStability] = useState(0.5);
+  const [voiceSimilarityBoost, setVoiceSimilarityBoost] = useState(0.75);
+  const [voiceStyle, setVoiceStyle] = useState(0.3);
   const [newPhone, setNewPhone] = useState("");
   const [newName, setNewName] = useState("");
 
@@ -30,6 +34,10 @@ export default function AdminAIConfig() {
       setResponseDelay(config.response_delay_seconds ?? 35);
       setVoiceEnabled(config.voice_enabled ?? false);
       setVoiceId(config.voice_id || "");
+      setVoiceSpeed(config.voice_speed ?? 1.0);
+      setVoiceStability(config.voice_stability ?? 0.5);
+      setVoiceSimilarityBoost(config.voice_similarity_boost ?? 0.75);
+      setVoiceStyle(config.voice_style ?? 0.3);
     }
   }, [config]);
 
@@ -41,6 +49,10 @@ export default function AdminAIConfig() {
       response_delay_seconds: responseDelay,
       voice_enabled: voiceEnabled,
       voice_id: voiceId || null,
+      voice_speed: voiceSpeed,
+      voice_stability: voiceStability,
+      voice_similarity_boost: voiceSimilarityBoost,
+      voice_style: voiceStyle,
     } as any);
   };
 
