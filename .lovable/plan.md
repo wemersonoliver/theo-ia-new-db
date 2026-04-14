@@ -1,50 +1,94 @@
 
 
-## Plano: Finalizar e Excluir Conversas no Painel do Usuário
+## Plano: Integração ElevenLabs TTS no Suporte + Sistema de Creditos de IA
 
-### Conceito
+Este e um projeto grande com varias fases. Vamos iniciar pela Fase 1 (suporte) e deixar as fases seguintes preparadas.
 
-Duas ações distintas para o usuário na tela de Conversas:
+---
 
-- **Finalizar**: Limpa as mensagens da conversa e reseta a sessão de IA, mas mantém um resumo do contexto anterior. Quando o lead entrar em contato novamente, a IA o cumprimentará pelo nome reconhecendo que é um retorno.
-- **Excluir**: Remove a conversa completamente do banco. Se o lead entrar em contato novamente, será tratado como um atendimento totalmente novo, sem contexto anterior.
+### Fase 1 — ElevenLabs no Agente de Suporte (implementacao imediata)
 
-### Alterações
+**1. Adicionar secret `ELEVENLABS_API_KEY`**
+- Solicitar a chave da ElevenLabs ao usuario
 
-**1. Hook `useConversations.ts`** — Adicionar duas mutations:
-- `finishConversation`: Salva um resumo das últimas mensagens no campo `messages` (como uma mensagem especial de tipo "context_summary"), limpa o histórico principal, reseta `ai_active` para `true`, `total_messages` para 0, e deleta a sessão correspondente em `whatsapp_ai_sessions`
-- `deleteConversation`: Deleta o registro da `whatsapp_conversations` e da `whatsapp_ai_sessions`
+**2. Criar Edge Function `elevenlabs-tts`**
+- Recebe `{ text, voiceId? }` e retorna audio MP3 via ElevenLabs API
+- Usa modelo `eleven_multilingual_v2` (suporte em portugues)
+- Voz padrao: uma voz masculina natural (Roger ou similar)
 
-**2. Página `Conversations.tsx`** — Adicionar botões no header do chat (desktop e mobile):
-- Botão "Finalizar" (ícone CheckCircle) com confirmação via AlertDialog
-- Botão "Excluir" (ícone Trash2) com confirmação via AlertDialog
-- Após ação, deseleciona o phone atual
+**3. Modificar `support-ai-agent/index.ts`**
+- Apos gerar cada bloco de texto, chamar `elevenlabs-tts` para converter em audio
+- Enviar o audio via Evolution API usando endpoint `/message/sendWhatsAppAudio/{instance}`
+- Logica: enviar texto E audio apenas para mensagens curtas e importantes (saudacao, despedida, respostas-chave), ou apenas texto para mensagens informativas longas
+- Adicionar flag na `system_ai_config` para ativar/desativar voz (`voice_enabled`, `voice_id`)
 
-**3. Edge Function `whatsapp-ai-agent/index.ts`** — Ajustar o prompt da IA:
-- Ao montar o contexto, verificar se existe uma mensagem do tipo `context_summary` no array de mensagens da conversa
-- Se existir, adicionar ao system prompt: "Este cliente já foi atendido anteriormente. Resumo do último atendimento: [resumo]. Cumprimente-o pelo nome e demonstre que se lembra dele."
-- Se não existir resumo (conversa excluída ou primeiro contato), manter comportamento atual
+**4. Atualizar tabela `system_ai_config`**
+- Migration: adicionar colunas `voice_enabled boolean default false`, `voice_id text default null`
 
-**4. Modelo de dados** — Nenhuma migração necessária. Usaremos o campo `messages` existente (jsonb) para armazenar o resumo como uma mensagem especial com `type: "context_summary"`.
+**5. Atualizar painel admin - Config IA do Suporte**
+- Adicionar toggle "Respostas por voz" e campo para selecionar voz
+- Arquivo: pagina de config do sistema AI no admin
 
-### Detalhes Técnicos
+---
 
-**Formato do resumo salvo na finalização:**
-```json
-{
-  "id": "summary-<timestamp>",
-  "type": "context_summary",
-  "content": "Resumo: Cliente [nome] conversou sobre [tópicos]. Último atendimento em [data].",
-  "timestamp": "<ISO>",
-  "from_me": true,
-  "sent_by": "ai"
-}
+### Fase 2 — Tabela de Custos e Tracking (implementacao imediata)
+
+**6. Criar tabela `ai_voice_usage`**
+```sql
+CREATE TABLE ai_voice_usage (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid,           -- null = sistema/suporte
+  phone text NOT NULL,
+  characters_count integer NOT NULL,
+  cost_cents integer NOT NULL DEFAULT 0,
+  source text NOT NULL DEFAULT 'support', -- 'support' | 'user_agent'
+  created_at timestamptz DEFAULT now()
+);
+```
+- RLS: super_admins leem tudo, users leem os proprios
+
+**7. Registrar uso na edge function**
+- Cada chamada TTS registra caracteres usados e custo estimado
+- Custo ElevenLabs: ~$0.24/1000 chars no plano Creator
+
+**8. Painel de Custos no Admin**
+- Nova aba ou secao no admin dashboard mostrando:
+  - Total de caracteres processados (dia/mes)
+  - Custo estimado em USD e BRL
+  - Breakdown por usuario vs suporte
+  - Grafico de uso ao longo do tempo
+
+---
+
+### Fase 3 — Sistema de Creditos por Usuario (preparacao futura)
+
+> Sera implementado depois de validar a Fase 1
+
+- Tabela `ai_credits` com saldo por usuario
+- Sistema de recarga (integracao Kiwify ou manual pelo admin)
+- Flag por usuario no admin para habilitar/desabilitar voz
+- Desconto de creditos por uso de TTS
+- Painel do usuario mostrando saldo e historico
+
+---
+
+### Detalhes Tecnicos
+
+**Fluxo do audio no WhatsApp:**
+```text
+support-ai-agent → texto gerado
+  → POST elevenlabs-tts (texto → mp3 base64)
+  → POST Evolution API /message/sendWhatsAppAudio/{instance}
+  → Cliente recebe audio no WhatsApp
 ```
 
-A mutation `finishConversation` irá:
-1. Pegar as últimas 5 mensagens e gerar um resumo textual simples (concatenação dos conteúdos principais)
-2. Atualizar `whatsapp_conversations` com `messages = [summary_message]`, `total_messages = 0`, `ai_active = true`
-3. Deletar o registro em `whatsapp_ai_sessions` para esse user_id+phone
+**Arquivos modificados:**
+- `supabase/functions/elevenlabs-tts/index.ts` (novo)
+- `supabase/functions/support-ai-agent/index.ts` (modificado)
+- `supabase/config.toml` (nova funcao)
+- Migration SQL (novas colunas + tabela)
+- Pagina admin de config IA do suporte (modificada)
+- Nova pagina/aba admin de custos de IA
 
-No `whatsapp-ai-agent`, ao construir o prompt, buscar mensagens do tipo `context_summary` e injetar instrução para cumprimentar o cliente pelo nome.
+**Pre-requisito:** Secret `ELEVENLABS_API_KEY` configurada pelo usuario.
 
