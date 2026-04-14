@@ -945,27 +945,14 @@ serve(async (req) => {
       const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")!;
       const evolutionKey = Deno.env.get("EVOLUTION_API_KEY")!;
 
-      // Check if voice is enabled
+      // Determine response mode: mirror the input type
       const voiceEnabled = sysConfig.voice_enabled === true;
       const voiceId = sysConfig.voice_id || undefined;
+      const respondWithAudio = voiceEnabled && inputType === "audio";
 
       for (let i = 0; i < messageBlocks.length; i++) {
-        // Send text message
-        await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": evolutionKey,
-          },
-          body: JSON.stringify({
-            number: phone,
-            text: messageBlocks[i],
-          }),
-        });
-
-        // Send audio for short important messages (greetings, key responses, farewells)
-        // Only for blocks <= 300 chars to avoid long audio
-        if (voiceEnabled && messageBlocks[i].length <= 300 && messageBlocks[i].length >= 10) {
+        if (respondWithAudio) {
+          // AUDIO MODE: send audio only (no text)
           try {
             const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
             const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -986,9 +973,7 @@ serve(async (req) => {
 
             if (ttsRes.ok) {
               const { audioBase64 } = await ttsRes.json();
-
               if (audioBase64) {
-                // Send audio via Evolution API
                 await fetch(`${evolutionUrl}/message/sendWhatsAppAudio/${sysInstance.instance_name}`, {
                   method: "POST",
                   headers: {
@@ -1000,14 +985,38 @@ serve(async (req) => {
                     audio: `data:audio/mpeg;base64,${audioBase64}`,
                   }),
                 });
-                console.log(`Audio sent for block ${i} (${messageBlocks[i].length} chars)`);
+                console.log(`Audio-only sent for block ${i} (${messageBlocks[i].length} chars)`);
               }
             } else {
-              console.error(`TTS failed for block ${i}:`, await ttsRes.text());
+              // Fallback to text if TTS fails
+              console.error(`TTS failed, falling back to text for block ${i}`);
+              await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "apikey": evolutionKey },
+                body: JSON.stringify({ number: phone, text: messageBlocks[i] }),
+              });
             }
           } catch (ttsErr) {
-            console.error(`TTS error for block ${i}:`, ttsErr);
+            console.error(`TTS error, falling back to text for block ${i}:`, ttsErr);
+            await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "apikey": evolutionKey },
+              body: JSON.stringify({ number: phone, text: messageBlocks[i] }),
+            });
           }
+        } else {
+          // TEXT MODE: send text only
+          await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": evolutionKey,
+            },
+            body: JSON.stringify({
+              number: phone,
+              text: messageBlocks[i],
+            }),
+          });
         }
 
         // Delay between blocks to simulate typing
