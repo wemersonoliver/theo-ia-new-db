@@ -64,8 +64,11 @@ export default function AdminConversations() {
     if (phoneParam && !selectedPhone) {
       setSelectedPhone(phoneParam);
       setMessageInput("Olá! Aqui é a equipe Theo IA. Como posso te ajudar?");
+      // Desativa a IA automaticamente quando admin inicia conversa via CRM
+      // para evitar que a IA responda no meio do atendimento humano
+      toggleAI.mutate({ phone: phoneParam, active: false });
     }
-  }, [searchParams, selectedPhone]);
+  }, [searchParams, selectedPhone, toggleAI]);
 
   const selectedConv = conversations.find((c) => c.phone === selectedPhone);
 
