@@ -17,6 +17,7 @@ import {
   Bell,
   Kanban,
   DollarSign,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -32,6 +33,7 @@ const adminNavItems = [
   { to: "/admin/voice-costs", icon: DollarSign, label: "Custos de Voz IA" },
   { to: "/admin/credits", icon: Users, label: "Créditos Usuários" },
   { to: "/admin/support", icon: Ticket, label: "Suporte" },
+  { to: "/admin/support-calendar", icon: Calendar, label: "Agenda de Suporte" },
   { to: "/admin/tutorial-videos", icon: Video, label: "Vídeos Tutoriais" },
   { to: "/admin/notifications", icon: Bell, label: "Notificações" },
   { to: "/admin/logs", icon: ScrollText, label: "Logs" },

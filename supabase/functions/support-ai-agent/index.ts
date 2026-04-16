@@ -127,7 +127,18 @@ O Theo IA é uma plataforma SaaS que permite aos usuários:
 ### Assinatura
 - Verifique o status (active, expired, cancelled) e a data de expiração
 - Para problemas de pagamento, oriente o cliente a verificar o email de cobrança
-- Se a assinatura estiver expirada, ofereça o link de renovação com incentivo`;
+- Se a assinatura estiver expirada, ofereça o link de renovação com incentivo
+
+## AGENDAMENTO COM O TIME DE SUPORTE
+
+Você pode agendar reuniões com o nosso time de suporte humano para ajudar em onboarding, configuração ou dúvidas mais elaboradas. Use as ferramentas:
+- \`support_list_appointment_types\` para listar os tipos de reunião disponíveis
+- \`support_check_available_slots\` para conferir horários livres numa data (YYYY-MM-DD)
+- \`support_create_appointment\` para criar — SEMPRE confirme tipo, data e hora com o cliente antes
+- \`support_list_my_appointments\` para mostrar reuniões já marcadas
+- \`support_cancel_appointment\` para cancelar
+
+Ofereça proativamente uma call quando o cliente demonstrar dificuldade em configurar a plataforma ou pedir ajuda mais elaborada.`;
 
 // Tool declarations for Gemini function calling
 const supportTools = {
@@ -315,9 +326,73 @@ const supportTools = {
         },
         required: ["reason"]
       }
+    },
+    {
+      name: "support_list_appointment_types",
+      description: "Lista os tipos de reunião do time de suporte disponíveis para o cliente agendar (ex.: Onboarding, Tira-dúvidas).",
+      parameters: { type: "object", properties: {} }
+    },
+    {
+      name: "support_check_available_slots",
+      description: "Retorna horários livres do time de suporte para um tipo de reunião em uma data específica (formato YYYY-MM-DD).",
+      parameters: {
+        type: "object",
+        properties: {
+          appointment_type_id: { type: "string", description: "UUID do tipo de reunião" },
+          date: { type: "string", description: "Data desejada (YYYY-MM-DD)" }
+        },
+        required: ["appointment_type_id", "date"]
+      }
+    },
+    {
+      name: "support_create_appointment",
+      description: "Cria um agendamento de reunião com o time de suporte para o cliente atual. SEMPRE confirme data, hora e tipo com o cliente antes de chamar.",
+      parameters: {
+        type: "object",
+        properties: {
+          appointment_type_id: { type: "string", description: "UUID do tipo de reunião" },
+          appointment_date: { type: "string", description: "Data (YYYY-MM-DD)" },
+          appointment_time: { type: "string", description: "Hora (HH:MM)" },
+          contact_name: { type: "string", description: "Nome do cliente" },
+          notes: { type: "string", description: "Notas/contexto opcional" }
+        },
+        required: ["appointment_type_id", "appointment_date", "appointment_time", "contact_name"]
+      }
+    },
+    {
+      name: "support_list_my_appointments",
+      description: "Lista os agendamentos de suporte do cliente atual (pelo telefone da conversa).",
+      parameters: { type: "object", properties: {} }
+    },
+    {
+      name: "support_cancel_appointment",
+      description: "Cancela um agendamento de suporte do cliente.",
+      parameters: {
+        type: "object",
+        properties: {
+          appointment_id: { type: "string", description: "UUID do agendamento a cancelar" }
+        },
+        required: ["appointment_id"]
+      }
     }
   ]
 };
+
+function dowFromDate(dateStr: string): number {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.getDay();
+}
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function minutesToTime(min: number): string {
+  const h = Math.floor(min / 60).toString().padStart(2, "0");
+  const m = (min % 60).toString().padStart(2, "0");
+  return `${h}:${m}`;
+}
 
 // Tool execution functions
 async function executeTool(supabase: any, toolName: string, args: any, phone: string, conversationHistory: any[]): Promise<string> {
@@ -532,6 +607,120 @@ async function executeTool(supabase: any, toolName: string, args: any, phone: st
           success: true, 
           message: "Conversa transferida para atendimento humano. Administradores foram notificados." 
         });
+      }
+
+      case "support_list_appointment_types": {
+        const { data: types } = await supabase
+          .from("support_appointment_types")
+          .select("id, name, description, duration_minutes, days_of_week, start_time, end_time")
+          .eq("is_active", true)
+          .order("name", { ascending: true });
+        return JSON.stringify({ types: types || [], count: types?.length || 0 });
+      }
+
+      case "support_check_available_slots": {
+        const typeId = args.appointment_type_id as string;
+        const date = args.date as string;
+        const { data: type } = await supabase
+          .from("support_appointment_types")
+          .select("*")
+          .eq("id", typeId)
+          .maybeSingle();
+        if (!type) return JSON.stringify({ available: [], error: "Tipo de reunião não encontrado" });
+
+        const dow = dowFromDate(date);
+        if (!Array.isArray(type.days_of_week) || !type.days_of_week.includes(dow)) {
+          return JSON.stringify({ available: [], reason: "Dia indisponível para este tipo" });
+        }
+
+        const startMin = timeToMinutes(String(type.start_time).slice(0, 5));
+        const endMin = timeToMinutes(String(type.end_time).slice(0, 5));
+        const dur = Number(type.duration_minutes) || 30;
+        const allSlots: string[] = [];
+        for (let m = startMin; m + dur <= endMin; m += dur) allSlots.push(minutesToTime(m));
+
+        const { data: booked } = await supabase
+          .from("support_appointments")
+          .select("appointment_time, status")
+          .eq("appointment_type_id", typeId)
+          .eq("appointment_date", date)
+          .neq("status", "cancelled");
+
+        const counts: Record<string, number> = {};
+        (booked || []).forEach((b: any) => {
+          const t = String(b.appointment_time).slice(0, 5);
+          counts[t] = (counts[t] || 0) + 1;
+        });
+        const max = Number(type.max_appointments_per_slot) || 1;
+        const free = allSlots.filter((s) => (counts[s] || 0) < max);
+        return JSON.stringify({ date, available: free, count: free.length });
+      }
+
+      case "support_create_appointment": {
+        const { data: type } = await supabase
+          .from("support_appointment_types")
+          .select("duration_minutes, name")
+          .eq("id", args.appointment_type_id)
+          .maybeSingle();
+
+        const { data: created, error } = await supabase
+          .from("support_appointments")
+          .insert({
+            appointment_type_id: args.appointment_type_id,
+            phone,
+            contact_name: args.contact_name,
+            appointment_date: args.appointment_date,
+            appointment_time: args.appointment_time,
+            duration_minutes: type?.duration_minutes || 30,
+            notes: args.notes || null,
+            status: "scheduled",
+          })
+          .select()
+          .single();
+
+        if (error) return JSON.stringify({ success: false, error: error.message });
+
+        // Notify admins via system WA
+        try {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+          const { data: admins } = await supabase
+            .from("admin_notification_contacts")
+            .select("phone, name")
+            .eq("active", true);
+          const msg = `📅 *Nova reunião de suporte agendada*\n\n👤 Cliente: ${args.contact_name}\n📞 ${phone}\n🗓️ ${args.appointment_date} às ${args.appointment_time}\n📝 ${type?.name || ""}${args.notes ? `\n\nObs: ${args.notes}` : ""}`;
+          for (const a of admins || []) {
+            await fetch(`${supabaseUrl}/functions/v1/send-whatsapp-message`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+              body: JSON.stringify({ phone: a.phone, message: msg, system: true }),
+            });
+          }
+        } catch (e) {
+          console.error("notify support appt err", e);
+        }
+
+        return JSON.stringify({ success: true, appointment: created });
+      }
+
+      case "support_list_my_appointments": {
+        const { data: appts } = await supabase
+          .from("support_appointments")
+          .select("id, appointment_date, appointment_time, duration_minutes, status, contact_name, appointment_type_id, support_appointment_types(name)")
+          .eq("phone", phone)
+          .order("appointment_date", { ascending: false })
+          .limit(10);
+        return JSON.stringify({ appointments: appts || [], count: appts?.length || 0 });
+      }
+
+      case "support_cancel_appointment": {
+        const { error } = await supabase
+          .from("support_appointments")
+          .update({ status: "cancelled", updated_at: new Date().toISOString() })
+          .eq("id", args.appointment_id)
+          .eq("phone", phone);
+        if (error) return JSON.stringify({ success: false, error: error.message });
+        return JSON.stringify({ success: true, message: "Agendamento cancelado" });
       }
 
       default:

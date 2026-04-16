@@ -1071,6 +1071,107 @@ export type Database = {
         }
         Relationships: []
       }
+      support_appointment_types: {
+        Row: {
+          created_at: string
+          days_of_week: number[]
+          description: string | null
+          duration_minutes: number
+          end_time: string
+          id: string
+          is_active: boolean
+          max_appointments_per_slot: number
+          name: string
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          days_of_week?: number[]
+          description?: string | null
+          duration_minutes?: number
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          max_appointments_per_slot?: number
+          name: string
+          start_time?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          days_of_week?: number[]
+          description?: string | null
+          duration_minutes?: number
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          max_appointments_per_slot?: number
+          name?: string
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      support_appointments: {
+        Row: {
+          appointment_date: string
+          appointment_time: string
+          appointment_type_id: string | null
+          contact_name: string | null
+          created_at: string
+          duration_minutes: number
+          id: string
+          notes: string | null
+          phone: string
+          reminder_sent: boolean
+          reminder_sent_at: string | null
+          status: string
+          updated_at: string
+          user_ref_id: string | null
+        }
+        Insert: {
+          appointment_date: string
+          appointment_time: string
+          appointment_type_id?: string | null
+          contact_name?: string | null
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          notes?: string | null
+          phone: string
+          reminder_sent?: boolean
+          reminder_sent_at?: string | null
+          status?: string
+          updated_at?: string
+          user_ref_id?: string | null
+        }
+        Update: {
+          appointment_date?: string
+          appointment_time?: string
+          appointment_type_id?: string | null
+          contact_name?: string | null
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          notes?: string | null
+          phone?: string
+          reminder_sent?: boolean
+          reminder_sent_at?: string | null
+          status?: string
+          updated_at?: string
+          user_ref_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_appointments_appointment_type_id_fkey"
+            columns: ["appointment_type_id"]
+            isOneToOne: false
+            referencedRelation: "support_appointment_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       support_ticket_messages: {
         Row: {
           content: string
@@ -1160,6 +1261,10 @@ export type Database = {
           voice_speed: number | null
           voice_stability: number | null
           voice_style: number | null
+          welcome_delay_minutes: number
+          welcome_message_delay_seconds: number
+          welcome_messages: Json
+          welcome_sequence_enabled: boolean
         }
         Insert: {
           active?: boolean | null
@@ -1175,6 +1280,10 @@ export type Database = {
           voice_speed?: number | null
           voice_stability?: number | null
           voice_style?: number | null
+          welcome_delay_minutes?: number
+          welcome_message_delay_seconds?: number
+          welcome_messages?: Json
+          welcome_sequence_enabled?: boolean
         }
         Update: {
           active?: boolean | null
@@ -1190,6 +1299,10 @@ export type Database = {
           voice_speed?: number | null
           voice_stability?: number | null
           voice_style?: number | null
+          welcome_delay_minutes?: number
+          welcome_message_delay_seconds?: number
+          welcome_messages?: Json
+          welcome_sequence_enabled?: boolean
         }
         Relationships: []
       }
@@ -1217,6 +1330,45 @@ export type Database = {
           processed?: boolean | null
           scheduled_at?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      system_welcome_queue: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          full_name: string | null
+          id: string
+          phone: string
+          processed: boolean
+          processed_at: string | null
+          scheduled_at: string
+          skipped_reason: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          full_name?: string | null
+          id?: string
+          phone: string
+          processed?: boolean
+          processed_at?: string | null
+          scheduled_at: string
+          skipped_reason?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          full_name?: string | null
+          id?: string
+          phone?: string
+          processed?: boolean
+          processed_at?: string | null
+          scheduled_at?: string
+          skipped_reason?: string | null
+          user_id?: string
         }
         Relationships: []
       }
