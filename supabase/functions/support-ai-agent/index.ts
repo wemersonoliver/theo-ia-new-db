@@ -315,9 +315,73 @@ const supportTools = {
         },
         required: ["reason"]
       }
+    },
+    {
+      name: "support_list_appointment_types",
+      description: "Lista os tipos de reunião do time de suporte disponíveis para o cliente agendar (ex.: Onboarding, Tira-dúvidas).",
+      parameters: { type: "object", properties: {} }
+    },
+    {
+      name: "support_check_available_slots",
+      description: "Retorna horários livres do time de suporte para um tipo de reunião em uma data específica (formato YYYY-MM-DD).",
+      parameters: {
+        type: "object",
+        properties: {
+          appointment_type_id: { type: "string", description: "UUID do tipo de reunião" },
+          date: { type: "string", description: "Data desejada (YYYY-MM-DD)" }
+        },
+        required: ["appointment_type_id", "date"]
+      }
+    },
+    {
+      name: "support_create_appointment",
+      description: "Cria um agendamento de reunião com o time de suporte para o cliente atual. SEMPRE confirme data, hora e tipo com o cliente antes de chamar.",
+      parameters: {
+        type: "object",
+        properties: {
+          appointment_type_id: { type: "string", description: "UUID do tipo de reunião" },
+          appointment_date: { type: "string", description: "Data (YYYY-MM-DD)" },
+          appointment_time: { type: "string", description: "Hora (HH:MM)" },
+          contact_name: { type: "string", description: "Nome do cliente" },
+          notes: { type: "string", description: "Notas/contexto opcional" }
+        },
+        required: ["appointment_type_id", "appointment_date", "appointment_time", "contact_name"]
+      }
+    },
+    {
+      name: "support_list_my_appointments",
+      description: "Lista os agendamentos de suporte do cliente atual (pelo telefone da conversa).",
+      parameters: { type: "object", properties: {} }
+    },
+    {
+      name: "support_cancel_appointment",
+      description: "Cancela um agendamento de suporte do cliente.",
+      parameters: {
+        type: "object",
+        properties: {
+          appointment_id: { type: "string", description: "UUID do agendamento a cancelar" }
+        },
+        required: ["appointment_id"]
+      }
     }
   ]
 };
+
+function dowFromDate(dateStr: string): number {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.getDay();
+}
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function minutesToTime(min: number): string {
+  const h = Math.floor(min / 60).toString().padStart(2, "0");
+  const m = (min % 60).toString().padStart(2, "0");
+  return `${h}:${m}`;
+}
 
 // Tool execution functions
 async function executeTool(supabase: any, toolName: string, args: any, phone: string, conversationHistory: any[]): Promise<string> {
