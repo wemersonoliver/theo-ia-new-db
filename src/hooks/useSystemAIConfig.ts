@@ -14,6 +14,10 @@ export interface SystemAIConfig {
   voice_similarity_boost: number;
   voice_style: number;
   response_delay_seconds: number;
+  welcome_sequence_enabled: boolean;
+  welcome_delay_minutes: number;
+  welcome_message_delay_seconds: number;
+  welcome_messages: string[];
   created_at: string;
   updated_at: string;
 }
