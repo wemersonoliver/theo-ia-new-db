@@ -24,6 +24,9 @@ export interface AdminCRMDeal {
   // joined from profiles
   user_email?: string | null;
   user_phone?: string | null;
+  // joined from system_whatsapp_conversations (support AI)
+  support_ai_active?: boolean | null;
+  has_support_conversation?: boolean;
 }
 
 export function useAdminCRMDeals(pipelineId: string | null, stageIds: string[]) {
@@ -75,14 +78,33 @@ export function useAdminCRMDeals(pipelineId: string | null, stageIds: string[]) 
         }
       }
 
-      const mapped = data.map(d => ({
-        ...d,
-        user_email: d.user_ref_id ? profilesMap[d.user_ref_id]?.email || null : null,
-        user_phone: d.user_ref_id ? profilesMap[d.user_ref_id]?.phone || null : null,
-        onboarding_completed: d.user_ref_id ? profilesMap[d.user_ref_id]?.onboarding_completed ?? d.onboarding_completed : d.onboarding_completed,
-        subscription_status: d.user_ref_id ? subsMap[d.user_ref_id]?.status || d.subscription_status : d.subscription_status,
-        subscription_plan: d.user_ref_id ? subsMap[d.user_ref_id]?.plan_type || d.subscription_plan : d.subscription_plan,
-      }));
+      // Fetch support AI status from system_whatsapp_conversations by phone
+      const phones = [...new Set(Object.values(profilesMap).map(p => p.phone).filter(Boolean) as string[])];
+      let supportConvMap: Record<string, boolean> = {};
+      if (phones.length > 0) {
+        const { data: convs } = await supabase
+          .from("system_whatsapp_conversations")
+          .select("phone, ai_active")
+          .in("phone", phones);
+        if (convs) {
+          convs.forEach(c => { supportConvMap[c.phone] = c.ai_active ?? true; });
+        }
+      }
+
+      const mapped = data.map(d => {
+        const phone = d.user_ref_id ? profilesMap[d.user_ref_id]?.phone || null : null;
+        const hasConv = phone ? phone in supportConvMap : false;
+        return {
+          ...d,
+          user_email: d.user_ref_id ? profilesMap[d.user_ref_id]?.email || null : null,
+          user_phone: phone,
+          onboarding_completed: d.user_ref_id ? profilesMap[d.user_ref_id]?.onboarding_completed ?? d.onboarding_completed : d.onboarding_completed,
+          subscription_status: d.user_ref_id ? subsMap[d.user_ref_id]?.status || d.subscription_status : d.subscription_status,
+          subscription_plan: d.user_ref_id ? subsMap[d.user_ref_id]?.plan_type || d.subscription_plan : d.subscription_plan,
+          support_ai_active: hasConv ? supportConvMap[phone!] : null,
+          has_support_conversation: hasConv,
+        };
+      });
       setDeals(mapped);
     }
     setLoading(false);
