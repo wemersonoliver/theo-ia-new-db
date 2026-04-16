@@ -3,7 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { AdminCRMDeal } from "@/hooks/useAdminCRMDeals";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { GripVertical, Mail, Phone, CheckCircle2, XCircle, CreditCard } from "lucide-react";
+import { GripVertical, Mail, Phone, CheckCircle2, XCircle, CreditCard, Bot, BotOff } from "lucide-react";
 
 interface AdminDealCardProps {
   deal: AdminCRMDeal;
@@ -95,6 +95,25 @@ export function AdminDealCard({ deal, onClick }: AdminDealCardProps) {
                 <CreditCard className="h-2.5 w-2.5" />
                 {sub.label}
                 {deal.subscription_plan && ` · ${deal.subscription_plan}`}
+              </Badge>
+            )}
+
+            {/* Support AI status (only if a support conversation exists) */}
+            {deal.has_support_conversation && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px] px-1.5 py-0 gap-0.5",
+                  deal.support_ai_active
+                    ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                    : "bg-slate-500/10 text-slate-400 border-slate-500/30"
+                )}
+              >
+                {deal.support_ai_active ? (
+                  <><Bot className="h-2.5 w-2.5" /> IA ativa</>
+                ) : (
+                  <><BotOff className="h-2.5 w-2.5" /> IA off</>
+                )}
               </Badge>
             )}
 
