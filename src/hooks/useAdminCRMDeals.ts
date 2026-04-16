@@ -27,6 +27,8 @@ export interface AdminCRMDeal {
   // joined from system_whatsapp_conversations (support AI)
   support_ai_active?: boolean | null;
   has_support_conversation?: boolean;
+  // joined from whatsapp_instances (user's own WhatsApp)
+  whatsapp_status?: string | null;
 }
 
 export function useAdminCRMDeals(pipelineId: string | null, stageIds: string[]) {
@@ -91,6 +93,18 @@ export function useAdminCRMDeals(pipelineId: string | null, stageIds: string[]) 
         }
       }
 
+      // Fetch user's WhatsApp instance status
+      let waMap: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: instances } = await supabase
+          .from("whatsapp_instances")
+          .select("user_id, status")
+          .in("user_id", userIds);
+        if (instances) {
+          instances.forEach(i => { waMap[i.user_id] = i.status || "pending"; });
+        }
+      }
+
       const mapped = data.map(d => {
         const phone = d.user_ref_id ? profilesMap[d.user_ref_id]?.phone || null : null;
         const hasConv = phone ? phone in supportConvMap : false;
@@ -101,8 +115,9 @@ export function useAdminCRMDeals(pipelineId: string | null, stageIds: string[]) 
           onboarding_completed: d.user_ref_id ? profilesMap[d.user_ref_id]?.onboarding_completed ?? d.onboarding_completed : d.onboarding_completed,
           subscription_status: d.user_ref_id ? subsMap[d.user_ref_id]?.status || d.subscription_status : d.subscription_status,
           subscription_plan: d.user_ref_id ? subsMap[d.user_ref_id]?.plan_type || d.subscription_plan : d.subscription_plan,
-          support_ai_active: hasConv ? supportConvMap[phone!] : null,
+          support_ai_active: hasConv ? supportConvMap[phone!] : true,
           has_support_conversation: hasConv,
+          whatsapp_status: d.user_ref_id ? waMap[d.user_ref_id] || null : null,
         };
       });
       setDeals(mapped);

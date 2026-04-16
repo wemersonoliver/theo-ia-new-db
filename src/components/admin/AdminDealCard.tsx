@@ -3,7 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { AdminCRMDeal } from "@/hooks/useAdminCRMDeals";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { GripVertical, Mail, Phone, CheckCircle2, XCircle, CreditCard, Bot, BotOff } from "lucide-react";
+import { GripVertical, Mail, Phone, CheckCircle2, XCircle, CreditCard, Bot, BotOff, Smartphone } from "lucide-react";
 
 interface AdminDealCardProps {
   deal: AdminCRMDeal;
@@ -98,22 +98,40 @@ export function AdminDealCard({ deal, onClick }: AdminDealCardProps) {
               </Badge>
             )}
 
-            {/* Support AI status (only if a support conversation exists) */}
-            {deal.has_support_conversation && (
+            {/* Support AI status — sempre visível quando há usuário vinculado */}
+            {deal.user_ref_id && (
               <Badge
                 variant="outline"
                 className={cn(
                   "text-[10px] px-1.5 py-0 gap-0.5",
-                  deal.support_ai_active
+                  deal.support_ai_active !== false
                     ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
                     : "bg-slate-500/10 text-slate-400 border-slate-500/30"
                 )}
               >
-                {deal.support_ai_active ? (
+                {deal.support_ai_active !== false ? (
                   <><Bot className="h-2.5 w-2.5" /> IA ativa</>
                 ) : (
                   <><BotOff className="h-2.5 w-2.5" /> IA off</>
                 )}
+              </Badge>
+            )}
+
+            {/* WhatsApp status — sempre visível quando há usuário vinculado */}
+            {deal.user_ref_id && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px] px-1.5 py-0 gap-0.5",
+                  deal.whatsapp_status === "connected" || deal.whatsapp_status === "open"
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    : "bg-red-500/10 text-red-400 border-red-500/30"
+                )}
+              >
+                <Smartphone className="h-2.5 w-2.5" />
+                {deal.whatsapp_status === "connected" || deal.whatsapp_status === "open"
+                  ? "WhatsApp"
+                  : "WhatsApp off"}
               </Badge>
             )}
 
