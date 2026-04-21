@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { persistEvolutionMedia } from "../_media.ts";
+import { resolveAccountId } from "../_account.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -311,6 +312,7 @@ serve(async (req) => {
     }
 
     const userId = instanceData.user_id;
+    const accountId = await resolveAccountId(supabase, userId);
 
     // Handle different events
     if (event === "qrcode.updated" || event === "QRCODE_UPDATED") {
