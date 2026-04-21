@@ -42,6 +42,7 @@ import {
 import { useContacts, type Contact } from "@/hooks/useContacts";
 import { TagInput, tagClass } from "@/components/TagInput";
 import { useSearchParams } from "react-router-dom";
+import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function getInitials(name: string | null, phone: string) {
@@ -69,9 +70,10 @@ interface ContactFormData {
   email: string;
   notes: string;
   tags: string[];
+  assigned_to: string | null;
 }
 
-const emptyForm: ContactFormData = { phone: "", name: "", email: "", notes: "", tags: [] };
+const emptyForm: ContactFormData = { phone: "", name: "", email: "", notes: "", tags: [], assigned_to: null };
 
 // ── Contact Form ──────────────────────────────────────────────────────────────
 interface ContactFormProps {
@@ -109,6 +111,10 @@ function ContactForm({ form, setForm, onSave, onCancel, isPending, phoneEditable
         <Label htmlFor="cf-email">E-mail</Label>
         <Input id="cf-email" type="email" value={form.email} onChange={update("email")} placeholder="email@exemplo.com" />
       </div>
+      <AssigneeSelector
+        value={form.assigned_to}
+        onChange={(userId) => setForm({ ...form, assigned_to: userId })}
+      />
       <div className="space-y-2">
         <Label>Tags</Label>
         <TagInput tags={form.tags} onChange={(tags) => setForm({ ...form, tags })} />
@@ -196,6 +202,7 @@ export default function Contacts() {
       email: contact.email || "",
       notes: contact.notes || "",
       tags: contact.tags || [],
+      assigned_to: contact.assigned_to ?? null,
     });
   }
 
@@ -211,7 +218,7 @@ export default function Contacts() {
 
   function handleCreate() {
     createContact.mutate(
-      { phone: form.phone, name: form.name, email: form.email, notes: form.notes, tags: form.tags },
+      { phone: form.phone, name: form.name, email: form.email, notes: form.notes, tags: form.tags, assigned_to: form.assigned_to },
       { onSuccess: () => setIsNewDialog(false) }
     );
   }

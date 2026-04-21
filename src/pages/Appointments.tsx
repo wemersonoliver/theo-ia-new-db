@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppointments, Appointment } from "@/hooks/useAppointments";
+import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { 
@@ -32,7 +33,7 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
 
 export default function Appointments() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const { appointments, appointmentDates, isLoading, updateStatus, deleteAppointment } = useAppointments(selectedDate);
+  const { appointments, appointmentDates, isLoading, updateStatus, deleteAppointment, assignAppointment } = useAppointments(selectedDate);
 
   const formatTime = (time: string) => {
     return time.slice(0, 5);
@@ -40,6 +41,10 @@ export default function Appointments() {
 
   const handleStatusChange = (id: string, status: string) => {
     updateStatus.mutate({ id, status });
+  };
+
+  const handleAssign = (id: string, userId: string | null) => {
+    assignAppointment.mutate({ id, userId });
   };
 
   const appointmentDatesSet = new Set(appointmentDates);
@@ -121,6 +126,7 @@ export default function Appointments() {
                     appointment={appointment}
                     onStatusChange={handleStatusChange}
                     onDelete={(id) => deleteAppointment.mutate(id)}
+                    onAssign={handleAssign}
                     formatTime={formatTime}
                   />
                 ))}
@@ -137,10 +143,11 @@ interface AppointmentCardProps {
   appointment: Appointment;
   onStatusChange: (id: string, status: string) => void;
   onDelete: (id: string) => void;
+  onAssign: (id: string, userId: string | null) => void;
   formatTime: (time: string) => string;
 }
 
-function AppointmentCard({ appointment, onStatusChange, onDelete, formatTime }: AppointmentCardProps) {
+function AppointmentCard({ appointment, onStatusChange, onDelete, onAssign, formatTime }: AppointmentCardProps) {
   const status = statusConfig[appointment.status] || statusConfig.scheduled;
   const tags: string[] = appointment.tags || [];
 
@@ -207,6 +214,14 @@ function AppointmentCard({ appointment, onStatusChange, onDelete, formatTime }: 
         {appointment.description && (
           <p className="text-sm text-muted-foreground">{appointment.description}</p>
         )}
+
+        <div className="pt-1">
+          <AssigneeSelector
+            compact
+            value={appointment.assigned_to ?? null}
+            onChange={(userId) => onAssign(appointment.id, userId)}
+          />
+        </div>
       </div>
 
       <div className="flex gap-2">

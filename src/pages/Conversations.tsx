@@ -17,6 +17,7 @@ import { useCRMDeals } from "@/hooks/useCRMDeals";
 import { DealDialog } from "@/components/crm/DealDialog";
 import { TagInput, tagClass } from "@/components/TagInput";
 import { MediaBubble } from "@/components/MediaBubble";
+import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -203,7 +204,7 @@ function CreateDealButton({ phone, contactName, className }: { phone: string; co
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Conversations() {
   const navigate = useNavigate();
-  const { conversations, isLoading, sendMessage, toggleAI, finishConversation, deleteConversation } = useConversations();
+  const { conversations, isLoading, sendMessage, toggleAI, finishConversation, deleteConversation, assignConversation } = useConversations();
   const [searchParams] = useSearchParams();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
@@ -346,6 +347,14 @@ export default function Conversations() {
             <div className="grid grid-cols-2 gap-2 border-b bg-muted/30 px-3 py-2 shrink-0">
               <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} className="w-full justify-center" />
               <TagPopover phone={selectedPhone} className="w-full justify-center" />
+              <div className="col-span-2 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground shrink-0">Responsável:</span>
+                <AssigneeSelector
+                  compact
+                  value={selectedConversation?.assigned_to ?? null}
+                  onChange={(userId) => assignConversation.mutate({ phone: selectedPhone, userId })}
+                />
+              </div>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" size="sm" className="w-full gap-1.5 justify-center">
@@ -518,6 +527,11 @@ export default function Conversations() {
                   <div className="flex items-center gap-2 shrink-0">
                     <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} />
                     <TagPopover phone={selectedPhone} />
+                    <AssigneeSelector
+                      compact
+                      value={selectedConversation?.assigned_to ?? null}
+                      onChange={(userId) => assignConversation.mutate({ phone: selectedPhone, userId })}
+                    />
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-1.5">

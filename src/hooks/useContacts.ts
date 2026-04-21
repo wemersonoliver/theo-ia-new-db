@@ -13,6 +13,7 @@ export interface Contact {
   email: string | null;
   notes: string | null;
   tags: string[];
+  assigned_to: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -68,15 +69,16 @@ export function useContacts() {
 
   const updateContact = useMutation({
     mutationFn: async (contact: Partial<Contact> & { id: string }) => {
+      const updates: Record<string, any> = {};
+      if (contact.name !== undefined) updates.name = contact.name;
+      if (contact.email !== undefined) updates.email = contact.email;
+      if (contact.notes !== undefined) updates.notes = contact.notes;
+      if (contact.phone !== undefined) updates.phone = contact.phone;
+      if (contact.tags !== undefined) updates.tags = contact.tags;
+      if (contact.assigned_to !== undefined) updates.assigned_to = contact.assigned_to;
       const { error } = await supabase
         .from("contacts")
-        .update({
-          name: contact.name,
-          email: contact.email,
-          notes: contact.notes,
-          phone: contact.phone,
-          tags: contact.tags,
-        })
+        .update(updates)
         .eq("id", contact.id);
       if (error) throw error;
     },
@@ -103,12 +105,12 @@ export function useContacts() {
   });
 
   const createContact = useMutation({
-    mutationFn: async (data: { phone: string; name?: string; email?: string; notes?: string; tags?: string[] }) => {
+    mutationFn: async (data: { phone: string; name?: string; email?: string; notes?: string; tags?: string[]; assigned_to?: string | null }) => {
       const ctx = await resolveAccountContext(user!.id);
       const { error } = await supabase.from("contacts").insert({
         user_id: user!.id,
         account_id: ctx?.accountId,
-        assigned_to: user!.id,
+        assigned_to: data.assigned_to ?? user!.id,
         phone: data.phone,
         name: data.name || null,
         email: data.email || null,

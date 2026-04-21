@@ -20,6 +20,7 @@ export interface Appointment {
   reminder_sent_at: string | null;
   confirmed_by_client: boolean;
   tags: string[];
+  assigned_to: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -173,6 +174,23 @@ export function useAppointments(selectedDate?: Date) {
     },
   });
 
+  const assignAppointment = useMutation({
+    mutationFn: async ({ id, userId }: { id: string; userId: string | null }) => {
+      const { error } = await supabase
+        .from("appointments")
+        .update({ assigned_to: userId, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      queryClient.invalidateQueries({ queryKey: ["appointments-today"] });
+      queryClient.invalidateQueries({ queryKey: ["appointments-upcoming"] });
+      toast.success("Responsável atualizado!");
+    },
+    onError: (e: Error) => toast.error(`Erro: ${e.message}`),
+  });
+
   return {
     appointments,
     todayAppointments,
@@ -181,6 +199,7 @@ export function useAppointments(selectedDate?: Date) {
     isLoading,
     updateStatus,
     deleteAppointment,
+    assignAppointment,
   };
 }
 
