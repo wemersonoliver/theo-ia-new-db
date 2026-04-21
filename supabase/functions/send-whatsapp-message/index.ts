@@ -128,11 +128,6 @@ serve(async (req) => {
 
     if (system) {
       // Save to system conversations
-      const supabaseAdmin = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
-
       const { data: conversation } = await supabaseAdmin
         .from("system_whatsapp_conversations")
         .select("id, messages")
@@ -164,18 +159,22 @@ serve(async (req) => {
           });
       }
     } else {
-      // Save to user conversations
-      const { data: conversation } = await supabase
+      // Save to account conversation (visible to whole team)
+      let convQuery = supabaseAdmin
         .from("whatsapp_conversations")
-        .select("id, messages")
-        .eq("user_id", userId)
-        .eq("phone", normalizedPhone)
-        .maybeSingle();
+        .select("id, messages, user_id, account_id")
+        .eq("phone", normalizedPhone);
+      if (accountId) {
+        convQuery = convQuery.eq("account_id", accountId);
+      } else {
+        convQuery = convQuery.eq("user_id", userId);
+      }
+      const { data: conversation } = await convQuery.maybeSingle();
 
       if (conversation) {
         const existingMessages = (conversation.messages as any[]) || [];
         const updatedMessages = [...existingMessages, newMessage];
-        await supabase
+        await supabaseAdmin
           .from("whatsapp_conversations")
           .update({
             messages: updatedMessages,
@@ -186,10 +185,11 @@ serve(async (req) => {
           })
           .eq("id", conversation.id);
       } else {
-        await supabase
+        await supabaseAdmin
           .from("whatsapp_conversations")
           .insert({
             user_id: userId,
+            account_id: accountId,
             phone: normalizedPhone,
             messages: [newMessage],
             last_message_at: new Date().toISOString(),
@@ -198,11 +198,13 @@ serve(async (req) => {
           });
       }
 
-      // Mark AI session as handed off
-      await supabase
+      // Mark AI session as handed off (use service role so members can write)
+      const sessionOwnerId = (conversation as any)?.user_id || userId;
+      await supabaseAdmin
         .from("whatsapp_ai_sessions")
         .upsert({
-          user_id: userId,
+          user_id: sessionOwnerId,
+          account_id: accountId,
           phone: normalizedPhone,
           status: "handed_off",
           last_human_message_at: new Date().toISOString(),
