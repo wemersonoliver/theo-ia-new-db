@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { resolveAccountContext } from "@/lib/account-context";
+import { logDealActivity } from "@/hooks/useCRMActivities";
 
 export interface CRMDeal {
   id: string;
@@ -81,6 +82,7 @@ export function useCRMDeals(pipelineId: string | null, stageIds: string[]) {
     } else if (data) {
       const mapped = { ...data, contact_name: (data as any).contacts?.name || null, contact_phone: (data as any).contacts?.phone || null };
       setDeals((prev) => [...prev, mapped]);
+      logDealActivity(data.id, user.id, "created", `Negócio "${data.title}" criado`);
     }
     return data;
   };
@@ -102,5 +104,31 @@ export function useCRMDeals(pipelineId: string | null, stageIds: string[]) {
     setDeals((prev) => prev.filter((d) => d.id !== id));
   };
 
-  return { deals, loading, createDeal, updateDeal, moveDeal, deleteDeal, refetch: fetchDeals };
+  const markAsWon = async (id: string) => {
+    if (!user) return;
+    const wonAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("crm_deals")
+      .update({ won_at: wonAt, lost_at: null, lost_reason: null })
+      .eq("id", id);
+    if (!error) {
+      setDeals((prev) => prev.map((d) => (d.id === id ? { ...d, won_at: wonAt, lost_at: null, lost_reason: null } : d)));
+      logDealActivity(id, user.id, "won", "Negócio marcado como Ganho 🎉");
+    }
+  };
+
+  const markAsLost = async (id: string, reason: string) => {
+    if (!user) return;
+    const lostAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("crm_deals")
+      .update({ lost_at: lostAt, lost_reason: reason, won_at: null })
+      .eq("id", id);
+    if (!error) {
+      setDeals((prev) => prev.map((d) => (d.id === id ? { ...d, lost_at: lostAt, lost_reason: reason, won_at: null } : d)));
+      logDealActivity(id, user.id, "lost", `Negócio perdido. Motivo: ${reason}`);
+    }
+  };
+
+  return { deals, loading, createDeal, updateDeal, moveDeal, deleteDeal, markAsWon, markAsLost, refetch: fetchDeals };
 }
