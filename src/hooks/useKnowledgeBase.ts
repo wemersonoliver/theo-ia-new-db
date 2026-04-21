@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useAccountId } from "@/hooks/useAccount";
+import { resolveAccountContext } from "@/lib/account-context";
 import { toast } from "sonner";
 
 export interface KnowledgeDocument {
@@ -16,22 +18,23 @@ export interface KnowledgeDocument {
 
 export function useKnowledgeBase() {
   const { user } = useAuth();
+  const { accountId } = useAccountId();
   const queryClient = useQueryClient();
 
   const { data: documents, isLoading } = useQuery({
-    queryKey: ["knowledge-documents", user?.id],
+    queryKey: ["knowledge-documents", accountId],
     queryFn: async () => {
-      if (!user) return [];
+      if (!user || !accountId) return [];
       const { data, error } = await supabase
         .from("knowledge_base_documents")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .order("created_at", { ascending: false });
       
       if (error) throw error;
       return (data || []) as KnowledgeDocument[];
     },
-    enabled: !!user,
+    enabled: !!user && !!accountId,
     refetchInterval: (query) => {
       const docs = query.state.data as KnowledgeDocument[] | undefined;
       const hasProcessing = docs?.some((d) => d.status === "processing");
@@ -42,6 +45,7 @@ export function useKnowledgeBase() {
   const uploadDocument = useMutation({
     mutationFn: async (file: File) => {
       if (!user) throw new Error("Usuário não autenticado");
+      const ctx = await resolveAccountContext(user.id);
 
       // Sanitize file name: remove accents and special characters
       const sanitizedName = file.name
@@ -60,6 +64,7 @@ export function useKnowledgeBase() {
         .from("knowledge_base_documents")
         .insert({
           user_id: user.id,
+          account_id: ctx?.accountId,
           file_name: file.name,
           file_path: filePath,
           file_size: file.size,
@@ -74,7 +79,7 @@ export function useKnowledgeBase() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["knowledge-documents", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-documents", accountId] });
       toast.success("Documento enviado! Processando...");
     },
     onError: (error: Error) => {
@@ -99,7 +104,7 @@ export function useKnowledgeBase() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["knowledge-documents", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-documents", accountId] });
       toast.success("Documento removido!");
     },
     onError: (error: Error) => {

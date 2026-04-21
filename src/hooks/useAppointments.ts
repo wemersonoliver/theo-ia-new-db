@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useAccountId } from "@/hooks/useAccount";
 import { toast } from "sonner";
 
 export interface Appointment {
@@ -38,17 +39,18 @@ export interface AppointmentSlot {
 
 export function useAppointments(selectedDate?: Date) {
   const { user } = useAuth();
+  const { accountId } = useAccountId();
   const queryClient = useQueryClient();
 
   const { data: appointments = [], isLoading } = useQuery({
-    queryKey: ["appointments", user?.id, selectedDate?.toISOString()],
+    queryKey: ["appointments", accountId, selectedDate?.toISOString()],
     queryFn: async () => {
-      if (!user) return [];
+      if (!user || !accountId) return [];
 
       let query = supabase
         .from("appointments")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .order("appointment_date", { ascending: true })
         .order("appointment_time", { ascending: true });
 
@@ -66,20 +68,20 @@ export function useAppointments(selectedDate?: Date) {
 
       return data as Appointment[];
     },
-    enabled: !!user,
+    enabled: !!user && !!accountId,
   });
 
   const { data: todayAppointments = [] } = useQuery({
-    queryKey: ["appointments-today", user?.id],
+    queryKey: ["appointments-today", accountId],
     queryFn: async () => {
-      if (!user) return [];
+      if (!user || !accountId) return [];
 
       const today = new Date().toISOString().split("T")[0];
 
       const { data, error } = await supabase
         .from("appointments")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .eq("appointment_date", today)
         .neq("status", "cancelled")
         .order("appointment_time", { ascending: true });
@@ -91,18 +93,18 @@ export function useAppointments(selectedDate?: Date) {
 
       return data as Appointment[];
     },
-    enabled: !!user,
+    enabled: !!user && !!accountId,
   });
 
   const { data: upcomingAppointments = [] } = useQuery({
-    queryKey: ["appointments-upcoming", user?.id],
+    queryKey: ["appointments-upcoming", accountId],
     queryFn: async () => {
-      if (!user) return [];
+      if (!user || !accountId) return [];
       const today = new Date().toISOString().split("T")[0];
       const { data, error } = await supabase
         .from("appointments")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .gte("appointment_date", today)
         .neq("status", "cancelled")
         .order("appointment_date", { ascending: true })
@@ -111,22 +113,22 @@ export function useAppointments(selectedDate?: Date) {
       if (error) { console.error("Error fetching upcoming appointments:", error); return []; }
       return data as Appointment[];
     },
-    enabled: !!user,
+    enabled: !!user && !!accountId,
   });
 
   const { data: appointmentDates = [] } = useQuery({
-    queryKey: ["appointment-dates", user?.id],
+    queryKey: ["appointment-dates", accountId],
     queryFn: async () => {
-      if (!user) return [];
+      if (!user || !accountId) return [];
       const { data, error } = await supabase
         .from("appointments")
         .select("appointment_date")
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .neq("status", "cancelled");
       if (error) { console.error("Error fetching appointment dates:", error); return []; }
       return [...new Set(data.map(d => d.appointment_date))] as string[];
     },
-    enabled: !!user,
+    enabled: !!user && !!accountId,
   });
 
   const updateStatus = useMutation({
@@ -184,17 +186,18 @@ export function useAppointments(selectedDate?: Date) {
 
 export function useAppointmentSlots() {
   const { user } = useAuth();
+  const { accountId } = useAccountId();
   const queryClient = useQueryClient();
 
   const { data: slots = [], isLoading } = useQuery({
-    queryKey: ["appointment-slots", user?.id],
+    queryKey: ["appointment-slots", accountId],
     queryFn: async () => {
-      if (!user) return [];
+      if (!user || !accountId) return [];
 
       const { data, error } = await supabase
         .from("appointment_slots")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .order("day_of_week", { ascending: true })
         .order("start_time", { ascending: true });
 
@@ -205,7 +208,7 @@ export function useAppointmentSlots() {
 
       return data as AppointmentSlot[];
     },
-    enabled: !!user,
+    enabled: !!user && !!accountId,
   });
 
   const saveSlot = useMutation({

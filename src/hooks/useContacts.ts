@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { resolveAccountContext } from "@/lib/account-context";
+import { useAccountId } from "@/hooks/useAccount";
 
 export interface Contact {
   id: string;
@@ -18,16 +19,17 @@ export interface Contact {
 
 export function useContacts() {
   const { user } = useAuth();
+  const { accountId } = useAccountId();
   const queryClient = useQueryClient();
 
   const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["contacts", user?.id],
-    enabled: !!user,
+    queryKey: ["contacts", accountId],
+    enabled: !!user && !!accountId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("contacts")
         .select("*")
-        .eq("user_id", user!.id)
+        .eq("account_id", accountId!)
         .order("name", { ascending: true, nullsFirst: false });
       if (error) throw error;
       return data as Contact[];
@@ -40,14 +42,16 @@ export function useContacts() {
       const { data: convs, error: convErr } = await supabase
         .from("whatsapp_conversations")
         .select("phone, contact_name")
-        .eq("user_id", user!.id);
+        .eq("account_id", accountId!);
       if (convErr) throw convErr;
 
       if (!convs || convs.length === 0) return;
 
+      const ctx = await resolveAccountContext(user!.id);
       // Upsert ignorando duplicatas (a constraint unique já cuida)
       const rows = convs.map((c) => ({
         user_id: user!.id,
+        account_id: ctx?.accountId,
         phone: c.phone,
         name: c.contact_name || null,
       }));
@@ -58,7 +62,7 @@ export function useContacts() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["contacts", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["contacts", accountId] });
     },
   });
 
@@ -73,12 +77,11 @@ export function useContacts() {
           phone: contact.phone,
           tags: contact.tags,
         })
-        .eq("id", contact.id)
-        .eq("user_id", user!.id);
+        .eq("id", contact.id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["contacts", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["contacts", accountId] });
       toast.success("Contato atualizado!");
     },
     onError: () => toast.error("Erro ao atualizar contato"),
@@ -89,12 +92,11 @@ export function useContacts() {
       const { error } = await supabase
         .from("contacts")
         .delete()
-        .eq("id", id)
-        .eq("user_id", user!.id);
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["contacts", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["contacts", accountId] });
       toast.success("Contato removido!");
     },
     onError: () => toast.error("Erro ao remover contato"),
@@ -116,7 +118,7 @@ export function useContacts() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["contacts", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["contacts", accountId] });
       toast.success("Contato criado!");
     },
     onError: (e: Error) => toast.error(e.message.includes("unique") ? "Telefone já cadastrado" : "Erro ao criar contato"),
