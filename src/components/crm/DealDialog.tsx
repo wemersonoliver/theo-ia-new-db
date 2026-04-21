@@ -13,6 +13,7 @@ import { CRMDeal } from "@/hooks/useCRMDeals";
 import { CRMStage } from "@/hooks/useCRMStages";
 import { Product } from "@/hooks/useProducts";
 import { Plus, Trash2 } from "lucide-react";
+import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 
 interface DealProduct {
   product_id: string;
@@ -39,6 +40,7 @@ interface DealDialogProps {
     contact_id?: string | null;
     description?: string | null;
     expected_close_date?: string | null;
+    assigned_to?: string | null;
   }, dealProducts?: DealProduct[]) => void;
   onDelete?: (id: string) => void;
 }
@@ -52,6 +54,7 @@ export function DealDialog({ open, onOpenChange, stages, deal, defaultStageId, d
   const [description, setDescription] = useState("");
   const [closeDate, setCloseDate] = useState("");
   const [dealProducts, setDealProducts] = useState<DealProduct[]>([]);
+  const [assignedTo, setAssignedTo] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -63,6 +66,7 @@ export function DealDialog({ open, onOpenChange, stages, deal, defaultStageId, d
       setDescription(deal?.description || "");
       setCloseDate(deal?.expected_close_date || "");
       setDealProducts(initialDealProducts || []);
+      setAssignedTo((deal as any)?.assigned_to ?? null);
     }
   }, [open, deal, defaultStageId, defaultContactId, defaultTitle, stages, initialDealProducts]);
 
@@ -79,6 +83,7 @@ export function DealDialog({ open, onOpenChange, stages, deal, defaultStageId, d
       contact_id: contactId === "none" ? null : contactId,
       description: description || null,
       expected_close_date: closeDate || null,
+      assigned_to: assignedTo,
     }, dealProducts.length > 0 ? dealProducts : undefined);
     onOpenChange(false);
   };
@@ -161,6 +166,8 @@ export function DealDialog({ open, onOpenChange, stages, deal, defaultStageId, d
               </Select>
             </div>
           )}
+
+          <AssigneeSelector value={assignedTo} onChange={setAssignedTo} />
 
           {/* Products section */}
           {products && products.length > 0 && (
