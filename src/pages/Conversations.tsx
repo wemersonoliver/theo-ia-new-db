@@ -17,6 +17,7 @@ import { useCRMDeals } from "@/hooks/useCRMDeals";
 import { DealDialog } from "@/components/crm/DealDialog";
 import { TagInput, tagClass } from "@/components/TagInput";
 import { MediaBubble } from "@/components/MediaBubble";
+import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
