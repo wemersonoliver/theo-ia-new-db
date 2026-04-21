@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff,
-  Mic, ImageIcon, FileText, Tag, ExternalLink, Kanban, CheckCircle, Trash2,
+  Mic, ImageIcon, FileText, Tag, ExternalLink, Kanban, CheckCircle, Trash2, ArrowLeft,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -308,96 +308,105 @@ export default function Conversations() {
           )}
         </div>
 
-        {/* Mobile Chat Dialog */}
-        <Dialog open={!!selectedPhone} onOpenChange={(open) => !open && setSelectedPhone(null)}>
-          <DialogContent className="flex h-[85vh] max-h-[85vh] w-[95vw] max-w-[95vw] flex-col p-0 gap-0 rounded-xl">
-            <DialogHeader className="flex-row items-center gap-2 border-b px-4 py-3 space-y-0">
-              <div className="flex-1 min-w-0">
-                <button
-                  className="flex items-center gap-1 group text-left"
-                  onClick={() => selectedPhone && openContactPage(selectedPhone)}
-                >
-                  <DialogTitle className="text-base truncate group-hover:text-primary transition-colors">
-                    {selectedConversation?.contact_name || selectedPhone}
-                  </DialogTitle>
-                  <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                </button>
+        {/* Mobile Chat Fullscreen Overlay */}
+        {selectedPhone && (
+          <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in slide-in-from-right duration-200">
+            {/* Header */}
+            <div className="flex items-center gap-2 border-b bg-background px-3 py-2 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedPhone(null)}
+                className="shrink-0"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <button
+                className="flex-1 min-w-0 text-left"
+                onClick={() => openContactPage(selectedPhone)}
+              >
+                <p className="font-medium text-sm truncate">
+                  {selectedConversation?.contact_name || selectedPhone}
+                </p>
                 <p className="text-xs text-muted-foreground truncate">{selectedPhone}</p>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {selectedPhone && <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} />}
-                {selectedPhone && <TagPopover phone={selectedPhone} />}
-                {selectedPhone && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="sm" className="gap-1.5">
-                        <CheckCircle className="h-4 w-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Finalizar conversa?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          As mensagens serão limpas, mas um resumo será salvo. Quando o lead entrar em contato novamente, a IA o reconhecerá pelo nome.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => {
-                          finishConversation.mutate({ phone: selectedPhone! });
-                          setSelectedPhone(null);
-                        }}>Finalizar</AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+              </button>
+              <Button
+                variant={selectedConversation?.ai_active ? "outline" : "default"}
+                size="sm"
+                onClick={() => toggleAI.mutate({
+                  phone: selectedPhone,
+                  active: !selectedConversation?.ai_active,
+                })}
+                disabled={toggleAI.isPending}
+                className="shrink-0"
+              >
+                {toggleAI.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : selectedConversation?.ai_active ? (
+                  <PowerOff className="h-4 w-4" />
+                ) : (
+                  <Power className="h-4 w-4" />
                 )}
-                {selectedPhone && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          A conversa será removida permanentemente. O lead será tratado como novo contato no próximo atendimento.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => {
-                          deleteConversation.mutate({ phone: selectedPhone! });
-                          setSelectedPhone(null);
-                        }}>Excluir</AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-                <Button
-                  variant={selectedConversation?.ai_active ? "outline" : "default"}
-                  size="sm"
-                  onClick={() => selectedPhone && toggleAI.mutate({
-                    phone: selectedPhone,
-                    active: !selectedConversation?.ai_active,
-                  })}
-                  disabled={toggleAI.isPending}
-                >
-                  {toggleAI.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : selectedConversation?.ai_active ? (
-                    <PowerOff className="h-4 w-4" />
-                  ) : (
-                    <Power className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            </DialogHeader>
+              </Button>
+            </div>
 
+            {/* Action bar */}
+            <div className="flex items-center gap-1.5 border-b bg-muted/30 px-3 py-2 overflow-x-auto shrink-0">
+              <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} />
+              <TagPopover phone={selectedPhone} />
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
+                    <CheckCircle className="h-4 w-4" />
+                    <span>Finalizar</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Finalizar conversa?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      As mensagens serão limpas, mas um resumo será salvo.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => {
+                      finishConversation.mutate({ phone: selectedPhone! });
+                      setSelectedPhone(null);
+                    }}>Finalizar</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive shrink-0">
+                    <Trash2 className="h-4 w-4" />
+                    <span>Excluir</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      A conversa será removida permanentemente.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => {
+                      deleteConversation.mutate({ phone: selectedPhone! });
+                      setSelectedPhone(null);
+                    }}>Excluir</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+
+            {/* Messages */}
             <ChatMessages messages={messages} className="flex-1 min-h-0" />
 
-            <div className="border-t bg-background p-3">
+            {/* Input */}
+            <div className="border-t bg-background p-3 shrink-0">
               <div className="flex gap-2">
                 <Input
                   value={messageInput}
@@ -423,8 +432,8 @@ export default function Conversations() {
                 {selectedConversation?.ai_active ? "🤖 IA ativa" : "👤 Atendimento manual"}
               </p>
             </div>
-          </DialogContent>
-        </Dialog>
+          </div>
+        )}
       </DashboardLayout>
     );
   }
