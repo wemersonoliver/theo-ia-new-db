@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useAccountId } from "@/hooks/useAccount";
 import { toFunctionError } from "@/lib/supabase-function-error";
 import { useEffect } from "react";
 import { toast } from "sonner";
@@ -29,22 +30,23 @@ interface WhatsAppConnectionResponse {
 
 export function useWhatsAppInstance() {
   const { user } = useAuth();
+  const { accountId } = useAccountId();
   const queryClient = useQueryClient();
 
   const { data: instance, isLoading, refetch } = useQuery({
-    queryKey: ["whatsapp-instance", user?.id],
+    queryKey: ["whatsapp-instance", accountId],
     queryFn: async () => {
-      if (!user) return null;
+      if (!user || !accountId) return null;
       const { data, error } = await supabase
         .from("whatsapp_instances")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .maybeSingle();
       
       if (error) throw error;
       return data as WhatsAppInstance | null;
     },
-    enabled: !!user,
+    enabled: !!user && !!accountId,
     refetchInterval: (query) => {
       const status = (query.state.data as WhatsAppInstance | null | undefined)?.status;
       return status === "pending" || status === "qr_ready" ? 2500 : false;
@@ -53,19 +55,19 @@ export function useWhatsAppInstance() {
   });
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !accountId) return;
     const channel = supabase
       .channel("whatsapp-instance-changes")
       .on("postgres_changes", {
         event: "*", schema: "public", table: "whatsapp_instances",
-        filter: `user_id=eq.${user.id}`,
+        filter: `account_id=eq.${accountId}`,
       }, () => {
-        queryClient.invalidateQueries({ queryKey: ["whatsapp-instance", user.id] });
+        queryClient.invalidateQueries({ queryKey: ["whatsapp-instance", accountId] });
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [user, queryClient]);
+  }, [user, accountId, queryClient]);
 
   const createInstance = useMutation({
     mutationFn: async (phoneNumber?: string | void) => {

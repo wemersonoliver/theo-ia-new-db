@@ -32,10 +32,11 @@ export function useCRMPipelines() {
     if (!user) return;
     setLoading(true);
     const ctx = await resolveAccountContext(user.id);
+    if (!ctx) { setLoading(false); return; }
     const { data, error } = await supabase
       .from("crm_pipelines")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("account_id", ctx.accountId)
       .order("created_at", { ascending: true });
 
     if (error) {

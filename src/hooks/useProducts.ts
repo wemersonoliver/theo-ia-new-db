@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useAccountId } from "@/hooks/useAccount";
+import { resolveAccountContext } from "@/lib/account-context";
 import { toast } from "sonner";
 
 export interface Product {
@@ -18,15 +20,17 @@ export interface Product {
 
 export function useProducts() {
   const { user } = useAuth();
+  const { accountId } = useAccountId();
   const queryClient = useQueryClient();
 
   const productsQuery = useQuery({
-    queryKey: ["products", user?.id],
-    enabled: !!user,
+    queryKey: ["products", accountId],
+    enabled: !!user && !!accountId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
         .select("*")
+        .eq("account_id", accountId!)
         .order("name");
       if (error) throw error;
       return data as Product[];
@@ -35,7 +39,8 @@ export function useProducts() {
 
   const createProduct = useMutation({
     mutationFn: async (product: { name: string; description?: string; quantity?: number; price_cents?: number; sku?: string }) => {
-      const { error } = await supabase.from("products").insert({ ...product, user_id: user!.id });
+      const ctx = await resolveAccountContext(user!.id);
+      const { error } = await supabase.from("products").insert({ ...product, user_id: user!.id, account_id: ctx?.accountId });
       if (error) throw error;
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["products"] }); toast.success("Produto criado"); },
@@ -62,7 +67,8 @@ export function useProducts() {
 
   const bulkCreateProducts = useMutation({
     mutationFn: async (products: { name: string; description?: string; quantity?: number; price_cents?: number; sku?: string }[]) => {
-      const rows = products.map(p => ({ ...p, user_id: user!.id }));
+      const ctx = await resolveAccountContext(user!.id);
+      const rows = products.map(p => ({ ...p, user_id: user!.id, account_id: ctx?.accountId }));
       const { error } = await supabase.from("products").insert(rows);
       if (error) throw error;
     },
@@ -98,7 +104,8 @@ export function useDealProducts(dealId?: string) {
       // Delete existing
       await supabase.from("crm_deal_products").delete().eq("deal_id", dealId);
       if (items.length > 0) {
-        const rows = items.map(i => ({ ...i, deal_id: dealId, user_id: user!.id }));
+        const ctx = await resolveAccountContext(user!.id);
+        const rows = items.map(i => ({ ...i, deal_id: dealId, user_id: user!.id, account_id: ctx?.accountId }));
         const { error } = await supabase.from("crm_deal_products").insert(rows);
         if (error) throw error;
       }

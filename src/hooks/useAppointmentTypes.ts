@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useAccountId } from "@/hooks/useAccount";
+import { resolveAccountContext } from "@/lib/account-context";
 import { toast } from "sonner";
 
 export interface AppointmentType {
@@ -32,16 +34,17 @@ export type AppointmentTypeInput = {
 
 export function useAppointmentTypes() {
   const { user } = useAuth();
+  const { accountId } = useAccountId();
   const queryClient = useQueryClient();
 
   const { data: appointmentTypes = [], isLoading } = useQuery({
-    queryKey: ["appointment-types", user?.id],
+    queryKey: ["appointment-types", accountId],
     queryFn: async () => {
-      if (!user) return [];
+      if (!user || !accountId) return [];
       const { data, error } = await supabase
         .from("appointment_types")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .order("name", { ascending: true });
 
       if (error) {
@@ -50,12 +53,13 @@ export function useAppointmentTypes() {
       }
       return data as AppointmentType[];
     },
-    enabled: !!user,
+    enabled: !!user && !!accountId,
   });
 
   const saveType = useMutation({
     mutationFn: async (type: AppointmentTypeInput) => {
       if (!user) throw new Error("Usuário não autenticado");
+      const ctx = await resolveAccountContext(user.id);
 
       const payload = {
         name: type.name,
@@ -77,7 +81,7 @@ export function useAppointmentTypes() {
       } else {
         const { error } = await supabase
           .from("appointment_types")
-          .insert({ user_id: user.id, ...payload });
+          .insert({ user_id: user.id, account_id: ctx?.accountId, ...payload });
         if (error) throw error;
       }
     },

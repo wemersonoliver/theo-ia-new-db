@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useAccountId } from "@/hooks/useAccount";
+import { resolveAccountContext } from "@/lib/account-context";
 import { toast } from "sonner";
 
 export interface FollowupConfig {
@@ -44,48 +46,50 @@ export interface FollowupAnalytics {
 
 export function useFollowupConfig() {
   const { user } = useAuth();
+  const { accountId } = useAccountId();
   const queryClient = useQueryClient();
 
   const { data: config, isLoading: configLoading } = useQuery({
-    queryKey: ["followup-config", user?.id],
+    queryKey: ["followup-config", accountId],
     queryFn: async () => {
-      if (!user) return null;
+      if (!user || !accountId) return null;
       const { data, error } = await supabase
         .from("followup_config")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .maybeSingle();
       if (error) throw error;
       return data as FollowupConfig | null;
     },
-    enabled: !!user,
+    enabled: !!user && !!accountId,
   });
 
   const saveConfig = useMutation({
     mutationFn: async (updates: Partial<FollowupConfig>) => {
       if (!user) throw new Error("Não autenticado");
+      const ctx = await resolveAccountContext(user.id);
 
       const { data: existing } = await supabase
         .from("followup_config")
         .select("id")
-        .eq("user_id", user.id)
+        .eq("account_id", ctx?.accountId)
         .maybeSingle();
 
       if (existing) {
         const { error } = await supabase
           .from("followup_config")
           .update(updates)
-          .eq("user_id", user.id);
+          .eq("id", existing.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from("followup_config")
-          .insert({ user_id: user.id, ...updates });
+          .insert({ user_id: user.id, account_id: ctx?.accountId, ...updates });
         if (error) throw error;
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["followup-config", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["followup-config", accountId] });
       toast.success("Configurações de Follow-Up salvas!");
     },
     onError: (error: Error) => {
@@ -95,14 +99,14 @@ export function useFollowupConfig() {
 
   // Analytics
   const { data: analytics, isLoading: analyticsLoading } = useQuery({
-    queryKey: ["followup-analytics", user?.id],
+    queryKey: ["followup-analytics", accountId],
     queryFn: async (): Promise<FollowupAnalytics> => {
-      if (!user) return { totalPending: 0, totalEngaged: 0, totalExhausted: 0, totalDeclined: 0, reactivationByDay: [], heatmap: { morning: 0, afternoon: 0 } };
+      if (!user || !accountId) return { totalPending: 0, totalEngaged: 0, totalExhausted: 0, totalDeclined: 0, reactivationByDay: [], heatmap: { morning: 0, afternoon: 0 } };
 
       const { data: trackingData, error } = await supabase
         .from("followup_tracking")
         .select("*")
-        .eq("user_id", user.id);
+        .eq("account_id", accountId);
 
       if (error) throw error;
 
@@ -139,24 +143,24 @@ export function useFollowupConfig() {
 
       return { totalPending, totalEngaged, totalExhausted, totalDeclined, reactivationByDay, heatmap: { morning, afternoon } };
     },
-    enabled: !!user,
+    enabled: !!user && !!accountId,
   });
 
   // Active trackings list
   const { data: trackings, isLoading: trackingsLoading } = useQuery({
-    queryKey: ["followup-trackings", user?.id],
+    queryKey: ["followup-trackings", accountId],
     queryFn: async () => {
-      if (!user) return [];
+      if (!user || !accountId) return [];
       const { data, error } = await supabase
         .from("followup_tracking")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
       return (data || []) as FollowupTracking[];
     },
-    enabled: !!user,
+    enabled: !!user && !!accountId,
   });
 
   return {

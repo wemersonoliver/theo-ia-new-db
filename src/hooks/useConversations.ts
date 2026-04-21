@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useAccountId } from "@/hooks/useAccount";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
@@ -31,16 +32,17 @@ export interface Conversation {
 
 export function useConversations() {
   const { user } = useAuth();
+  const { accountId } = useAccountId();
   const queryClient = useQueryClient();
 
   const { data: conversations, isLoading } = useQuery({
-    queryKey: ["conversations", user?.id],
+    queryKey: ["conversations", accountId],
     queryFn: async () => {
-      if (!user) return [];
+      if (!user || !accountId) return [];
       const { data, error } = await supabase
         .from("whatsapp_conversations")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .order("last_message_at", { ascending: false });
       
       if (error) throw error;
@@ -49,13 +51,13 @@ export function useConversations() {
         messages: (d.messages as unknown as Message[]) || [],
       })) as Conversation[];
     },
-    enabled: !!user,
+    enabled: !!user && !!accountId,
     refetchInterval: 5000,
   });
 
   // Subscribe to realtime updates
   useEffect(() => {
-    if (!user) return;
+    if (!user || !accountId) return;
 
     const channel = supabase
       .channel("conversations-changes")
@@ -65,10 +67,10 @@ export function useConversations() {
           event: "*",
           schema: "public",
           table: "whatsapp_conversations",
-          filter: `user_id=eq.${user.id}`,
+          filter: `account_id=eq.${accountId}`,
         },
         () => {
-          queryClient.invalidateQueries({ queryKey: ["conversations", user.id] });
+          queryClient.invalidateQueries({ queryKey: ["conversations", accountId] });
         }
       )
       .subscribe();
@@ -76,7 +78,7 @@ export function useConversations() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, queryClient]);
+  }, [user, accountId, queryClient]);
 
   const sendMessage = useMutation({
     mutationFn: async ({ phone, content }: { phone: string; content: string }) => {
@@ -96,18 +98,18 @@ export function useConversations() {
 
   const toggleAI = useMutation({
     mutationFn: async ({ phone, active }: { phone: string; active: boolean }) => {
-      if (!user) throw new Error("Usuário não autenticado");
+      if (!user || !accountId) throw new Error("Usuário não autenticado");
       
       const { error } = await supabase
         .from("whatsapp_conversations")
         .update({ ai_active: active, updated_at: new Date().toISOString() })
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .eq("phone", phone);
       
       if (error) throw error;
     },
     onSuccess: (_, { active }) => {
-      queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["conversations", accountId] });
       toast.success(active ? "IA reativada para esta conversa!" : "IA desativada para esta conversa.");
     },
     onError: (error: Error) => {
@@ -117,13 +119,13 @@ export function useConversations() {
 
   const finishConversation = useMutation({
     mutationFn: async ({ phone }: { phone: string }) => {
-      if (!user) throw new Error("Usuário não autenticado");
+      if (!user || !accountId) throw new Error("Usuário não autenticado");
 
       // Get current conversation to build summary
       const { data: conv } = await supabase
         .from("whatsapp_conversations")
         .select("messages, contact_name")
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .eq("phone", phone)
         .maybeSingle();
 
@@ -151,7 +153,7 @@ export function useConversations() {
           ai_active: true,
           updated_at: now,
         })
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .eq("phone", phone);
 
       if (convError) throw convError;
@@ -160,11 +162,11 @@ export function useConversations() {
       await supabase
         .from("whatsapp_ai_sessions")
         .delete()
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .eq("phone", phone);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["conversations", accountId] });
       queryClient.invalidateQueries({ queryKey: ["conversation"] });
       toast.success("Conversa finalizada! O lead será reconhecido no próximo contato.");
     },
@@ -175,12 +177,12 @@ export function useConversations() {
 
   const deleteConversation = useMutation({
     mutationFn: async ({ phone }: { phone: string }) => {
-      if (!user) throw new Error("Usuário não autenticado");
+      if (!user || !accountId) throw new Error("Usuário não autenticado");
 
       const { error: convError } = await supabase
         .from("whatsapp_conversations")
         .delete()
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .eq("phone", phone);
 
       if (convError) throw convError;
@@ -188,11 +190,11 @@ export function useConversations() {
       await supabase
         .from("whatsapp_ai_sessions")
         .delete()
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .eq("phone", phone);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["conversations", accountId] });
       queryClient.invalidateQueries({ queryKey: ["conversation"] });
       toast.success("Conversa excluída com sucesso.");
     },
@@ -213,16 +215,17 @@ export function useConversations() {
 
 export function useConversation(phone: string) {
   const { user } = useAuth();
+  const { accountId } = useAccountId();
   const queryClient = useQueryClient();
 
   const { data: conversation, isLoading } = useQuery({
-    queryKey: ["conversation", user?.id, phone],
+    queryKey: ["conversation", accountId, phone],
     queryFn: async () => {
-      if (!user || !phone) return null;
+      if (!user || !accountId || !phone) return null;
       const { data, error } = await supabase
         .from("whatsapp_conversations")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("account_id", accountId)
         .eq("phone", phone)
         .maybeSingle();
       
@@ -233,13 +236,13 @@ export function useConversation(phone: string) {
         messages: (data.messages as unknown as Message[]) || [],
       } as Conversation;
     },
-    enabled: !!user && !!phone,
+    enabled: !!user && !!accountId && !!phone,
     refetchInterval: 3000,
   });
 
   // Subscribe to realtime updates for this specific conversation
   useEffect(() => {
-    if (!user || !phone) return;
+    if (!user || !accountId || !phone) return;
 
     const channel = supabase
       .channel(`conversation-${phone}`)
@@ -249,12 +252,12 @@ export function useConversation(phone: string) {
           event: "*",
           schema: "public",
           table: "whatsapp_conversations",
-          filter: `user_id=eq.${user.id}`,
+          filter: `account_id=eq.${accountId}`,
         },
         (payload) => {
           const record = payload.new as Conversation;
           if (record.phone === phone) {
-            queryClient.invalidateQueries({ queryKey: ["conversation", user.id, phone] });
+            queryClient.invalidateQueries({ queryKey: ["conversation", accountId, phone] });
           }
         }
       )
@@ -263,7 +266,7 @@ export function useConversation(phone: string) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, phone, queryClient]);
+  }, [user, accountId, phone, queryClient]);
 
   return {
     conversation,
