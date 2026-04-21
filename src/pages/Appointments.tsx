@@ -62,12 +62,6 @@ export default function Appointments() {
     <DashboardLayout
       title="Agendamentos"
       description="Visualize e gerencie seus agendamentos"
-      actions={
-        <Button onClick={() => setDialogOpen(true)} size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          Novo agendamento
-        </Button>
-      }
     >
       <AppointmentDialog
         open={dialogOpen}
@@ -78,6 +72,12 @@ export default function Appointments() {
           await createAppointment.mutateAsync(data);
         }}
       />
+      <div className="flex justify-end mb-4">
+        <Button onClick={() => setDialogOpen(true)} size="sm">
+          <Plus className="h-4 w-4 mr-2" />
+          Novo agendamento
+        </Button>
+      </div>
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Calendar */}
         <Card className="lg:col-span-1">
