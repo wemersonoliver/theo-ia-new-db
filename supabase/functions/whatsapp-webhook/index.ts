@@ -693,6 +693,7 @@ serve(async (req) => {
             .from("whatsapp_conversations")
             .insert({
               user_id: userId,
+              account_id: accountId,
               phone,
               contact_name: contactName,
               messages: [newMessage],
@@ -703,7 +704,7 @@ serve(async (req) => {
 
           // Create CRM deal in "Atendimento IA" stage for new conversations
           try {
-            await createCRMDealForNewConversation(supabase, userId, phone, contactName);
+            await createCRMDealForNewConversation(supabase, userId, accountId, phone, contactName);
           } catch (e) {
             console.error("Error creating CRM deal:", e);
           }
@@ -751,6 +752,7 @@ async function triggerAIResponse(supabase: any, userId: string, phone: string, m
         .from("whatsapp_pending_responses")
         .upsert({
           user_id: userId,
+          account_id: accountId,
           phone,
           scheduled_at: scheduledAt,
           processed: false,
