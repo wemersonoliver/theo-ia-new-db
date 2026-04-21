@@ -39,13 +39,17 @@ export interface AppointmentSlot {
   updated_at?: string;
 }
 
-export function useAppointments(selectedDate?: Date) {
+export function useAppointments(selectedDate?: Date, range?: { start: Date; end: Date }) {
   const { user } = useAuth();
   const { accountId } = useAccountId();
   const queryClient = useQueryClient();
 
   const { data: appointments = [], isLoading } = useQuery({
-    queryKey: ["appointments", accountId, selectedDate?.toISOString()],
+    queryKey: [
+      "appointments",
+      accountId,
+      range ? `${range.start.toISOString()}_${range.end.toISOString()}` : selectedDate?.toISOString(),
+    ],
     queryFn: async () => {
       if (!user || !accountId) return [];
 
@@ -56,7 +60,11 @@ export function useAppointments(selectedDate?: Date) {
         .order("appointment_date", { ascending: true })
         .order("appointment_time", { ascending: true });
 
-      if (selectedDate) {
+      if (range) {
+        const startStr = range.start.toISOString().split("T")[0];
+        const endStr = range.end.toISOString().split("T")[0];
+        query = query.gte("appointment_date", startStr).lte("appointment_date", endStr);
+      } else if (selectedDate) {
         const dateStr = selectedDate.toISOString().split("T")[0];
         query = query.eq("appointment_date", dateStr);
       }
