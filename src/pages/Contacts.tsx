@@ -42,6 +42,7 @@ import {
 import { useContacts, type Contact } from "@/hooks/useContacts";
 import { TagInput, tagClass } from "@/components/TagInput";
 import { useSearchParams } from "react-router-dom";
+import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function getInitials(name: string | null, phone: string) {
@@ -69,9 +70,10 @@ interface ContactFormData {
   email: string;
   notes: string;
   tags: string[];
+  assigned_to: string | null;
 }
 
-const emptyForm: ContactFormData = { phone: "", name: "", email: "", notes: "", tags: [] };
+const emptyForm: ContactFormData = { phone: "", name: "", email: "", notes: "", tags: [], assigned_to: null };
 
 // ── Contact Form ──────────────────────────────────────────────────────────────
 interface ContactFormProps {
