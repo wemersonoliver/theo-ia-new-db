@@ -35,13 +35,16 @@ function ChatMessages({ messages, className }: { messages: Message[]; className?
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    // Aguarda o próximo frame para garantir que o DOM foi renderizado
+    requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    });
   }, [messages]);
 
   return (
-    <ScrollArea className={cn("flex-1", className)} ref={scrollRef}>
+    <div ref={scrollRef} className={cn("flex-1 overflow-y-auto", className)}>
       <div className="space-y-3 p-3">
         {messages.filter(msg => msg.type !== "context_summary").map((msg, index) => (
           <div
@@ -91,7 +94,7 @@ function ChatMessages({ messages, className }: { messages: Message[]; className?
           </div>
         ))}
       </div>
-    </ScrollArea>
+    </div>
   );
 }
 

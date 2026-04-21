@@ -31,6 +31,8 @@ const statusLabels: Record<string, { label: string; variant: "default" | "second
 function TicketChat({ ticketId }: { ticketId: string }) {
   const { messages, isLoading, sendMessage } = useTicketMessages(ticketId);
   const [reply, setReply] = useState("");
+  const scrollRef = useState<HTMLDivElement | null>(null);
+  const containerRef = (el: HTMLDivElement | null) => { if (el) el.scrollTop = el.scrollHeight; };
 
   const handleSend = async () => {
     if (!reply.trim()) return;
@@ -40,7 +42,7 @@ function TicketChat({ ticketId }: { ticketId: string }) {
 
   return (
     <div className="flex flex-col h-[50vh]">
-      <ScrollArea className="flex-1 min-h-0">
+      <div ref={containerRef} key={messages.length} className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-4 space-y-3">
           {messages.map((msg) => (
             <div key={msg.id} className={cn("flex", msg.sender_type === "user" ? "justify-end" : "justify-start")}>
@@ -60,7 +62,7 @@ function TicketChat({ ticketId }: { ticketId: string }) {
             <p className="text-center text-muted-foreground text-sm py-8">Nenhuma mensagem. Envie sua primeira mensagem!</p>
           )}
         </div>
-      </ScrollArea>
+      </div>
       <div className="border-t p-3 flex gap-2">
         <Input
           value={reply}
