@@ -1,87 +1,92 @@
 
 
-## Sistema multi-usuários com equipes e permissões
+## Calendário visual estilo Google Calendar
 
-Hoje cada cliente do Theo IA é uma "ilha" — só uma pessoa por conta. A solução é introduzir o conceito de **conta (account)** com um **dono** e vários **membros** (vendedores e atendentes), onde cada membro só enxerga conversas, deals e contatos atribuídos a ele, e o dono define o que cada um pode acessar.
-
----
-
-### Conceitos novos
-
-- **Account**: a "empresa" do cliente. Quem se cadastra hoje vira automaticamente dono de uma account própria.
-- **Account members**: usuários convidados (vendedor/atendente) ligados à account do dono.
-- **Papéis fixos** dentro da account:
-  - **Owner** (dono): tudo, inclusive convidar/remover pessoas e gerenciar assinatura.
-  - **Manager** (gerente): tudo operacional, sem mexer em assinatura/equipe.
-  - **Seller** (vendedor): CRM, contatos e conversas atribuídas a ele.
-  - **Agent** (atendente): conversas e agendamentos atribuídos a ele.
-- **Override por usuário**: o owner pode marcar/desmarcar permissões avulsas em cima do papel base (ex: dar acesso à Base de Conhecimento para um vendedor específico).
+Vou transformar a página `/appointments` em uma agenda visual moderna, parecida com o exemplo enviado (DeepCRM/Google Calendar), mantendo a simplicidade como prioridade.
 
 ---
 
-### O que será feito
+### Layout novo
 
-**1. Banco de dados**
-- Nova tabela `accounts` (id, owner_user_id, name, created_at).
-- Nova tabela `account_members` (account_id, user_id, role, permissions jsonb, invited_at, status).
-- Nova coluna `account_id` em todas as tabelas de dados: `whatsapp_conversations`, `whatsapp_ai_config`, `whatsapp_instances`, `contacts`, `crm_deals`, `crm_pipelines`, `crm_stages`, `crm_activities`, `crm_deal_products`, `appointments`, `appointment_types`, `appointment_slots`, `knowledge_base_documents`, `notification_contacts`, `products`, `support_tickets`, `followup_config`, `followup_tracking`, `whatsapp_ai_sessions`, `whatsapp_pending_responses`, `subscriptions`, `platform_settings`.
-- Nova coluna `assigned_to` (user_id) em: `whatsapp_conversations`, `crm_deals`, `appointments`, `contacts` — para distribuição.
-- Migração: para cada usuário existente, cria uma account com ele como owner e copia o `user_id` de todas as tabelas para o `account_id` correspondente.
+```text
+┌────────────────────────────────────────────────────────────────────┐
+│ [Hoje] [‹] [›]   Abril de 2026          [Mês][Semana][Dia]  [+ Novo]│
+├────────────────────────────────────────────────────────────────────┤
+│ Filtros: [👤 Responsável ▾] [🏷️ Status ▾] [🔎 Buscar...]           │
+├────────────────────────────────────────────────────────────────────┤
+│  DOM    SEG    TER    QUA    QUI    SEX    SÁB                     │
+│  ┌────┬────┬────┬────┬────┬────┬────┐                              │
+│  │ 29 │ 30 │ 31 │  1 │  2 │  3 │  4 │                              │
+│  │    │    │    │ ●  │    │    │    │  ← bolinhas coloridas        │
+│  ├────┼────┼────┼────┼────┼────┼────┤    por responsável           │
+│  │  5 │  6 │  7 │  8 │  9 │ 10 │ 11 │                              │
+│  │    │ ●● │    │    │ ●  │    │    │                              │
+│  ├────┼────┼────┼────┼────┼────┼────┤                              │
+│  │ 12 │ 13 │ 14 │ 15 │ 16 │ 17 │ 18 │                              │
+│  │    │    │    │ 09:00 Teste│    │    │  ← compromisso inline     │
+│  ...                                                                │
+└────────────────────────────────────────────────────────────────────┘
+```
 
-**2. Funções e RLS**
-- `current_account_id()`: retorna a account do usuário logado (sua própria se for owner, senão a account onde é membro).
-- `has_account_permission(_perm text)`: combina papel + override.
-- `is_account_member(_account uuid)`: usado nas policies.
-- Todas as policies das tabelas listadas passam de `auth.uid() = user_id` para `is_account_member(account_id) AND has_account_permission('xxx')` + filtro por `assigned_to = auth.uid()` quando o papel é Seller/Agent.
+Clicando em um dia → abre **drawer lateral** com a lista detalhada daquele dia (cards atuais reaproveitados).
+Clicando em um compromisso no grid → abre o mesmo drawer já focado no agendamento.
+Clicando em dia vazio → abre o `AppointmentDialog` já com a data preenchida.
 
-**3. Edge functions**
-- `team-invite`: owner cria membro (cria conta auth + profile + linha em `account_members`); envia senha provisória por e-mail/WhatsApp.
-- `team-update`: alterar papel, permissões avulsas, ativar/desativar membro.
-- `team-remove`: remover membro (mantém histórico, apenas marca status `removed`).
-- Edge functions existentes (`whatsapp-webhook`, `whatsapp-ai-agent`, `manage-appointment`, etc.) ganham resolução de `account_id` a partir do `user_id` recebido — sem mudança de comportamento para o cliente final.
+---
 
-**4. Frontend — área do dono**
-- Nova página **`/team`** (Configurações → aba "Equipe"): lista de membros com papel, status, último acesso, botão "Convidar membro" e modal de edição (papel + checkboxes de permissões avulsas).
-- Item "Equipe" no Sidebar visível só para owner/manager.
+### Modos de visualização
 
-**5. Frontend — experiência do membro**
-- `Sidebar` filtra itens conforme permissões: Atendente vê só Conversas + Agendamentos; Vendedor vê CRM + Contatos + Conversas; Manager vê quase tudo; Owner vê tudo.
-- Listas (Conversas, CRM, Contatos, Agendamentos) recebem filtro automático via RLS — Seller/Agent só veem registros com `assigned_to = ele`.
-- Em cada conversa/deal/contato/appointment, o owner/manager vê um campo "Responsável" (select com membros) para reatribuir. Botão "Atribuir a mim" disponível para qualquer membro com permissão.
+1. **Mês** (padrão): grid 7×5/6, cada célula mostra até 3 compromissos resumidos (`HH:MM Título`) + "+N mais"
+2. **Semana**: 7 colunas com faixas horárias verticais (06:00–22:00), compromissos em blocos coloridos
+3. **Dia**: 1 coluna com timeline vertical detalhada
 
-**6. Limites por plano (regra de negócio)**
-- Plano Mensal: até 3 membros + owner.
-- Plano Anual: até 10 membros + owner.
-- Trial: até 2 membros para testar.
-- Limite validado na edge function `team-invite`.
+---
+
+### Filtros (barra superior, sempre visível)
+
+- **Responsável**: multi-select com avatares dos membros da equipe (`useTeamMembers`). Padrão para owner/manager: "Toda a equipe". Para vendedor/atendente: travado em "Meus agendamentos".
+- **Status**: chips clicáveis (Agendado · Confirmado · Concluído · Cancelado)
+- **Busca**: por nome do contato, telefone ou título
+
+---
+
+### Sugestões para deixar ainda melhor (simplicidade)
+
+1. **Cores por responsável** — cada membro ganha uma cor automática (paleta fixa de 8 cores). O ponto/bloco no calendário herda essa cor → bate o olho e sabe de quem é.
+2. **Indicador "Hoje"** com círculo destacado (igual Google Calendar).
+3. **Atalhos de teclado**: `T` = hoje, `←/→` = navegar, `M/S/D` = trocar visualização, `N` = novo agendamento.
+4. **Mini-legenda fixa no rodapé**: lista os responsáveis filtrados com sua cor.
+5. **Hover preview**: passar o mouse num compromisso mostra tooltip com nome do cliente, telefone e status — sem precisar clicar.
+6. **Arrastar para reagendar** (drag-and-drop): mover um compromisso para outro dia atualiza a data automaticamente. Confirmação rápida via toast com "Desfazer".
+7. **Botão flutuante "+"** no canto inferior direito no mobile, para criar agendamento com um toque.
+8. **Card de resumo** acima do calendário: "Hoje você tem 3 agendamentos · 1 pendente de confirmação" (já existe `todayAppointments` no hook).
+
+---
+
+### O que será criado/alterado
+
+**Novos arquivos:**
+- `src/components/appointments/AppointmentCalendar.tsx` — componente principal com grid mensal/semanal/diário
+- `src/components/appointments/AppointmentDayDrawer.tsx` — drawer lateral com lista do dia
+- `src/components/appointments/AppointmentFilters.tsx` — barra de filtros (responsável/status/busca)
+- `src/components/appointments/AppointmentEventChip.tsx` — bloco visual de compromisso na grade
+- `src/lib/assignee-colors.ts` — utilitário que mapeia `user_id` → cor fixa
+
+**Alterados:**
+- `src/pages/Appointments.tsx` — substituir layout atual (calendário pequeno + lista) pelo novo calendário visual em tela cheia
+- `src/hooks/useAppointments.ts` — adicionar busca por intervalo de datas (mês/semana visível) ao invés de só um dia, e mutation `rescheduleAppointment` para drag-and-drop
+
+**Mantido como está:**
+- `AppointmentDialog` (formulário de criação) — só será reusado
+- Hooks de criação/atribuição/status/exclusão — apenas reaproveitados
 
 ---
 
 ### Detalhes técnicos
 
-- **Fluxo de cadastro existente** continua igual: novo usuário registrado vira owner de uma account criada automaticamente via trigger `handle_new_user`.
-- **Tabela de permissões**: o JSON `permissions` em `account_members` guarda apenas overrides, ex: `{"knowledge_base": true, "billing": false}`. O resto vem do papel base via função `has_account_permission`.
-- **Permissões disponíveis** (chaves usadas pelas RLS e Sidebar):
-  - `conversations`, `crm`, `contacts`, `appointments`, `appointment_settings`, `knowledge_base`, `ai_config`, `whatsapp_instance`, `team_management`, `billing`, `settings`, `support`, `view_all_assigned` (vê tudo da conta, ignora filtro de `assigned_to`).
-- **Defaults por papel**:
-
-```text
-Owner    → todas = true
-Manager  → todas exceto billing/team_management = true ; view_all_assigned = true
-Seller   → conversations, crm, contacts, appointments = true ; view_all_assigned = false
-Agent    → conversations, appointments = true ; view_all_assigned = false
-```
-
-- **Subscription compartilhada**: a assinatura passa a ser por `account_id`. O `ProtectedRoute` vai checar a subscription da account do usuário (própria se owner, do owner se membro), não mais a sua própria.
-- **Trial**: o trial de 15 dias é da account (data de criação da account), não do membro convidado.
-- **Convite**: edge function cria o usuário no Supabase Auth com senha provisória aleatória + envia mensagem via system WhatsApp para o telefone do membro com instruções e link de troca de senha.
-- **Webhook do WhatsApp**: continua chegando pelo `user_id` do owner (instância pertence à account); o roteamento para "responsável" da conversa é definido por regra simples — primeira mensagem fica sem `assigned_to`, owner/manager pode atribuir manualmente, ou o atendente que responder primeiro vira o responsável (regra opcional configurável).
-- **Compatibilidade**: enquanto a migração roda, a coluna `user_id` antiga continua existindo nas tabelas para não quebrar código não migrado; é descontinuada depois que todo o código frontend passa a usar `account_id`.
-- **Sem quebra para clientes atuais**: cada conta vira owner único da sua própria account, comportamento idêntico ao de hoje até que ele convide alguém.
-
----
-
-### Resultado final
-
-O dono da conta entra em **Configurações → Equipe**, convida vendedores e atendentes informando nome, telefone e papel, e cada convidado recebe acesso ao painel com Sidebar reduzido às áreas permitidas. Conversas, deals e agendamentos são distribuídos por responsável, garantindo que vendedor não veja lead do colega e atendente não veja chat do outro. O owner pode reatribuir, ajustar permissões individuais e remover membros a qualquer momento.
+- **Biblioteca de calendário**: usar `date-fns` (já instalado) para construir a grade manualmente — sem nova dependência pesada. Mantém bundle leve e visual 100% Tailwind/shadcn.
+- **Drag-and-drop**: usar `@dnd-kit/core` se já estiver no projeto (o CRM Kanban usa); senão, implementar com HTML5 drag nativo para evitar nova dep.
+- **Performance**: a query do mês carrega só o intervalo visível (`.gte(start).lte(end)`), substituindo a busca atual por dia.
+- **Responsivo**: no mobile (<768px) o modo "Mês" colapsa para visualização "Lista por dia" (mais legível em telas pequenas) — visualizações Semana/Dia ficam acessíveis nos botões.
+- **Permissões**: vendedor/atendente recebe filtro forçado `assigned_to = user.id` no client (e RLS já garante no banco).
 
