@@ -527,6 +527,11 @@ export default function Conversations() {
                   <div className="flex items-center gap-2 shrink-0">
                     <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} />
                     <TagPopover phone={selectedPhone} />
+                    <AssigneeSelector
+                      compact
+                      value={selectedConversation?.assigned_to ?? null}
+                      onChange={(userId) => assignConversation.mutate({ phone: selectedPhone, userId })}
+                    />
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-1.5">
