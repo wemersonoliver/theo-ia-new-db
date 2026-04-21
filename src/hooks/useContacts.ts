@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
+import { resolveAccountContext } from "@/lib/account-context";
 
 export interface Contact {
   id: string;
@@ -101,8 +102,11 @@ export function useContacts() {
 
   const createContact = useMutation({
     mutationFn: async (data: { phone: string; name?: string; email?: string; notes?: string; tags?: string[] }) => {
+      const ctx = await resolveAccountContext(user!.id);
       const { error } = await supabase.from("contacts").insert({
         user_id: user!.id,
+        account_id: ctx?.accountId,
+        assigned_to: user!.id,
         phone: data.phone,
         name: data.name || null,
         email: data.email || null,

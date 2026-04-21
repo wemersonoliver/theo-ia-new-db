@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { resolveAccountContext } from "@/lib/account-context";
 
 export interface CRMPipeline {
   id: string;
@@ -30,6 +31,7 @@ export function useCRMPipelines() {
   const fetchPipelines = useCallback(async () => {
     if (!user) return;
     setLoading(true);
+    const ctx = await resolveAccountContext(user.id);
     const { data, error } = await supabase
       .from("crm_pipelines")
       .select("*")
@@ -45,7 +47,7 @@ export function useCRMPipelines() {
       // Create default pipeline with stages
       const { data: newPipeline, error: createError } = await supabase
         .from("crm_pipelines")
-        .insert({ user_id: user.id, name: "Vendas" })
+        .insert({ user_id: user.id, account_id: ctx?.accountId, name: "Vendas" })
         .select()
         .single();
 
@@ -54,6 +56,7 @@ export function useCRMPipelines() {
           ...s,
           pipeline_id: newPipeline.id,
           user_id: user.id,
+          account_id: ctx?.accountId,
         }));
         await supabase.from("crm_stages").insert(stages);
         setPipelines([newPipeline]);
@@ -69,9 +72,10 @@ export function useCRMPipelines() {
 
   const createPipeline = async (name: string) => {
     if (!user) return;
+    const ctx = await resolveAccountContext(user.id);
     const { data, error } = await supabase
       .from("crm_pipelines")
-      .insert({ user_id: user.id, name })
+      .insert({ user_id: user.id, account_id: ctx?.accountId, name })
       .select()
       .single();
     if (error) {
@@ -81,6 +85,7 @@ export function useCRMPipelines() {
         ...s,
         pipeline_id: data.id,
         user_id: user.id,
+        account_id: ctx?.accountId,
       }));
       await supabase.from("crm_stages").insert(stages);
       setPipelines((prev) => [...prev, data]);

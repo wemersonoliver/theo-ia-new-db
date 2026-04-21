@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { resolveAccountContext } from "@/lib/account-context";
 
 export interface CRMStage {
   id: string;
@@ -38,9 +39,10 @@ export function useCRMStages(pipelineId: string | null) {
   const addStage = async (name: string, color: string = "#6366f1") => {
     if (!user || !pipelineId) return;
     const position = stages.length;
+    const ctx = await resolveAccountContext(user.id);
     const { data } = await supabase
       .from("crm_stages")
-      .insert({ pipeline_id: pipelineId, user_id: user.id, name, position, color })
+      .insert({ pipeline_id: pipelineId, user_id: user.id, account_id: ctx?.accountId, name, position, color })
       .select()
       .single();
     if (data) setStages((prev) => [...prev, data]);
