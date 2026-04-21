@@ -1030,11 +1030,25 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
       displayName = conv?.contact_name || "Desconhecido";
     }
 
-    const { data: notifContacts } = await supabase
-      .from("notification_contacts")
-      .select("phone, name")
-      .eq("user_id", userId)
-      .eq("notify_handoffs", true);
+    // Try by account_id first (works for accounts with team), fall back to user_id
+    const accId = await resolveAccountId(supabase, userId);
+    let notifContacts: any[] | null = null;
+    if (accId) {
+      const { data } = await supabase
+        .from("notification_contacts")
+        .select("phone, name")
+        .eq("account_id", accId)
+        .eq("notify_handoffs", true);
+      notifContacts = data || null;
+    }
+    if (!notifContacts || notifContacts.length === 0) {
+      const { data } = await supabase
+        .from("notification_contacts")
+        .select("phone, name")
+        .eq("user_id", userId)
+        .eq("notify_handoffs", true);
+      notifContacts = data || null;
+    }
 
     if (!notifContacts || notifContacts.length === 0) return;
 
