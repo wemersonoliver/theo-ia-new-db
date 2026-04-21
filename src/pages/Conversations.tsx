@@ -204,7 +204,7 @@ function CreateDealButton({ phone, contactName, className }: { phone: string; co
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Conversations() {
   const navigate = useNavigate();
-  const { conversations, isLoading, sendMessage, toggleAI, finishConversation, deleteConversation } = useConversations();
+  const { conversations, isLoading, sendMessage, toggleAI, finishConversation, deleteConversation, assignConversation } = useConversations();
   const [searchParams] = useSearchParams();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");

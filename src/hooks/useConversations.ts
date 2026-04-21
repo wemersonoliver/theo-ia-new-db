@@ -26,6 +26,7 @@ export interface Conversation {
   last_message_at: string | null;
   total_messages: number;
   ai_active: boolean;
+  assigned_to: string | null;
   created_at: string;
   updated_at: string;
 }
