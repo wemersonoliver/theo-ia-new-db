@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSystemConversations, useSystemConversation } from "@/hooks/useSystemConversations";
 import type { Message } from "@/hooks/useConversations";
 import {
@@ -15,15 +16,18 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 function ChatMessages({ messages }: { messages: Message[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    requestAnimationFrame(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    });
   }, [messages]);
 
   return (
-    <ScrollArea className="flex-1" ref={scrollRef}>
+    <div ref={scrollRef} className="flex-1 overflow-y-auto">
       <div className="space-y-3 p-3">
         {messages.map((msg, i) => (
           <div key={msg.id || i} className={cn("flex", msg.from_me ? "justify-end" : "justify-start")}>
@@ -47,7 +51,7 @@ function ChatMessages({ messages }: { messages: Message[] }) {
           </div>
         ))}
       </div>
-    </ScrollArea>
+    </div>
   );
 }
 
