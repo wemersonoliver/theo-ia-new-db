@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff,
-  Mic, ImageIcon, FileText, Tag, ExternalLink, Kanban, CheckCircle, Trash2, ArrowLeft,
+  Tag, ExternalLink, Kanban, CheckCircle, Trash2, ArrowLeft,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";

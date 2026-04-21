@@ -12,7 +12,7 @@ import { useSystemConversations, useSystemConversation } from "@/hooks/useSystem
 import type { Message } from "@/hooks/useConversations";
 import { MediaBubble } from "@/components/MediaBubble";
 import {
-  MessageSquare, Send, Loader2, User, Bot, Power, PowerOff, Mic, ImageIcon, FileText, Trash2, ArrowLeft,
+  MessageSquare, Send, Loader2, User, Bot, Power, PowerOff, Trash2, ArrowLeft,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
