@@ -515,6 +515,19 @@ serve(async (req) => {
             console.error("OCR error:", error);
             content = caption ? `[${mediaType === "document" ? "Documento" : "Imagem"}] ${caption}` : `[${mediaType === "document" ? "Documento" : "Imagem"} não processado]`;
           }
+        } else if (isVideoMessage) {
+          messageType = "video";
+          const caption = msg.message?.videoMessage?.caption || "";
+          try {
+            persistedMedia = await persistEvolutionMedia({
+              supabase, evolutionUrl, evolutionKey, instanceName,
+              messageKey, scope: userId, phone,
+              messageId: msg.key?.id || crypto.randomUUID(),
+              fallbackExt: "mp4",
+              knownMime: msg.message?.videoMessage?.mimetype || null,
+            });
+          } catch (e) { console.error("Persist video error:", e); }
+          content = caption ? `[Vídeo] ${caption}` : "[Vídeo]";
         } else {
           content = msg.message?.conversation || 
                    msg.message?.extendedTextMessage?.text ||
