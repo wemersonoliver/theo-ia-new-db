@@ -36,6 +36,7 @@ serve(async (req) => {
       try {
         const inactivityMs = (config.inactivity_hours || 24) * 60 * 60 * 1000;
         const cutoffTime = new Date(Date.now() - inactivityMs).toISOString();
+        const accountId = config.account_id || (await resolveAccountId(supabase, config.user_id));
 
         // Find conversations where last message is older than inactivity_hours
         const { data: conversations } = await supabase
@@ -91,6 +92,7 @@ serve(async (req) => {
             .from("followup_tracking")
             .insert({
               user_id: config.user_id,
+              account_id: accountId,
               phone: conv.phone,
               current_step: 1,
               status: "pending",
