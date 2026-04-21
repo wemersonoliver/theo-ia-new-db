@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useAccountId } from "@/hooks/useAccount";
+import { resolveAccountContext } from "@/lib/account-context";
 import { toast } from "sonner";
 
 export interface Appointment {
@@ -191,6 +192,54 @@ export function useAppointments(selectedDate?: Date) {
     onError: (e: Error) => toast.error(`Erro: ${e.message}`),
   });
 
+  const createAppointment = useMutation({
+    mutationFn: async (input: {
+      title: string;
+      phone: string;
+      contact_name?: string | null;
+      description?: string | null;
+      appointment_date: string; // YYYY-MM-DD
+      appointment_time: string; // HH:MM
+      duration_minutes?: number;
+      appointment_type_id?: string | null;
+      assigned_to?: string | null;
+      notes?: string | null;
+    }) => {
+      if (!user) throw new Error("Usuário não autenticado");
+      const ctx = await resolveAccountContext(user.id);
+      if (!ctx?.accountId) throw new Error("Conta não encontrada");
+
+      // Normaliza telefone: garante DDI 55 para BR
+      let phone = (input.phone || "").replace(/\D/g, "");
+      if (phone.length === 10 || phone.length === 11) phone = "55" + phone;
+
+      const { error } = await supabase.from("appointments").insert({
+        user_id: user.id,
+        account_id: ctx.accountId,
+        assigned_to: input.assigned_to ?? user.id,
+        title: input.title,
+        phone,
+        contact_name: input.contact_name ?? null,
+        description: input.description ?? null,
+        notes: input.notes ?? null,
+        appointment_date: input.appointment_date,
+        appointment_time: input.appointment_time,
+        duration_minutes: input.duration_minutes ?? 30,
+        appointment_type_id: input.appointment_type_id ?? null,
+        status: "scheduled",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      queryClient.invalidateQueries({ queryKey: ["appointments-today"] });
+      queryClient.invalidateQueries({ queryKey: ["appointments-upcoming"] });
+      queryClient.invalidateQueries({ queryKey: ["appointment-dates"] });
+      toast.success("Agendamento criado!");
+    },
+    onError: (e: Error) => toast.error(`Erro ao criar agendamento: ${e.message}`),
+  });
+
   return {
     appointments,
     todayAppointments,
@@ -200,6 +249,7 @@ export function useAppointments(selectedDate?: Date) {
     updateStatus,
     deleteAppointment,
     assignAppointment,
+    createAppointment,
   };
 }
 
