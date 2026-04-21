@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,8 +31,13 @@ const statusLabels: Record<string, { label: string; variant: "default" | "second
 function TicketChat({ ticketId }: { ticketId: string }) {
   const { messages, isLoading, sendMessage } = useTicketMessages(ticketId);
   const [reply, setReply] = useState("");
-  const scrollRef = useState<HTMLDivElement | null>(null);
-  const containerRef = (el: HTMLDivElement | null) => { if (el) el.scrollTop = el.scrollHeight; };
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    });
+  }, [messages]);
 
   const handleSend = async () => {
     if (!reply.trim()) return;
@@ -42,7 +47,7 @@ function TicketChat({ ticketId }: { ticketId: string }) {
 
   return (
     <div className="flex flex-col h-[50vh]">
-      <div ref={containerRef} key={messages.length} className="flex-1 min-h-0 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-4 space-y-3">
           {messages.map((msg) => (
             <div key={msg.id} className={cn("flex", msg.sender_type === "user" ? "justify-end" : "justify-start")}>
