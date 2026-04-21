@@ -580,7 +580,7 @@ serve(async (req) => {
 
             // Move CRM deal to "Atendimento humano" when human responds
             try {
-              await moveCRMDealToHumanStage(supabase, userId, phone);
+              await moveCRMDealToHumanStage(supabase, userId, accountId, phone);
             } catch (e) {
               console.error("Error moving CRM deal to human stage:", e);
             }
