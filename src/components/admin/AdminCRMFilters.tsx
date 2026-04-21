@@ -172,7 +172,7 @@ export function AdminCRMFilters({ filters, onChange }: Props) {
 function FilterGroup({ label, options, value, onSelect }: { label: string; options: readonly { value: string; label: string }[]; value: string; onSelect: (v: string) => void }) {
   return (
     <div>
-      <Label className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</Label>
+      <Label className="text-xs font-semibold uppercase tracking-wider text-amber-400/90">{label}</Label>
       <div className="flex gap-1.5 mt-2">
         {options.map((o) => (
           <button
@@ -181,8 +181,8 @@ function FilterGroup({ label, options, value, onSelect }: { label: string; optio
             className={cn(
               "rounded-full px-3 py-1 text-xs font-medium border transition-all flex-1",
               value === o.value
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                : "bg-slate-800/50 text-slate-400 border-transparent hover:bg-slate-800"
+                ? "bg-amber-500 text-slate-950 border-amber-500 shadow-sm"
+                : "bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 hover:text-white"
             )}
           >
             {o.label}
@@ -201,15 +201,15 @@ function DateField({ value, onChange, placeholder }: { value: Date | null; onCha
           variant="outline"
           size="sm"
           className={cn(
-            "h-9 justify-start text-left font-normal bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700",
-            !value && "text-slate-500"
+            "h-9 justify-start text-left font-normal bg-slate-800 border-slate-600 text-white hover:bg-slate-700 hover:text-white",
+            !value && "text-slate-400"
           )}
         >
           <CalendarIcon className="mr-2 h-3.5 w-3.5" />
           {value ? format(value, "dd/MM/yy", { locale: ptBR }) : placeholder}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0 bg-slate-900 border-slate-700" align="start">
+      <PopoverContent className="w-auto p-0 bg-slate-900 border-slate-700 text-slate-100" align="start">
         <Calendar
           mode="single"
           selected={value || undefined}
@@ -220,7 +220,7 @@ function DateField({ value, onChange, placeholder }: { value: Date | null; onCha
         />
         {value && (
           <div className="p-2 border-t border-slate-700">
-            <Button variant="ghost" size="sm" className="w-full text-xs text-slate-400" onClick={() => onChange(null)}>
+            <Button variant="ghost" size="sm" className="w-full text-xs text-slate-300 hover:text-white hover:bg-slate-800" onClick={() => onChange(null)}>
               Limpar
             </Button>
           </div>
