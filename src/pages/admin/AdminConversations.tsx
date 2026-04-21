@@ -10,8 +10,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useSystemConversations, useSystemConversation } from "@/hooks/useSystemConversations";
 import type { Message } from "@/hooks/useConversations";
+import { MediaBubble } from "@/components/MediaBubble";
 import {
-  MessageSquare, Send, Loader2, User, Bot, Power, PowerOff, Mic, ImageIcon, FileText, Trash2, ArrowLeft,
+  MessageSquare, Send, Loader2, User, Bot, Power, PowerOff, Trash2, ArrowLeft,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -40,10 +41,12 @@ function ChatMessages({ messages }: { messages: Message[] }) {
                   {msg.sent_by === "ai" || msg.sent_by === "ai_first_contact" ? <><Bot className="h-3 w-3" /> IA</> : <><User className="h-3 w-3" /> Cliente</>}
                 </div>
               )}
-              {msg.type === "audio" && <span className="text-xs text-slate-500 flex items-center gap-1 mb-1"><Mic className="h-3 w-3" /> Áudio</span>}
-              {msg.type === "image" && <span className="text-xs text-slate-500 flex items-center gap-1 mb-1"><ImageIcon className="h-3 w-3" /> Imagem</span>}
-              {msg.type === "document" && <span className="text-xs text-slate-500 flex items-center gap-1 mb-1"><FileText className="h-3 w-3" /> Doc</span>}
-              <p className="whitespace-pre-wrap break-words text-sm">{msg.content}</p>
+              {(msg.type === "audio" || msg.type === "image" || msg.type === "video" || msg.type === "document") && (
+                <MediaBubble msg={msg} variant="admin" />
+              )}
+              {msg.content && (
+                <p className="whitespace-pre-wrap break-words text-sm">{msg.content}</p>
+              )}
               <p className="mt-1 text-right text-xs text-slate-600">
                 {new Date(msg.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
               </p>

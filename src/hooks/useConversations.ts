@@ -11,6 +11,9 @@ export interface Message {
   content: string;
   type: "text" | "image" | "audio" | "video" | "document" | "context_summary";
   sent_by: "human" | "ai" | "ai_first_contact";
+  media_url?: string;
+  media_mime?: string;
+  media_filename?: string;
 }
 
 export interface Conversation {

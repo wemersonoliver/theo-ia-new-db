@@ -16,13 +16,14 @@ import { useCRMStages } from "@/hooks/useCRMStages";
 import { useCRMDeals } from "@/hooks/useCRMDeals";
 import { DealDialog } from "@/components/crm/DealDialog";
 import { TagInput, tagClass } from "@/components/TagInput";
+import { MediaBubble } from "@/components/MediaBubble";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff,
-  Mic, ImageIcon, FileText, Tag, ExternalLink, Kanban, CheckCircle, Trash2, ArrowLeft,
+  Tag, ExternalLink, Kanban, CheckCircle, Trash2, ArrowLeft,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -69,22 +70,12 @@ function ChatMessages({ messages, className }: { messages: Message[]; className?
                   )}
                 </div>
               )}
-              {msg.type === "audio" && (
-                <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-                  <Mic className="h-3 w-3" /> Áudio transcrito
-                </span>
+              {(msg.type === "audio" || msg.type === "image" || msg.type === "video" || msg.type === "document") && (
+                <MediaBubble msg={msg} />
               )}
-              {msg.type === "image" && (
-                <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-                  <ImageIcon className="h-3 w-3" /> Imagem analisada
-                </span>
+              {msg.content && (
+                <p className="whitespace-pre-wrap break-words text-sm">{msg.content}</p>
               )}
-              {msg.type === "document" && (
-                <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-                  <FileText className="h-3 w-3" /> Documento analisado
-                </span>
-              )}
-              <p className="whitespace-pre-wrap break-words text-sm">{msg.content}</p>
               <p className={cn(
                 "mt-1 text-right text-xs",
                 msg.from_me ? "text-primary-foreground/70" : "text-muted-foreground"
