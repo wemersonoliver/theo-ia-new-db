@@ -547,7 +547,7 @@ serve(async (req) => {
 
         // Handle outgoing messages (sent by human via WhatsApp)
         if (isFromMe) {
-          const outgoingMessage = {
+          const outgoingMessage: any = {
             id: msg.key?.id || crypto.randomUUID(),
             timestamp: new Date().toISOString(),
             from_me: true,
@@ -555,6 +555,11 @@ serve(async (req) => {
             type: messageType,
             sent_by: "human",
           };
+          if (persistedMedia) {
+            outgoingMessage.media_url = persistedMedia.url;
+            outgoingMessage.media_mime = persistedMedia.mime;
+            outgoingMessage.media_filename = persistedMedia.filename;
+          }
 
           if (conversation) {
             const existingMessages = conversation.messages || [];
@@ -626,6 +631,11 @@ serve(async (req) => {
         if (isMediaMessage && messageKey) {
           newMessage.media_key = messageKey;
           newMessage.media_type = isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker";
+        }
+        if (persistedMedia) {
+          newMessage.media_url = persistedMedia.url;
+          newMessage.media_mime = persistedMedia.mime;
+          newMessage.media_filename = persistedMedia.filename;
         }
 
         // Helper function to check if message contains trigger keywords
