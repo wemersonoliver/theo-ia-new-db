@@ -203,6 +203,24 @@ export function useConversations() {
     },
   });
 
+  const assignConversation = useMutation({
+    mutationFn: async ({ phone, userId }: { phone: string; userId: string | null }) => {
+      if (!user || !accountId) throw new Error("Usuário não autenticado");
+      const { error } = await supabase
+        .from("whatsapp_conversations")
+        .update({ assigned_to: userId, updated_at: new Date().toISOString() })
+        .eq("account_id", accountId)
+        .eq("phone", phone);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations", accountId] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      toast.success("Responsável atualizado!");
+    },
+    onError: (e: Error) => toast.error(`Erro: ${e.message}`),
+  });
+
   return {
     conversations: conversations || [],
     isLoading,
@@ -210,6 +228,7 @@ export function useConversations() {
     toggleAI,
     finishConversation,
     deleteConversation,
+    assignConversation,
   };
 }
 
