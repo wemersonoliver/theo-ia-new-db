@@ -462,7 +462,18 @@ serve(async (req) => {
           messageType = isImageMessage || isStickerMessage ? "image" : "document";
           const mediaType = isStickerMessage ? "sticker" : (isImageMessage ? "image" : "document");
           const caption = msg.message?.imageMessage?.caption || msg.message?.documentMessage?.caption || "";
-          
+          const docFilename = msg.message?.documentMessage?.fileName || null;
+          try {
+            persistedMedia = await persistEvolutionMedia({
+              supabase, evolutionUrl, evolutionKey, instanceName,
+              messageKey, scope: userId, phone,
+              messageId: msg.key?.id || crypto.randomUUID(),
+              fallbackExt: isDocumentMessage ? "bin" : (isStickerMessage ? "webp" : "jpg"),
+              filename: docFilename,
+              knownMime: msg.message?.imageMessage?.mimetype || msg.message?.documentMessage?.mimetype || msg.message?.stickerMessage?.mimetype || null,
+            });
+          } catch (e) { console.error("Persist media error:", e); }
+
           try {
             console.log("Processing OCR for:", phone, mediaType);
             const ocrResponse = await fetch(
