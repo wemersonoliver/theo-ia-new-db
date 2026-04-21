@@ -31,8 +31,8 @@ export default function AdminCRM() {
   return (
     <AdminLayout title="CRM" description="Gestão do ciclo de vida dos clientes">
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div className="flex items-center gap-6 shrink-0">
             <div className="text-center">
               <p className="text-2xl font-bold text-white">{totalDeals}</p>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">Total</p>
@@ -46,16 +46,17 @@ export default function AdminCRM() {
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">Assinantes</p>
             </div>
           </div>
-          <PipelineSelector
-            pipelines={pipelines as any}
-            activePipelineId={activePipelineId}
-            onSelect={setActivePipelineId}
-            onCreate={createPipeline}
-            onOpenSettings={() => setSettingsOpen(true)}
-          />
+          <div className="flex items-center gap-2 flex-1 lg:justify-end flex-wrap">
+            <AdminCRMFilters filters={filters} onChange={setFilters} />
+            <PipelineSelector
+              pipelines={pipelines as any}
+              activePipelineId={activePipelineId}
+              onSelect={setActivePipelineId}
+              onCreate={createPipeline}
+              onOpenSettings={() => setSettingsOpen(true)}
+            />
+          </div>
         </div>
-
-        <AdminCRMFilters filters={filters} onChange={setFilters} />
 
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
