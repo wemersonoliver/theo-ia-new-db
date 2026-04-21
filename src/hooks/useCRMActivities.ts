@@ -89,7 +89,7 @@ export async function logDealActivity(
       account_id: ctx?.accountId,
       type,
       content,
-      metadata: metadata ?? {},
+      metadata: (metadata ?? {}) as any,
     });
   } catch (e) {
     console.warn("[logDealActivity] failed", e);
