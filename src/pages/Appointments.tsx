@@ -1,286 +1,285 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Calendar } from "@/components/ui/calendar";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useAppointments, Appointment } from "@/hooks/useAppointments";
-import { AssigneeSelector } from "@/components/team/AssigneeSelector";
+import { Card, CardContent } from "@/components/ui/card";
+import { useAppointments } from "@/hooks/useAppointments";
 import { AppointmentDialog } from "@/components/appointments/AppointmentDialog";
-import { format, parseISO } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { 
-  Clock, 
-  Phone, 
-  User, 
-  CheckCircle, 
-  XCircle, 
-  Calendar as CalendarIcon,
-  Loader2,
-  Plus
-} from "lucide-react";
+import { AppointmentCalendar, CalendarView } from "@/components/appointments/AppointmentCalendar";
+import { AppointmentDayDrawer } from "@/components/appointments/AppointmentDayDrawer";
+import { AppointmentFilters, StatusFilter } from "@/components/appointments/AppointmentFilters";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { useAccount } from "@/hooks/useAccount";
+import { useAuth } from "@/lib/auth";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { getAssigneeColor } from "@/lib/assignee-colors";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  scheduled: { label: "Agendado", variant: "default" },
-  confirmed: { label: "Confirmado", variant: "secondary" },
-  cancelled: { label: "Cancelado", variant: "destructive" },
-  completed: { label: "Concluído", variant: "outline" },
-};
+  addDays,
+  endOfMonth,
+  endOfWeek,
+  format,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
+import { CalendarCheck, Loader2, Plus } from "lucide-react";
 
 export default function Appointments() {
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const { user } = useAuth();
+  const { isOwner, isManager } = useAccount();
+  const { members } = useTeamMembers();
+  const canSeeAll = isOwner || isManager;
+
+  const [view, setView] = useState<CalendarView>("month");
+  const [cursor, setCursor] = useState<Date>(new Date());
+
+  // Filtros
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<StatusFilter[]>([]);
+  const [search, setSearch] = useState("");
+
+  // Dialog/Drawer
   const [dialogOpen, setDialogOpen] = useState(false);
-  const { appointments, appointmentDates, isLoading, updateStatus, deleteAppointment, assignAppointment, createAppointment } = useAppointments(selectedDate);
+  const [dialogDefaultDate, setDialogDefaultDate] = useState<Date | undefined>(undefined);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerDate, setDrawerDate] = useState<Date | null>(null);
 
-  const formatTime = (time: string) => {
-    return time.slice(0, 5);
-  };
+  // Range visível
+  const range = useMemo(() => {
+    if (view === "month") {
+      return {
+        start: startOfWeek(startOfMonth(cursor), { weekStartsOn: 0 }),
+        end: endOfWeek(endOfMonth(cursor), { weekStartsOn: 0 }),
+      };
+    }
+    if (view === "week") {
+      return {
+        start: startOfWeek(cursor, { weekStartsOn: 0 }),
+        end: endOfWeek(cursor, { weekStartsOn: 0 }),
+      };
+    }
+    return { start: cursor, end: cursor };
+  }, [view, cursor]);
 
-  const handleStatusChange = (id: string, status: string) => {
-    updateStatus.mutate({ id, status });
-  };
+  const {
+    appointments,
+    todayAppointments,
+    isLoading,
+    updateStatus,
+    deleteAppointment,
+    assignAppointment,
+    createAppointment,
+    rescheduleAppointment,
+  } = useAppointments(undefined, range);
 
-  const handleAssign = (id: string, userId: string | null) => {
-    assignAppointment.mutate({ id, userId });
-  };
+  // Aplica filtros
+  const filtered = useMemo(() => {
+    let list = appointments;
 
-  const appointmentDatesSet = new Set(appointmentDates);
+    // Permissão: vendedor/agente só vê próprios
+    if (!canSeeAll && user) {
+      list = list.filter((a) => a.assigned_to === user.id || a.user_id === user.id);
+    }
 
-  const filteredAppointments = selectedDate
-    ? appointments.filter(
-        (apt) => apt.appointment_date === format(selectedDate, "yyyy-MM-dd")
-      )
-    : appointments;
+    if (selectedAssignees.length > 0) {
+      list = list.filter((a) => a.assigned_to && selectedAssignees.includes(a.assigned_to));
+    }
 
-  return (
-    <DashboardLayout
-      title="Agendamentos"
-      description="Visualize e gerencie seus agendamentos"
-    >
-      <AppointmentDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        defaultDate={selectedDate}
-        isSubmitting={createAppointment.isPending}
-        onSubmit={async (data) => {
-          await createAppointment.mutateAsync(data);
-        }}
-      />
-      <div className="flex justify-end mb-4">
-        <Button onClick={() => setDialogOpen(true)} size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          Novo agendamento
-        </Button>
-      </div>
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Calendar */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CalendarIcon className="h-5 w-5" />
-              Calendário
-            </CardTitle>
-            <CardDescription>
-              Selecione uma data para ver os agendamentos
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={setSelectedDate}
-              locale={ptBR}
-              className="rounded-md border pointer-events-auto"
-              modifiers={{
-                hasAppointment: (date) =>
-                  appointmentDatesSet.has(format(date, "yyyy-MM-dd")),
-              }}
-              modifiersStyles={{
-                hasAppointment: {
-                  backgroundColor: "hsl(142 40% 75%)",
-                  borderRadius: "6px",
-                  fontWeight: 600,
-                },
-              }}
-            />
-          </CardContent>
-        </Card>
+    if (selectedStatuses.length > 0) {
+      list = list.filter((a) => selectedStatuses.includes(a.status as StatusFilter));
+    }
 
-        {/* Appointments List */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>
-              {selectedDate
-                ? `Agendamentos - ${format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}`
-                : "Todos os Agendamentos"}
-            </CardTitle>
-            <CardDescription>
-              {filteredAppointments.length} agendamento(s) encontrado(s)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : filteredAppointments.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <CalendarIcon className="h-12 w-12 text-muted-foreground/50" />
-                <p className="mt-4 text-muted-foreground">
-                  Nenhum agendamento para esta data
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredAppointments.map((appointment) => (
-                  <AppointmentCard
-                    key={appointment.id}
-                    appointment={appointment}
-                    onStatusChange={handleStatusChange}
-                    onDelete={(id) => deleteAppointment.mutate(id)}
-                    onAssign={handleAssign}
-                    formatTime={formatTime}
-                  />
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </DashboardLayout>
-  );
-}
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (a) =>
+          a.title?.toLowerCase().includes(q) ||
+          a.contact_name?.toLowerCase().includes(q) ||
+          a.phone?.toLowerCase().includes(q)
+      );
+    }
 
-interface AppointmentCardProps {
-  appointment: Appointment;
-  onStatusChange: (id: string, status: string) => void;
-  onDelete: (id: string) => void;
-  onAssign: (id: string, userId: string | null) => void;
-  formatTime: (time: string) => string;
-}
+    return list;
+  }, [appointments, canSeeAll, user, selectedAssignees, selectedStatuses, search]);
 
-function AppointmentCard({ appointment, onStatusChange, onDelete, onAssign, formatTime }: AppointmentCardProps) {
-  const status = statusConfig[appointment.status] || statusConfig.scheduled;
-  const tags: string[] = appointment.tags || [];
+  // Atalhos de teclado
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (dialogOpen || drawerOpen) return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
 
-  const tagColors: Record<string, string> = {
-    confirmado: "bg-green-100 text-green-800 border-green-200",
-    realizado: "bg-blue-100 text-blue-800 border-blue-200",
-    "no-show": "bg-red-100 text-red-800 border-red-200",
-    reagendado: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  };
+      if (e.key === "t" || e.key === "T") setCursor(new Date());
+      else if (e.key === "ArrowLeft")
+        setCursor((c) =>
+          view === "month" ? addDays(c, -30) : view === "week" ? addDays(c, -7) : addDays(c, -1)
+        );
+      else if (e.key === "ArrowRight")
+        setCursor((c) =>
+          view === "month" ? addDays(c, 30) : view === "week" ? addDays(c, 7) : addDays(c, 1)
+        );
+      else if (e.key === "m" || e.key === "M") setView("month");
+      else if (e.key === "s" || e.key === "S") setView("week");
+      else if (e.key === "d" || e.key === "D") setView("day");
+      else if (e.key === "n" || e.key === "N") {
+        setDialogDefaultDate(cursor);
+        setDialogOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [view, cursor, dialogOpen, drawerOpen]);
 
-  const cardBg: Record<string, string> = {
-    confirmed: "border-l-4 border-l-green-500 bg-green-50 dark:bg-green-950/20",
-    completed: "border-l-4 border-l-green-500 bg-green-50 dark:bg-green-950/20",
-    cancelled: "border-l-4 border-l-red-500 bg-red-50 dark:bg-red-950/20",
-    scheduled: "border-l-4 border-l-muted-foreground/30",
-  };
+  const dayAppts = useMemo(() => {
+    if (!drawerDate) return [];
+    const key = format(drawerDate, "yyyy-MM-dd");
+    return filtered.filter((a) => a.appointment_date === key);
+  }, [drawerDate, filtered]);
+
+  const todayPending = todayAppointments.filter((a) => a.status === "scheduled").length;
+
+  // Membros visíveis na legenda (com agendamentos no range filtrado)
+  const legendMembers = useMemo(() => {
+    const usedIds = new Set<string | null>();
+    filtered.forEach((a) => usedIds.add(a.assigned_to));
+    return (members || [])
+      .filter((m) => usedIds.has(m.user_id))
+      .map((m) => ({ id: m.user_id, name: m.full_name || m.email || "Membro" }));
+  }, [filtered, members]);
 
   return (
-    <div className={`flex items-start justify-between rounded-lg border p-4 ${cardBg[appointment.status] || cardBg.scheduled}`}>
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <h4 className="font-semibold">{appointment.title}</h4>
-          <Badge variant={status.variant}>{status.label}</Badge>
-          {appointment.confirmed_by_client && (
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300 text-xs">
-              ✓ Confirmado pelo cliente
-            </Badge>
+    <DashboardLayout title="Agendamentos" description="Sua agenda visual e simplificada">
+      <TooltipProvider>
+        <AppointmentDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          defaultDate={dialogDefaultDate}
+          isSubmitting={createAppointment.isPending}
+          onSubmit={async (data) => {
+            await createAppointment.mutateAsync(data);
+          }}
+        />
+
+        <AppointmentDayDrawer
+          open={drawerOpen}
+          onOpenChange={setDrawerOpen}
+          date={drawerDate}
+          appointments={dayAppts}
+          onCreate={() => {
+            setDialogDefaultDate(drawerDate ?? undefined);
+            setDialogOpen(true);
+          }}
+          onStatusChange={(id, status) => updateStatus.mutate({ id, status })}
+          onAssign={(id, userId) => assignAppointment.mutate({ id, userId })}
+          onDelete={(id) => deleteAppointment.mutate(id)}
+        />
+
+        <div className="space-y-4">
+          {/* Card de resumo */}
+          {todayAppointments.length > 0 && (
+            <Card className="border-primary/20 bg-primary/5">
+              <CardContent className="flex items-center gap-3 py-3">
+                <div className="rounded-full bg-primary/10 p-2">
+                  <CalendarCheck className="h-4 w-4 text-primary" />
+                </div>
+                <div className="text-sm">
+                  <span className="font-semibold">Hoje você tem {todayAppointments.length} agendamento{todayAppointments.length !== 1 ? "s" : ""}</span>
+                  {todayPending > 0 && (
+                    <span className="text-muted-foreground">
+                      {" · "}
+                      {todayPending} pendente{todayPending !== 1 ? "s" : ""} de confirmação
+                    </span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           )}
-          {appointment.reminder_sent && (
-            <Badge variant="outline" className="text-xs">
-              🔔 Lembrete enviado
-            </Badge>
-          )}
-          {tags.map((tag) => (
-            <span
-              key={tag}
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${tagColors[tag] || "bg-gray-100 text-gray-800 border-gray-200"}`}
+
+          {/* Filtros + botão Novo */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex-1 min-w-[280px]">
+              <AppointmentFilters
+                selectedAssignees={selectedAssignees}
+                onAssigneesChange={setSelectedAssignees}
+                selectedStatuses={selectedStatuses}
+                onStatusesChange={setSelectedStatuses}
+                search={search}
+                onSearchChange={setSearch}
+              />
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                setDialogDefaultDate(cursor);
+                setDialogOpen(true);
+              }}
             >
-              {tag}
-            </span>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Clock className="h-4 w-4" />
-            {formatTime(appointment.appointment_time)}
-            {appointment.duration_minutes && ` (${appointment.duration_minutes}min)`}
-          </span>
-          
-          <span className="flex items-center gap-1">
-            <Phone className="h-4 w-4" />
-            {appointment.phone}
-          </span>
-          
-          {appointment.contact_name && (
-            <span className="flex items-center gap-1">
-              <User className="h-4 w-4" />
-              {appointment.contact_name}
-            </span>
-          )}
-        </div>
-
-        {appointment.description && (
-          <p className="text-sm text-muted-foreground">{appointment.description}</p>
-        )}
-
-        <div className="pt-1">
-          <AssigneeSelector
-            compact
-            value={appointment.assigned_to ?? null}
-            onChange={(userId) => onAssign(appointment.id, userId)}
-          />
-        </div>
-      </div>
-
-      <div className="flex gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              Ações
+              <Plus className="h-4 w-4 mr-2" />
+              Novo
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {appointment.status !== "confirmed" && (
-              <DropdownMenuItem onClick={() => onStatusChange(appointment.id, "confirmed")}>
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Confirmar
-              </DropdownMenuItem>
-            )}
-            {appointment.status !== "completed" && (
-              <DropdownMenuItem onClick={() => onStatusChange(appointment.id, "completed")}>
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Concluir
-              </DropdownMenuItem>
-            )}
-            {appointment.status !== "cancelled" && (
-              <DropdownMenuItem 
-                onClick={() => onStatusChange(appointment.id, "cancelled")}
-                className="text-destructive"
-              >
-                <XCircle className="mr-2 h-4 w-4" />
-                Cancelar
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem 
-              onClick={() => onDelete(appointment.id)}
-              className="text-destructive"
-            >
-              <XCircle className="mr-2 h-4 w-4" />
-              Excluir
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
+          </div>
+
+          {/* Calendário */}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <AppointmentCalendar
+              view={view}
+              onViewChange={setView}
+              cursor={cursor}
+              onCursorChange={setCursor}
+              appointments={filtered}
+              onDayClick={(d) => {
+                setDrawerDate(d);
+                setDrawerOpen(true);
+              }}
+              onEmptyDayClick={(d) => {
+                setDialogDefaultDate(d);
+                setDialogOpen(true);
+              }}
+              onReschedule={(id, newDate) =>
+                rescheduleAppointment.mutate({ id, appointment_date: newDate })
+              }
+            />
+          )}
+
+          {/* Legenda */}
+          {legendMembers.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+              <span className="font-semibold text-muted-foreground">Responsáveis:</span>
+              {legendMembers.map((m) => {
+                const c = getAssigneeColor(m.id);
+                return (
+                  <span key={m.id} className="inline-flex items-center gap-1.5">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: c.dot }}
+                    />
+                    <span>{m.name}</span>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Atalhos hint */}
+          <p className="hidden md:block text-[11px] text-muted-foreground">
+            Atalhos: <kbd className="rounded bg-muted px-1">T</kbd> Hoje · <kbd className="rounded bg-muted px-1">←</kbd>/<kbd className="rounded bg-muted px-1">→</kbd> Navegar · <kbd className="rounded bg-muted px-1">M</kbd>/<kbd className="rounded bg-muted px-1">S</kbd>/<kbd className="rounded bg-muted px-1">D</kbd> Trocar visualização · <kbd className="rounded bg-muted px-1">N</kbd> Novo
+          </p>
+        </div>
+
+        {/* FAB mobile */}
+        <Button
+          size="icon"
+          className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg md:hidden z-40"
+          onClick={() => {
+            setDialogDefaultDate(cursor);
+            setDialogOpen(true);
+          }}
+        >
+          <Plus className="h-6 w-6" />
+        </Button>
+      </TooltipProvider>
+    </DashboardLayout>
   );
 }

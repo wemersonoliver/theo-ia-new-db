@@ -39,13 +39,17 @@ export interface AppointmentSlot {
   updated_at?: string;
 }
 
-export function useAppointments(selectedDate?: Date) {
+export function useAppointments(selectedDate?: Date, range?: { start: Date; end: Date }) {
   const { user } = useAuth();
   const { accountId } = useAccountId();
   const queryClient = useQueryClient();
 
   const { data: appointments = [], isLoading } = useQuery({
-    queryKey: ["appointments", accountId, selectedDate?.toISOString()],
+    queryKey: [
+      "appointments",
+      accountId,
+      range ? `${range.start.toISOString()}_${range.end.toISOString()}` : selectedDate?.toISOString(),
+    ],
     queryFn: async () => {
       if (!user || !accountId) return [];
 
@@ -56,7 +60,11 @@ export function useAppointments(selectedDate?: Date) {
         .order("appointment_date", { ascending: true })
         .order("appointment_time", { ascending: true });
 
-      if (selectedDate) {
+      if (range) {
+        const startStr = range.start.toISOString().split("T")[0];
+        const endStr = range.end.toISOString().split("T")[0];
+        query = query.gte("appointment_date", startStr).lte("appointment_date", endStr);
+      } else if (selectedDate) {
         const dateStr = selectedDate.toISOString().split("T")[0];
         query = query.eq("appointment_date", dateStr);
       }
@@ -240,6 +248,34 @@ export function useAppointments(selectedDate?: Date) {
     onError: (e: Error) => toast.error(`Erro ao criar agendamento: ${e.message}`),
   });
 
+  const rescheduleAppointment = useMutation({
+    mutationFn: async ({
+      id,
+      appointment_date,
+      appointment_time,
+    }: {
+      id: string;
+      appointment_date: string;
+      appointment_time?: string;
+    }) => {
+      const payload: Record<string, unknown> = {
+        appointment_date,
+        updated_at: new Date().toISOString(),
+      };
+      if (appointment_time) payload.appointment_time = appointment_time;
+      const { error } = await supabase.from("appointments").update(payload).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      queryClient.invalidateQueries({ queryKey: ["appointments-today"] });
+      queryClient.invalidateQueries({ queryKey: ["appointments-upcoming"] });
+      queryClient.invalidateQueries({ queryKey: ["appointment-dates"] });
+      toast.success("Agendamento remarcado!");
+    },
+    onError: (e: Error) => toast.error(`Erro ao remarcar: ${e.message}`),
+  });
+
   return {
     appointments,
     todayAppointments,
@@ -250,6 +286,7 @@ export function useAppointments(selectedDate?: Date) {
     deleteAppointment,
     assignAppointment,
     createAppointment,
+    rescheduleAppointment,
   };
 }
 
