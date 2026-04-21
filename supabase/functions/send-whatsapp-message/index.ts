@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import { resolveAccountId } from "../_account.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,13 +47,14 @@ serve(async (req) => {
     }
 
     let instanceName: string;
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    const accountId = system ? null : await resolveAccountId(supabaseAdmin, userId);
 
     if (system) {
       // Use system WhatsApp instance (admin/support)
-      const supabaseAdmin = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
       const { data: sysInstance } = await supabaseAdmin
         .from("system_whatsapp_instance")
         .select("instance_name, status")
@@ -63,12 +65,16 @@ serve(async (req) => {
       }
       instanceName = sysInstance.instance_name;
     } else {
-      // Use user's own instance
-      const { data: instance } = await supabase
+      // Use account's instance (works for owners and invited members alike)
+      let instanceQuery = supabaseAdmin
         .from("whatsapp_instances")
-        .select("instance_name, status")
-        .eq("user_id", userId)
-        .maybeSingle();
+        .select("instance_name, status, user_id");
+      if (accountId) {
+        instanceQuery = instanceQuery.eq("account_id", accountId);
+      } else {
+        instanceQuery = instanceQuery.eq("user_id", userId);
+      }
+      const { data: instance } = await instanceQuery.maybeSingle();
 
       if (!instance || instance.status !== "connected") {
         return jsonResponse({ error: "WhatsApp não está conectado" }, 400);
