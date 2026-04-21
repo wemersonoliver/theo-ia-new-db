@@ -12,11 +12,12 @@ import { Label } from "@/components/ui/label";
 import { useSupportTickets, useTicketMessages } from "@/hooks/useSupportTickets";
 import { useAuth } from "@/lib/auth";
 import {
-  MessageSquare, Ticket, Plus, Send, Loader2, Clock, CheckCircle2, XCircle, ExternalLink,
+  MessageSquare, Ticket, Plus, Send, Loader2, Clock, CheckCircle2, XCircle, ExternalLink, ArrowLeft,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const SUPPORT_PHONE = "5547991293662";
 const SUPPORT_MESSAGE = encodeURIComponent("Olá! Preciso de suporte para o Theo IA");
@@ -91,6 +92,7 @@ export default function Support() {
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
+  const isMobile = useIsMobile();
 
   const handleCreate = async () => {
     if (!subject.trim() || !description.trim()) return;
@@ -218,7 +220,7 @@ export default function Support() {
       </Dialog>
 
       {/* Ticket Detail Dialog */}
-      <Dialog open={!!selectedTicketId} onOpenChange={(open) => !open && setSelectedTicketId(null)}>
+      <Dialog open={!!selectedTicketId && !isMobile} onOpenChange={(open) => !open && setSelectedTicketId(null)}>
         <DialogContent className="max-w-2xl p-0 gap-0">
           {selectedTicket && (
             <>
@@ -236,6 +238,29 @@ export default function Support() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Mobile fullscreen */}
+      {isMobile && selectedTicket && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in slide-in-from-right duration-200">
+          <div className="flex items-center gap-2 border-b bg-background px-3 py-2 shrink-0">
+            <Button variant="ghost" size="icon" onClick={() => setSelectedTicketId(null)} className="shrink-0">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-sm truncate">{selectedTicket.subject}</p>
+                <Badge variant={statusLabels[selectedTicket.status]?.variant || "default"} className="text-xs shrink-0">
+                  {statusLabels[selectedTicket.status]?.label || selectedTicket.status}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground truncate">{selectedTicket.description}</p>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 flex flex-col">
+            <TicketChat ticketId={selectedTicket.id} />
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }
