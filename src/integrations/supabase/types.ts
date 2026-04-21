@@ -1713,6 +1713,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      auto_advance_admin_deal_to_trial: {
+        Args: { _user_id: string }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
