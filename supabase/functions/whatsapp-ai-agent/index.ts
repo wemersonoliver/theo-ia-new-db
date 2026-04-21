@@ -288,6 +288,7 @@ serve(async (req) => {
         .from("whatsapp_ai_sessions")
         .upsert({
           user_id: userId,
+          account_id: accountId,
           phone,
           status: "handed_off",
           handed_off_at: new Date().toISOString(),
@@ -765,6 +766,7 @@ Regras adicionais:
       .from("whatsapp_ai_sessions")
       .upsert({
         user_id: userId,
+        account_id: accountId,
         phone,
         status: "active",
         messages_without_human: messagesCount + 1,
