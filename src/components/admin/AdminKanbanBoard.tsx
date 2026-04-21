@@ -64,7 +64,7 @@ export function AdminKanbanBoard({ stages, deals, onCreateDeal, onUpdateDeal, on
   return (
     <>
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="flex gap-4 overflow-x-auto pb-4 px-1">
+        <div className="flex gap-2 pb-4 px-1 w-full">
           {stages.map(stage => (
             <AdminKanbanColumn
               key={stage.id}
