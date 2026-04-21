@@ -27,6 +27,20 @@ export function DealCard({ deal, onClick }: DealCardProps) {
     transition,
   };
 
+  let pointerDown: { x: number; y: number } | null = null;
+  const handlePointerDown = (e: React.PointerEvent) => {
+    pointerDown = { x: e.clientX, y: e.clientY };
+  };
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!pointerDown) return;
+    const dx = Math.abs(e.clientX - pointerDown.x);
+    const dy = Math.abs(e.clientY - pointerDown.y);
+    pointerDown = null;
+    if (dx < 5 && dy < 5) {
+      onClick(deal);
+    }
+  };
+
   const formatCurrency = (cents: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
 
@@ -40,6 +54,8 @@ export function DealCard({ deal, onClick }: DealCardProps) {
       style={style}
       {...attributes}
       {...listeners}
+      onPointerDownCapture={handlePointerDown}
+      onPointerUp={handlePointerUp}
       className={cn(
         "group relative rounded-lg border bg-card p-3 shadow-sm transition-all hover:shadow-md cursor-grab active:cursor-grabbing touch-none select-none",
         isDragging && "opacity-50 shadow-lg rotate-2"
