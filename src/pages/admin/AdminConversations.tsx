@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useSystemConversations, useSystemConversation } from "@/hooks/useSystemConversations";
 import type { Message } from "@/hooks/useConversations";
 import {
@@ -26,12 +27,12 @@ function ChatMessages({ messages }: { messages: Message[] }) {
   }, [messages]);
 
   return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto">
+    <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden">
       <div className="space-y-3 p-3">
         {messages.map((msg, i) => (
           <div key={msg.id || i} className={cn("flex", msg.from_me ? "justify-end" : "justify-start")}>
             <div className={cn(
-              "max-w-[85%] rounded-2xl px-3 py-2",
+              "max-w-[85%] overflow-hidden rounded-2xl px-3 py-2 [overflow-wrap:anywhere]",
               msg.from_me ? "bg-amber-500/20 text-slate-200 rounded-br-sm" : "bg-slate-800 rounded-bl-sm text-slate-300"
             )}>
               {!msg.from_me && (
@@ -42,7 +43,7 @@ function ChatMessages({ messages }: { messages: Message[] }) {
               {msg.type === "audio" && <span className="text-xs text-slate-500 flex items-center gap-1 mb-1"><Mic className="h-3 w-3" /> Áudio</span>}
               {msg.type === "image" && <span className="text-xs text-slate-500 flex items-center gap-1 mb-1"><ImageIcon className="h-3 w-3" /> Imagem</span>}
               {msg.type === "document" && <span className="text-xs text-slate-500 flex items-center gap-1 mb-1"><FileText className="h-3 w-3" /> Doc</span>}
-              <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+              <p className="whitespace-pre-wrap break-words text-sm">{msg.content}</p>
               <p className="mt-1 text-right text-xs text-slate-600">
                 {new Date(msg.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
               </p>
@@ -131,8 +132,8 @@ export default function AdminConversations() {
           )}
         </div>
 
-        {selectedPhone && (
-          <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 animate-in slide-in-from-right duration-200">
+        <Sheet open={!!selectedPhone} onOpenChange={(open) => !open && setSelectedPhone(null)}>
+          <SheetContent side="right" hideClose className="z-[70] flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden border-l-0 bg-slate-950 p-0 sm:max-w-none">
             <div className="flex items-center gap-2 border-b border-slate-800 bg-slate-900 px-3 py-2 shrink-0">
               <Button
                 variant="ghost"
@@ -172,7 +173,7 @@ export default function AdminConversations() {
             </div>
             <ChatMessages messages={messages} />
             <div className="border-t border-slate-800 p-3 bg-slate-900 shrink-0">
-              <div className="flex gap-2">
+              <div className="flex items-end gap-2">
                 <Textarea
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
@@ -180,19 +181,20 @@ export default function AdminConversations() {
                   placeholder="Mensagem..."
                   disabled={sendMessage.isPending}
                   rows={2}
-                  className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-500 resize-none text-base"
+                  className="min-w-0 flex-1 resize-none bg-slate-800 border-slate-700 text-base text-slate-200 placeholder:text-slate-500"
                 />
                 <Button
                   onClick={handleSend}
                   disabled={!messageInput.trim() || sendMessage.isPending}
-                  className="bg-amber-500 hover:bg-amber-600 text-black"
+                  size="icon"
+                  className="shrink-0 bg-amber-500 text-black hover:bg-amber-600"
                 >
                   {sendMessage.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
-          </div>
-        )}
+          </SheetContent>
+        </Sheet>
       </AdminLayout>
     );
   }

@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useSupportTickets, useTicketMessages } from "@/hooks/useSupportTickets";
 import { useAuth } from "@/lib/auth";
 import {
@@ -47,17 +48,17 @@ function TicketChat({ ticketId, fullHeight = false }: { ticketId: string; fullHe
   };
 
   return (
-    <div className={cn("flex flex-col", fullHeight ? "flex-1 min-h-0" : "h-[50vh]")}>
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+    <div className={cn("flex flex-col overflow-hidden", fullHeight ? "flex-1 min-h-0" : "h-[50vh]")}>
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <div className="p-4 space-y-3">
           {messages.map((msg) => (
             <div key={msg.id} className={cn("flex", msg.sender_type === "user" ? "justify-end" : "justify-start")}>
               <div className={cn(
-                "max-w-[80%] rounded-2xl px-3 py-2",
+                "max-w-[85%] overflow-hidden rounded-2xl px-3 py-2 [overflow-wrap:anywhere]",
                 msg.sender_type === "user" ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted rounded-bl-sm"
               )}>
                 <p className="text-xs mb-1 text-muted-foreground">{msg.sender_type === "admin" ? "Suporte" : "Você"}</p>
-                <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                <p className="whitespace-pre-wrap break-words text-sm">{msg.content}</p>
                 <p className="mt-1 text-right text-xs opacity-60">
                   {new Date(msg.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                 </p>
@@ -69,15 +70,16 @@ function TicketChat({ ticketId, fullHeight = false }: { ticketId: string; fullHe
           )}
         </div>
       </div>
-      <div className="border-t p-3 flex gap-2">
+      <div className="border-t p-3 flex items-end gap-2">
         <Input
           value={reply}
           onChange={(e) => setReply(e.target.value)}
           placeholder="Escreva sua mensagem..."
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
           disabled={sendMessage.isPending}
+          className="min-w-0 flex-1 text-base"
         />
-        <Button onClick={handleSend} disabled={!reply.trim() || sendMessage.isPending} size="icon">
+        <Button onClick={handleSend} disabled={!reply.trim() || sendMessage.isPending} size="icon" className="shrink-0">
           {sendMessage.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
       </div>
@@ -241,7 +243,8 @@ export default function Support() {
 
       {/* Mobile fullscreen */}
       {isMobile && selectedTicket && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in slide-in-from-right duration-200">
+        <Sheet open={!!selectedTicketId} onOpenChange={(open) => !open && setSelectedTicketId(null)}>
+          <SheetContent side="right" hideClose className="z-[70] flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden border-l-0 p-0 sm:max-w-none">
           <div className="flex items-center gap-2 border-b bg-background px-3 py-2 shrink-0">
             <Button variant="ghost" size="icon" onClick={() => setSelectedTicketId(null)} className="shrink-0">
               <ArrowLeft className="h-5 w-5" />
@@ -257,7 +260,8 @@ export default function Support() {
             </div>
           </div>
           <TicketChat ticketId={selectedTicket.id} fullHeight />
-        </div>
+          </SheetContent>
+        </Sheet>
       )}
     </DashboardLayout>
   );
