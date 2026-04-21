@@ -73,3 +73,16 @@ export function useAccount() {
 
   return { membership, isLoading, isOwner, isManager, isMember, can };
 }
+
+/**
+ * Hook utilitário: retorna apenas o account_id e ownerId do usuário logado.
+ * Útil para hooks de queries que precisam filtrar por account_id.
+ */
+export function useAccountId() {
+  const { membership, isLoading } = useAccount();
+  return {
+    accountId: membership?.account_id ?? null,
+    ownerId: membership?.owner_user_id ?? null,
+    isLoading,
+  };
+}
