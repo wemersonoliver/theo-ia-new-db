@@ -18,6 +18,7 @@ import { Product } from "@/hooks/useProducts";
 import { KanbanColumn } from "./KanbanColumn";
 import { DealCard } from "./DealCard";
 import { DealDialog } from "./DealDialog";
+import { DealDetailsDrawer } from "./DealDetailsDrawer";
 
 interface KanbanBoardProps {
   stages: CRMStage[];
@@ -28,11 +29,14 @@ interface KanbanBoardProps {
   onUpdateDeal: (id: string, updates: any) => void;
   onMoveDeal: (dealId: string, newStageId: string, newPosition: number) => void;
   onDeleteDeal: (id: string) => void;
+  onMarkWon?: (id: string) => Promise<void> | void;
+  onMarkLost?: (id: string, reason: string) => Promise<void> | void;
 }
 
-export function KanbanBoard({ stages, deals, contacts, products, onCreateDeal, onUpdateDeal, onMoveDeal, onDeleteDeal }: KanbanBoardProps) {
+export function KanbanBoard({ stages, deals, contacts, products, onCreateDeal, onUpdateDeal, onMoveDeal, onDeleteDeal, onMarkWon, onMarkLost }: KanbanBoardProps) {
   const [activeDeal, setActiveDeal] = useState<CRMDeal | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedDeal, setSelectedDeal] = useState<CRMDeal | null>(null);
   const [defaultStageId, setDefaultStageId] = useState<string>("");
 
@@ -95,8 +99,7 @@ export function KanbanBoard({ stages, deals, contacts, products, onCreateDeal, o
 
   const handleDealClick = (deal: CRMDeal) => {
     setSelectedDeal(deal);
-    setDefaultStageId(deal.stage_id);
-    setDialogOpen(true);
+    setDrawerOpen(true);
   };
 
   const handleSave = async (data: any) => {
@@ -106,6 +109,11 @@ export function KanbanBoard({ stages, deals, contacts, products, onCreateDeal, o
       await onCreateDeal(data);
     }
   };
+
+  // Keep selectedDeal in sync with latest deals after updates
+  const liveSelectedDeal = selectedDeal
+    ? deals.find((d) => d.id === selectedDeal.id) || selectedDeal
+    : null;
 
   return (
     <>
@@ -136,12 +144,23 @@ export function KanbanBoard({ stages, deals, contacts, products, onCreateDeal, o
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         stages={stages}
-        deal={selectedDeal}
+        deal={null}
         defaultStageId={defaultStageId}
         contacts={contacts}
         products={products}
         onSave={handleSave}
         onDelete={onDeleteDeal}
+      />
+
+      <DealDetailsDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        deal={liveSelectedDeal}
+        stages={stages}
+        onUpdate={onUpdateDeal}
+        onDelete={onDeleteDeal}
+        onMarkWon={onMarkWon}
+        onMarkLost={onMarkLost}
       />
     </>
   );

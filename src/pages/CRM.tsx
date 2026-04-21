@@ -16,7 +16,7 @@ export default function CRM() {
   const { pipelines, activePipelineId, setActivePipelineId, loading: pipelinesLoading, createPipeline, renamePipeline, deletePipeline } = useCRMPipelines();
   const { stages, loading: stagesLoading, addStage, updateStage, deleteStage } = useCRMStages(activePipelineId);
   const stageIds = useMemo(() => stages.map((s) => s.id), [stages]);
-  const { deals, loading: dealsLoading, createDeal, updateDeal, moveDeal, deleteDeal } = useCRMDeals(activePipelineId, stageIds);
+  const { deals, loading: dealsLoading, createDeal, updateDeal, moveDeal, deleteDeal, markAsWon, markAsLost } = useCRMDeals(activePipelineId, stageIds);
   const { contacts } = useContacts();
   const { products } = useProducts();
 
@@ -82,6 +82,8 @@ export default function CRM() {
             onUpdateDeal={updateDeal}
             onMoveDeal={moveDeal}
             onDeleteDeal={deleteDeal}
+            onMarkWon={markAsWon}
+            onMarkLost={markAsLost}
           />
         )}
       </div>
