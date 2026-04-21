@@ -21,6 +21,21 @@ export function AdminDealCard({ deal, onClick }: AdminDealCardProps) {
     transition,
   };
 
+  // Detecta clique vs drag: se o ponteiro mover mais que o threshold, vira drag
+  let pointerDown: { x: number; y: number } | null = null;
+  const handlePointerDown = (e: React.PointerEvent) => {
+    pointerDown = { x: e.clientX, y: e.clientY };
+  };
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!pointerDown) return;
+    const dx = Math.abs(e.clientX - pointerDown.x);
+    const dy = Math.abs(e.clientY - pointerDown.y);
+    pointerDown = null;
+    if (dx < 5 && dy < 5) {
+      onClick(deal);
+    }
+  };
+
   const daysInStage = Math.floor(
     (Date.now() - new Date(deal.updated_at).getTime()) / (1000 * 60 * 60 * 24)
   );
@@ -41,6 +56,8 @@ export function AdminDealCard({ deal, onClick }: AdminDealCardProps) {
       style={style}
       {...attributes}
       {...listeners}
+      onPointerDownCapture={handlePointerDown}
+      onPointerUp={handlePointerUp}
       className={cn(
         "group relative rounded-lg border border-slate-700/50 bg-slate-800/80 p-3 shadow-sm transition-all hover:border-slate-600 hover:shadow-md cursor-grab active:cursor-grabbing touch-none select-none",
         isDragging && "opacity-50 shadow-lg rotate-2"
