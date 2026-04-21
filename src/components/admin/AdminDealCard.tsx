@@ -3,7 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { AdminCRMDeal } from "@/hooks/useAdminCRMDeals";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { GripVertical, Mail, Phone, CheckCircle2, XCircle, CreditCard, Bot, BotOff, Smartphone } from "lucide-react";
+import { Mail, Phone, CheckCircle2, XCircle, CreditCard, Bot, BotOff, Smartphone, Pencil } from "lucide-react";
 
 interface AdminDealCardProps {
   deal: AdminCRMDeal;
@@ -39,22 +39,27 @@ export function AdminDealCard({ deal, onClick }: AdminDealCardProps) {
     <div
       ref={setNodeRef}
       style={style}
+      {...attributes}
+      {...listeners}
       className={cn(
-        "group rounded-lg border border-slate-700/50 bg-slate-800/80 p-3 shadow-sm transition-all hover:border-slate-600 hover:shadow-md cursor-pointer",
+        "group relative rounded-lg border border-slate-700/50 bg-slate-800/80 p-3 shadow-sm transition-all hover:border-slate-600 hover:shadow-md cursor-grab active:cursor-grabbing touch-none select-none",
         isDragging && "opacity-50 shadow-lg rotate-2"
       )}
-      onClick={() => onClick(deal)}
     >
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick(deal);
+        }}
+        className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity rounded-md p-1 bg-slate-700/80 hover:bg-slate-600 text-slate-300 hover:text-white"
+        aria-label="Editar deal"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
       <div className="flex items-start gap-2">
-        <button
-          {...attributes}
-          {...listeners}
-          className="mt-0.5 cursor-grab opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-slate-300"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 pr-6">
           <p className="font-medium text-sm text-slate-100 truncate">{deal.title}</p>
 
           {deal.user_email && (
