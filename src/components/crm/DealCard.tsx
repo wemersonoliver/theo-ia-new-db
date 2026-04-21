@@ -3,7 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { CRMDeal } from "@/hooks/useCRMDeals";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { GripVertical, Calendar, DollarSign, User } from "lucide-react";
+import { Calendar, DollarSign, User, Pencil } from "lucide-react";
 
 interface DealCardProps {
   deal: CRMDeal;
@@ -38,22 +38,27 @@ export function DealCard({ deal, onClick }: DealCardProps) {
     <div
       ref={setNodeRef}
       style={style}
+      {...attributes}
+      {...listeners}
       className={cn(
-        "group rounded-lg border bg-card p-3 shadow-sm transition-all hover:shadow-md cursor-pointer",
+        "group relative rounded-lg border bg-card p-3 shadow-sm transition-all hover:shadow-md cursor-grab active:cursor-grabbing touch-none select-none",
         isDragging && "opacity-50 shadow-lg rotate-2"
       )}
-      onClick={() => onClick(deal)}
     >
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick(deal);
+        }}
+        className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity rounded-md p-1 bg-muted hover:bg-muted-foreground/20 text-muted-foreground hover:text-foreground"
+        aria-label="Editar deal"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
       <div className="flex items-start gap-2">
-        <button
-          {...attributes}
-          {...listeners}
-          className="mt-0.5 cursor-grab opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 pr-6">
           <p className="font-medium text-sm truncate">{deal.title}</p>
 
           {(deal.contact_name || deal.contact_phone) && (
