@@ -19,7 +19,7 @@ export function AdminKanbanColumn({ stage, deals, onAddDeal, onDealClick }: Admi
   const { setNodeRef, isOver } = useDroppable({ id: stage.id, data: { type: "stage" } });
 
   return (
-    <div className="flex flex-col w-72 shrink-0">
+    <div className="flex flex-col flex-1 min-w-0 basis-0">
       <div className="rounded-t-lg px-3 py-2 border border-b-0 border-slate-700/50" style={{ borderTopColor: stage.color, borderTopWidth: 3 }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
