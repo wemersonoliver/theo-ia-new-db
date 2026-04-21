@@ -2,6 +2,7 @@ import { AdminLayout } from "@/components/admin/AdminLayout";
 import { AdminKanbanBoard } from "@/components/admin/AdminKanbanBoard";
 import { PipelineSelector } from "@/components/crm/PipelineSelector";
 import { PipelineSettingsDialog } from "@/components/crm/PipelineSettingsDialog";
+import { AdminCRMFilters, EMPTY_ADMIN_FILTERS, useFilteredAdminDeals, type AdminCRMFilterState } from "@/components/admin/AdminCRMFilters";
 import { useAdminCRMPipelines } from "@/hooks/useAdminCRMPipelines";
 import { useAdminCRMStages } from "@/hooks/useAdminCRMStages";
 import { useAdminCRMDeals } from "@/hooks/useAdminCRMDeals";
@@ -15,14 +16,17 @@ export default function AdminCRM() {
   const { deals, loading: dealsLoading, createDeal, updateDeal, moveDeal, deleteDeal } = useAdminCRMDeals(activePipelineId, stageIds);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [filters, setFilters] = useState<AdminCRMFilterState>(EMPTY_ADMIN_FILTERS);
   const activePipeline = useMemo(() => pipelines.find(p => p.id === activePipelineId) || null, [pipelines, activePipelineId]);
 
   const isLoading = pipelinesLoading || stagesLoading || dealsLoading;
 
+  const filteredDeals = useFilteredAdminDeals(deals, filters);
+
   // Stats
-  const totalDeals = deals.length;
-  const onboardedCount = deals.filter(d => d.onboarding_completed).length;
-  const activeSubsCount = deals.filter(d => d.subscription_status === "active").length;
+  const totalDeals = filteredDeals.length;
+  const onboardedCount = filteredDeals.filter(d => d.onboarding_completed).length;
+  const activeSubsCount = filteredDeals.filter(d => d.subscription_status === "active").length;
 
   return (
     <AdminLayout title="CRM" description="Gestão do ciclo de vida dos clientes">
@@ -51,6 +55,8 @@ export default function AdminCRM() {
           />
         </div>
 
+        <AdminCRMFilters filters={filters} onChange={setFilters} />
+
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-slate-500" />
@@ -58,7 +64,7 @@ export default function AdminCRM() {
         ) : (
           <AdminKanbanBoard
             stages={stages}
-            deals={deals}
+            deals={filteredDeals}
             onCreateDeal={createDeal}
             onUpdateDeal={updateDeal}
             onMoveDeal={moveDeal}
