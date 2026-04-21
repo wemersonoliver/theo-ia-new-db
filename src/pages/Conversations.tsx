@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useConversations, useConversation, Message } from "@/hooks/useConversations";
 import { useContacts } from "@/hooks/useContacts";
 import { useCRMPipelines } from "@/hooks/useCRMPipelines";
@@ -44,7 +45,7 @@ function ChatMessages({ messages, className }: { messages: Message[]; className?
   }, [messages]);
 
   return (
-    <div ref={scrollRef} className={cn("flex-1 overflow-y-auto", className)}>
+    <div ref={scrollRef} className={cn("flex-1 overflow-y-auto overflow-x-hidden", className)}>
       <div className="space-y-3 p-3">
         {messages.filter(msg => msg.type !== "context_summary").map((msg, index) => (
           <div
@@ -53,7 +54,7 @@ function ChatMessages({ messages, className }: { messages: Message[]; className?
           >
             <div
               className={cn(
-                "max-w-[85%] rounded-2xl px-3 py-2",
+                "max-w-[85%] overflow-hidden rounded-2xl px-3 py-2 [overflow-wrap:anywhere]",
                 msg.from_me
                   ? "bg-primary text-primary-foreground rounded-br-sm"
                   : "bg-muted rounded-bl-sm"
@@ -83,7 +84,7 @@ function ChatMessages({ messages, className }: { messages: Message[]; className?
                   <FileText className="h-3 w-3" /> Documento analisado
                 </span>
               )}
-              <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+              <p className="whitespace-pre-wrap break-words text-sm">{msg.content}</p>
               <p className={cn(
                 "mt-1 text-right text-xs",
                 msg.from_me ? "text-primary-foreground/70" : "text-muted-foreground"
@@ -99,7 +100,7 @@ function ChatMessages({ messages, className }: { messages: Message[]; className?
 }
 
 // ── Tag Popover ───────────────────────────────────────────────────────────────
-function TagPopover({ phone }: { phone: string }) {
+function TagPopover({ phone, className }: { phone: string; className?: string }) {
   const { contacts, updateContact } = useContacts();
   const [open, setOpen] = useState(false);
 
@@ -114,7 +115,7 @@ function TagPopover({ phone }: { phone: string }) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
+        <Button variant="outline" size="sm" className={cn("gap-1.5 shrink-0", className)}>
           <Tag className="h-4 w-4" />
           <span className="hidden sm:inline">Tags</span>
           {tags.length > 0 && (
@@ -160,7 +161,7 @@ function TagPopover({ phone }: { phone: string }) {
 }
 
 // ── Create Deal Button ────────────────────────────────────────────────────────
-function CreateDealButton({ phone, contactName }: { phone: string; contactName?: string | null }) {
+function CreateDealButton({ phone, contactName, className }: { phone: string; contactName?: string | null; className?: string }) {
   const { contacts } = useContacts();
   const { pipelines, activePipelineId } = useCRMPipelines();
   const { stages } = useCRMStages(activePipelineId);
@@ -186,7 +187,7 @@ function CreateDealButton({ phone, contactName }: { phone: string; contactName?:
       <Button
         variant="outline"
         size="sm"
-        className="gap-1.5 shrink-0"
+        className={cn("gap-1.5 shrink-0", className)}
         onClick={() => setOpen(true)}
       >
         <Kanban className="h-4 w-4" />
@@ -309,8 +310,8 @@ export default function Conversations() {
         </div>
 
         {/* Mobile Chat Fullscreen Overlay */}
-        {selectedPhone && (
-          <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in slide-in-from-right duration-200">
+        <Sheet open={!!selectedPhone} onOpenChange={(open) => !open && setSelectedPhone(null)}>
+          <SheetContent side="right" hideClose className="z-[70] flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden border-l-0 p-0 sm:max-w-none">
             {/* Header */}
             <div className="flex items-center gap-2 border-b bg-background px-3 py-2 shrink-0">
               <Button
@@ -351,12 +352,12 @@ export default function Conversations() {
             </div>
 
             {/* Action bar */}
-            <div className="flex items-center gap-1.5 border-b bg-muted/30 px-3 py-2 overflow-x-auto shrink-0">
-              <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} />
-              <TagPopover phone={selectedPhone} />
+            <div className="grid grid-cols-2 gap-2 border-b bg-muted/30 px-3 py-2 shrink-0">
+              <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} className="w-full justify-center" />
+              <TagPopover phone={selectedPhone} className="w-full justify-center" />
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
+                  <Button variant="outline" size="sm" className="w-full gap-1.5 justify-center">
                     <CheckCircle className="h-4 w-4" />
                     <span>Finalizar</span>
                   </Button>
@@ -379,7 +380,7 @@ export default function Conversations() {
               </AlertDialog>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive shrink-0">
+                  <Button variant="outline" size="sm" className="w-full gap-1.5 justify-center text-destructive hover:text-destructive">
                     <Trash2 className="h-4 w-4" />
                     <span>Excluir</span>
                   </Button>
@@ -407,19 +408,20 @@ export default function Conversations() {
 
             {/* Input */}
             <div className="border-t bg-background p-3 shrink-0">
-              <div className="flex gap-2">
+              <div className="flex items-end gap-2">
                 <Input
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
                   onKeyDown={handleKeyPress}
                   placeholder="Mensagem..."
                   disabled={sendMessage.isPending}
-                  className="text-base"
+                  className="min-w-0 flex-1 text-base"
                 />
                 <Button
                   onClick={handleSendMessage}
                   disabled={!messageInput.trim() || sendMessage.isPending}
                   size="icon"
+                  className="shrink-0"
                 >
                   {sendMessage.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -432,8 +434,8 @@ export default function Conversations() {
                 {selectedConversation?.ai_active ? "🤖 IA ativa" : "👤 Atendimento manual"}
               </p>
             </div>
-          </div>
-        )}
+          </SheetContent>
+        </Sheet>
       </DashboardLayout>
     );
   }
