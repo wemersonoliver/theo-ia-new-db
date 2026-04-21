@@ -23,7 +23,7 @@ export function KanbanColumn({ stage, deals, onAddDeal, onDealClick }: KanbanCol
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
 
   return (
-    <div className="flex flex-col w-72 shrink-0">
+    <div className="flex flex-col flex-1 min-w-0 basis-0">
       {/* Header */}
       <div className="rounded-t-lg px-3 py-2 border border-b-0" style={{ borderTopColor: stage.color, borderTopWidth: 3 }}>
         <div className="flex items-center justify-between">
