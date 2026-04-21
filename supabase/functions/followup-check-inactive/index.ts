@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveAccountId } from "../_account.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,6 +36,7 @@ serve(async (req) => {
       try {
         const inactivityMs = (config.inactivity_hours || 24) * 60 * 60 * 1000;
         const cutoffTime = new Date(Date.now() - inactivityMs).toISOString();
+        const accountId = config.account_id || (await resolveAccountId(supabase, config.user_id));
 
         // Find conversations where last message is older than inactivity_hours
         const { data: conversations } = await supabase
@@ -90,6 +92,7 @@ serve(async (req) => {
             .from("followup_tracking")
             .insert({
               user_id: config.user_id,
+              account_id: accountId,
               phone: conv.phone,
               current_step: 1,
               status: "pending",

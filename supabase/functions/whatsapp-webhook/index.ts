@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { persistEvolutionMedia } from "../_media.ts";
+import { resolveAccountId } from "../_account.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -311,6 +312,7 @@ serve(async (req) => {
     }
 
     const userId = instanceData.user_id;
+    const accountId = await resolveAccountId(supabase, userId);
 
     // Handle different events
     if (event === "qrcode.updated" || event === "QRCODE_UPDATED") {
@@ -578,7 +580,7 @@ serve(async (req) => {
 
             // Move CRM deal to "Atendimento humano" when human responds
             try {
-              await moveCRMDealToHumanStage(supabase, userId, phone);
+              await moveCRMDealToHumanStage(supabase, userId, accountId, phone);
             } catch (e) {
               console.error("Error moving CRM deal to human stage:", e);
             }
@@ -691,6 +693,7 @@ serve(async (req) => {
             .from("whatsapp_conversations")
             .insert({
               user_id: userId,
+              account_id: accountId,
               phone,
               contact_name: contactName,
               messages: [newMessage],
@@ -701,7 +704,7 @@ serve(async (req) => {
 
           // Create CRM deal in "Atendimento IA" stage for new conversations
           try {
-            await createCRMDealForNewConversation(supabase, userId, phone, contactName);
+            await createCRMDealForNewConversation(supabase, userId, accountId, phone, contactName);
           } catch (e) {
             console.error("Error creating CRM deal:", e);
           }
@@ -749,6 +752,7 @@ async function triggerAIResponse(supabase: any, userId: string, phone: string, m
         .from("whatsapp_pending_responses")
         .upsert({
           user_id: userId,
+          account_id: accountId,
           phone,
           scheduled_at: scheduledAt,
           processed: false,
@@ -836,7 +840,7 @@ const DEFAULT_CRM_STAGES = [
   { name: "Venda realizada", position: 5, color: "#6366f1" },
 ];
 
-async function ensureCRMPipeline(supabase: any, userId: string): Promise<{ pipelineId: string; stages: any[] }> {
+async function ensureCRMPipeline(supabase: any, userId: string, accountId: string | null): Promise<{ pipelineId: string; stages: any[] }> {
   const { data: pipelines } = await supabase
     .from("crm_pipelines")
     .select("id")
@@ -851,7 +855,7 @@ async function ensureCRMPipeline(supabase: any, userId: string): Promise<{ pipel
   } else {
     const { data: newPipeline } = await supabase
       .from("crm_pipelines")
-      .insert({ user_id: userId, name: "Vendas" })
+      .insert({ user_id: userId, account_id: accountId, name: "Vendas" })
       .select("id")
       .single();
 
@@ -862,6 +866,7 @@ async function ensureCRMPipeline(supabase: any, userId: string): Promise<{ pipel
       ...s,
       pipeline_id: pipelineId,
       user_id: userId,
+      account_id: accountId,
     }));
     await supabase.from("crm_stages").insert(stages);
   }
@@ -875,8 +880,8 @@ async function ensureCRMPipeline(supabase: any, userId: string): Promise<{ pipel
   return { pipelineId, stages: stagesData || [] };
 }
 
-async function createCRMDealForNewConversation(supabase: any, userId: string, phone: string, contactName: string | null) {
-  const { stages } = await ensureCRMPipeline(supabase, userId);
+async function createCRMDealForNewConversation(supabase: any, userId: string, accountId: string | null, phone: string, contactName: string | null) {
+  const { stages } = await ensureCRMPipeline(supabase, userId, accountId);
   
   const aiStage = stages.find((s: any) => s.name === "Atendimento IA") || stages[0];
   if (!aiStage) return;
@@ -914,6 +919,7 @@ async function createCRMDealForNewConversation(supabase: any, userId: string, ph
 
   const dealData: any = {
     user_id: userId,
+    account_id: accountId,
     stage_id: aiStage.id,
     title: contactName || phone,
     position: count || 0,
@@ -929,8 +935,8 @@ async function createCRMDealForNewConversation(supabase: any, userId: string, ph
   console.log("CRM deal created for new conversation:", phone);
 }
 
-async function moveCRMDealToHumanStage(supabase: any, userId: string, phone: string) {
-  const { stages } = await ensureCRMPipeline(supabase, userId);
+async function moveCRMDealToHumanStage(supabase: any, userId: string, accountId: string | null, phone: string) {
+  const { stages } = await ensureCRMPipeline(supabase, userId, accountId);
   
   const aiStage = stages.find((s: any) => s.name === "Atendimento IA") || stages[0];
   const humanStage = stages.find((s: any) => s.name === "Atendimento humano") || stages[1];

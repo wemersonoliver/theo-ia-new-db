@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveAccountId } from "../_account.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -220,6 +221,8 @@ serve(async (req) => {
       });
     }
 
+    const accountId = await resolveAccountId(supabase, userId);
+
     // Get AI config
     const { data: aiConfig } = await supabase
       .from("whatsapp_ai_config")
@@ -285,6 +288,7 @@ serve(async (req) => {
         .from("whatsapp_ai_sessions")
         .upsert({
           user_id: userId,
+          account_id: accountId,
           phone,
           status: "handed_off",
           handed_off_at: new Date().toISOString(),
@@ -762,6 +766,7 @@ Regras adicionais:
       .from("whatsapp_ai_sessions")
       .upsert({
         user_id: userId,
+        account_id: accountId,
         phone,
         status: "active",
         messages_without_human: messagesCount + 1,
@@ -1025,11 +1030,25 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
       displayName = conv?.contact_name || "Desconhecido";
     }
 
-    const { data: notifContacts } = await supabase
-      .from("notification_contacts")
-      .select("phone, name")
-      .eq("user_id", userId)
-      .eq("notify_handoffs", true);
+    // Try by account_id first (works for accounts with team), fall back to user_id
+    const accId = await resolveAccountId(supabase, userId);
+    let notifContacts: any[] | null = null;
+    if (accId) {
+      const { data } = await supabase
+        .from("notification_contacts")
+        .select("phone, name")
+        .eq("account_id", accId)
+        .eq("notify_handoffs", true);
+      notifContacts = data || null;
+    }
+    if (!notifContacts || notifContacts.length === 0) {
+      const { data } = await supabase
+        .from("notification_contacts")
+        .select("phone, name")
+        .eq("user_id", userId)
+        .eq("notify_handoffs", true);
+      notifContacts = data || null;
+    }
 
     if (!notifContacts || notifContacts.length === 0) return;
 
