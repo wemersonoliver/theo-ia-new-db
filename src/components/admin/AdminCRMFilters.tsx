@@ -140,25 +140,25 @@ export function AdminCRMFilters({ filters, onChange }: Props) {
       {activeCount > 0 && (
         <div className="flex gap-1 flex-wrap">
           {filters.subscriptionActive !== "any" && (
-            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-slate-800 text-slate-200" onClick={() => onChange({ ...filters, subscriptionActive: "any" })}>
+            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-amber-500/15 text-amber-200 border border-amber-500/30 hover:bg-amber-500/25" onClick={() => onChange({ ...filters, subscriptionActive: "any" })}>
               Assinatura: {filters.subscriptionActive === "yes" ? "Ativa" : "Inativa"}
               <X className="h-2.5 w-2.5" />
             </Badge>
           )}
           {filters.onboardingCompleted !== "any" && (
-            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-slate-800 text-slate-200" onClick={() => onChange({ ...filters, onboardingCompleted: "any" })}>
+            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-emerald-500/15 text-emerald-200 border border-emerald-500/30 hover:bg-emerald-500/25" onClick={() => onChange({ ...filters, onboardingCompleted: "any" })}>
               Onboarding: {filters.onboardingCompleted === "yes" ? "Concluído" : "Pendente"}
               <X className="h-2.5 w-2.5" />
             </Badge>
           )}
           {filters.whatsappStatus !== "any" && (
-            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-slate-800 text-slate-200" onClick={() => onChange({ ...filters, whatsappStatus: "any" })}>
+            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-sky-500/15 text-sky-200 border border-sky-500/30 hover:bg-sky-500/25" onClick={() => onChange({ ...filters, whatsappStatus: "any" })}>
               WA: {filters.whatsappStatus === "on" ? "On" : "Off"}
               <X className="h-2.5 w-2.5" />
             </Badge>
           )}
           {(filters.registeredFrom || filters.registeredTo) && (
-            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-slate-800 text-slate-200" onClick={() => onChange({ ...filters, registeredFrom: null, registeredTo: null })}>
+            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-violet-500/15 text-violet-200 border border-violet-500/30 hover:bg-violet-500/25" onClick={() => onChange({ ...filters, registeredFrom: null, registeredTo: null })}>
               {filters.registeredFrom ? format(filters.registeredFrom, "dd/MM/yy") : "..."} → {filters.registeredTo ? format(filters.registeredTo, "dd/MM/yy") : "..."}
               <X className="h-2.5 w-2.5" />
             </Badge>
