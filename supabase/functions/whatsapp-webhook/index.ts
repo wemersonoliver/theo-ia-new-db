@@ -406,14 +406,27 @@ serve(async (req) => {
         const isImageMessage = !!msg.message?.imageMessage;
         const isDocumentMessage = !!msg.message?.documentMessage;
         const isStickerMessage = !!msg.message?.stickerMessage;
+        const isVideoMessage = !!msg.message?.videoMessage;
         const messageKey = msg.key;
         
         let content: string;
         let messageType: "text" | "audio" | "image" | "video" | "document" = "text";
+        let persistedMedia: { url: string; mime: string; filename: string } | null = null;
+        const evolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
+        const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
         
         if (isAudioMessage) {
           // Transcribe audio
           messageType = "audio";
+          try {
+            persistedMedia = await persistEvolutionMedia({
+              supabase, evolutionUrl, evolutionKey, instanceName,
+              messageKey, scope: userId, phone,
+              messageId: msg.key?.id || crypto.randomUUID(),
+              fallbackExt: "ogg",
+              knownMime: msg.message?.audioMessage?.mimetype || null,
+            });
+          } catch (e) { console.error("Persist audio error:", e); }
           try {
             console.log("Transcribing audio message for:", phone);
             const transcribeResponse = await fetch(
