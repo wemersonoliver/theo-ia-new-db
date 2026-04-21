@@ -105,12 +105,12 @@ export function useContacts() {
   });
 
   const createContact = useMutation({
-    mutationFn: async (data: { phone: string; name?: string; email?: string; notes?: string; tags?: string[] }) => {
+    mutationFn: async (data: { phone: string; name?: string; email?: string; notes?: string; tags?: string[]; assigned_to?: string | null }) => {
       const ctx = await resolveAccountContext(user!.id);
       const { error } = await supabase.from("contacts").insert({
         user_id: user!.id,
         account_id: ctx?.accountId,
-        assigned_to: user!.id,
+        assigned_to: data.assigned_to ?? user!.id,
         phone: data.phone,
         name: data.name || null,
         email: data.email || null,
