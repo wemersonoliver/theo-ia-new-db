@@ -347,6 +347,14 @@ export default function Conversations() {
             <div className="grid grid-cols-2 gap-2 border-b bg-muted/30 px-3 py-2 shrink-0">
               <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} className="w-full justify-center" />
               <TagPopover phone={selectedPhone} className="w-full justify-center" />
+              <div className="col-span-2 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground shrink-0">Responsável:</span>
+                <AssigneeSelector
+                  compact
+                  value={selectedConversation?.assigned_to ?? null}
+                  onChange={(userId) => assignConversation.mutate({ phone: selectedPhone, userId })}
+                />
+              </div>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" size="sm" className="w-full gap-1.5 justify-center">
