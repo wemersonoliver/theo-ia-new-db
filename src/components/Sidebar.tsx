@@ -21,7 +21,6 @@ import {
   Kanban,
   Package,
   Ticket,
-  Volume2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
