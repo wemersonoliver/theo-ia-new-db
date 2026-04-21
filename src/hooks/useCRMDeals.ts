@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { resolveAccountContext } from "@/lib/account-context";
 
 export interface CRMDeal {
   id: string;
@@ -70,9 +71,10 @@ export function useCRMDeals(pipelineId: string | null, stageIds: string[]) {
   }) => {
     if (!user) return;
     const position = deals.filter((d) => d.stage_id === deal.stage_id).length;
+    const ctx = await resolveAccountContext(user.id);
     const { data, error } = await supabase
       .from("crm_deals")
-      .insert({ ...deal, user_id: user.id, position })
+      .insert({ ...deal, user_id: user.id, account_id: ctx?.accountId, assigned_to: user.id, position })
       .select("*, contacts(name, phone)")
       .single();
     if (error) {

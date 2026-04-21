@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import theoLogo from "@/assets/logo_theo_ia.png";
+import { useAccount } from "@/hooks/useAccount";
 import {
   Dialog,
   DialogContent,
@@ -33,19 +34,18 @@ import {
 } from "@/components/ui/dialog";
 
 const navItems = [
-  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/whatsapp", icon: Smartphone, label: "WhatsApp" },
-  { to: "/ai-agent", icon: Bot, label: "Agente IA" },
-  { to: "/knowledge-base", icon: FileText, label: "Base de Conhecimento" },
-  { to: "/crm", icon: Kanban, label: "CRM" },
-  // { to: "/products", icon: Package, label: "Produtos" }, // Oculto temporariamente - futura atualização
-  { to: "/conversations", icon: MessageSquare, label: "Conversas" },
-  { to: "/contacts", icon: Users, label: "Contatos" },
-  { to: "/appointments", icon: Calendar, label: "Agendamentos" },
-  { to: "/appointment-settings", icon: CalendarCog, label: "Config. Horários" },
-  { to: "/settings", icon: Settings, label: "Configurações" },
-  { to: "/subscriptions", icon: CreditCard, label: "Assinaturas" },
-  { to: "/support", icon: Ticket, label: "Suporte" },
+  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", perm: null as string | null },
+  { to: "/whatsapp", icon: Smartphone, label: "WhatsApp", perm: "whatsapp_instance" },
+  { to: "/ai-agent", icon: Bot, label: "Agente IA", perm: "ai_config" },
+  { to: "/knowledge-base", icon: FileText, label: "Base de Conhecimento", perm: "knowledge_base" },
+  { to: "/crm", icon: Kanban, label: "CRM", perm: "crm" },
+  { to: "/conversations", icon: MessageSquare, label: "Conversas", perm: "conversations" },
+  { to: "/contacts", icon: Users, label: "Contatos", perm: "contacts" },
+  { to: "/appointments", icon: Calendar, label: "Agendamentos", perm: "appointments" },
+  { to: "/appointment-settings", icon: CalendarCog, label: "Config. Horários", perm: "appointment_settings" },
+  { to: "/settings", icon: Settings, label: "Configurações", perm: "settings" },
+  { to: "/subscriptions", icon: CreditCard, label: "Assinaturas", perm: "billing" },
+  { to: "/support", icon: Ticket, label: "Suporte", perm: "support" },
 ];
 
 const SUPPORT_PHONE = "5547991293662";
@@ -62,6 +62,7 @@ export function Sidebar({ mobile, onNavigate }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const { membership, can } = useAccount();
 
   useEffect(() => {
     if (!user) return;
@@ -75,9 +76,17 @@ export function Sidebar({ mobile, onNavigate }: SidebarProps) {
       });
   }, [user]);
 
+  // Filtra itens conforme permissão do papel/overrides do membro
+  const visibleNavItems = navItems.filter((item) => {
+    if (!item.perm) return true;
+    // Sem membership ainda? mostra tudo (ex: cadastro recém-criado)
+    if (!membership) return true;
+    return can(item.perm);
+  });
+
   const allNavItems = isSuperAdmin
-    ? [...navItems, { to: "/admin/dashboard", icon: ShieldCheck, label: "Administração" }]
-    : navItems;
+    ? [...visibleNavItems, { to: "/admin/dashboard", icon: ShieldCheck, label: "Administração", perm: null }]
+    : visibleNavItems;
 
   const showFull = mobile || !collapsed;
 

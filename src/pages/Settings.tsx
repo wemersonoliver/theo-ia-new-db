@@ -9,6 +9,8 @@ import { useAuth } from "@/lib/auth";
 import { Key, User, Loader2, Sun, Moon, Bell, PlayCircle, Hash } from "lucide-react";
 import { NotificationsTab } from "@/components/settings/NotificationsTab";
 import { TutorialTab } from "@/components/settings/TutorialTab";
+import { TeamTab } from "@/components/team/TeamTab";
+import { useAccount } from "@/hooks/useAccount";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useTheme } from "next-themes";
@@ -16,6 +18,7 @@ import { useTheme } from "next-themes";
 export default function Settings() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { isOwner } = useAccount();
   
   const [fullName, setFullName] = useState("");
   const [userCode, setUserCode] = useState<number | null>(null);
@@ -93,6 +96,7 @@ export default function Settings() {
       <Tabs defaultValue="profile" className="space-y-6">
         <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
           <TabsTrigger value="profile" className="min-w-fit">Perfil</TabsTrigger>
+          {isOwner && <TabsTrigger value="team" className="min-w-fit">Equipe</TabsTrigger>}
           <TabsTrigger value="notifications" className="min-w-fit">Notificações</TabsTrigger>
           <TabsTrigger value="appearance" className="min-w-fit">Aparência</TabsTrigger>
           <TabsTrigger value="security" className="min-w-fit">Segurança</TabsTrigger>
@@ -154,6 +158,10 @@ export default function Settings() {
 
         <TabsContent value="notifications">
           <NotificationsTab />
+        </TabsContent>
+
+        <TabsContent value="team">
+          <TeamTab />
         </TabsContent>
 
         <TabsContent value="appearance">
