@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveAccountId } from "../_account.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -81,6 +82,7 @@ Deno.serve(async (req) => {
 
     // Find user by email
     let userId: string | null = null;
+    let accountId: string | null = null;
     if (customerEmail) {
       const { data: profile } = await supabase
         .from("profiles")
@@ -90,6 +92,7 @@ Deno.serve(async (req) => {
 
       if (profile) {
         userId = profile.user_id;
+        accountId = await resolveAccountId(supabase, userId);
       }
     }
 
@@ -108,6 +111,7 @@ Deno.serve(async (req) => {
     };
 
     if (userId) subscriptionData.user_id = userId;
+    if (accountId) subscriptionData.account_id = accountId;
     if (startedAt) subscriptionData.started_at = startedAt;
     if (cancelledAt) subscriptionData.cancelled_at = cancelledAt;
     if (refundedAt) subscriptionData.refunded_at = refundedAt;
