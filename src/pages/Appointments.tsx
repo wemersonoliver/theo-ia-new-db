@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppointments, Appointment } from "@/hooks/useAppointments";
 import { AssigneeSelector } from "@/components/team/AssigneeSelector";
+import { AppointmentDialog } from "@/components/appointments/AppointmentDialog";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { 
@@ -15,7 +16,8 @@ import {
   CheckCircle, 
   XCircle, 
   Calendar as CalendarIcon,
-  Loader2
+  Loader2,
+  Plus
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -33,7 +35,8 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
 
 export default function Appointments() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const { appointments, appointmentDates, isLoading, updateStatus, deleteAppointment, assignAppointment } = useAppointments(selectedDate);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const { appointments, appointmentDates, isLoading, updateStatus, deleteAppointment, assignAppointment, createAppointment } = useAppointments(selectedDate);
 
   const formatTime = (time: string) => {
     return time.slice(0, 5);
@@ -60,6 +63,21 @@ export default function Appointments() {
       title="Agendamentos"
       description="Visualize e gerencie seus agendamentos"
     >
+      <AppointmentDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        defaultDate={selectedDate}
+        isSubmitting={createAppointment.isPending}
+        onSubmit={async (data) => {
+          await createAppointment.mutateAsync(data);
+        }}
+      />
+      <div className="flex justify-end mb-4">
+        <Button onClick={() => setDialogOpen(true)} size="sm">
+          <Plus className="h-4 w-4 mr-2" />
+          Novo agendamento
+        </Button>
+      </div>
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Calendar */}
         <Card className="lg:col-span-1">
