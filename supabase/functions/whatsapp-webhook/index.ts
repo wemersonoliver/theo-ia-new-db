@@ -123,12 +123,26 @@ serve(async (req) => {
           const isImageMessage = !!msg.message?.imageMessage;
           const isDocumentMessage = !!msg.message?.documentMessage;
           const isStickerMessage = !!msg.message?.stickerMessage;
-          
+          const isVideoMessage = !!msg.message?.videoMessage;
+
           let content: string;
-          let messageType: "text" | "audio" | "image" | "document" = "text";
+          let messageType: "text" | "audio" | "image" | "video" | "document" = "text";
+          let persistedMedia: { url: string; mime: string; filename: string } | null = null;
+          const evolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
+          const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
 
           if (isAudioMessage) {
             messageType = "audio";
+            // Persist audio to storage (parallel-ish to transcription)
+            try {
+              persistedMedia = await persistEvolutionMedia({
+                supabase, evolutionUrl, evolutionKey, instanceName,
+                messageKey, scope: "system", phone,
+                messageId: msg.key?.id || crypto.randomUUID(),
+                fallbackExt: "ogg",
+                knownMime: msg.message?.audioMessage?.mimetype || null,
+              });
+            } catch (e) { console.error("System persist audio error:", e); }
             try {
               console.log("Transcribing system audio for:", phone);
               const transcribeResponse = await fetch(
@@ -154,10 +168,34 @@ serve(async (req) => {
               console.error("System transcription error:", error);
               content = "[Áudio não transcrito]";
             }
+          } else if (isVideoMessage) {
+            messageType = "video";
+            const caption = msg.message?.videoMessage?.caption || "";
+            try {
+              persistedMedia = await persistEvolutionMedia({
+                supabase, evolutionUrl, evolutionKey, instanceName,
+                messageKey, scope: "system", phone,
+                messageId: msg.key?.id || crypto.randomUUID(),
+                fallbackExt: "mp4",
+                knownMime: msg.message?.videoMessage?.mimetype || null,
+              });
+            } catch (e) { console.error("System persist video error:", e); }
+            content = caption ? `[Vídeo] ${caption}` : "[Vídeo]";
           } else if (isImageMessage || isDocumentMessage || isStickerMessage) {
             messageType = isImageMessage || isStickerMessage ? "image" : "document";
             const mediaType = isStickerMessage ? "sticker" : (isImageMessage ? "image" : "document");
             const caption = msg.message?.imageMessage?.caption || msg.message?.documentMessage?.caption || "";
+            const docFilename = msg.message?.documentMessage?.fileName || null;
+            try {
+              persistedMedia = await persistEvolutionMedia({
+                supabase, evolutionUrl, evolutionKey, instanceName,
+                messageKey, scope: "system", phone,
+                messageId: msg.key?.id || crypto.randomUUID(),
+                fallbackExt: isDocumentMessage ? "bin" : (isStickerMessage ? "webp" : "jpg"),
+                filename: docFilename,
+                knownMime: msg.message?.imageMessage?.mimetype || msg.message?.documentMessage?.mimetype || msg.message?.stickerMessage?.mimetype || null,
+              });
+            } catch (e) { console.error("System persist media error:", e); }
             try {
               console.log("Processing system OCR for:", phone, mediaType);
               const ocrResponse = await fetch(
@@ -199,7 +237,7 @@ serve(async (req) => {
             content = "[Mídia]";
           }
 
-          const newMessage = {
+          const newMessage: any = {
             id: msg.key?.id || crypto.randomUUID(),
             timestamp: new Date().toISOString(),
             from_me: isFromMe,
@@ -207,6 +245,11 @@ serve(async (req) => {
             type: messageType,
             sent_by: isFromMe ? "human" : "human",
           };
+          if (persistedMedia) {
+            newMessage.media_url = persistedMedia.url;
+            newMessage.media_mime = persistedMedia.mime;
+            newMessage.media_filename = persistedMedia.filename;
+          }
 
           // Get or create system conversation
           const { data: conv } = await supabase
