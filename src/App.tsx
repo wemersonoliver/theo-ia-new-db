@@ -41,7 +41,6 @@ import AdminNotifications from "./pages/admin/AdminNotifications";
 import AdminCRM from "./pages/admin/AdminCRM";
 import AdminVoiceCosts from "./pages/admin/AdminVoiceCosts";
 import AdminCreditsManager from "./pages/admin/AdminCreditsManager";
-import UserCredits from "./pages/UserCredits";
 import AdminSupportCalendar from "./pages/admin/AdminSupportCalendar";
 
 const queryClient = new QueryClient();
@@ -74,7 +73,6 @@ const App = () => (
               <Route path="/crm" element={<ProtectedRoute><CRM /></ProtectedRoute>} />
               {/* <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} /> */}{/* Oculto temporariamente */}
               <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
-              <Route path="/credits" element={<ProtectedRoute><UserCredits /></ProtectedRoute>} />
 
               {/* Admin Panel */}
               <Route path="/admin/login" element={<AdminLogin />} />
