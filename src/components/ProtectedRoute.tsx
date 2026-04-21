@@ -44,11 +44,23 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         return;
       }
 
-      // Check active subscription
+      // Resolve account: own account (owner) OR account where user is a member
+      const { data: membership } = await supabase
+        .from("account_members")
+        .select("account_id, role, accounts!inner(owner_user_id, created_at)")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .order("role", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      const accountOwnerId = (membership as any)?.accounts?.owner_user_id || user.id;
+
+      // Check active subscription for the account owner (subscription is shared)
       const { data: subscription } = await supabase
         .from("subscriptions")
         .select("status")
-        .eq("user_id", user.id)
+        .eq("user_id", accountOwnerId)
         .eq("status", "active")
         .limit(1)
         .maybeSingle();
@@ -59,11 +71,17 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         return;
       }
 
-      // Check if user is blocked
+      // Check if user is blocked + get profile (own profile for phone, owner profile for trial)
       const { data: profile } = await supabase
         .from("profiles")
-        .select("is_blocked, created_at, phone")
+        .select("is_blocked, phone")
         .eq("user_id", user.id)
+        .maybeSingle();
+
+      const { data: ownerProfile } = await supabase
+        .from("profiles")
+        .select("created_at")
+        .eq("user_id", accountOwnerId)
         .maybeSingle();
 
       // Check if phone is missing
@@ -77,9 +95,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         return;
       }
 
-      // Check trial expiration based on profile created_at
-      if (profile?.created_at) {
-        const createdAt = new Date(profile.created_at);
+      // Trial é compartilhado por account: usa created_at do owner (ou da account)
+      const trialAnchor = ownerProfile?.created_at || (membership as any)?.accounts?.created_at;
+      if (trialAnchor) {
+        const createdAt = new Date(trialAnchor);
         const now = new Date();
         const diffMs = now.getTime() - createdAt.getTime();
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
