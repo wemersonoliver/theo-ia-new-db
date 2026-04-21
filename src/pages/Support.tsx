@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,13 @@ const statusLabels: Record<string, { label: string; variant: "default" | "second
 function TicketChat({ ticketId }: { ticketId: string }) {
   const { messages, isLoading, sendMessage } = useTicketMessages(ticketId);
   const [reply, setReply] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    });
+  }, [messages]);
 
   const handleSend = async () => {
     if (!reply.trim()) return;
@@ -40,7 +47,7 @@ function TicketChat({ ticketId }: { ticketId: string }) {
 
   return (
     <div className="flex flex-col h-[50vh]">
-      <ScrollArea className="flex-1 min-h-0">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-4 space-y-3">
           {messages.map((msg) => (
             <div key={msg.id} className={cn("flex", msg.sender_type === "user" ? "justify-end" : "justify-start")}>
@@ -60,7 +67,7 @@ function TicketChat({ ticketId }: { ticketId: string }) {
             <p className="text-center text-muted-foreground text-sm py-8">Nenhuma mensagem. Envie sua primeira mensagem!</p>
           )}
         </div>
-      </ScrollArea>
+      </div>
       <div className="border-t p-3 flex gap-2">
         <Input
           value={reply}

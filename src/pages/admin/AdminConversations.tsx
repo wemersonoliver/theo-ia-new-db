@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSystemConversations, useSystemConversation } from "@/hooks/useSystemConversations";
 import type { Message } from "@/hooks/useConversations";
 import {
@@ -15,15 +16,18 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 function ChatMessages({ messages }: { messages: Message[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    requestAnimationFrame(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    });
   }, [messages]);
 
   return (
-    <ScrollArea className="flex-1" ref={scrollRef}>
+    <div ref={scrollRef} className="flex-1 overflow-y-auto">
       <div className="space-y-3 p-3">
         {messages.map((msg, i) => (
           <div key={msg.id || i} className={cn("flex", msg.from_me ? "justify-end" : "justify-start")}>
@@ -47,7 +51,7 @@ function ChatMessages({ messages }: { messages: Message[] }) {
           </div>
         ))}
       </div>
-    </ScrollArea>
+    </div>
   );
 }
 
@@ -57,6 +61,7 @@ export default function AdminConversations() {
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const { messages } = useSystemConversation(selectedPhone || "");
+  const isMobile = useIsMobile();
 
   // Auto-select phone from query param and pre-fill message
   useEffect(() => {
@@ -77,6 +82,117 @@ export default function AdminConversations() {
     await sendMessage.mutateAsync({ phone: selectedPhone, content: messageInput });
     setMessageInput("");
   };
+
+  // ── Mobile ────────────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <AdminLayout title="Conversas do Sistema" description="Conversas via WhatsApp do sistema">
+        <div className="space-y-2">
+          {isLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-slate-500" /></div>
+          ) : conversations.length === 0 ? (
+            <Card className="bg-slate-900/50 border-slate-800">
+              <CardContent className="flex flex-col items-center py-12 text-slate-500">
+                <MessageSquare className="h-12 w-12 opacity-30" />
+                <p className="mt-4 text-sm">Nenhuma conversa</p>
+              </CardContent>
+            </Card>
+          ) : (
+            conversations.map((conv) => {
+              const last = conv.messages?.[conv.messages.length - 1];
+              return (
+                <Card
+                  key={conv.id}
+                  className="cursor-pointer bg-slate-900/50 border-slate-800 hover:bg-slate-800 transition-colors"
+                  onClick={() => setSelectedPhone(conv.phone)}
+                >
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate text-sm text-slate-200">{conv.contact_name || conv.phone}</p>
+                        {last && <p className="mt-0.5 text-xs text-slate-500 truncate">{last.from_me ? "Você: " : ""}{last.content}</p>}
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {conv.ai_active ? (
+                          <Badge className="bg-amber-500/10 text-amber-400 text-xs border-amber-500/20">IA</Badge>
+                        ) : (
+                          <Badge className="bg-slate-700 text-slate-400 text-xs">Humano</Badge>
+                        )}
+                        {conv.last_message_at && (
+                          <span className="text-xs text-slate-600">
+                            {formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true, locale: ptBR })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })
+          )}
+        </div>
+
+        <Dialog open={!!selectedPhone} onOpenChange={(open) => !open && setSelectedPhone(null)}>
+          <DialogContent className="flex h-[85vh] max-h-[85vh] w-[95vw] max-w-[95vw] flex-col p-0 gap-0 rounded-xl bg-slate-900 border-slate-800">
+            <DialogHeader className="border-b border-slate-800 px-4 py-3 space-y-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <DialogTitle className="text-sm text-white truncate">{selectedConv?.contact_name || selectedPhone}</DialogTitle>
+                  <p className="text-xs text-slate-500 truncate">{selectedPhone}</p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => selectedPhone && toggleAI.mutate({ phone: selectedPhone, active: !selectedConv?.ai_active })}
+                    disabled={toggleAI.isPending}
+                    className="border-slate-700 text-slate-300 hover:bg-slate-800"
+                  >
+                    {selectedConv?.ai_active ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm("Excluir esta conversa?")) {
+                        deleteConversation.mutate(selectedPhone!);
+                        setSelectedPhone(null);
+                      }
+                    }}
+                    disabled={deleteConversation.isPending}
+                    className="border-red-900/50 text-red-400 hover:bg-red-950/30"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </DialogHeader>
+            <ChatMessages messages={messages} />
+            <div className="border-t border-slate-800 p-3 bg-slate-900">
+              <div className="flex gap-2">
+                <Textarea
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                  placeholder="Mensagem..."
+                  disabled={sendMessage.isPending}
+                  rows={2}
+                  className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-500 resize-none"
+                />
+                <Button
+                  onClick={handleSend}
+                  disabled={!messageInput.trim() || sendMessage.isPending}
+                  className="bg-amber-500 hover:bg-amber-600 text-black"
+                >
+                  {sendMessage.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout title="Conversas do Sistema" description="Conversas via WhatsApp do sistema">
