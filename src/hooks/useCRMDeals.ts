@@ -39,7 +39,6 @@ export function useCRMDeals(pipelineId: string | null, stageIds: string[]) {
       .from("crm_deals")
       .select("*, contacts(name, phone)")
       .in("stage_id", stageIds)
-      .eq("user_id", user.id)
       .order("position", { ascending: true });
 
     if (data) {

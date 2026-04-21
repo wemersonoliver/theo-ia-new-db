@@ -26,7 +26,6 @@ export function useCRMStages(pipelineId: string | null) {
       .from("crm_stages")
       .select("*")
       .eq("pipeline_id", pipelineId)
-      .eq("user_id", user.id)
       .order("position", { ascending: true });
     setStages(data || []);
     setLoading(false);
