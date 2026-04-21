@@ -14,6 +14,80 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_members: {
+        Row: {
+          account_id: string
+          created_at: string
+          id: string
+          invited_at: string
+          invited_by: string | null
+          last_seen_at: string | null
+          permissions: Json
+          role: Database["public"]["Enums"]["account_role"]
+          status: Database["public"]["Enums"]["account_member_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          id?: string
+          invited_at?: string
+          invited_by?: string | null
+          last_seen_at?: string | null
+          permissions?: Json
+          role?: Database["public"]["Enums"]["account_role"]
+          status?: Database["public"]["Enums"]["account_member_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          id?: string
+          invited_at?: string
+          invited_by?: string | null
+          last_seen_at?: string | null
+          permissions?: Json
+          role?: Database["public"]["Enums"]["account_role"]
+          status?: Database["public"]["Enums"]["account_member_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_members_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      accounts: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_user_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_user_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_user_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       admin_crm_deals: {
         Row: {
           created_at: string
@@ -269,6 +343,7 @@ export type Database = {
       }
       appointment_slots: {
         Row: {
+          account_id: string | null
           created_at: string | null
           day_of_week: number
           end_time: string
@@ -281,6 +356,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           created_at?: string | null
           day_of_week: number
           end_time: string
@@ -293,6 +369,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           created_at?: string | null
           day_of_week?: number
           end_time?: string
@@ -308,6 +385,7 @@ export type Database = {
       }
       appointment_types: {
         Row: {
+          account_id: string | null
           created_at: string | null
           days_of_week: number[]
           description: string | null
@@ -322,6 +400,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           created_at?: string | null
           days_of_week?: number[]
           description?: string | null
@@ -336,6 +415,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           created_at?: string | null
           days_of_week?: number[]
           description?: string | null
@@ -353,9 +433,11 @@ export type Database = {
       }
       appointments: {
         Row: {
+          account_id: string | null
           appointment_date: string
           appointment_time: string
           appointment_type_id: string | null
+          assigned_to: string | null
           confirmed_by_client: boolean | null
           contact_name: string | null
           created_at: string | null
@@ -373,9 +455,11 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           appointment_date: string
           appointment_time: string
           appointment_type_id?: string | null
+          assigned_to?: string | null
           confirmed_by_client?: boolean | null
           contact_name?: string | null
           created_at?: string | null
@@ -393,9 +477,11 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           appointment_date?: string
           appointment_time?: string
           appointment_type_id?: string | null
+          assigned_to?: string | null
           confirmed_by_client?: boolean | null
           contact_name?: string | null
           created_at?: string | null
@@ -424,6 +510,8 @@ export type Database = {
       }
       contacts: {
         Row: {
+          account_id: string | null
+          assigned_to: string | null
           created_at: string
           email: string | null
           id: string
@@ -435,6 +523,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
+          assigned_to?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -446,6 +536,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
+          assigned_to?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -460,6 +552,7 @@ export type Database = {
       }
       crm_activities: {
         Row: {
+          account_id: string | null
           content: string
           created_at: string
           deal_id: string
@@ -469,6 +562,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           content: string
           created_at?: string
           deal_id: string
@@ -478,6 +572,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           content?: string
           created_at?: string
           deal_id?: string
@@ -498,6 +593,7 @@ export type Database = {
       }
       crm_deal_products: {
         Row: {
+          account_id: string | null
           created_at: string
           deal_id: string
           id: string
@@ -507,6 +603,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           created_at?: string
           deal_id: string
           id?: string
@@ -516,6 +613,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           created_at?: string
           deal_id?: string
           id?: string
@@ -543,6 +641,8 @@ export type Database = {
       }
       crm_deals: {
         Row: {
+          account_id: string | null
+          assigned_to: string | null
           contact_id: string | null
           created_at: string
           description: string | null
@@ -561,6 +661,8 @@ export type Database = {
           won_at: string | null
         }
         Insert: {
+          account_id?: string | null
+          assigned_to?: string | null
           contact_id?: string | null
           created_at?: string
           description?: string | null
@@ -579,6 +681,8 @@ export type Database = {
           won_at?: string | null
         }
         Update: {
+          account_id?: string | null
+          assigned_to?: string | null
           contact_id?: string | null
           created_at?: string
           description?: string | null
@@ -615,6 +719,7 @@ export type Database = {
       }
       crm_pipelines: {
         Row: {
+          account_id: string | null
           created_at: string
           id: string
           name: string
@@ -622,6 +727,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           created_at?: string
           id?: string
           name?: string
@@ -629,6 +735,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           created_at?: string
           id?: string
           name?: string
@@ -639,6 +746,7 @@ export type Database = {
       }
       crm_stages: {
         Row: {
+          account_id: string | null
           color: string
           created_at: string
           id: string
@@ -649,6 +757,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           color?: string
           created_at?: string
           id?: string
@@ -659,6 +768,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           color?: string
           created_at?: string
           id?: string
@@ -716,6 +826,7 @@ export type Database = {
       }
       followup_config: {
         Row: {
+          account_id: string | null
           bargaining_tools: string | null
           created_at: string | null
           enabled: boolean
@@ -731,6 +842,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           bargaining_tools?: string | null
           created_at?: string | null
           enabled?: boolean
@@ -746,6 +858,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           bargaining_tools?: string | null
           created_at?: string | null
           enabled?: boolean
@@ -764,6 +877,7 @@ export type Database = {
       }
       followup_tracking: {
         Row: {
+          account_id: string | null
           context_summary: string | null
           created_at: string | null
           current_step: number
@@ -777,6 +891,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           context_summary?: string | null
           created_at?: string | null
           current_step?: number
@@ -790,6 +905,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           context_summary?: string | null
           created_at?: string | null
           current_step?: number
@@ -806,6 +922,7 @@ export type Database = {
       }
       knowledge_base_documents: {
         Row: {
+          account_id: string | null
           content_text: string | null
           created_at: string | null
           file_name: string
@@ -816,6 +933,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           content_text?: string | null
           created_at?: string | null
           file_name: string
@@ -826,6 +944,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           content_text?: string | null
           created_at?: string | null
           file_name?: string
@@ -839,6 +958,7 @@ export type Database = {
       }
       notification_contacts: {
         Row: {
+          account_id: string | null
           created_at: string
           id: string
           name: string | null
@@ -849,6 +969,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           created_at?: string
           id?: string
           name?: string | null
@@ -859,6 +980,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           created_at?: string
           id?: string
           name?: string | null
@@ -899,6 +1021,7 @@ export type Database = {
       }
       platform_settings: {
         Row: {
+          account_id: string | null
           created_at: string | null
           evolution_api_key: string | null
           evolution_api_url: string | null
@@ -907,6 +1030,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           created_at?: string | null
           evolution_api_key?: string | null
           evolution_api_url?: string | null
@@ -915,6 +1039,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           created_at?: string | null
           evolution_api_key?: string | null
           evolution_api_url?: string | null
@@ -926,6 +1051,7 @@ export type Database = {
       }
       products: {
         Row: {
+          account_id: string | null
           active: boolean
           created_at: string
           description: string | null
@@ -938,6 +1064,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           active?: boolean
           created_at?: string
           description?: string | null
@@ -950,6 +1077,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           active?: boolean
           created_at?: string
           description?: string | null
@@ -1007,6 +1135,7 @@ export type Database = {
       }
       subscriptions: {
         Row: {
+          account_id: string | null
           amount_cents: number | null
           cancelled_at: string | null
           created_at: string | null
@@ -1028,6 +1157,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           amount_cents?: number | null
           cancelled_at?: string | null
           created_at?: string | null
@@ -1049,6 +1179,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           amount_cents?: number | null
           cancelled_at?: string | null
           created_at?: string | null
@@ -1209,6 +1340,7 @@ export type Database = {
       }
       support_tickets: {
         Row: {
+          account_id: string | null
           admin_notes: string | null
           closed_at: string | null
           created_at: string | null
@@ -1221,6 +1353,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           admin_notes?: string | null
           closed_at?: string | null
           created_at?: string | null
@@ -1233,6 +1366,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           admin_notes?: string | null
           closed_at?: string | null
           created_at?: string | null
@@ -1467,6 +1601,7 @@ export type Database = {
       }
       whatsapp_ai_config: {
         Row: {
+          account_id: string | null
           active: boolean | null
           agent_name: string | null
           business_address: string | null
@@ -1497,6 +1632,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           active?: boolean | null
           agent_name?: string | null
           business_address?: string | null
@@ -1527,6 +1663,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           active?: boolean | null
           agent_name?: string | null
           business_address?: string | null
@@ -1560,6 +1697,7 @@ export type Database = {
       }
       whatsapp_ai_sessions: {
         Row: {
+          account_id: string | null
           created_at: string | null
           handed_off_at: string | null
           id: string
@@ -1572,6 +1710,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           created_at?: string | null
           handed_off_at?: string | null
           id?: string
@@ -1584,6 +1723,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           created_at?: string | null
           handed_off_at?: string | null
           id?: string
@@ -1599,7 +1739,9 @@ export type Database = {
       }
       whatsapp_conversations: {
         Row: {
+          account_id: string | null
           ai_active: boolean | null
+          assigned_to: string | null
           contact_name: string | null
           created_at: string | null
           id: string
@@ -1611,7 +1753,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           ai_active?: boolean | null
+          assigned_to?: string | null
           contact_name?: string | null
           created_at?: string | null
           id?: string
@@ -1623,7 +1767,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           ai_active?: boolean | null
+          assigned_to?: string | null
           contact_name?: string | null
           created_at?: string | null
           id?: string
@@ -1638,6 +1784,7 @@ export type Database = {
       }
       whatsapp_instances: {
         Row: {
+          account_id: string | null
           created_at: string | null
           id: string
           instance_name: string
@@ -1651,6 +1798,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           created_at?: string | null
           id?: string
           instance_name: string
@@ -1664,6 +1812,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           created_at?: string | null
           id?: string
           instance_name?: string
@@ -1680,6 +1829,7 @@ export type Database = {
       }
       whatsapp_pending_responses: {
         Row: {
+          account_id: string | null
           created_at: string | null
           id: string
           phone: string
@@ -1689,6 +1839,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           created_at?: string | null
           id?: string
           phone: string
@@ -1698,6 +1849,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           created_at?: string | null
           id?: string
           phone?: string
@@ -1717,6 +1869,15 @@ export type Database = {
         Args: { _user_id: string }
         Returns: undefined
       }
+      current_account_id: { Args: never; Returns: string }
+      get_account_role: {
+        Args: { _account_id: string }
+        Returns: Database["public"]["Enums"]["account_role"]
+      }
+      has_account_permission: {
+        Args: { _account_id: string; _permission: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1724,8 +1885,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_account_member: { Args: { _account_id: string }; Returns: boolean }
+      must_filter_by_assignment: {
+        Args: { _account_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
+      account_member_status: "active" | "invited" | "suspended" | "removed"
+      account_role: "owner" | "manager" | "seller" | "agent"
       app_role: "super_admin" | "admin" | "user"
     }
     CompositeTypes: {
@@ -1854,6 +2022,8 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      account_member_status: ["active", "invited", "suspended", "removed"],
+      account_role: ["owner", "manager", "seller", "agent"],
       app_role: ["super_admin", "admin", "user"],
     },
   },
