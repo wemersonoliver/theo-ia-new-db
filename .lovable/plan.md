@@ -1,92 +1,116 @@
 
 
-## Calendário visual estilo Google Calendar
+## Tornar o card de negócio do CRM mais completo
 
-Vou transformar a página `/appointments` em uma agenda visual moderna, parecida com o exemplo enviado (DeepCRM/Google Calendar), mantendo a simplicidade como prioridade.
+Vou transformar o `DealDialog` (que abre ao clicar num card do CRM) em um **painel lateral rico** com todas as informações do cliente, anotações, ações rápidas e histórico — mantendo simples para usuários leigos.
 
 ---
 
-### Layout novo
+### Novo layout (drawer lateral à direita, em vez de modal central)
 
 ```text
-┌────────────────────────────────────────────────────────────────────┐
-│ [Hoje] [‹] [›]   Abril de 2026          [Mês][Semana][Dia]  [+ Novo]│
-├────────────────────────────────────────────────────────────────────┤
-│ Filtros: [👤 Responsável ▾] [🏷️ Status ▾] [🔎 Buscar...]           │
-├────────────────────────────────────────────────────────────────────┤
-│  DOM    SEG    TER    QUA    QUI    SEX    SÁB                     │
-│  ┌────┬────┬────┬────┬────┬────┬────┐                              │
-│  │ 29 │ 30 │ 31 │  1 │  2 │  3 │  4 │                              │
-│  │    │    │    │ ●  │    │    │    │  ← bolinhas coloridas        │
-│  ├────┼────┼────┼────┼────┼────┼────┤    por responsável           │
-│  │  5 │  6 │  7 │  8 │  9 │ 10 │ 11 │                              │
-│  │    │ ●● │    │    │ ●  │    │    │                              │
-│  ├────┼────┼────┼────┼────┼────┼────┤                              │
-│  │ 12 │ 13 │ 14 │ 15 │ 16 │ 17 │ 18 │                              │
-│  │    │    │    │ 09:00 Teste│    │    │  ← compromisso inline     │
-│  ...                                                                │
-└────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│ ← [Título do Negócio]              [✏️] [⋮ mais]   [✕]    │
+│   🏷️ Estágio atual ▾   • R$ 1.200,00   • Alta prioridade   │
+├────────────────────────────────────────────────────────────┤
+│ AÇÕES RÁPIDAS                                              │
+│  [💬 Conversar no WhatsApp] [📅 Agendar] [✅ Ganho] [❌ Perdido] │
+├────────────────────────────────────────────────────────────┤
+│ 👤 CLIENTE                                                 │
+│   Nome:  Maria Silva                                       │
+│   📞 (47) 99999-0000  [copiar]                             │
+│   🏷️ Tags: vip, indicação                                  │
+│   👥 Responsável: João  ▾                                  │
+├────────────────────────────────────────────────────────────┤
+│ 📝 ANOTAÇÕES E HISTÓRICO                                   │
+│  ┌──────────────────────────────────────────────────────┐ │
+│  │ Escreva uma anotação...                       [Salvar]│ │
+│  └──────────────────────────────────────────────────────┘ │
+│                                                             │
+│  • João — há 2h                                            │
+│    "Cliente pediu retorno na sexta"                        │
+│  • Sistema — há 1d                                         │
+│    Movido de "Atendimento IA" → "Negociação"               │
+│  • Maria — há 3d                                           │
+│    Negócio criado                                          │
+├────────────────────────────────────────────────────────────┤
+│ 🛒 PRODUTOS  [+ adicionar]                                 │
+│   1x Plano Mensal    R$ 97,00         [✕]                  │
+│   Total: R$ 97,00                                          │
+├────────────────────────────────────────────────────────────┤
+│ 📅 PRÓXIMO AGENDAMENTO                                     │
+│   Reunião — 25/04 às 14:00 com João  [ver]                │
+│   (ou: "Nenhum agendamento" + botão criar)                 │
+├────────────────────────────────────────────────────────────┤
+│ ⚙️ DETALHES (recolhível)                                   │
+│   Descrição · Previsão de fechamento · Criado em ...       │
+└────────────────────────────────────────────────────────────┘
 ```
 
-Clicando em um dia → abre **drawer lateral** com a lista detalhada daquele dia (cards atuais reaproveitados).
-Clicando em um compromisso no grid → abre o mesmo drawer já focado no agendamento.
-Clicando em dia vazio → abre o `AppointmentDialog` já com a data preenchida.
+---
+
+### Botões de ação rápida (topo, sempre visíveis)
+
+1. **💬 Conversar no WhatsApp** → abre `/conversations?phone={telefone}` direto na conversa do cliente.
+2. **📅 Agendar** → abre o `AppointmentDialog` já preenchido com nome, telefone e responsável do negócio.
+3. **✅ Marcar como Ganho** → move o negócio para o último estágio (ou estágio "Ganho") + registra atividade automática.
+4. **❌ Marcar como Perdido** → pede motivo curto (input rápido) e arquiva.
 
 ---
 
-### Modos de visualização
+### Anotações + Histórico (timeline unificada)
 
-1. **Mês** (padrão): grid 7×5/6, cada célula mostra até 3 compromissos resumidos (`HH:MM Título`) + "+N mais"
-2. **Semana**: 7 colunas com faixas horárias verticais (06:00–22:00), compromissos em blocos coloridos
-3. **Dia**: 1 coluna com timeline vertical detalhada
+Usar a tabela existente `crm_activities` (já existe no banco) para registrar:
+- **Anotações manuais** do usuário (`type: 'note'`)
+- **Eventos automáticos** do sistema (`type: 'stage_change'`, `type: 'created'`, `type: 'won'`, `type: 'lost'`, `type: 'appointment_created'`)
 
----
-
-### Filtros (barra superior, sempre visível)
-
-- **Responsável**: multi-select com avatares dos membros da equipe (`useTeamMembers`). Padrão para owner/manager: "Toda a equipe". Para vendedor/atendente: travado em "Meus agendamentos".
-- **Status**: chips clicáveis (Agendado · Confirmado · Concluído · Cancelado)
-- **Busca**: por nome do contato, telefone ou título
+Tudo aparece numa timeline reversa (mais recente em cima), com ícone, autor, tempo relativo ("há 2h") e conteúdo. Campo de input no topo para adicionar nova anotação com um clique.
 
 ---
 
-### Sugestões para deixar ainda melhor (simplicidade)
+### Sugestões extras para deixar o card mais completo (sem complicar)
 
-1. **Cores por responsável** — cada membro ganha uma cor automática (paleta fixa de 8 cores). O ponto/bloco no calendário herda essa cor → bate o olho e sabe de quem é.
-2. **Indicador "Hoje"** com círculo destacado (igual Google Calendar).
-3. **Atalhos de teclado**: `T` = hoje, `←/→` = navegar, `M/S/D` = trocar visualização, `N` = novo agendamento.
-4. **Mini-legenda fixa no rodapé**: lista os responsáveis filtrados com sua cor.
-5. **Hover preview**: passar o mouse num compromisso mostra tooltip com nome do cliente, telefone e status — sem precisar clicar.
-6. **Arrastar para reagendar** (drag-and-drop): mover um compromisso para outro dia atualiza a data automaticamente. Confirmação rápida via toast com "Desfazer".
-7. **Botão flutuante "+"** no canto inferior direito no mobile, para criar agendamento com um toque.
-8. **Card de resumo** acima do calendário: "Hoje você tem 3 agendamentos · 1 pendente de confirmação" (já existe `todayAppointments` no hook).
+1. **Cor do estágio na borda lateral do drawer** — bate o olho e sabe em que fase está.
+2. **Indicador de "tempo parado"** — se o negócio está no mesmo estágio há mais de 7 dias, mostra um aviso amarelo "⏰ Parado há 12 dias — vale dar um follow-up?".
+3. **Última mensagem do WhatsApp** — preview de 1 linha da última conversa com esse contato (se houver), com botão "Ver conversa".
+4. **Próximo agendamento** — busca em `appointments` pelo telefone do contato e mostra o mais próximo no futuro.
+5. **Cópia rápida** — botões `[copiar]` ao lado do telefone e do valor para facilitar compartilhar.
+6. **Atribuir responsável visível no topo** — `AssigneeSelector` com avatar colorido (usar `assignee-colors`).
+7. **Atalhos de teclado**: `Esc` fecha · `Ctrl+Enter` salva anotação · `W` marca ganho.
+8. **Botão "Ir para o contato"** — leva para `/contacts?id=...` para ver tudo do cliente.
+9. **Confirmação suave ao excluir** — modal "Tem certeza? Esta ação não pode ser desfeita" com botão destacado.
+10. **Modo edição inline** — clicar no título, valor ou estágio edita direto, sem precisar abrir formulário separado (tipo Trello/Notion).
 
 ---
 
 ### O que será criado/alterado
 
 **Novos arquivos:**
-- `src/components/appointments/AppointmentCalendar.tsx` — componente principal com grid mensal/semanal/diário
-- `src/components/appointments/AppointmentDayDrawer.tsx` — drawer lateral com lista do dia
-- `src/components/appointments/AppointmentFilters.tsx` — barra de filtros (responsável/status/busca)
-- `src/components/appointments/AppointmentEventChip.tsx` — bloco visual de compromisso na grade
-- `src/lib/assignee-colors.ts` — utilitário que mapeia `user_id` → cor fixa
+- `src/components/crm/DealDetailsDrawer.tsx` — novo componente principal (drawer lateral com seções)
+- `src/components/crm/DealActivityTimeline.tsx` — timeline de anotações + eventos automáticos
+- `src/components/crm/DealQuickActions.tsx` — barra de botões de ação rápida
+- `src/hooks/useCRMActivities.ts` — hook para listar/criar atividades do deal
+- `src/hooks/useDealRelatedData.ts` — busca paralela: última conversa + próximo agendamento + produtos do deal
 
 **Alterados:**
-- `src/pages/Appointments.tsx` — substituir layout atual (calendário pequeno + lista) pelo novo calendário visual em tela cheia
-- `src/hooks/useAppointments.ts` — adicionar busca por intervalo de datas (mês/semana visível) ao invés de só um dia, e mutation `rescheduleAppointment` para drag-and-drop
+- `src/components/crm/KanbanBoard.tsx` — substituir `DealDialog` por `DealDetailsDrawer` no clique do card; manter `DealDialog` apenas para criação rápida (botão "+")
+- `src/components/crm/DealCard.tsx` — adicionar pequenos indicadores: ícone de WhatsApp se há conversa ativa, ícone de calendário se há agendamento futuro, badge "⏰" se parado >7 dias
+- `src/hooks/useCRMDeals.ts` — adicionar mutations `markAsWon(id)` e `markAsLost(id, reason)` que também registram atividade automática
 
-**Mantido como está:**
-- `AppointmentDialog` (formulário de criação) — só será reusado
-- Hooks de criação/atribuição/status/exclusão — apenas reaproveitados
+**Mantido:**
+- `DealDialog` continua existindo para o fluxo de **criação** de negócio (formulário rápido)
+- `useCRMDeals`, `useProducts`, `useContacts` reaproveitados
 
 ---
 
 ### Detalhes técnicos
 
-- **Biblioteca de calendário**: usar `date-fns` (já instalado) para construir a grade manualmente — sem nova dependência pesada. Mantém bundle leve e visual 100% Tailwind/shadcn.
-- **Drag-and-drop**: usar `@dnd-kit/core` se já estiver no projeto (o CRM Kanban usa); senão, implementar com HTML5 drag nativo para evitar nova dep.
-- **Performance**: a query do mês carrega só o intervalo visível (`.gte(start).lte(end)`), substituindo a busca atual por dia.
-- **Responsivo**: no mobile (<768px) o modo "Mês" colapsa para visualização "Lista por dia" (mais legível em telas pequenas) — visualizações Semana/Dia ficam acessíveis nos botões.
-- **Permissões**: vendedor/atendente recebe filtro forçado `assigned_to = user.id` no client (e RLS já garante no banco).
+- **Componente base**: usar o `Sheet` do shadcn (lateral direito, ~480px desktop / fullscreen mobile) — já está no projeto.
+- **Atividades**: a tabela `crm_activities` já existe com RLS por `account_id`. Eventos automáticos serão inseridos no client após cada mutation (`updateDeal` registra mudança de estágio, `markAsWon` registra ganho, etc.).
+- **Botão WhatsApp**: navega para `/conversations?phone=${normalizePhone(deal.contact_phone)}` — a página Conversations já aceita esse query param.
+- **Botão Agendar**: reusa o `AppointmentDialog` existente passando `defaultPhone`, `defaultContactName`, `defaultAssignedTo`.
+- **Próximo agendamento**: query simples em `appointments` filtrada por telefone normalizado e `appointment_date >= hoje`, ordenada e limitada a 1.
+- **Última conversa**: query em `whatsapp_conversations` por telefone normalizado, lendo só o último item de `messages`.
+- **Performance**: tudo carregado em paralelo via `Promise.all` ao abrir o drawer; cache local para não refetch ao reabrir o mesmo deal em <30s.
+- **Mobile**: drawer ocupa tela inteira, ações ficam em barra fixa no topo, timeline rolável.
 
