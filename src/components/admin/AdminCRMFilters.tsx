@@ -60,18 +60,18 @@ export function AdminCRMFilters({ filters, onChange }: Props) {
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <div className="relative flex-1 min-w-[200px] max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+      <div className="relative flex-1 min-w-[220px] max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
         <Input
           placeholder="Buscar por nome, email ou telefone..."
           value={filters.search}
           onChange={(e) => onChange({ ...filters, search: e.target.value })}
-          className="pl-9 h-9 bg-slate-900 border-slate-700 text-slate-200 placeholder:text-slate-500"
+          className="pl-9 h-9 bg-slate-800/80 border-slate-600 text-white placeholder:text-slate-400 focus-visible:ring-amber-500/40 focus-visible:border-amber-500/60"
         />
         {filters.search && (
           <button
             onClick={() => onChange({ ...filters, search: "" })}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -80,18 +80,18 @@ export function AdminCRMFilters({ filters, onChange }: Props) {
 
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="h-9 gap-1.5 bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800">
+          <Button variant="outline" size="sm" className="h-9 gap-1.5 bg-slate-800/80 border-slate-600 text-white hover:bg-slate-700 hover:text-white">
             <Filter className="h-3.5 w-3.5" />
             Filtros
             {activeCount > 0 && (
-              <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-[10px] bg-amber-500/20 text-amber-300">
+              <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-[10px] bg-amber-500 text-slate-950 font-bold border-0">
                 {activeCount}
               </Badge>
             )}
             <ChevronDown className="h-3 w-3 ml-0.5" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-80 p-4 bg-slate-900 border-slate-700" align="start">
+        <PopoverContent className="w-80 p-4 bg-slate-900 border-slate-700 text-slate-100" align="start">
           <div className="space-y-4">
             <FilterGroup
               label="Assinatura ativa"
@@ -140,25 +140,25 @@ export function AdminCRMFilters({ filters, onChange }: Props) {
       {activeCount > 0 && (
         <div className="flex gap-1 flex-wrap">
           {filters.subscriptionActive !== "any" && (
-            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-slate-800 text-slate-200" onClick={() => onChange({ ...filters, subscriptionActive: "any" })}>
+            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-amber-500/15 text-amber-200 border border-amber-500/30 hover:bg-amber-500/25" onClick={() => onChange({ ...filters, subscriptionActive: "any" })}>
               Assinatura: {filters.subscriptionActive === "yes" ? "Ativa" : "Inativa"}
               <X className="h-2.5 w-2.5" />
             </Badge>
           )}
           {filters.onboardingCompleted !== "any" && (
-            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-slate-800 text-slate-200" onClick={() => onChange({ ...filters, onboardingCompleted: "any" })}>
+            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-emerald-500/15 text-emerald-200 border border-emerald-500/30 hover:bg-emerald-500/25" onClick={() => onChange({ ...filters, onboardingCompleted: "any" })}>
               Onboarding: {filters.onboardingCompleted === "yes" ? "Concluído" : "Pendente"}
               <X className="h-2.5 w-2.5" />
             </Badge>
           )}
           {filters.whatsappStatus !== "any" && (
-            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-slate-800 text-slate-200" onClick={() => onChange({ ...filters, whatsappStatus: "any" })}>
+            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-sky-500/15 text-sky-200 border border-sky-500/30 hover:bg-sky-500/25" onClick={() => onChange({ ...filters, whatsappStatus: "any" })}>
               WA: {filters.whatsappStatus === "on" ? "On" : "Off"}
               <X className="h-2.5 w-2.5" />
             </Badge>
           )}
           {(filters.registeredFrom || filters.registeredTo) && (
-            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-slate-800 text-slate-200" onClick={() => onChange({ ...filters, registeredFrom: null, registeredTo: null })}>
+            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer bg-violet-500/15 text-violet-200 border border-violet-500/30 hover:bg-violet-500/25" onClick={() => onChange({ ...filters, registeredFrom: null, registeredTo: null })}>
               {filters.registeredFrom ? format(filters.registeredFrom, "dd/MM/yy") : "..."} → {filters.registeredTo ? format(filters.registeredTo, "dd/MM/yy") : "..."}
               <X className="h-2.5 w-2.5" />
             </Badge>
@@ -172,7 +172,7 @@ export function AdminCRMFilters({ filters, onChange }: Props) {
 function FilterGroup({ label, options, value, onSelect }: { label: string; options: readonly { value: string; label: string }[]; value: string; onSelect: (v: string) => void }) {
   return (
     <div>
-      <Label className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</Label>
+      <Label className="text-xs font-semibold uppercase tracking-wider text-amber-400/90">{label}</Label>
       <div className="flex gap-1.5 mt-2">
         {options.map((o) => (
           <button
@@ -181,8 +181,8 @@ function FilterGroup({ label, options, value, onSelect }: { label: string; optio
             className={cn(
               "rounded-full px-3 py-1 text-xs font-medium border transition-all flex-1",
               value === o.value
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                : "bg-slate-800/50 text-slate-400 border-transparent hover:bg-slate-800"
+                ? "bg-amber-500 text-slate-950 border-amber-500 shadow-sm"
+                : "bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 hover:text-white"
             )}
           >
             {o.label}
@@ -201,15 +201,15 @@ function DateField({ value, onChange, placeholder }: { value: Date | null; onCha
           variant="outline"
           size="sm"
           className={cn(
-            "h-9 justify-start text-left font-normal bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700",
-            !value && "text-slate-500"
+            "h-9 justify-start text-left font-normal bg-slate-800 border-slate-600 text-white hover:bg-slate-700 hover:text-white",
+            !value && "text-slate-400"
           )}
         >
           <CalendarIcon className="mr-2 h-3.5 w-3.5" />
           {value ? format(value, "dd/MM/yy", { locale: ptBR }) : placeholder}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0 bg-slate-900 border-slate-700" align="start">
+      <PopoverContent className="w-auto p-0 bg-slate-900 border-slate-700 text-slate-100" align="start">
         <Calendar
           mode="single"
           selected={value || undefined}
@@ -220,7 +220,7 @@ function DateField({ value, onChange, placeholder }: { value: Date | null; onCha
         />
         {value && (
           <div className="p-2 border-t border-slate-700">
-            <Button variant="ghost" size="sm" className="w-full text-xs text-slate-400" onClick={() => onChange(null)}>
+            <Button variant="ghost" size="sm" className="w-full text-xs text-slate-300 hover:text-white hover:bg-slate-800" onClick={() => onChange(null)}>
               Limpar
             </Button>
           </div>
