@@ -29,7 +29,7 @@ const statusLabels: Record<string, { label: string; variant: "default" | "second
   closed: { label: "Fechado", variant: "outline" },
 };
 
-function TicketChat({ ticketId }: { ticketId: string }) {
+function TicketChat({ ticketId, fullHeight = false }: { ticketId: string; fullHeight?: boolean }) {
   const { messages, isLoading, sendMessage } = useTicketMessages(ticketId);
   const [reply, setReply] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -47,7 +47,7 @@ function TicketChat({ ticketId }: { ticketId: string }) {
   };
 
   return (
-    <div className="flex flex-col h-[50vh]">
+    <div className={cn("flex flex-col", fullHeight ? "flex-1 min-h-0" : "h-[50vh]")}>
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-4 space-y-3">
           {messages.map((msg) => (
@@ -256,9 +256,7 @@ export default function Support() {
               <p className="text-xs text-muted-foreground truncate">{selectedTicket.description}</p>
             </div>
           </div>
-          <div className="flex-1 min-h-0 flex flex-col">
-            <TicketChat ticketId={selectedTicket.id} />
-          </div>
+          <TicketChat ticketId={selectedTicket.id} fullHeight />
         </div>
       )}
     </DashboardLayout>
