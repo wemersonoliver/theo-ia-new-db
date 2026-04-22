@@ -18,6 +18,7 @@ import { DealDialog } from "@/components/crm/DealDialog";
 import { TagInput, tagClass } from "@/components/TagInput";
 import { MediaBubble } from "@/components/MediaBubble";
 import { AssigneeSelector } from "@/components/team/AssigneeSelector";
+import { WhatsAppAvatar } from "@/components/WhatsAppAvatar";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -271,6 +272,12 @@ export default function Conversations() {
                 >
                   <CardContent className="p-3">
                     <div className="flex items-center justify-between gap-2">
+                      <WhatsAppAvatar
+                        name={conv.contact_name}
+                        phone={conv.phone}
+                        pictureUrl={(conv as any).profile_picture_url}
+                        className="h-11 w-11"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="font-medium truncate">
                           {conv.contact_name || conv.phone}
@@ -314,6 +321,12 @@ export default function Conversations() {
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
+              <WhatsAppAvatar
+                name={selectedConversation?.contact_name}
+                phone={selectedPhone}
+                pictureUrl={(selectedConversation as any)?.profile_picture_url}
+                className="h-9 w-9"
+              />
               <button
                 className="flex-1 min-w-0 text-left"
                 onClick={() => openContactPage(selectedPhone)}
