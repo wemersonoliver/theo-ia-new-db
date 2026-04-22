@@ -38,11 +38,14 @@ import {
   User,
   Tag,
   X,
+  Upload,
+  MapPin,
 } from "lucide-react";
 import { useContacts, type Contact } from "@/hooks/useContacts";
 import { TagInput, tagClass } from "@/components/TagInput";
 import { useSearchParams } from "react-router-dom";
 import { AssigneeSelector } from "@/components/team/AssigneeSelector";
+import { ContactImportDialog } from "@/components/contacts/ContactImportDialog";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function getInitials(name: string | null, phone: string) {
