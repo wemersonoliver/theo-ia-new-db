@@ -182,19 +182,10 @@ export function useAdminDashboardMetrics(range: DateRange) {
       const apptCur = (appts || []).filter((a: any) => inRange(a.created_at)).length;
       const apptPrev = (appts || []).filter((a: any) => inPrev(a.created_at)).length;
 
-      // Deals ganhos
-      const { data: deals } = await supabase
-        .from("crm_deals")
-        .select("id, account_id, won_at, value_cents")
-        .not("won_at", "is", null)
-        .gte("won_at", fetchStart)
-        .lte("won_at", fetchEnd);
-      const salesCur = (deals || []).filter((d: any) => inRange(d.won_at));
-      const salesPrev = (deals || []).filter((d: any) => inPrev(d.won_at));
-      const salesValueCur = salesCur.reduce(
-        (s: number, d: any) => s + (d.value_cents || 0),
-        0
-      );
+      // Vendas = assinaturas pagas (Kiwify) — já calculadas acima
+      const salesCur = paidSubsCur;
+      const salesPrev = paidSubsPrev;
+      const salesValueCur = paidSubsValueCur;
 
       // Tickets abertos
       const { count: openTickets } = await supabase
