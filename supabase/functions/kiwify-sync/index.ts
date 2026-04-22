@@ -131,9 +131,18 @@ Deno.serve(async (req) => {
           if (profile) userId = profile.user_id;
         }
 
-        const amountCents = sale.Commissions?.charge_amount
-          ? Math.round(parseFloat(sale.Commissions.charge_amount) * 100)
-          : null;
+        // Kiwify pode enviar valor em reais ("97.00") OU já em centavos ("9700")
+        const parseKiwifyAmount = (raw: unknown): number | null => {
+          if (raw === null || raw === undefined) return null;
+          const str = String(raw).trim();
+          if (!str) return null;
+          const hasDecimal = str.includes(".") || str.includes(",");
+          const num = parseFloat(str.replace(",", "."));
+          if (!isFinite(num)) return null;
+          if (hasDecimal) return Math.round(num * 100);
+          return num >= 1000 ? Math.round(num) : Math.round(num * 100);
+        };
+        const amountCents = parseKiwifyAmount(sale.Commissions?.charge_amount);
 
         // Upsert
         const { data: existing } = await supabase
