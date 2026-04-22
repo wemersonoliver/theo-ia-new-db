@@ -53,6 +53,22 @@ serve(async (req) => {
     );
     const accountId = system ? null : await resolveAccountId(supabaseAdmin, userId);
 
+    // Resolve attendant display name to prefix message (e.g. "*Maria*:\nmensagem")
+    let attendantName = "";
+    {
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("full_name, email")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const raw = (profile?.full_name || profile?.email || "").trim();
+      if (raw) {
+        // Use only first name to keep messages clean
+        attendantName = raw.split(/\s+/)[0];
+      }
+    }
+    const outgoingText = attendantName ? `*${attendantName}*:\n${content}` : content;
+
     if (system) {
       // Use system WhatsApp instance (admin/support)
       const { data: sysInstance } = await supabaseAdmin
@@ -108,7 +124,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         number: normalizedPhone,
-        text: content,
+        text: outgoingText,
       }),
     });
 
@@ -121,9 +137,11 @@ serve(async (req) => {
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       from_me: true,
-      content,
+      content: outgoingText,
       type: "text",
       sent_by: "human",
+      attendant_name: attendantName || null,
+      attendant_user_id: userId,
     };
 
     if (system) {
