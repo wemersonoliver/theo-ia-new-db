@@ -267,6 +267,10 @@ export default function Contacts() {
             )}
             Sincronizar
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setIsImportDialog(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Importar
+          </Button>
           <Button size="sm" onClick={openNew}>
             <Plus className="h-4 w-4 mr-2" />
             Novo Contato
