@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 import { AppointmentDialog } from "@/components/appointments/AppointmentDialog";
+import { TagInput } from "@/components/TagInput";
 import { DealQuickActions } from "./DealQuickActions";
 import { DealActivityTimeline } from "./DealActivityTimeline";
 import { CRMDeal } from "@/hooks/useCRMDeals";
@@ -85,6 +86,7 @@ export function DealDetailsDrawer({
   deal,
   stages,
   contacts = [],
+  availableTags,
   onUpdate,
   onDelete,
   onMarkWon,
