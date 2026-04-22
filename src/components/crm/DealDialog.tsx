@@ -33,6 +33,7 @@ interface DealDialogProps {
   contacts?: { id: string; name: string | null; phone: string }[];
   products?: Product[];
   initialDealProducts?: DealProduct[];
+  availableTags?: string[];
   onSave: (data: {
     title: string;
     stage_id: string;
@@ -47,7 +48,7 @@ interface DealDialogProps {
   onDelete?: (id: string) => void;
 }
 
-export function DealDialog({ open, onOpenChange, stages, deal, defaultStageId, defaultContactId, defaultTitle, contacts, products, initialDealProducts, onSave, onDelete }: DealDialogProps) {
+export function DealDialog({ open, onOpenChange, stages, deal, defaultStageId, defaultContactId, defaultTitle, contacts, products, initialDealProducts, availableTags, onSave, onDelete }: DealDialogProps) {
   const [title, setTitle] = useState("");
   const [stageId, setStageId] = useState("");
   const [valueBRL, setValueBRL] = useState("");
@@ -226,7 +227,7 @@ export function DealDialog({ open, onOpenChange, stages, deal, defaultStageId, d
 
           <div>
             <Label>Tags / Etiquetas</Label>
-            <TagInput tags={tags} onChange={setTags} />
+            <TagInput tags={tags} onChange={setTags} extraSuggestions={availableTags} />
           </div>
         </div>
         <DialogFooter className="gap-2">
