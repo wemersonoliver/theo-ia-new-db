@@ -519,6 +519,8 @@ export type Database = {
           name: string | null
           notes: string | null
           phone: string
+          profile_picture_updated_at: string | null
+          profile_picture_url: string | null
           tags: string[] | null
           updated_at: string
           user_id: string
@@ -533,6 +535,8 @@ export type Database = {
           name?: string | null
           notes?: string | null
           phone: string
+          profile_picture_updated_at?: string | null
+          profile_picture_url?: string | null
           tags?: string[] | null
           updated_at?: string
           user_id: string
@@ -547,6 +551,8 @@ export type Database = {
           name?: string | null
           notes?: string | null
           phone?: string
+          profile_picture_updated_at?: string | null
+          profile_picture_url?: string | null
           tags?: string[] | null
           updated_at?: string
           user_id?: string
@@ -1793,6 +1799,8 @@ export type Database = {
           last_message_at: string | null
           messages: Json | null
           phone: string
+          profile_picture_updated_at: string | null
+          profile_picture_url: string | null
           total_messages: number | null
           updated_at: string | null
           user_id: string
@@ -1807,6 +1815,8 @@ export type Database = {
           last_message_at?: string | null
           messages?: Json | null
           phone: string
+          profile_picture_updated_at?: string | null
+          profile_picture_url?: string | null
           total_messages?: number | null
           updated_at?: string | null
           user_id: string
@@ -1821,6 +1831,8 @@ export type Database = {
           last_message_at?: string | null
           messages?: Json | null
           phone?: string
+          profile_picture_updated_at?: string | null
+          profile_picture_url?: string | null
           total_messages?: number | null
           updated_at?: string | null
           user_id?: string
