@@ -545,7 +545,7 @@ export default function Conversations() {
                     <WhatsAppAvatar
                       name={selectedConversation?.contact_name}
                       phone={selectedPhone}
-                      pictureUrl={(selectedConversation as any)?.profile_picture_url}
+                      pictureUrl={getConversationPicture(selectedPhone, (selectedConversation as any)?.profile_picture_url)}
                     />
                     <div className="min-w-0">
                     {/* Clickable contact name */}
