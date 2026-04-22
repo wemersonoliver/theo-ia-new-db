@@ -7,15 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { DealTaskCounts } from "@/hooks/useCRMDealTasks";
 
 interface KanbanColumnProps {
   stage: CRMStage;
   deals: CRMDeal[];
   onAddDeal: (stageId: string) => void;
   onDealClick: (deal: CRMDeal) => void;
+  taskCounts?: Record<string, DealTaskCounts>;
 }
 
-export function KanbanColumn({ stage, deals, onAddDeal, onDealClick }: KanbanColumnProps) {
+export function KanbanColumn({ stage, deals, onAddDeal, onDealClick, taskCounts }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id, data: { type: "stage" } });
 
   const totalValue = deals.reduce((sum, d) => sum + (d.value_cents || 0), 0);
@@ -52,7 +54,7 @@ export function KanbanColumn({ stage, deals, onAddDeal, onDealClick }: KanbanCol
           <SortableContext items={deals.map((d) => d.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-2">
               {deals.map((deal) => (
-                <DealCard key={deal.id} deal={deal} onClick={onDealClick} />
+                <DealCard key={deal.id} deal={deal} onClick={onDealClick} taskCounts={taskCounts?.[deal.id]} />
               ))}
             </div>
           </SortableContext>
