@@ -359,6 +359,12 @@ export default function Contacts() {
                         <span className="truncate">{contact.email}</span>
                       </div>
                     )}
+                    {(contact as any).address && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{(contact as any).address}</span>
+                      </div>
+                    )}
                     {contact.notes && (
                       <div className="flex items-start gap-1 text-xs text-muted-foreground mt-1">
                         <FileText className="h-3 w-3 shrink-0 mt-0.5" />
