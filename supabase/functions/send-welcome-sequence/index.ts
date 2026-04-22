@@ -165,6 +165,20 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Resolve system WhatsApp instance once
+    const { data: sysInstance } = await supabase
+      .from("system_whatsapp_instance")
+      .select("instance_name, status")
+      .maybeSingle();
+
+    if (!sysInstance || sysInstance.status !== "connected") {
+      return new Response(
+        JSON.stringify({ ok: false, error: "system WhatsApp not connected" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const instanceName = (sysInstance as any).instance_name as string;
+
     const { data: pending, error } = await supabase
       .from("system_welcome_queue")
       .select("*")
@@ -177,7 +191,7 @@ Deno.serve(async (req) => {
     let processed = 0;
     for (const item of pending || []) {
       try {
-        await processOne(supabase, item, cfg);
+        await processOne(supabase, item, cfg, instanceName);
         processed++;
       } catch (e) {
         console.error("welcome processOne err", item.id, e);
