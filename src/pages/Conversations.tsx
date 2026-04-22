@@ -488,26 +488,36 @@ export default function Conversations() {
                         )}
                         onClick={() => setSelectedPhone(conv.phone)}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium truncate text-sm">
-                            {conv.contact_name || conv.phone}
-                          </span>
-                          {conv.ai_active ? (
-                            <Badge variant="outline" className="text-xs shrink-0">IA</Badge>
-                          ) : (
-                            <Badge variant="secondary" className="text-xs shrink-0">Humano</Badge>
-                          )}
+                        <div className="flex items-start gap-3">
+                          <WhatsAppAvatar
+                            name={conv.contact_name}
+                            phone={conv.phone}
+                            pictureUrl={(conv as any).profile_picture_url}
+                            className="h-10 w-10"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium truncate text-sm">
+                                {conv.contact_name || conv.phone}
+                              </span>
+                              {conv.ai_active ? (
+                                <Badge variant="outline" className="text-xs shrink-0">IA</Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-xs shrink-0">Humano</Badge>
+                              )}
+                            </div>
+                            {lastMessage && (
+                              <p className="mt-1 truncate text-xs text-muted-foreground">
+                                {lastMessage.from_me ? "Você: " : ""}{lastMessage.content}
+                              </p>
+                            )}
+                            {conv.last_message_at && (
+                              <p className="mt-1 text-xs text-muted-foreground/70">
+                                {formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true, locale: ptBR })}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        {lastMessage && (
-                          <p className="mt-1 truncate text-xs text-muted-foreground">
-                            {lastMessage.from_me ? "Você: " : ""}{lastMessage.content}
-                          </p>
-                        )}
-                        {conv.last_message_at && (
-                          <p className="mt-1 text-xs text-muted-foreground/70">
-                            {formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true, locale: ptBR })}
-                          </p>
-                        )}
                       </button>
                     );
                   })}
@@ -523,7 +533,13 @@ export default function Conversations() {
             <>
               <CardHeader className="border-b py-3">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <WhatsAppAvatar
+                      name={selectedConversation?.contact_name}
+                      phone={selectedPhone}
+                      pictureUrl={(selectedConversation as any)?.profile_picture_url}
+                    />
+                    <div className="min-w-0">
                     {/* Clickable contact name */}
                     <button
                       className="flex items-center gap-1.5 group text-left"
@@ -535,6 +551,7 @@ export default function Conversations() {
                       <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                     </button>
                     <p className="text-sm text-muted-foreground">{selectedPhone}</p>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
