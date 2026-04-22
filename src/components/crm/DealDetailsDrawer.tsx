@@ -542,6 +542,9 @@ export function DealDetailsDrawer({
               )}
             </section>
 
+            {/* Tarefas */}
+            <DealTasksSection dealId={deal.id} />
+
             {/* Anotações + Histórico */}
             <section className="space-y-2">
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
