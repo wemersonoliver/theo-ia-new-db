@@ -84,6 +84,7 @@ async function processOne(
   supabase: ReturnType<typeof createClient>,
   item: any,
   cfg: any,
+  instanceName: string,
 ) {
   const phone: string = item.phone;
   const fullName: string | null = item.full_name;
@@ -122,7 +123,7 @@ async function processOne(
   for (let i = 0; i < messages.length; i++) {
     const text = applyVars(messages[i], vars);
     try {
-      await sendSystemMessage(phone, text);
+      await sendSystemMessage(supabase, instanceName, phone, text);
     } catch (e) {
       console.error("welcome send err", item.id, e);
       await supabase
