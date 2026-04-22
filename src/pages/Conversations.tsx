@@ -540,8 +540,8 @@ export default function Conversations() {
           {selectedPhone ? (
             <>
               <CardHeader className="border-b py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                  <div className="flex items-center gap-3 min-w-0 flex-1 basis-full xl:basis-auto">
                     <WhatsAppAvatar
                       name={selectedConversation?.contact_name}
                       phone={selectedPhone}
@@ -550,19 +550,19 @@ export default function Conversations() {
                     <div className="min-w-0">
                     {/* Clickable contact name */}
                     <button
-                      className="flex items-center gap-1.5 group text-left"
+                      className="flex items-center gap-1.5 group text-left max-w-full"
                       onClick={() => openContactPage(selectedPhone)}
                     >
-                      <CardTitle className="text-base group-hover:text-primary transition-colors">
+                      <CardTitle className="text-base group-hover:text-primary transition-colors truncate">
                         {selectedConversation?.contact_name || selectedPhone}
                       </CardTitle>
                       <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                     </button>
-                    <p className="text-sm text-muted-foreground">{selectedPhone}</p>
+                    <p className="text-sm text-muted-foreground truncate">{selectedPhone}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} />
                     <TagPopover phone={selectedPhone} />
                     <AssigneeSelector
