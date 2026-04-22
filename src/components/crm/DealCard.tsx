@@ -3,11 +3,13 @@ import { CSS } from "@dnd-kit/utilities";
 import { CRMDeal } from "@/hooks/useCRMDeals";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Calendar, DollarSign, User, Pencil } from "lucide-react";
+import { Calendar, DollarSign, User, Pencil, ListTodo, AlertTriangle } from "lucide-react";
+import type { DealTaskCounts } from "@/hooks/useCRMDealTasks";
 
 interface DealCardProps {
   deal: CRMDeal;
   onClick: (deal: CRMDeal) => void;
+  taskCounts?: DealTaskCounts;
 }
 
 const priorityColors: Record<string, string> = {
@@ -16,7 +18,7 @@ const priorityColors: Record<string, string> = {
   low: "bg-muted text-muted-foreground border-border",
 };
 
-export function DealCard({ deal, onClick }: DealCardProps) {
+export function DealCard({ deal, onClick, taskCounts }: DealCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: deal.id,
     data: { type: "deal", deal },
@@ -103,6 +105,32 @@ export function DealCard({ deal, onClick }: DealCardProps) {
             <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", priorityColors[deal.priority] || priorityColors.medium)}>
               {deal.priority === "high" ? "Alta" : deal.priority === "low" ? "Baixa" : "Média"}
             </Badge>
+            {taskCounts && taskCounts.total > 0 && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0 text-[10px] font-medium",
+                  taskCounts.overdue > 0
+                    ? "border-destructive/30 bg-destructive/10 text-destructive"
+                    : taskCounts.dueToday > 0
+                    ? "border-amber-300/60 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                    : "border-border bg-muted text-muted-foreground"
+                )}
+                title={
+                  taskCounts.overdue > 0
+                    ? `${taskCounts.overdue} tarefa(s) vencida(s)`
+                    : taskCounts.dueToday > 0
+                    ? `${taskCounts.dueToday} tarefa(s) para hoje`
+                    : `${taskCounts.completed}/${taskCounts.total} tarefas concluídas`
+                }
+              >
+                {taskCounts.overdue > 0 ? (
+                  <AlertTriangle className="h-2.5 w-2.5" />
+                ) : (
+                  <ListTodo className="h-2.5 w-2.5" />
+                )}
+                {taskCounts.completed}/{taskCounts.total}
+              </span>
+            )}
             {daysInStage > 0 && (
               <span className={cn("text-[10px]", daysInStage > 7 ? "text-destructive" : "text-muted-foreground")}>
                 {daysInStage}d
