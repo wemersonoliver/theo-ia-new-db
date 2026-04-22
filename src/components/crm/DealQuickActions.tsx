@@ -37,7 +37,6 @@ export function DealQuickActions({
         size="sm"
         variant="outline"
         onClick={onSchedule}
-        disabled={!hasPhone}
       >
         <CalendarPlus className="h-4 w-4 mr-1.5" />
         Agendar
