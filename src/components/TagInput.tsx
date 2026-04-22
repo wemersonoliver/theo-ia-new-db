@@ -23,14 +23,19 @@ export const SUGGESTED_TAGS = [
 interface TagInputProps {
   tags: string[];
   onChange: (tags: string[]) => void;
+  extraSuggestions?: string[];
 }
 
-export function TagInput({ tags, onChange }: TagInputProps) {
+export function TagInput({ tags, onChange, extraSuggestions = [] }: TagInputProps) {
   const [input, setInput] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const suggestions = SUGGESTED_TAGS.filter(
+  const allSuggestions = Array.from(
+    new Set([...SUGGESTED_TAGS, ...extraSuggestions.filter(Boolean)])
+  );
+
+  const suggestions = allSuggestions.filter(
     (s) =>
       s.toLowerCase().includes(input.toLowerCase()) &&
       !tags.map((t) => t.toLowerCase()).includes(s.toLowerCase())
@@ -95,7 +100,7 @@ export function TagInput({ tags, onChange }: TagInputProps) {
       {showSuggestions && (input || suggestions.length > 0) && (
         <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-md border bg-popover shadow-md">
           {input.trim() &&
-            !SUGGESTED_TAGS.map((s) => s.toLowerCase()).includes(input.toLowerCase()) && (
+            !allSuggestions.map((s) => s.toLowerCase()).includes(input.toLowerCase()) && (
               <button
                 className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
                 onMouseDown={() => addTag(input)}
