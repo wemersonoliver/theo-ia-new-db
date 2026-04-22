@@ -46,25 +46,7 @@ import { TagInput, tagClass } from "@/components/TagInput";
 import { useSearchParams } from "react-router-dom";
 import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 import { ContactImportDialog } from "@/components/contacts/ContactImportDialog";
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-function getInitials(name: string | null, phone: string) {
-  if (name?.trim()) {
-    const parts = name.trim().split(" ");
-    return parts.length > 1
-      ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-      : parts[0][0].toUpperCase();
-  }
-  return phone.slice(-2);
-}
-
-function ContactAvatar({ name, phone }: { name: string | null; phone: string }) {
-  return (
-    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-sm">
-      {getInitials(name, phone)}
-    </div>
-  );
-}
+import { WhatsAppAvatar } from "@/components/WhatsAppAvatar";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ContactFormData {
@@ -344,7 +326,11 @@ export default function Contacts() {
             <Card key={contact.id} className="group hover:shadow-md transition-shadow">
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
-                  <ContactAvatar name={contact.name} phone={contact.phone} />
+                  <WhatsAppAvatar
+                    name={contact.name}
+                    phone={contact.phone}
+                    pictureUrl={contact.profile_picture_url}
+                  />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm truncate">
                       {contact.name || <span className="text-muted-foreground italic">Sem nome</span>}

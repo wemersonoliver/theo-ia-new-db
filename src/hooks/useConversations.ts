@@ -27,6 +27,8 @@ export interface Conversation {
   total_messages: number;
   ai_active: boolean;
   assigned_to: string | null;
+  profile_picture_url: string | null;
+  profile_picture_updated_at: string | null;
   created_at: string;
   updated_at: string;
 }

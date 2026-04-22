@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.sync-whatsapp-statuses]
 verify_jwt = false
+
+[functions.sync-whatsapp-profile-pictures]
+verify_jwt = false
