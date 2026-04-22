@@ -12,6 +12,7 @@ export interface Contact {
   name: string | null;
   email: string | null;
   notes: string | null;
+  address: string | null;
   tags: string[];
   assigned_to: string | null;
   created_at: string;
@@ -74,6 +75,7 @@ export function useContacts() {
       if (contact.email !== undefined) updates.email = contact.email;
       if (contact.notes !== undefined) updates.notes = contact.notes;
       if (contact.phone !== undefined) updates.phone = contact.phone;
+      if (contact.address !== undefined) updates.address = contact.address;
       if (contact.tags !== undefined) updates.tags = contact.tags;
       if (contact.assigned_to !== undefined) updates.assigned_to = contact.assigned_to;
       const { error } = await supabase
