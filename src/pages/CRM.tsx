@@ -44,20 +44,18 @@ export default function CRM() {
   const isLoading = pipelinesLoading || stagesLoading || dealsLoading;
 
   return (
-    <DashboardLayout title="CRM">
+    <DashboardLayout title="CRM" description="Gerencie suas negociações no funil de vendas">
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold">CRM</h1>
-            <p className="text-sm text-muted-foreground">Gerencie suas negociações no funil de vendas</p>
-          </div>
-          <PipelineSelector
+          <div className="sm:ml-auto">
+            <PipelineSelector
             pipelines={pipelines}
             activePipelineId={activePipelineId}
             onSelect={setActivePipelineId}
             onCreate={createPipeline}
             onOpenSettings={() => setSettingsOpen(true)}
-          />
+            />
+          </div>
         </div>
 
         <CRMFilters
