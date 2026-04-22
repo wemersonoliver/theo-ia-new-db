@@ -10,6 +10,7 @@ import { Key, User, Loader2, Sun, Moon, Bell, PlayCircle, Hash } from "lucide-re
 import { NotificationsTab } from "@/components/settings/NotificationsTab";
 import { TutorialTab } from "@/components/settings/TutorialTab";
 import { TeamTab } from "@/components/team/TeamTab";
+import { DangerZoneTab } from "@/components/settings/DangerZoneTab";
 import { useAccount } from "@/hooks/useAccount";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -101,6 +102,7 @@ export default function Settings() {
           <TabsTrigger value="appearance" className="min-w-fit">Aparência</TabsTrigger>
           <TabsTrigger value="security" className="min-w-fit">Segurança</TabsTrigger>
           <TabsTrigger value="tutorial" className="min-w-fit">Tutorial</TabsTrigger>
+          {isOwner && <TabsTrigger value="danger" className="min-w-fit text-destructive">Avançado</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="profile">
@@ -239,6 +241,12 @@ export default function Settings() {
         <TabsContent value="tutorial">
           <TutorialTab />
         </TabsContent>
+
+        {isOwner && (
+          <TabsContent value="danger">
+            <DangerZoneTab />
+          </TabsContent>
+        )}
       </Tabs>
     </DashboardLayout>
   );
