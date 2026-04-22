@@ -780,7 +780,7 @@ serve(async (req) => {
   }
 });
 
-async function triggerAIResponse(supabase: any, userId: string, phone: string, messageContent: string, delaySeconds?: number, mediaInfo?: { messageKey: any; instanceName: string; mediaType: string }) {
+async function triggerAIResponse(supabase: any, userId: string, accountId: string | null, phone: string, messageContent: string, delaySeconds?: number, mediaInfo?: { messageKey: any; instanceName: string; mediaType: string }) {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
