@@ -223,7 +223,10 @@ export default function Contacts() {
 
   function handleSaveEdit() {
     if (!editingContact) return;
-    updateContact.mutate({ id: editingContact.id, ...form }, { onSuccess: () => setEditingContact(null) });
+    updateContact.mutate(
+      { id: editingContact.id, ...form } as any,
+      { onSuccess: () => setEditingContact(null) },
+    );
   }
 
   function handleCreate() {
