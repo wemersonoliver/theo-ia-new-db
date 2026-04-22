@@ -115,7 +115,8 @@ serve(async (req) => {
           const remoteJid = msg.key?.remoteJid;
           if (!remoteJid || remoteJid.includes("@g.us")) continue;
 
-          const phone = remoteJid.replace("@s.whatsapp.net", "");
+          const rawPhone = remoteJid.replace("@s.whatsapp.net", "");
+          const phone = normalizeBrazilianPhone(rawPhone);
           const isFromMe = msg.key?.fromMe === true;
           const contactName = msg.pushName || null;
           const messageKey = msg.key;
