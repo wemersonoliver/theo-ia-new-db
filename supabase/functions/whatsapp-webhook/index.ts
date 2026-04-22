@@ -756,7 +756,7 @@ serve(async (req) => {
           if (shouldActivateAI) {
             console.log("AI activated for new conversation:", phone);
             const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
-            await triggerAIResponse(supabase, userId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
+            await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
           } else {
             console.log("AI not activated (no keyword match):", phone);
           }
