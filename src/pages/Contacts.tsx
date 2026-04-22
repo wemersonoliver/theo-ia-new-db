@@ -38,11 +38,14 @@ import {
   User,
   Tag,
   X,
+  Upload,
+  MapPin,
 } from "lucide-react";
 import { useContacts, type Contact } from "@/hooks/useContacts";
 import { TagInput, tagClass } from "@/components/TagInput";
 import { useSearchParams } from "react-router-dom";
 import { AssigneeSelector } from "@/components/team/AssigneeSelector";
+import { ContactImportDialog } from "@/components/contacts/ContactImportDialog";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function getInitials(name: string | null, phone: string) {
@@ -69,11 +72,12 @@ interface ContactFormData {
   name: string;
   email: string;
   notes: string;
+  address: string;
   tags: string[];
   assigned_to: string | null;
 }
 
-const emptyForm: ContactFormData = { phone: "", name: "", email: "", notes: "", tags: [], assigned_to: null };
+const emptyForm: ContactFormData = { phone: "", name: "", email: "", notes: "", address: "", tags: [], assigned_to: null };
 
 // ── Contact Form ──────────────────────────────────────────────────────────────
 interface ContactFormProps {
@@ -110,6 +114,10 @@ function ContactForm({ form, setForm, onSave, onCancel, isPending, phoneEditable
       <div className="space-y-2">
         <Label htmlFor="cf-email">E-mail</Label>
         <Input id="cf-email" type="email" value={form.email} onChange={update("email")} placeholder="email@exemplo.com" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="cf-address">Endereço</Label>
+        <Input id="cf-address" value={form.address} onChange={update("address")} placeholder="Rua, número, bairro, cidade" />
       </div>
       <AssigneeSelector
         value={form.assigned_to}
@@ -150,13 +158,14 @@ export default function Contacts() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const autoOpenedRef = useRef<string | null>(null);
-  const { contacts, isLoading, updateContact, deleteContact, createContact, syncFromConversations } =
+  const { contacts, isLoading, updateContact, deleteContact, createContact, syncFromConversations, importContacts } =
     useContacts();
 
   const [search, setSearch] = useState("");
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [isNewDialog, setIsNewDialog] = useState(false);
+  const [isImportDialog, setIsImportDialog] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState<ContactFormData>(emptyForm);
 
@@ -201,6 +210,7 @@ export default function Contacts() {
       name: contact.name || "",
       email: contact.email || "",
       notes: contact.notes || "",
+      address: (contact as any).address || "",
       tags: contact.tags || [],
       assigned_to: contact.assigned_to ?? null,
     });
@@ -213,12 +223,15 @@ export default function Contacts() {
 
   function handleSaveEdit() {
     if (!editingContact) return;
-    updateContact.mutate({ id: editingContact.id, ...form }, { onSuccess: () => setEditingContact(null) });
+    updateContact.mutate(
+      { id: editingContact.id, ...form } as any,
+      { onSuccess: () => setEditingContact(null) },
+    );
   }
 
   function handleCreate() {
     createContact.mutate(
-      { phone: form.phone, name: form.name, email: form.email, notes: form.notes, tags: form.tags, assigned_to: form.assigned_to },
+      { phone: form.phone, name: form.name, email: form.email, notes: form.notes, address: form.address, tags: form.tags, assigned_to: form.assigned_to },
       { onSuccess: () => setIsNewDialog(false) }
     );
   }
@@ -253,6 +266,10 @@ export default function Contacts() {
               <RefreshCw className="h-4 w-4 mr-2" />
             )}
             Sincronizar
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setIsImportDialog(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Importar
           </Button>
           <Button size="sm" onClick={openNew}>
             <Plus className="h-4 w-4 mr-2" />
@@ -340,6 +357,12 @@ export default function Contacts() {
                       <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
                         <Mail className="h-3 w-3 shrink-0" />
                         <span className="truncate">{contact.email}</span>
+                      </div>
+                    )}
+                    {(contact as any).address && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{(contact as any).address}</span>
                       </div>
                     )}
                     {contact.notes && (
@@ -459,6 +482,14 @@ export default function Contacts() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import Dialog */}
+      <ContactImportDialog
+        open={isImportDialog}
+        onOpenChange={setIsImportDialog}
+        isPending={importContacts.isPending}
+        onImport={(rows, strategy) => importContacts.mutateAsync({ rows, strategy })}
+      />
     </DashboardLayout>
   );
 }
