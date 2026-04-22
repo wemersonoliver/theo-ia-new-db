@@ -31,7 +31,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Search, Pencil, Trash2 } from "lucide-react";
+import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Search, Pencil, Trash2, LogIn } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { startImpersonation } from "@/lib/impersonation";
 
 
 interface AdminUser {
@@ -56,6 +58,7 @@ interface AdminUser {
 export default function AdminUsers() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [passwordDialog, setPasswordDialog] = useState<string | null>(null);
@@ -216,6 +219,24 @@ export default function AdminUsers() {
     setActionLoading(false);
   };
 
+  const handleImpersonate = async (target: AdminUser) => {
+    if (!confirm(`Entrar como ${target.full_name || target.email}?\n\nVocê terá acesso TOTAL à conta dele em modo suporte. Um banner amarelo no topo permite voltar ao admin a qualquer momento.`)) return;
+    setActionLoading(true);
+    try {
+      await startImpersonation(target.id);
+      window.dispatchEvent(new Event("impersonation-changed"));
+      toast({ title: "Modo suporte ativo", description: `Você agora está como ${target.email}` });
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      toast({
+        title: "Erro ao entrar",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+      setActionLoading(false);
+    }
+  };
+
   const filteredUsers = users.filter((u) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
@@ -319,6 +340,16 @@ export default function AdminUsers() {
                           {new Date(u.created_at).toLocaleDateString("pt-BR")}
                         </TableCell>
                         <TableCell className="text-right space-x-1 py-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleImpersonate(u)}
+                            disabled={actionLoading || u.id === user?.id}
+                            title="Entrar como este usuário (modo suporte)"
+                            className="text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                          >
+                            <LogIn className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
