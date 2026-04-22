@@ -648,6 +648,54 @@ export type Database = {
           },
         ]
       }
+      crm_deal_tasks: {
+        Row: {
+          account_id: string | null
+          assigned_to: string | null
+          completed: boolean
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          deal_id: string
+          description: string | null
+          due_date: string | null
+          id: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          assigned_to?: string | null
+          completed?: boolean
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          deal_id: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          assigned_to?: string | null
+          completed?: boolean
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          deal_id?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       crm_deals: {
         Row: {
           account_id: string | null
