@@ -700,12 +700,12 @@ serve(async (req) => {
               
               console.log("AI reactivated by keyword for:", phone);
               const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
-              await triggerAIResponse(supabase, userId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
+              await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
             }
           } else if (conversation.ai_active) {
             // AI already active, trigger response with delay
             const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
-            await triggerAIResponse(supabase, userId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
+            await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
           }
         } else {
           // New conversation - check if should activate AI
