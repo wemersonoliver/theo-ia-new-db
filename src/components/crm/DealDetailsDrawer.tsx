@@ -459,7 +459,6 @@ export function DealDetailsDrawer({
                       tags={deal.tags || []}
                       onChange={(next) => onUpdate(deal.id, { tags: next } as any)}
                       extraSuggestions={availableTags}
-                      placeholder="Digite e pressione Enter..."
                     />
                   </div>
                 </div>
