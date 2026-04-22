@@ -906,18 +906,108 @@ async function ensureCRMPipeline(supabase: any, userId: string, accountId: strin
   return { pipelineId, stages: stagesData || [] };
 }
 
-async function createCRMDealForNewConversation(supabase: any, userId: string, accountId: string | null, phone: string, contactName: string | null) {
+async function ensureContactForConversation(
+  supabase: any,
+  userId: string,
+  accountId: string | null,
+  phone: string,
+  contactName: string | null,
+) {
+  const { data: existingContact } = await supabase
+    .from("contacts")
+    .select("id, name, account_id")
+    .eq("user_id", userId)
+    .eq("phone", phone)
+    .maybeSingle();
+
+  if (existingContact) {
+    const updates: Record<string, any> = {};
+    if (!existingContact.name && contactName) updates.name = contactName;
+    if (!existingContact.account_id && accountId) updates.account_id = accountId;
+
+    if (Object.keys(updates).length === 0) {
+      return existingContact;
+    }
+
+    const { data: updatedContact } = await supabase
+      .from("contacts")
+      .update(updates)
+      .eq("id", existingContact.id)
+      .select("id, name, account_id")
+      .single();
+
+    return updatedContact || existingContact;
+  }
+
+  const { data: createdContact } = await supabase
+    .from("contacts")
+    .insert({
+      user_id: userId,
+      account_id: accountId,
+      assigned_to: userId,
+      phone,
+      name: contactName || null,
+      tags: ["whatsapp"],
+    })
+    .select("id, name, account_id")
+    .single();
+
+  return createdContact;
+}
+
+async function linkOpenCRMDealToContact(
+  supabase: any,
+  userId: string,
+  accountId: string | null,
+  phone: string,
+  contactId: string,
+  contactName: string | null,
+) {
+  const { stages } = await ensureCRMPipeline(supabase, userId, accountId);
+  const stageIds = stages.map((stage: any) => stage.id);
+  if (stageIds.length === 0) return;
+
+  const titleCandidates = [contactName, phone].filter((value, index, arr): value is string => !!value && arr.indexOf(value) === index);
+  if (titleCandidates.length === 0) return;
+
+  const { data: orphanDeals } = await supabase
+    .from("crm_deals")
+    .select("id")
+    .eq("user_id", userId)
+    .in("stage_id", stageIds)
+    .in("title", titleCandidates)
+    .is("contact_id", null)
+    .is("won_at", null)
+    .is("lost_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const orphanDeal = orphanDeals?.[0];
+  if (!orphanDeal) return;
+
+  const updates: Record<string, any> = { contact_id: contactId, updated_at: new Date().toISOString() };
+  if (contactName) updates.title = contactName;
+
+  await supabase
+    .from("crm_deals")
+    .update(updates)
+    .eq("id", orphanDeal.id);
+}
+
+async function createCRMDealForNewConversation(
+  supabase: any,
+  userId: string,
+  accountId: string | null,
+  phone: string,
+  contactName: string | null,
+  contactId: string | null,
+) {
   const { stages } = await ensureCRMPipeline(supabase, userId, accountId);
   
   const aiStage = stages.find((s: any) => s.name === "Atendimento IA") || stages[0];
   if (!aiStage) return;
 
-  const { data: contact } = await supabase
-    .from("contacts")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("phone", phone)
-    .maybeSingle();
+  const contact = contactId ? { id: contactId } : null;
 
   if (contact) {
     const stageIds = stages.map((s: any) => s.id);

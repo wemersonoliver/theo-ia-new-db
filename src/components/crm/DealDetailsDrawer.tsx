@@ -115,7 +115,7 @@ export function DealDetailsDrawer({
     () => contacts.find((contact) => contact.id === deal?.contact_id) || null,
     [contacts, deal?.contact_id]
   );
-  const contactName = deal?.contact_name || linkedContact?.name || null;
+  const contactName = deal?.contact_name || linkedContact?.name || deal?.title || null;
   const phone = deal?.contact_phone || linkedContact?.phone || null;
   const phoneFormatted = useMemo(() => formatPhoneBR(phone), [phone]);
   const phoneNormalized = useMemo(() => normalizePhone(phone), [phone]);
