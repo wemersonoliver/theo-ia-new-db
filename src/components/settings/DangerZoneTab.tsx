@@ -22,7 +22,8 @@ import { useQueryClient } from "@tanstack/react-query";
 
 export function DangerZoneTab() {
   const { user } = useAuth();
-  const { accountId, isOwner } = useAccount();
+  const { membership, isOwner } = useAccount();
+  const accountId = membership?.account_id;
   const queryClient = useQueryClient();
 
   const [confirmConvOpen, setConfirmConvOpen] = useState(false);
