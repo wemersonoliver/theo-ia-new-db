@@ -482,6 +482,14 @@ export default function Contacts() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import Dialog */}
+      <ContactImportDialog
+        open={isImportDialog}
+        onOpenChange={setIsImportDialog}
+        isPending={importContacts.isPending}
+        onImport={(rows, strategy) => importContacts.mutateAsync({ rows, strategy })}
+      />
     </DashboardLayout>
   );
 }
