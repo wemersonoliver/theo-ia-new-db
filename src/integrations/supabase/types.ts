@@ -511,6 +511,7 @@ export type Database = {
       contacts: {
         Row: {
           account_id: string | null
+          address: string | null
           assigned_to: string | null
           created_at: string
           email: string | null
@@ -524,6 +525,7 @@ export type Database = {
         }
         Insert: {
           account_id?: string | null
+          address?: string | null
           assigned_to?: string | null
           created_at?: string
           email?: string | null
@@ -537,6 +539,7 @@ export type Database = {
         }
         Update: {
           account_id?: string | null
+          address?: string | null
           assigned_to?: string | null
           created_at?: string
           email?: string | null
