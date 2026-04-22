@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,25 +19,72 @@ function applyVars(template: string, vars: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
 }
 
-async function sendSystemMessage(phone: string, message: string) {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/send-whatsapp-message`, {
+async function sendSystemMessage(
+  supabase: ReturnType<typeof createClient>,
+  instanceName: string,
+  phone: string,
+  message: string,
+) {
+  const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
+  const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+  if (!evolutionUrl || !evolutionKey) throw new Error("Evolution API não configurada");
+
+  const sendResponse = await evolutionRequest({
+    evolutionUrl,
+    evolutionKey,
+    path: `/message/sendText/${instanceName}`,
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-    },
-    body: JSON.stringify({ phone, message, system: true }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ number: phone, text: message }),
   });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`send-whatsapp-message ${res.status}: ${text}`);
-  return text;
+
+  if (!sendResponse.ok) {
+    throw new Error(`Evolution ${sendResponse.status}: ${sendResponse.text}`);
+  }
+
+  // Persist message in system conversation history
+  const newMessage = {
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    from_me: true,
+    content: message,
+    type: "text",
+    sent_by: "ai_first_contact",
+  };
+
+  const { data: conv } = await supabase
+    .from("system_whatsapp_conversations")
+    .select("id, messages, total_messages")
+    .eq("phone", phone)
+    .maybeSingle();
+
+  if (conv) {
+    const existing = (conv.messages as any[]) || [];
+    await supabase
+      .from("system_whatsapp_conversations")
+      .update({
+        messages: [...existing, newMessage],
+        total_messages: (conv.total_messages ?? 0) + 1,
+        last_message_at: newMessage.timestamp,
+        updated_at: newMessage.timestamp,
+      })
+      .eq("id", conv.id);
+  } else {
+    await supabase.from("system_whatsapp_conversations").insert({
+      phone,
+      messages: [newMessage],
+      total_messages: 1,
+      last_message_at: newMessage.timestamp,
+      ai_active: true,
+    });
+  }
 }
 
 async function processOne(
   supabase: ReturnType<typeof createClient>,
   item: any,
   cfg: any,
+  instanceName: string,
 ) {
   const phone: string = item.phone;
   const fullName: string | null = item.full_name;
@@ -75,7 +123,7 @@ async function processOne(
   for (let i = 0; i < messages.length; i++) {
     const text = applyVars(messages[i], vars);
     try {
-      await sendSystemMessage(phone, text);
+      await sendSystemMessage(supabase, instanceName, phone, text);
     } catch (e) {
       console.error("welcome send err", item.id, e);
       await supabase
@@ -117,6 +165,20 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Resolve system WhatsApp instance once
+    const { data: sysInstance } = await supabase
+      .from("system_whatsapp_instance")
+      .select("instance_name, status")
+      .maybeSingle();
+
+    if (!sysInstance || sysInstance.status !== "connected") {
+      return new Response(
+        JSON.stringify({ ok: false, error: "system WhatsApp not connected" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const instanceName = (sysInstance as any).instance_name as string;
+
     const { data: pending, error } = await supabase
       .from("system_welcome_queue")
       .select("*")
@@ -129,7 +191,7 @@ Deno.serve(async (req) => {
     let processed = 0;
     for (const item of pending || []) {
       try {
-        await processOne(supabase, item, cfg);
+        await processOne(supabase, item, cfg, instanceName);
         processed++;
       } catch (e) {
         console.error("welcome processOne err", item.id, e);
