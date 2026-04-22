@@ -104,8 +104,11 @@ export function useAdminDashboardMetrics(range: DateRange) {
       // Subscriptions
       const { data: subs } = await supabase
         .from("subscriptions")
-        .select("status, plan_type, amount_cents, started_at");
-      const activeSubs = (subs || []).filter((s: any) => s.status === "active");
+        .select("status, plan_type, amount_cents, started_at, created_at, user_id, account_id");
+      // Considera "venda concluída" toda assinatura ativa que NÃO seja tester (cortesia)
+      const isPaying = (s: any) =>
+        s.status === "active" && (s.plan_type || "").toLowerCase() !== "tester";
+      const activeSubs = (subs || []).filter(isPaying);
       const activeSubscriptions = activeSubs.length;
       const mrrCents = activeSubs.reduce((acc: number, s: any) => {
         const amt = s.amount_cents || 0;
@@ -128,6 +131,19 @@ export function useAdminDashboardMetrics(range: DateRange) {
         count: v.count,
         mrrCents: v.mrrCents,
       }));
+
+      // Vendas concluídas = assinaturas pagas iniciadas no período (Kiwify)
+      const subDate = (s: any) => s.started_at || s.created_at;
+      const paidSubsCur = (subs || []).filter(
+        (s: any) => isPaying(s) && inRange(subDate(s))
+      );
+      const paidSubsPrev = (subs || []).filter(
+        (s: any) => isPaying(s) && inPrev(subDate(s))
+      );
+      const paidSubsValueCur = paidSubsCur.reduce(
+        (sum: number, s: any) => sum + (s.amount_cents || 0),
+        0
+      );
 
       // WhatsApp instances
       const { data: instances } = await supabase
@@ -166,19 +182,10 @@ export function useAdminDashboardMetrics(range: DateRange) {
       const apptCur = (appts || []).filter((a: any) => inRange(a.created_at)).length;
       const apptPrev = (appts || []).filter((a: any) => inPrev(a.created_at)).length;
 
-      // Deals ganhos
-      const { data: deals } = await supabase
-        .from("crm_deals")
-        .select("id, account_id, won_at, value_cents")
-        .not("won_at", "is", null)
-        .gte("won_at", fetchStart)
-        .lte("won_at", fetchEnd);
-      const salesCur = (deals || []).filter((d: any) => inRange(d.won_at));
-      const salesPrev = (deals || []).filter((d: any) => inPrev(d.won_at));
-      const salesValueCur = salesCur.reduce(
-        (s: number, d: any) => s + (d.value_cents || 0),
-        0
-      );
+      // Vendas = assinaturas pagas (Kiwify) — já calculadas acima
+      const salesCur = paidSubsCur;
+      const salesPrev = paidSubsPrev;
+      const salesValueCur = paidSubsValueCur;
 
       // Tickets abertos
       const { count: openTickets } = await supabase
@@ -232,7 +239,7 @@ export function useAdminDashboardMetrics(range: DateRange) {
       for (const d of salesCur as any[]) {
         const row = ensureAcc(d.account_id);
         row.sales++;
-        row.salesValueCents += d.value_cents || 0;
+        row.salesValueCents += d.amount_cents || 0;
       }
       const topAccounts = Object.values(accountMap)
         .sort((a, b) => b.salesValueCents - a.salesValueCents || b.leads - a.leads)
