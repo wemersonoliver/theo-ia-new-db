@@ -14,6 +14,7 @@ import { CRMStage } from "@/hooks/useCRMStages";
 import { Product } from "@/hooks/useProducts";
 import { Plus, Trash2 } from "lucide-react";
 import { AssigneeSelector } from "@/components/team/AssigneeSelector";
+import { TagInput } from "@/components/TagInput";
 
 interface DealProduct {
   product_id: string;
@@ -41,6 +42,7 @@ interface DealDialogProps {
     description?: string | null;
     expected_close_date?: string | null;
     assigned_to?: string | null;
+    tags?: string[];
   }, dealProducts?: DealProduct[]) => void;
   onDelete?: (id: string) => void;
 }
@@ -55,6 +57,7 @@ export function DealDialog({ open, onOpenChange, stages, deal, defaultStageId, d
   const [closeDate, setCloseDate] = useState("");
   const [dealProducts, setDealProducts] = useState<DealProduct[]>([]);
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
 
   useEffect(() => {
     if (open) {
@@ -67,6 +70,7 @@ export function DealDialog({ open, onOpenChange, stages, deal, defaultStageId, d
       setCloseDate(deal?.expected_close_date || "");
       setDealProducts(initialDealProducts || []);
       setAssignedTo((deal as any)?.assigned_to ?? null);
+      setTags(deal?.tags || []);
     }
   }, [open, deal, defaultStageId, defaultContactId, defaultTitle, stages, initialDealProducts]);
 
@@ -84,6 +88,7 @@ export function DealDialog({ open, onOpenChange, stages, deal, defaultStageId, d
       description: description || null,
       expected_close_date: closeDate || null,
       assigned_to: assignedTo,
+      tags,
     }, dealProducts.length > 0 ? dealProducts : undefined);
     onOpenChange(false);
   };
