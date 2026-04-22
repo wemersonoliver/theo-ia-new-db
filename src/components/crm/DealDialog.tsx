@@ -223,6 +223,11 @@ export function DealDialog({ open, onOpenChange, stages, deal, defaultStageId, d
             <Label>Descrição</Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Detalhes da negociação..." rows={3} />
           </div>
+
+          <div>
+            <Label>Tags / Etiquetas</Label>
+            <TagInput tags={tags} onChange={setTags} />
+          </div>
         </div>
         <DialogFooter className="gap-2">
           {deal && onDelete && (
