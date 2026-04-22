@@ -239,7 +239,7 @@ export function useAdminDashboardMetrics(range: DateRange) {
       for (const d of salesCur as any[]) {
         const row = ensureAcc(d.account_id);
         row.sales++;
-        row.salesValueCents += d.value_cents || 0;
+        row.salesValueCents += d.amount_cents || 0;
       }
       const topAccounts = Object.values(accountMap)
         .sort((a, b) => b.salesValueCents - a.salesValueCents || b.leads - a.leads)
