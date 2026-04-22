@@ -57,6 +57,7 @@ interface DealDetailsDrawerProps {
   deal: CRMDeal | null;
   stages: CRMStage[];
   contacts?: { id: string; name: string | null; phone: string }[];
+  availableTags?: string[];
   onUpdate: (id: string, updates: Partial<CRMDeal>) => void;
   onDelete: (id: string) => void;
   onMarkWon?: (id: string) => Promise<void> | void;
