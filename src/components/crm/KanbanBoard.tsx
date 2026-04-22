@@ -19,6 +19,7 @@ import { KanbanColumn } from "./KanbanColumn";
 import { DealCard } from "./DealCard";
 import { DealDialog } from "./DealDialog";
 import { DealDetailsDrawer } from "./DealDetailsDrawer";
+import { useCRMDealTasksCounts } from "@/hooks/useCRMDealTasks";
 
 interface KanbanBoardProps {
   stages: CRMStage[];
@@ -40,6 +41,9 @@ export function KanbanBoard({ stages, deals, contacts, products, availableTags, 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedDeal, setSelectedDeal] = useState<CRMDeal | null>(null);
   const [defaultStageId, setDefaultStageId] = useState<string>("");
+
+  const dealIds = useMemo(() => deals.map((d) => d.id), [deals]);
+  const { data: taskCounts } = useCRMDealTasksCounts(dealIds);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -133,6 +137,7 @@ export function KanbanBoard({ stages, deals, contacts, products, availableTags, 
               deals={dealsByStage[stage.id] || []}
               onAddDeal={handleAddDeal}
               onDealClick={handleDealClick}
+              taskCounts={taskCounts}
             />
           ))}
         </div>
