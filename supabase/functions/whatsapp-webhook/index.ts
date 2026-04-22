@@ -403,7 +403,8 @@ serve(async (req) => {
         const remoteJid = msg.key?.remoteJid;
         if (!remoteJid || remoteJid.includes("@g.us")) continue; // Skip groups
 
-        const phone = remoteJid.replace("@s.whatsapp.net", "");
+        const rawPhone = remoteJid.replace("@s.whatsapp.net", "");
+        const phone = normalizeBrazilianPhone(rawPhone);
         
         // Detect message type
         const isAudioMessage = !!msg.message?.audioMessage;
