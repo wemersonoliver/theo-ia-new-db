@@ -60,7 +60,6 @@ export async function startImpersonation(targetUserId: string): Promise<void> {
   const { error: verifyErr } = await supabase.auth.verifyOtp({
     type: "magiclink",
     token_hash: data.hashed_token,
-    email: data.email,
   });
 
   if (verifyErr) {
