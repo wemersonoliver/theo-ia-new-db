@@ -25,6 +25,7 @@ interface KanbanBoardProps {
   deals: CRMDeal[];
   contacts: { id: string; name: string | null; phone: string }[];
   products?: Product[];
+  availableTags?: string[];
   onCreateDeal: (deal: any) => Promise<any>;
   onUpdateDeal: (id: string, updates: any) => void;
   onMoveDeal: (dealId: string, newStageId: string, newPosition: number) => void;
@@ -33,7 +34,7 @@ interface KanbanBoardProps {
   onMarkLost?: (id: string, reason: string) => Promise<void> | void;
 }
 
-export function KanbanBoard({ stages, deals, contacts, products, onCreateDeal, onUpdateDeal, onMoveDeal, onDeleteDeal, onMarkWon, onMarkLost }: KanbanBoardProps) {
+export function KanbanBoard({ stages, deals, contacts, products, availableTags, onCreateDeal, onUpdateDeal, onMoveDeal, onDeleteDeal, onMarkWon, onMarkLost }: KanbanBoardProps) {
   const [activeDeal, setActiveDeal] = useState<CRMDeal | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -148,6 +149,7 @@ export function KanbanBoard({ stages, deals, contacts, products, onCreateDeal, o
         defaultStageId={defaultStageId}
         contacts={contacts}
         products={products}
+        availableTags={availableTags}
         onSave={handleSave}
         onDelete={onDeleteDeal}
       />
@@ -158,6 +160,7 @@ export function KanbanBoard({ stages, deals, contacts, products, onCreateDeal, o
         deal={liveSelectedDeal}
         stages={stages}
         contacts={contacts}
+        availableTags={availableTags}
         onUpdate={onUpdateDeal}
         onDelete={onDeleteDeal}
         onMarkWon={onMarkWon}
