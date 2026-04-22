@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 import { AppointmentDialog } from "@/components/appointments/AppointmentDialog";
+import { TagInput } from "@/components/TagInput";
 import { DealQuickActions } from "./DealQuickActions";
 import { DealActivityTimeline } from "./DealActivityTimeline";
 import { CRMDeal } from "@/hooks/useCRMDeals";
@@ -85,6 +86,7 @@ export function DealDetailsDrawer({
   deal,
   stages,
   contacts = [],
+  availableTags,
   onUpdate,
   onDelete,
   onMarkWon,
@@ -450,15 +452,16 @@ export function DealDetailsDrawer({
                   </p>
                 )}
 
-                {deal.tags && deal.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {deal.tags.map((t) => (
-                      <Badge key={t} variant="secondary" className="text-[10px]">
-                        {t}
-                      </Badge>
-                    ))}
+                <div className="pt-2">
+                  <Label className="text-xs text-muted-foreground">Tags / Etiquetas</Label>
+                  <div className="mt-1">
+                    <TagInput
+                      tags={deal.tags || []}
+                      onChange={(next) => onUpdate(deal.id, { tags: next } as any)}
+                      extraSuggestions={availableTags}
+                    />
                   </div>
-                )}
+                </div>
               </div>
 
               <div className="pt-1">
