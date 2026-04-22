@@ -56,6 +56,7 @@ interface DealDetailsDrawerProps {
   onOpenChange: (open: boolean) => void;
   deal: CRMDeal | null;
   stages: CRMStage[];
+  contacts?: { id: string; name: string | null; phone: string }[];
   onUpdate: (id: string, updates: Partial<CRMDeal>) => void;
   onDelete: (id: string) => void;
   onMarkWon?: (id: string) => Promise<void> | void;
@@ -82,6 +83,7 @@ export function DealDetailsDrawer({
   onOpenChange,
   deal,
   stages,
+  contacts = [],
   onUpdate,
   onDelete,
   onMarkWon,
@@ -109,7 +111,12 @@ export function DealDetailsDrawer({
   // Schedule dialog
   const [scheduleOpen, setScheduleOpen] = useState(false);
 
-  const phone = deal?.contact_phone || null;
+  const linkedContact = useMemo(
+    () => contacts.find((contact) => contact.id === deal?.contact_id) || null,
+    [contacts, deal?.contact_id]
+  );
+  const contactName = deal?.contact_name || linkedContact?.name || null;
+  const phone = deal?.contact_phone || linkedContact?.phone || null;
   const phoneFormatted = useMemo(() => formatPhoneBR(phone), [phone]);
   const phoneNormalized = useMemo(() => normalizePhone(phone), [phone]);
 
@@ -421,7 +428,7 @@ export function DealDetailsDrawer({
               </h3>
               <div className="space-y-1.5">
                 <p className="text-sm font-medium">
-                  {deal.contact_name || "Sem nome"}
+                   {contactName || "Sem nome"}
                 </p>
                 {phone ? (
                   <div className="flex items-center gap-1.5 text-sm">
@@ -642,7 +649,7 @@ export function DealDetailsDrawer({
         onOpenChange={setScheduleOpen}
         defaultDate={new Date()}
         defaultPhone={phoneFormatted || phone || ""}
-        defaultContactName={deal.contact_name || ""}
+        defaultContactName={contactName || ""}
         defaultAssignedTo={(deal as any).assigned_to ?? null}
         isSubmitting={createAppointment.isPending}
         onSubmit={async (data) => {

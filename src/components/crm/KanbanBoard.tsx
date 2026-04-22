@@ -157,6 +157,7 @@ export function KanbanBoard({ stages, deals, contacts, products, onCreateDeal, o
         onOpenChange={setDrawerOpen}
         deal={liveSelectedDeal}
         stages={stages}
+        contacts={contacts}
         onUpdate={onUpdateDeal}
         onDelete={onDeleteDeal}
         onMarkWon={onMarkWon}
