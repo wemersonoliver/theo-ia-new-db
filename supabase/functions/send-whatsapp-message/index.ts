@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 import { resolveAccountId } from "../_account.ts";
+import { normalizeBrazilianPhone } from "../_phone.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
