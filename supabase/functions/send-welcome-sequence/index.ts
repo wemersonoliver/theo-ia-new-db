@@ -91,10 +91,28 @@ async function processOne(
   const delaySec: number = cfg?.welcome_message_delay_seconds ?? 4;
   const messages: string[] = Array.isArray(cfg?.welcome_messages) ? cfg.welcome_messages : [];
 
+  // CLAIM ATÔMICO: marca como processed=true ANTES de enviar.
+  // Se outro worker já claimou (race condition), o update retorna 0 linhas e abortamos.
+  const { data: claimed, error: claimErr } = await supabase
+    .from("system_welcome_queue")
+    .update({ processed: true, processed_at: new Date().toISOString() })
+    .eq("id", item.id)
+    .eq("processed", false)
+    .select("id");
+
+  if (claimErr) {
+    console.error("welcome claim err", item.id, claimErr);
+    return;
+  }
+  if (!claimed || claimed.length === 0) {
+    console.log("welcome already claimed by another worker", item.id);
+    return;
+  }
+
   if (messages.length === 0) {
     await supabase
       .from("system_welcome_queue")
-      .update({ processed: true, processed_at: new Date().toISOString(), skipped_reason: "no_messages" })
+      .update({ skipped_reason: "no_messages" })
       .eq("id", item.id);
     return;
   }
@@ -110,8 +128,6 @@ async function processOne(
     await supabase
       .from("system_welcome_queue")
       .update({
-        processed: true,
-        processed_at: new Date().toISOString(),
         skipped_reason: "existing_conversation",
       })
       .eq("id", item.id);
@@ -129,8 +145,6 @@ async function processOne(
       await supabase
         .from("system_welcome_queue")
         .update({
-          processed: true,
-          processed_at: new Date().toISOString(),
           error_message: String((e as Error).message || e),
         })
         .eq("id", item.id);
@@ -140,11 +154,6 @@ async function processOne(
       await new Promise((r) => setTimeout(r, delaySec * 1000));
     }
   }
-
-  await supabase
-    .from("system_welcome_queue")
-    .update({ processed: true, processed_at: new Date().toISOString() })
-    .eq("id", item.id);
 }
 
 Deno.serve(async (req) => {
