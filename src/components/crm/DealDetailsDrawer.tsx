@@ -641,6 +641,9 @@ export function DealDetailsDrawer({
         open={scheduleOpen}
         onOpenChange={setScheduleOpen}
         defaultDate={new Date()}
+        defaultPhone={phoneFormatted || phone || ""}
+        defaultContactName={deal.contact_name || ""}
+        defaultAssignedTo={(deal as any).assigned_to ?? null}
         isSubmitting={createAppointment.isPending}
         onSubmit={async (data) => {
           // Pre-fill from deal
