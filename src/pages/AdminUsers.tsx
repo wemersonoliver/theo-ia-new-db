@@ -219,6 +219,24 @@ export default function AdminUsers() {
     setActionLoading(false);
   };
 
+  const handleImpersonate = async (target: AdminUser) => {
+    if (!confirm(`Entrar como ${target.full_name || target.email}?\n\nVocê terá acesso TOTAL à conta dele em modo suporte. Um banner amarelo no topo permite voltar ao admin a qualquer momento.`)) return;
+    setActionLoading(true);
+    try {
+      await startImpersonation(target.id);
+      window.dispatchEvent(new Event("impersonation-changed"));
+      toast({ title: "Modo suporte ativo", description: `Você agora está como ${target.email}` });
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      toast({
+        title: "Erro ao entrar",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+      setActionLoading(false);
+    }
+  };
+
   const filteredUsers = users.filter((u) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
