@@ -14,6 +14,9 @@ interface AppointmentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultDate?: Date;
+  defaultPhone?: string | null;
+  defaultContactName?: string | null;
+  defaultAssignedTo?: string | null;
   onSubmit: (data: {
     title: string;
     phone: string;
@@ -33,6 +36,9 @@ export function AppointmentDialog({
   open,
   onOpenChange,
   defaultDate,
+  defaultPhone,
+  defaultContactName,
+  defaultAssignedTo,
   onSubmit,
   isSubmitting,
 }: AppointmentDialogProps) {
@@ -51,17 +57,17 @@ export function AppointmentDialog({
   useEffect(() => {
     if (open) {
       setTitle("");
-      setPhone("");
-      setContactName("");
+      setPhone(defaultPhone ?? "");
+      setContactName(defaultContactName ?? "");
       setDescription("");
       setDate(format(defaultDate ?? new Date(), "yyyy-MM-dd"));
       setTime("09:00");
       setDuration(30);
       setTypeId("none");
-      setAssignedTo(null);
+      setAssignedTo(defaultAssignedTo ?? null);
       setNotes("");
     }
-  }, [open, defaultDate]);
+  }, [open, defaultDate, defaultPhone, defaultContactName, defaultAssignedTo]);
 
   const handleTypeChange = (val: string) => {
     setTypeId(val);
