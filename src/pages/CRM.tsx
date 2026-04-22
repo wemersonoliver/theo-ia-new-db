@@ -33,8 +33,9 @@ export default function CRM() {
   const availableTags = useMemo(() => {
     const set = new Set<string>();
     deals.forEach((d) => d.tags?.forEach((t: string) => set.add(t)));
+    (contacts || []).forEach((c: any) => (c.tags || []).forEach((t: string) => set.add(t)));
     return Array.from(set).sort();
-  }, [deals]);
+  }, [deals, contacts]);
 
   const maxDealValue = useMemo(() => Math.max(0, ...deals.map((d) => d.value_cents || 0)), [deals]);
 
@@ -78,6 +79,7 @@ export default function CRM() {
             deals={filteredDeals}
             contacts={contactsList}
             products={products.filter(p => p.active)}
+            availableTags={availableTags}
             onCreateDeal={createDeal}
             onUpdateDeal={updateDeal}
             onMoveDeal={moveDeal}
