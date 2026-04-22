@@ -590,6 +590,14 @@ serve(async (req) => {
           continue; // Don't trigger AI for outgoing messages
         }
 
+        const ensuredContact = await ensureContactForConversation(
+          supabase,
+          userId,
+          accountId,
+          phone,
+          contactName,
+        );
+
         // Check if there's an active follow-up and mark as engaged
         if (!isFromMe) {
           const { data: activeFollowup } = await supabase
@@ -666,6 +674,17 @@ serve(async (req) => {
             })
             .eq("id", conversation.id);
 
+          if (ensuredContact?.id) {
+            await linkOpenCRMDealToContact(
+              supabase,
+              userId,
+              accountId,
+              phone,
+              ensuredContact.id,
+              contactName,
+            );
+          }
+
           // Check if AI should be activated (for inactive conversations)
           if (!conversation.ai_active && aiConfig?.keyword_activation_enabled) {
             const hasKeyword = checkKeywordActivation();
@@ -704,7 +723,14 @@ serve(async (req) => {
 
           // Create CRM deal in "Atendimento IA" stage for new conversations
           try {
-            await createCRMDealForNewConversation(supabase, userId, accountId, phone, contactName);
+            await createCRMDealForNewConversation(
+              supabase,
+              userId,
+              accountId,
+              phone,
+              contactName,
+              ensuredContact?.id ?? null,
+            );
           } catch (e) {
             console.error("Error creating CRM deal:", e);
           }
