@@ -87,7 +87,7 @@ async function processOne(
   cfg: any,
   instanceName: string,
 ) {
-  const phone: string = item.phone;
+  const phone: string = normalizeBrazilianPhone(item.phone);
   const fullName: string | null = item.full_name;
   const delaySec: number = cfg?.welcome_message_delay_seconds ?? 4;
   const messages: string[] = Array.isArray(cfg?.welcome_messages) ? cfg.welcome_messages : [];
