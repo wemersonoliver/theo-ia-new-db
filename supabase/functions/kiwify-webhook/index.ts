@@ -28,11 +28,25 @@ Deno.serve(async (req) => {
     const customerPhone = body.Customer?.mobile || body.customer?.mobile;
     const productId = body.Product?.id || body.product?.id;
     const productName = body.Product?.name || body.product?.name;
-    const amountCents = body.Commissions?.charge_amount
-      ? Math.round(parseFloat(body.Commissions.charge_amount) * 100)
-      : body.sale_amount
-        ? Math.round(parseFloat(body.sale_amount) * 100)
-        : null;
+    // Kiwify pode enviar valor em reais ("97.00") OU já em centavos ("9700").
+    // Heurística: se não tem ponto/vírgula E é >= 1000, já é centavo.
+    const parseKiwifyAmount = (raw: unknown): number | null => {
+      if (raw === null || raw === undefined) return null;
+      const str = String(raw).trim();
+      if (!str) return null;
+      const hasDecimal = str.includes(".") || str.includes(",");
+      const normalized = str.replace(",", ".");
+      const num = parseFloat(normalized);
+      if (!isFinite(num)) return null;
+      // Se já vem com decimal (ex: "97.00"), multiplica por 100
+      if (hasDecimal) return Math.round(num * 100);
+      // Inteiro: se >= 1000, assume que já está em centavos (ex: "9700" = R$97)
+      // Caso contrário trata como reais (ex: "97" = R$97 = 9700 centavos)
+      return num >= 1000 ? Math.round(num) : Math.round(num * 100);
+    };
+    const amountCents =
+      parseKiwifyAmount(body.Commissions?.charge_amount) ??
+      parseKiwifyAmount(body.sale_amount);
     const planType = body.plan?.name || body.subscription_plan || null;
 
     if (!orderId) {
