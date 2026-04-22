@@ -1578,6 +1578,48 @@ export type Database = {
         }
         Relationships: []
       }
+      user_goals: {
+        Row: {
+          account_id: string
+          appointments_goal: number
+          created_at: string
+          id: string
+          leads_goal: number
+          period_type: string
+          sales_goal: number
+          sales_value_cents_goal: number
+          services_goal: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          appointments_goal?: number
+          created_at?: string
+          id?: string
+          leads_goal?: number
+          period_type?: string
+          sales_goal?: number
+          sales_value_cents_goal?: number
+          services_goal?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          appointments_goal?: number
+          created_at?: string
+          id?: string
+          leads_goal?: number
+          period_type?: string
+          sales_goal?: number
+          sales_value_cents_goal?: number
+          services_goal?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
