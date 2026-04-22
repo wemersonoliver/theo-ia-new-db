@@ -206,11 +206,16 @@ function CreateDealButton({ phone, contactName, className }: { phone: string; co
 export default function Conversations() {
   const navigate = useNavigate();
   const { conversations, isLoading, sendMessage, toggleAI, finishConversation, deleteConversation, assignConversation } = useConversations();
+  const { contacts } = useContacts();
   const [searchParams] = useSearchParams();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const { messages } = useConversation(selectedPhone || "");
   const isMobile = useIsMobile();
+  const contactPictureByPhone = useMemo(
+    () => new Map(contacts.map((contact) => [contact.phone, contact.profile_picture_url])),
+    [contacts],
+  );
 
   // Seleciona automaticamente o contato se vier da página de Contatos
   useEffect(() => {
@@ -234,6 +239,9 @@ export default function Conversations() {
   };
 
   const selectedConversation = conversations.find((c) => c.phone === selectedPhone);
+  const getConversationPicture = (phone: string, conversationPicture?: string | null) => {
+    return conversationPicture || contactPictureByPhone.get(phone) || null;
+  };
 
   function openContactPage(phone: string) {
     navigate(`/contacts?open=${encodeURIComponent(phone)}`);
@@ -275,7 +283,7 @@ export default function Conversations() {
                       <WhatsAppAvatar
                         name={conv.contact_name}
                         phone={conv.phone}
-                        pictureUrl={(conv as any).profile_picture_url}
+                        pictureUrl={getConversationPicture(conv.phone, (conv as any).profile_picture_url)}
                         className="h-11 w-11"
                       />
                       <div className="min-w-0 flex-1">
@@ -324,7 +332,7 @@ export default function Conversations() {
               <WhatsAppAvatar
                 name={selectedConversation?.contact_name}
                 phone={selectedPhone}
-                pictureUrl={(selectedConversation as any)?.profile_picture_url}
+                pictureUrl={selectedPhone ? getConversationPicture(selectedPhone, (selectedConversation as any)?.profile_picture_url) : null}
                 className="h-9 w-9"
               />
               <button
@@ -492,7 +500,7 @@ export default function Conversations() {
                           <WhatsAppAvatar
                             name={conv.contact_name}
                             phone={conv.phone}
-                            pictureUrl={(conv as any).profile_picture_url}
+                            pictureUrl={getConversationPicture(conv.phone, (conv as any).profile_picture_url)}
                             className="h-10 w-10"
                           />
                           <div className="min-w-0 flex-1">
@@ -537,7 +545,7 @@ export default function Conversations() {
                     <WhatsAppAvatar
                       name={selectedConversation?.contact_name}
                       phone={selectedPhone}
-                      pictureUrl={(selectedConversation as any)?.profile_picture_url}
+                      pictureUrl={getConversationPicture(selectedPhone, (selectedConversation as any)?.profile_picture_url)}
                     />
                     <div className="min-w-0">
                     {/* Clickable contact name */}

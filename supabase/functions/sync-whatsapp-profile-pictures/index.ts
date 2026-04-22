@@ -7,6 +7,25 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function extractPictureUrl(data: Record<string, unknown> | null | undefined) {
+  const candidates = [
+    data?.profilePictureUrl,
+    data?.url,
+    data?.picture,
+    (data?.response as Record<string, unknown> | undefined)?.profilePictureUrl,
+    (data?.response as Record<string, unknown> | undefined)?.url,
+    (data?.response as Record<string, unknown> | undefined)?.picture,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
+}
+
 /**
  * Sync WhatsApp profile pictures for contacts/conversations.
  *
@@ -100,26 +119,42 @@ serve(async (req) => {
 
     for (const t of targets) {
       try {
-        const remoteJid = t.phone.includes("@") ? t.phone : `${t.phone}@s.whatsapp.net`;
-        const result = await evolutionRequest({
-          evolutionUrl,
-          evolutionKey,
-          path: `/chat/fetchProfilePictureUrl/${t.instance}`,
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ number: remoteJid }),
-        });
+        const numberCandidates = Array.from(
+          new Set([
+            t.phone,
+            t.phone.includes("@") ? t.phone : `${t.phone}@s.whatsapp.net`,
+          ]),
+        );
 
-        if (!result.ok) {
-          failed++;
-          continue;
+        let pictureUrl: string | null = null;
+        let lastPayload: unknown = null;
+
+        for (const number of numberCandidates) {
+          const result = await evolutionRequest({
+            evolutionUrl,
+            evolutionKey,
+            path: `/chat/fetchProfilePictureUrl/${t.instance}`,
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ number }),
+          });
+
+          lastPayload = result.data;
+
+          if (!result.ok) {
+            console.warn(`Profile picture lookup failed for ${t.phone} using ${number}: ${result.status} ${result.text}`);
+            continue;
+          }
+
+          pictureUrl = extractPictureUrl(result.data as Record<string, unknown> | null | undefined);
+          if (pictureUrl) break;
         }
 
-        const pictureUrl: string | null =
-          result.data?.profilePictureUrl ||
-          result.data?.url ||
-          result.data?.picture ||
-          null;
+        if (!pictureUrl) {
+          failed++;
+          console.warn(`No profile picture URL returned for ${t.phone}`, lastPayload);
+          continue;
+        }
 
         const now = new Date().toISOString();
 
