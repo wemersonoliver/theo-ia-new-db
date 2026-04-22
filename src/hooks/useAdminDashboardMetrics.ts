@@ -104,8 +104,11 @@ export function useAdminDashboardMetrics(range: DateRange) {
       // Subscriptions
       const { data: subs } = await supabase
         .from("subscriptions")
-        .select("status, plan_type, amount_cents, started_at");
-      const activeSubs = (subs || []).filter((s: any) => s.status === "active");
+        .select("status, plan_type, amount_cents, started_at, created_at, user_id, account_id");
+      // Considera "venda concluída" toda assinatura ativa que NÃO seja tester (cortesia)
+      const isPaying = (s: any) =>
+        s.status === "active" && (s.plan_type || "").toLowerCase() !== "tester";
+      const activeSubs = (subs || []).filter(isPaying);
       const activeSubscriptions = activeSubs.length;
       const mrrCents = activeSubs.reduce((acc: number, s: any) => {
         const amt = s.amount_cents || 0;
@@ -128,6 +131,19 @@ export function useAdminDashboardMetrics(range: DateRange) {
         count: v.count,
         mrrCents: v.mrrCents,
       }));
+
+      // Vendas concluídas = assinaturas pagas iniciadas no período (Kiwify)
+      const subDate = (s: any) => s.started_at || s.created_at;
+      const paidSubsCur = (subs || []).filter(
+        (s: any) => isPaying(s) && inRange(subDate(s))
+      );
+      const paidSubsPrev = (subs || []).filter(
+        (s: any) => isPaying(s) && inPrev(subDate(s))
+      );
+      const paidSubsValueCur = paidSubsCur.reduce(
+        (sum: number, s: any) => sum + (s.amount_cents || 0),
+        0
+      );
 
       // WhatsApp instances
       const { data: instances } = await supabase
