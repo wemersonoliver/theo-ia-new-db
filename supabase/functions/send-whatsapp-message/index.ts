@@ -108,11 +108,8 @@ serve(async (req) => {
       return jsonResponse({ error: "Erro de configuração do servidor" }, 500);
     }
 
-    // Normalize phone: ensure country code 55 for Brazilian numbers
-    let normalizedPhone = phone.replace(/\D/g, "");
-    if (normalizedPhone.length === 10 || normalizedPhone.length === 11) {
-      normalizedPhone = "55" + normalizedPhone;
-    }
+    // Normalize Brazilian phone to canonical 13-digit form (with 9th digit)
+    const normalizedPhone = normalizeBrazilianPhone(phone);
 
     // Send message via Evolution API
     const sendResponse = await evolutionRequest({
