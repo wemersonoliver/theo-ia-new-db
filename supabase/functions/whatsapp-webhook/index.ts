@@ -724,6 +724,21 @@ serve(async (req) => {
               ai_active: shouldActivateAI,
             });
 
+          // Fire-and-forget: fetch WhatsApp profile picture for this new contact
+          try {
+            const fnUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/sync-whatsapp-profile-pictures`;
+            fetch(fnUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              },
+              body: JSON.stringify({ phone, instanceName }),
+            }).catch((err) => console.error("Profile picture sync failed:", err));
+          } catch (e) {
+            console.error("Failed to trigger profile picture sync:", e);
+          }
+
           // Create CRM deal in "Atendimento IA" stage for new conversations
           try {
             await createCRMDealForNewConversation(
