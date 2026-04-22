@@ -72,11 +72,12 @@ interface ContactFormData {
   name: string;
   email: string;
   notes: string;
+  address: string;
   tags: string[];
   assigned_to: string | null;
 }
 
-const emptyForm: ContactFormData = { phone: "", name: "", email: "", notes: "", tags: [], assigned_to: null };
+const emptyForm: ContactFormData = { phone: "", name: "", email: "", notes: "", address: "", tags: [], assigned_to: null };
 
 // ── Contact Form ──────────────────────────────────────────────────────────────
 interface ContactFormProps {
@@ -113,6 +114,10 @@ function ContactForm({ form, setForm, onSave, onCancel, isPending, phoneEditable
       <div className="space-y-2">
         <Label htmlFor="cf-email">E-mail</Label>
         <Input id="cf-email" type="email" value={form.email} onChange={update("email")} placeholder="email@exemplo.com" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="cf-address">Endereço</Label>
+        <Input id="cf-address" value={form.address} onChange={update("address")} placeholder="Rua, número, bairro, cidade" />
       </div>
       <AssigneeSelector
         value={form.assigned_to}
