@@ -1,0 +1,1 @@
+INSERT INTO public.system_welcome_queue (user_id, phone, full_name, scheduled_at) VALUES ('061644fc-4791-4c26-82ff-aa11c4230ce3', '5585997627354', 'Marcos Vinicius', now());
