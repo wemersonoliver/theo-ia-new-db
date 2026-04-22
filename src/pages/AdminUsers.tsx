@@ -58,6 +58,7 @@ interface AdminUser {
 export default function AdminUsers() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [passwordDialog, setPasswordDialog] = useState<string | null>(null);
