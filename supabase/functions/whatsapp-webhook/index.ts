@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { persistEvolutionMedia } from "../_media.ts";
 import { resolveAccountId } from "../_account.ts";
+import { normalizeBrazilianPhone } from "../_phone.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -114,7 +115,8 @@ serve(async (req) => {
           const remoteJid = msg.key?.remoteJid;
           if (!remoteJid || remoteJid.includes("@g.us")) continue;
 
-          const phone = remoteJid.replace("@s.whatsapp.net", "");
+          const rawPhone = remoteJid.replace("@s.whatsapp.net", "");
+          const phone = normalizeBrazilianPhone(rawPhone);
           const isFromMe = msg.key?.fromMe === true;
           const contactName = msg.pushName || null;
           const messageKey = msg.key;
@@ -401,7 +403,8 @@ serve(async (req) => {
         const remoteJid = msg.key?.remoteJid;
         if (!remoteJid || remoteJid.includes("@g.us")) continue; // Skip groups
 
-        const phone = remoteJid.replace("@s.whatsapp.net", "");
+        const rawPhone = remoteJid.replace("@s.whatsapp.net", "");
+        const phone = normalizeBrazilianPhone(rawPhone);
         
         // Detect message type
         const isAudioMessage = !!msg.message?.audioMessage;
