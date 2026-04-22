@@ -158,13 +158,14 @@ export default function Contacts() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const autoOpenedRef = useRef<string | null>(null);
-  const { contacts, isLoading, updateContact, deleteContact, createContact, syncFromConversations } =
+  const { contacts, isLoading, updateContact, deleteContact, createContact, syncFromConversations, importContacts } =
     useContacts();
 
   const [search, setSearch] = useState("");
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [isNewDialog, setIsNewDialog] = useState(false);
+  const [isImportDialog, setIsImportDialog] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState<ContactFormData>(emptyForm);
 
@@ -209,6 +210,7 @@ export default function Contacts() {
       name: contact.name || "",
       email: contact.email || "",
       notes: contact.notes || "",
+      address: (contact as any).address || "",
       tags: contact.tags || [],
       assigned_to: contact.assigned_to ?? null,
     });
@@ -226,7 +228,7 @@ export default function Contacts() {
 
   function handleCreate() {
     createContact.mutate(
-      { phone: form.phone, name: form.name, email: form.email, notes: form.notes, tags: form.tags, assigned_to: form.assigned_to },
+      { phone: form.phone, name: form.name, email: form.email, notes: form.notes, address: form.address, tags: form.tags, assigned_to: form.assigned_to },
       { onSuccess: () => setIsNewDialog(false) }
     );
   }
