@@ -343,6 +343,16 @@ export default function AdminUsers() {
                           <Button
                             variant="outline"
                             size="sm"
+                            onClick={() => handleImpersonate(u)}
+                            disabled={actionLoading || u.id === user?.id}
+                            title="Entrar como este usuário (modo suporte)"
+                            className="text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                          >
+                            <LogIn className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => openEditDialog(u)}
                             disabled={actionLoading}
                             title="Editar perfil"
