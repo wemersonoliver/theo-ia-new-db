@@ -700,12 +700,12 @@ serve(async (req) => {
               
               console.log("AI reactivated by keyword for:", phone);
               const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
-              await triggerAIResponse(supabase, userId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
+              await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
             }
           } else if (conversation.ai_active) {
             // AI already active, trigger response with delay
             const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
-            await triggerAIResponse(supabase, userId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
+            await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
           }
         } else {
           // New conversation - check if should activate AI
@@ -756,7 +756,7 @@ serve(async (req) => {
           if (shouldActivateAI) {
             console.log("AI activated for new conversation:", phone);
             const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
-            await triggerAIResponse(supabase, userId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
+            await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
           } else {
             console.log("AI not activated (no keyword match):", phone);
           }
@@ -780,7 +780,7 @@ serve(async (req) => {
   }
 });
 
-async function triggerAIResponse(supabase: any, userId: string, phone: string, messageContent: string, delaySeconds?: number, mediaInfo?: { messageKey: any; instanceName: string; mediaType: string }) {
+async function triggerAIResponse(supabase: any, userId: string, accountId: string | null, phone: string, messageContent: string, delaySeconds?: number, mediaInfo?: { messageKey: any; instanceName: string; mediaType: string }) {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
