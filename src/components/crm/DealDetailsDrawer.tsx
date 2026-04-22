@@ -27,6 +27,7 @@ import { AppointmentDialog } from "@/components/appointments/AppointmentDialog";
 import { TagInput } from "@/components/TagInput";
 import { DealQuickActions } from "./DealQuickActions";
 import { DealActivityTimeline } from "./DealActivityTimeline";
+import { DealTasksSection } from "./DealTasksSection";
 import { CRMDeal } from "@/hooks/useCRMDeals";
 import { CRMStage } from "@/hooks/useCRMStages";
 import { useDealRelatedData, normalizePhone } from "@/hooks/useDealRelatedData";
@@ -540,6 +541,9 @@ export function DealDetailsDrawer({
                 </div>
               )}
             </section>
+
+            {/* Tarefas */}
+            <DealTasksSection dealId={deal.id} />
 
             {/* Anotações + Histórico */}
             <section className="space-y-2">
