@@ -1,5 +1,16 @@
 export const RECAPTCHA_SITE_KEY = "6Ld9TcYsAAAAAMEDUiTck3OS4RKCJYCBs-fR69Kf";
 
+/**
+ * Returns true only when running on the production domain (theoia.com.br).
+ * In Lovable preview, lovable.app subdomains and localhost it returns false,
+ * so reCAPTCHA stays disabled while iterating.
+ */
+export function isRecaptchaEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return host === "theoia.com.br" || host === "www.theoia.com.br";
+}
+
 declare global {
   interface Window {
     grecaptcha?: {
