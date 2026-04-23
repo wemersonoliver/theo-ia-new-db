@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 import { resolveAccountId } from "../_account.ts";
-import { normalizeBrazilianPhone } from "../_phone.ts";
+import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -111,24 +111,38 @@ serve(async (req) => {
     // Normalize Brazilian phone to canonical 13-digit form (with 9th digit)
     const normalizedPhone = normalizeBrazilianPhone(phone);
 
-    // Send message via Evolution API
-    const sendResponse = await evolutionRequest({
-      evolutionUrl,
-      evolutionKey,
-      path: `/message/sendText/${instanceName}`,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        number: normalizedPhone,
-        text: outgoingText,
-      }),
-    });
+    // Send via Evolution API with automatic fallback for the "9th digit" issue:
+    // some Brazilian WhatsApp accounts (legacy DDDs) only accept the 12-digit
+    // form. We try the canonical (13-digit) first and, if Evolution rejects
+    // the number as invalid/non-existent, retry with the variant.
+    const candidates = [normalizedPhone];
+    const variant = getBrazilianPhoneVariant(normalizedPhone);
+    if (variant && variant !== normalizedPhone) candidates.push(variant);
 
-    if (!sendResponse.ok) {
+    let sendResponse: Awaited<ReturnType<typeof evolutionRequest>> | null = null;
+    for (const candidate of candidates) {
+      sendResponse = await evolutionRequest({
+        evolutionUrl,
+        evolutionKey,
+        path: `/message/sendText/${instanceName}`,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ number: candidate, text: outgoingText }),
+      });
+      if (sendResponse.ok) break;
+
+      const body = sendResponse.text || "";
+      const isInvalidNumber =
+        sendResponse.status === 400 ||
+        sendResponse.status === 404 ||
+        /not.?exists|invalid.?number|number.?does.?not|not.?in.?whatsapp|jid/i.test(body);
+      if (!isInvalidNumber) break;
+      console.warn(`Number ${candidate} rejected by Evolution, trying variant...`);
+    }
+
+    if (!sendResponse || !sendResponse.ok) {
       console.error("Evolution send error:", sendResponse);
-      return jsonResponse(buildEvolutionErrorPayload(sendResponse, "Erro ao enviar mensagem"), 502);
+      return jsonResponse(buildEvolutionErrorPayload(sendResponse!, "Erro ao enviar mensagem"), 502);
     }
 
     const newMessage = {

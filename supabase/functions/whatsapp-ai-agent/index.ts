@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveAccountId } from "../_account.ts";
+import { getBrazilianPhoneVariant } from "../_phone.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -963,22 +964,46 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
       return;
     }
 
-    const response = await fetch(`${evolutionUrl}/message/sendText/${instance.instance_name}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: evolutionKey,
-      },
-      body: JSON.stringify({
-        number: phone,
-        text: message,
-      }),
-    });
+    // Tenta enviar com o número como veio (geralmente normalizado com 9).
+    // Se Evolution responder erro de número inexistente, tenta a variante
+    // alternativa (sem o 9 no caso de DDDs antigos / números legados).
+    const tryNumbers = [phone];
+    const variant = getBrazilianPhoneVariant(phone);
+    if (variant && variant !== phone) tryNumbers.push(variant);
 
-    const responseText = await response.text();
-    if (!response.ok) {
-      console.error("Evolution send error:", responseText);
+    let lastErrorBody = "";
+    for (const candidate of tryNumbers) {
+      const response = await fetch(`${evolutionUrl}/message/sendText/${instance.instance_name}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: evolutionKey,
+        },
+        body: JSON.stringify({
+          number: candidate,
+          text: message,
+        }),
+      });
+
+      const responseText = await response.text();
+      if (response.ok) {
+        console.log(`Message sent via ${candidate} (instance: ${instance.instance_name})`);
+        return;
+      }
+
+      lastErrorBody = responseText;
+      const isInvalidNumber =
+        response.status === 400 ||
+        response.status === 404 ||
+        /not.?exists|invalid.?number|number.?does.?not|not.?in.?whatsapp|jid/i.test(responseText);
+
+      if (!isInvalidNumber) {
+        console.error(`Evolution send error (${candidate}):`, responseText);
+        return;
+      }
+      console.warn(`Number ${candidate} rejected by Evolution, trying variant...`);
     }
+    console.error("Evolution send failed for all variants:", lastErrorBody);
   } catch (error) {
     console.error("Send message error:", error);
   }

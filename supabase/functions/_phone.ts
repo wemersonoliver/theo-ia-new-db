@@ -45,3 +45,32 @@ export function normalizeBrazilianPhone(raw: string | null | undefined): string 
 
   return digits;
 }
+
+// Retorna o "irmão" do número brasileiro: a forma alternativa com/sem o 9.
+// Útil para fallback no envio Evolution: alguns JIDs reais são de 12 dígitos
+// (sem o 9), e a normalização canônica força 13. Se o envio falhar, tente
+// a outra forma antes de desistir.
+export function getBrazilianPhoneVariant(raw: string | null | undefined): string | null {
+  const digits = (raw || "").replace(/\D/g, "");
+  if (!digits.startsWith("55")) return null;
+
+  // 13 dígitos (55 + DDD + 9 + 8 dígitos): produz versão sem o 9 (12 dígitos)
+  if (digits.length === 13) {
+    const ddd = digits.slice(2, 4);
+    const ninth = digits.slice(4, 5);
+    const rest = digits.slice(5);
+    if (ninth === "9") {
+      return `55${ddd}${rest}`;
+    }
+    return null;
+  }
+
+  // 12 dígitos (55 + DDD + 8 dígitos): produz versão com o 9 (13 dígitos)
+  if (digits.length === 12) {
+    const ddd = digits.slice(2, 4);
+    const rest = digits.slice(4);
+    return `55${ddd}9${rest}`;
+  }
+
+  return null;
+}
