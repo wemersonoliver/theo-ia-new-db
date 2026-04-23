@@ -78,7 +78,7 @@ export function useWhatsAppInstance() {
       return data as WhatsAppConnectionResponse;
     },
     onSuccess: (data, phoneNumber) => {
-      queryClient.invalidateQueries({ queryKey: ["whatsapp-instance", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-instance", accountId] });
 
       if (phoneNumber) {
         if (data?.pairingCode) {
@@ -103,7 +103,7 @@ export function useWhatsAppInstance() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["whatsapp-instance", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-instance", accountId] });
       toast.success("WhatsApp desconectado.");
     },
     onError: (error: Error) => {
@@ -120,7 +120,7 @@ export function useWhatsAppInstance() {
       return data as WhatsAppConnectionResponse;
     },
     onSuccess: (data, phoneNumber) => {
-      queryClient.invalidateQueries({ queryKey: ["whatsapp-instance", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-instance", accountId] });
 
       if (!phoneNumber) return;
 
