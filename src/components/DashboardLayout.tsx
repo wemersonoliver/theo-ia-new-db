@@ -3,6 +3,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Menu, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { WhatsAppDisconnectedBanner } from "@/components/WhatsAppDisconnectedBanner";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -36,6 +37,8 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
           </Sheet>
           <h1 className="text-lg font-semibold truncate">{title}</h1>
         </header>
+
+        <WhatsAppDisconnectedBanner />
 
         <main className="flex-1 overflow-auto">
           <div className="container py-4 md:py-6">
