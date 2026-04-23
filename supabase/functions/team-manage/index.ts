@@ -89,8 +89,23 @@ serve(async (req) => {
     // ========== INVITE ==========
     if (action === "invite") {
       const { full_name, phone, email, role, permissions } = body;
-      if (!full_name || !phone || !role) {
-        return new Response(JSON.stringify({ error: "Nome, telefone e papel são obrigatórios" }), {
+      if (!full_name || !phone || !role || !email) {
+        return new Response(JSON.stringify({ error: "Nome, telefone, email e papel são obrigatórios" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      // Valida formato de email
+      const emailTrimmed = String(email).trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailTrimmed)) {
+        return new Response(JSON.stringify({ error: "Informe um email válido" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (emailTrimmed.endsWith(".theoia.local")) {
+        return new Response(JSON.stringify({ error: "Email inválido" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -124,7 +139,7 @@ serve(async (req) => {
       }
 
       const normalizedPhone = normalizePhone(phone);
-      const memberEmail = (email && String(email).trim()) || `membro_${Date.now()}@${normalizedPhone || "team"}.theoia.local`;
+      const memberEmail = emailTrimmed;
       const provisionalPassword = randomPassword();
 
       // Cria usuário no Auth

@@ -81,8 +81,11 @@ export function TeamMemberDialog({ open, onOpenChange, member }: Props) {
     if (isEditing && member) {
       await update.mutateAsync({ member_id: member.id, role, permissions: overrides });
     } else {
-      if (!fullName.trim() || !phone.trim()) return;
-      await invite.mutateAsync({ full_name: fullName, phone, email: email || undefined, role, permissions: overrides });
+      const emailTrimmed = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!fullName.trim() || !phone.trim() || !emailTrimmed) return;
+      if (!emailRegex.test(emailTrimmed)) return;
+      await invite.mutateAsync({ full_name: fullName, phone, email: emailTrimmed, role, permissions: overrides });
     }
     onOpenChange(false);
   };
@@ -118,9 +121,16 @@ export function TeamMemberDialog({ open, onOpenChange, member }: Props) {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Email (opcional — usado para login)</Label>
-                <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
-                <p className="text-xs text-muted-foreground">Se vazio, geramos um email interno automaticamente.</p>
+                <Label>Email *</Label>
+                <Input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                  placeholder="email@exemplo.com"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Será usado pelo membro para fazer login e recuperar a senha.
+                </p>
               </div>
             </>
           )}
