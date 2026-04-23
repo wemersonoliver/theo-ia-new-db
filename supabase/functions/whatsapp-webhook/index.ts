@@ -1111,3 +1111,71 @@ async function moveCRMDealToHumanStage(supabase: any, userId: string, accountId:
     console.log("CRM deal moved to Atendimento humano:", phone);
   }
 }
+
+async function notifyUserDisconnected(supabase: any, userId: string) {
+  try {
+    // Fetch profile to get user's WhatsApp/phone
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("phone, full_name")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!profile?.phone) {
+      console.log("notifyUserDisconnected: user has no phone registered", userId);
+      return;
+    }
+
+    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+    if (!evolutionUrl || !evolutionKey) {
+      console.log("notifyUserDisconnected: Evolution API not configured");
+      return;
+    }
+
+    // Use system instance to send the alert
+    const { data: sysInstance } = await supabase
+      .from("system_whatsapp_instance")
+      .select("instance_name, status")
+      .limit(1)
+      .maybeSingle();
+
+    if (!sysInstance || sysInstance.status !== "connected") {
+      console.log("notifyUserDisconnected: system instance not connected");
+      return;
+    }
+
+    // Normalize phone (10-11 digits → add 55 prefix)
+    const digits = String(profile.phone).replace(/\D/g, "");
+    let normalized = digits;
+    if (digits.length === 10 || digits.length === 11) {
+      normalized = `55${digits}`;
+    }
+
+    const firstName = (profile.full_name || "").split(" ")[0] || "";
+    const greeting = firstName ? `Olá, ${firstName}!` : "Olá!";
+
+    const message =
+      `⚠️ *Atenção: WhatsApp desconectado*\n\n` +
+      `${greeting} Detectamos que o seu WhatsApp conectado ao *Theo IA* foi desconectado.\n\n` +
+      `Enquanto não reconectar, a IA *não vai responder* aos seus clientes e novas mensagens não serão recebidas.\n\n` +
+      `🔗 Reconecte agora em: https://theoia.com.br/whatsapp\n\n` +
+      `Se precisar de ajuda, é só responder aqui.`;
+
+    const resp = await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: evolutionKey },
+      body: JSON.stringify({ number: normalized, text: message }),
+    });
+
+    if (!resp.ok) {
+      const txt = await resp.text();
+      console.error("notifyUserDisconnected: send failed", resp.status, txt.slice(0, 200));
+      return;
+    }
+
+    console.log(`Disconnection alert sent to user ${userId} (${normalized})`);
+  } catch (error) {
+    console.error("notifyUserDisconnected error:", error);
+  }
+}
