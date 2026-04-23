@@ -53,7 +53,7 @@ serve(async (req) => {
     // Find the instance owner (user instance or system instance)
     const { data: instanceData } = await supabase
       .from("whatsapp_instances")
-      .select("user_id, id")
+      .select("user_id, id, status, instance_name")
       .eq("instance_name", instanceName)
       .maybeSingle();
 
@@ -373,6 +373,7 @@ serve(async (req) => {
         });
         console.log("Conversation sync triggered for user:", userId);
       } else if (state === "close" || state === "disconnected") {
+        const previousStatus = instanceData.status;
         await supabase
           .from("whatsapp_instances")
           .update({
@@ -384,6 +385,13 @@ serve(async (req) => {
           .eq("user_id", userId);
 
         console.log("WhatsApp disconnected for user:", userId);
+
+        // Notify user only on real connection drops (was previously connected)
+        if (previousStatus === "connected") {
+          notifyUserDisconnected(supabase, userId).catch((err) =>
+            console.error("Error sending disconnection notification:", err)
+          );
+        }
       }
     }
 
