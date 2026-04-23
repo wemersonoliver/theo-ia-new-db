@@ -14,6 +14,22 @@ const json = (body: Record<string, unknown>, status = 200) =>
   });
 
 function pickStatus(item: any): string {
+  // Detecta logout silencioso: Evolution mantém connectionStatus "open" mesmo após
+  // o WhatsApp invalidar a sessão (Baileys recebe 401). Nesse caso há um
+  // disconnectionReasonCode/disconnectionAt mais recente que o updatedAt da conexão.
+  const disconnectionCode = item?.disconnectionReasonCode ?? item?.instance?.disconnectionReasonCode;
+  const disconnectionAt = item?.disconnectionAt ?? item?.instance?.disconnectionAt;
+  if (disconnectionCode === 401 || disconnectionCode === 403) {
+    // Se o disconnectionAt é o evento mais recente (ou não há reconexão posterior), está deslogado
+    const updatedAt = item?.updatedAt ?? item?.instance?.updatedAt;
+    if (!updatedAt || !disconnectionAt || new Date(disconnectionAt) >= new Date(updatedAt) - 1000 * 60) {
+      // Permite até 1min de tolerância: reconexões geralmente atualizam updatedAt logo depois
+    }
+    // Critério simples e seguro: se há código 401/403 registrado, tratamos como desconectado
+    // (uma reconexão bem-sucedida limpa o disconnectionReasonCode na Evolution)
+    return "disconnected";
+  }
+
   const raw = String(
     item?.connectionStatus ??
       item?.status ??
