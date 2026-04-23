@@ -9,6 +9,179 @@ const corsHeaders = {
 // Max items to process per invocation to avoid timeout (each takes ~5-8s with composing)
 const MAX_ITEMS_PER_RUN = 5;
 
+// ─── Sanitização de nome ──────────────────────────────────────────────
+function sanitizeContactName(rawName: string | null | undefined): string | null {
+  if (!rawName) return null;
+  const name = rawName.trim();
+  if (name.length < 3) return null;
+  if (/^\d+$/.test(name)) return null;
+  const letterCount = (name.match(/[A-Za-zÀ-ÿ]/g) || []).length;
+  if (letterCount < 3) return null;
+  const lower = name.toLowerCase();
+  const blacklist = ["user", "usuario", "usuário", "cliente", "client", "whatsapp", "wpp", "anp", "test", "teste", "lead", "contato", "contact"];
+  if (blacklist.includes(lower)) return null;
+  if (/^[^A-Za-zÀ-ÿ]+$/.test(name)) return null;
+  const firstWord = name.split(/\s+/)[0];
+  if (firstWord.length < 3) return null;
+  return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+}
+
+// ─── Biblioteca de ganchos de persuasão ───────────────────────────────
+const HOOK_LIBRARY: Record<string, { name: string; instruction: string; example: string }> = {
+  confirmacao_de_leitura: {
+    name: "Confirmação de Leitura",
+    instruction: "O cliente recebeu material/link/proposta concreta. Pergunte de forma leve se conseguiu olhar/avaliar — referenciando EXATAMENTE o que foi enviado.",
+    example: "Conseguiu dar uma olhadinha no link da calculadora que te mandei? Se quiser, faço a simulação aqui com você.",
+  },
+  rotulo_voss: {
+    name: "Rótulo (Chris Voss)",
+    instruction: "Nomeie a possível objeção/sentimento do cliente sem cobrá-lo. Use 'parece que...', 'imagino que...'. Reduz resistência.",
+    example: "Parece que algo te fez pausar essa decisão... posso ajudar a clarear alguma dúvida?",
+  },
+  pergunta_calibrada: {
+    name: "Pergunta Calibrada (Chris Voss)",
+    instruction: "Pergunta com 'como' ou 'o que' que faz o cliente refletir sobre o resultado desejado. Nunca sim/não genérico.",
+    example: "Como seria pra você se conseguíssemos resolver [problema específico] essa semana?",
+  },
+  coerencia_cialdini: {
+    name: "Coerência (Cialdini)",
+    instruction: "Relembre algo que o cliente JÁ DISSE querer/precisar. Cite literalmente. Aciona o gatilho de manter consistência.",
+    example: "Você comentou que precisava resolver [X] — isso ainda faz sentido pra você?",
+  },
+  prova_social: {
+    name: "Prova Social (Cialdini)",
+    instruction: "Mencione resultado de outros clientes parecidos (sem nomes). Útil quando há objeção implícita.",
+    example: "Outros clientes do mesmo perfil que o seu conseguiram [resultado] em poucos dias — vale a pena tentar?",
+  },
+  reciprocidade: {
+    name: "Reciprocidade (Cialdini)",
+    instruction: "Ofereça algo de valor sem pedir nada em troca: dica, material, análise gratuita. Cria obrigação social leve.",
+    example: "Separei uma dica rápida que pode te ajudar com [tema] — quer que eu te mande?",
+  },
+  escassez: {
+    name: "Escassez Real",
+    instruction: "USE APENAS NOS DIAS 5-6. Crie urgência REAL com prazo/condição que de fato muda. Nada de escassez falsa.",
+    example: "Essa condição vale até [prazo], depois entra a tabela cheia. Quer que eu garanta pra você?",
+  },
+  pergunta_de_saida: {
+    name: "Pergunta de Saída",
+    instruction: "USE APENAS NO ÚLTIMO DIA. Encerramento elegante que dá ao cliente a opção de fechar a porta com dignidade — muitas vezes ele reabre.",
+    example: "Faz sentido a gente pausar por aqui, ou ainda quer seguir adiante?",
+  },
+};
+
+// ─── Validação anti-genérico ──────────────────────────────────────────
+function isGenericGreeting(msg: string): boolean {
+  const cleaned = msg.toLowerCase().trim().replace(/[!.?,]/g, "").replace(/\s+/g, " ");
+  const patterns = [
+    /^(olá|oi|ola|opa|e[ai])\s+(tudo bem|tudo certo|td bem|td certo|como (você |voce )?(vai|está|esta|tá|ta))\s*$/,
+    /^(olá|oi|ola|opa)\s+\w{1,15}\s+(tudo bem|td bem|tudo certo)\s*$/,
+    /^(olá|oi|ola)\s*$/,
+  ];
+  return patterns.some((rx) => rx.test(cleaned));
+}
+
+// ─── Etapa A: Análise estruturada da conversa ─────────────────────────
+interface ConversationAnalysis {
+  offered_item: string;
+  pending_object: string;
+  lead_temperature: "frio" | "morno" | "quente";
+  last_open_point: string;
+  name_is_valid: boolean;
+  sanitized_name: string | null;
+  recommended_hook: string;
+  reasoning: string;
+}
+
+async function analyzeConversation(
+  geminiKey: string,
+  contextText: string,
+  rawContactName: string | null,
+  silencePattern: string,
+  lastClientSnippet: string,
+  currentDay: number,
+  maxDays: number,
+): Promise<ConversationAnalysis | null> {
+  const sanitized = sanitizeContactName(rawContactName);
+
+  const analysisPrompt = `Você é um analista de vendas. Analise a conversa abaixo e extraia informações estruturadas para gerar uma mensagem de follow-up de alta conversão.
+
+CONVERSA:
+${contextText || "(sem histórico relevante)"}
+
+METADADOS:
+- Nome bruto do contato no WhatsApp: "${rawContactName || "(vazio)"}"
+- Nome sanitizado pelo sistema: "${sanitized || "(inválido)"}"
+- Padrão de silêncio: ${silencePattern}
+- Última mensagem do cliente: "${lastClientSnippet || "(nunca respondeu)"}"
+- Dia atual do follow-up: ${currentDay} de ${maxDays}
+
+Retorne via tool call um JSON estruturado. Seja FACTUAL — extraia informações REAIS da conversa, não invente.`;
+
+  const tool = {
+    function_declarations: [{
+      name: "registrar_analise",
+      description: "Registra a análise estruturada da conversa.",
+      parameters: {
+        type: "object",
+        properties: {
+          offered_item: { type: "string", description: "O que foi concretamente oferecido/enviado pelo atendente. Ex: 'link da calculadora', 'proposta', 'agendamento'. Se nada, retorne 'nenhum item específico'." },
+          pending_object: { type: "string", description: "O que o cliente precisa fazer/avaliar/responder, baseado na conversa." },
+          lead_temperature: { type: "string", enum: ["frio", "morno", "quente"] },
+          last_open_point: { type: "string", description: "Último assunto/dúvida em aberto, citando algo da conversa." },
+          name_is_valid: { type: "boolean", description: "true se o nome sanitizado é nome humano real; false se placeholder/lixo." },
+          sanitized_name: { type: "string", description: "Nome sanitizado a usar (string vazia se inválido)." },
+          recommended_hook: {
+            type: "string",
+            enum: ["confirmacao_de_leitura", "rotulo_voss", "pergunta_calibrada", "coerencia_cialdini", "prova_social", "reciprocidade", "escassez", "pergunta_de_saida"],
+            description: "Gancho mais adequado. 'escassez' só dias 5-6. 'pergunta_de_saida' só último dia."
+          },
+          reasoning: { type: "string", description: "Justificativa curta (1-2 frases)." },
+        },
+        required: ["offered_item", "pending_object", "lead_temperature", "last_open_point", "name_is_valid", "sanitized_name", "recommended_hook", "reasoning"],
+      },
+    }],
+  };
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: analysisPrompt }] }],
+        tools: [tool],
+        toolConfig: { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["registrar_analise"] } },
+        generationConfig: { temperature: 0.3, maxOutputTokens: 600 },
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    console.error("Gemini analysis failed:", response.status, await response.text());
+    return null;
+  }
+
+  const data = await response.json();
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  const fnCall = parts.find((p: any) => p.functionCall)?.functionCall;
+  if (!fnCall?.args) {
+    console.error("Analysis: no functionCall in response");
+    return null;
+  }
+  const args = fnCall.args;
+  return {
+    offered_item: args.offered_item || "nenhum item específico",
+    pending_object: args.pending_object || "retomar a conversa",
+    lead_temperature: args.lead_temperature || "frio",
+    last_open_point: args.last_open_point || "",
+    name_is_valid: args.name_is_valid === true,
+    sanitized_name: args.name_is_valid ? (args.sanitized_name || sanitized) : null,
+    recommended_hook: args.recommended_hook || "pergunta_calibrada",
+    reasoning: args.reasoning || "",
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
