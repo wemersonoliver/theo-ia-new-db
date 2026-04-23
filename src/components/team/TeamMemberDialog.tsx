@@ -81,8 +81,11 @@ export function TeamMemberDialog({ open, onOpenChange, member }: Props) {
     if (isEditing && member) {
       await update.mutateAsync({ member_id: member.id, role, permissions: overrides });
     } else {
-      if (!fullName.trim() || !phone.trim()) return;
-      await invite.mutateAsync({ full_name: fullName, phone, email: email || undefined, role, permissions: overrides });
+      const emailTrimmed = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!fullName.trim() || !phone.trim() || !emailTrimmed) return;
+      if (!emailRegex.test(emailTrimmed)) return;
+      await invite.mutateAsync({ full_name: fullName, phone, email: emailTrimmed, role, permissions: overrides });
     }
     onOpenChange(false);
   };
