@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveAccountId } from "../_account.ts";
-import { getBrazilianPhoneVariant } from "../_phone.ts";
+import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -943,6 +943,51 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function extractDigitsFromRemoteJid(remoteJid: string | null | undefined): string {
+  return (remoteJid || "")
+    .replace(/@s\.whatsapp\.net$/i, "")
+    .replace(/@lid$/i, "")
+    .replace(/\D/g, "");
+}
+
+async function resolvePreferredChatNumber(instanceName: string, normalizedPhone: string, evolutionUrl: string, evolutionKey: string) {
+  try {
+    const variant = getBrazilianPhoneVariant(normalizedPhone);
+    const candidateSet = new Set([normalizedPhone, variant].filter(Boolean) as string[]);
+
+    const chatsResponse = await fetch(`${evolutionUrl}/chat/findChats/${instanceName}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: evolutionKey,
+      },
+      body: JSON.stringify({}),
+    });
+
+    if (!chatsResponse.ok) {
+      console.warn("Could not fetch chats to resolve preferred number:", await chatsResponse.text());
+      return null;
+    }
+
+    const chats = await chatsResponse.json();
+    if (!Array.isArray(chats)) return null;
+
+    for (const chat of chats) {
+      const remoteJid = chat?.id || chat?.remoteJid || chat?.jid;
+      const digits = extractDigitsFromRemoteJid(remoteJid);
+      if (!digits) continue;
+
+      if (candidateSet.has(digits) || normalizeBrazilianPhone(digits) === normalizedPhone) {
+        return digits;
+      }
+    }
+  } catch (error) {
+    console.warn("Failed resolving preferred chat number:", error);
+  }
+
+  return null;
+}
+
 async function sendWhatsAppMessage(supabase: any, userId: string, phone: string, message: string) {
   try {
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
@@ -964,15 +1009,18 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
       return;
     }
 
-    // Tenta enviar com o número como veio (geralmente normalizado com 9).
-    // Se Evolution responder erro de número inexistente, tenta a variante
-    // alternativa (sem o 9 no caso de DDDs antigos / números legados).
-    const tryNumbers = [phone];
+    const resolvedChatNumber = await resolvePreferredChatNumber(instance.instance_name, phone, evolutionUrl, evolutionKey);
+
+    // Prioriza o número real do chat na Evolution e depois cai para os formatos
+    // normalizados/variantes para números brasileiros legados.
+    const tryNumbers = [resolvedChatNumber, phone];
     const variant = getBrazilianPhoneVariant(phone);
     if (variant && variant !== phone) tryNumbers.push(variant);
 
+    const uniqueTryNumbers = [...new Set(tryNumbers.filter(Boolean) as string[])];
+
     let lastErrorBody = "";
-    for (const candidate of tryNumbers) {
+    for (const candidate of uniqueTryNumbers) {
       const response = await fetch(`${evolutionUrl}/message/sendText/${instance.instance_name}`, {
         method: "POST",
         headers: {
