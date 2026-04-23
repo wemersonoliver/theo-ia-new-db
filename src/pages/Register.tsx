@@ -9,7 +9,6 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2, MessageSquare, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { getRecaptchaToken } from "@/lib/recaptcha";
 
 export default function Register() {
   const [fullName, setFullName] = useState("");
@@ -35,21 +34,6 @@ export default function Register() {
       return;
     }
     setLoading(true);
-
-    const captchaToken = await getRecaptchaToken("register");
-    if (!captchaToken) {
-      toast.error("Falha na verificação de segurança. Recarregue a página.");
-      setLoading(false);
-      return;
-    }
-    const { data: verify } = await supabase.functions.invoke("verify-recaptcha", {
-      body: { token: captchaToken, action: "register" },
-    });
-    if (!verify?.success) {
-      toast.error("Verificação anti-bot falhou. Tente novamente.");
-      setLoading(false);
-      return;
-    }
 
     const { error } = await signUp(email, password, fullName, phone.replace(/\D/g, ""));
 
