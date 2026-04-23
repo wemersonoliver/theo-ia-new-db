@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, MessageSquare, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { getRecaptchaToken } from "@/lib/recaptcha";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -17,21 +16,6 @@ export default function ForgotPassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
-    const captchaToken = await getRecaptchaToken("forgot_password");
-    if (!captchaToken) {
-      toast.error("Falha na verificação de segurança. Recarregue a página.");
-      setLoading(false);
-      return;
-    }
-    const { data: verify } = await supabase.functions.invoke("verify-recaptcha", {
-      body: { token: captchaToken, action: "forgot_password" },
-    });
-    if (!verify?.success) {
-      toast.error("Verificação anti-bot falhou. Tente novamente.");
-      setLoading(false);
-      return;
-    }
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,

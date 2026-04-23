@@ -9,7 +9,6 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { getRecaptchaToken } from "@/lib/recaptcha";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -22,21 +21,6 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
-    const captchaToken = await getRecaptchaToken("login");
-    if (!captchaToken) {
-      toast.error("Falha na verificação de segurança. Recarregue a página.");
-      setLoading(false);
-      return;
-    }
-    const { data: verify } = await supabase.functions.invoke("verify-recaptcha", {
-      body: { token: captchaToken, action: "login" },
-    });
-    if (!verify?.success) {
-      toast.error("Verificação anti-bot falhou. Tente novamente.");
-      setLoading(false);
-      return;
-    }
 
     const { error } = await signIn(email, password);
 
