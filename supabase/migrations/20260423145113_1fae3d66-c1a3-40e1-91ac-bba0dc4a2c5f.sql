@@ -1,0 +1,1 @@
+UPDATE public.followup_tracking SET next_scheduled_at = now() WHERE id = '97177e28-e3dd-4148-95f6-05e13e4fc004' AND status = 'pending';
