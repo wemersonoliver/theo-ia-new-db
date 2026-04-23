@@ -118,9 +118,16 @@ export function TeamMemberDialog({ open, onOpenChange, member }: Props) {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Email (opcional — usado para login)</Label>
-                <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
-                <p className="text-xs text-muted-foreground">Se vazio, geramos um email interno automaticamente.</p>
+                <Label>Email *</Label>
+                <Input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                  placeholder="email@exemplo.com"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Será usado pelo membro para fazer login e recuperar a senha.
+                </p>
               </div>
             </>
           )}
