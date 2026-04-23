@@ -100,6 +100,14 @@ serve(async (req) => {
     const userId = claimsData.user.id;
     const userEmail = claimsData.user.email || "";
 
+    // Resolve account_id (owner) so the instance is visible to the frontend
+    const { data: ownedAccount } = await supabase
+      .from("accounts")
+      .select("id")
+      .eq("owner_user_id", userId)
+      .maybeSingle();
+    const accountId = ownedAccount?.id ?? null;
+
     const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
     if (!evolutionUrl || !evolutionKey) {
@@ -123,7 +131,7 @@ serve(async (req) => {
         
         if (state.state === "open") {
           await supabase.from("whatsapp_instances").upsert({
-            user_id: userId, instance_name: instanceName,
+            user_id: userId, account_id: accountId, instance_name: instanceName,
             status: "connected", qr_code_base64: null, pairing_code: null,
             updated_at: new Date().toISOString(),
           }, { onConflict: "user_id" });
@@ -204,7 +212,7 @@ serve(async (req) => {
       }
 
       await supabase.from("whatsapp_instances").upsert({
-        user_id: userId, instance_name: instanceName,
+        user_id: userId, account_id: accountId, instance_name: instanceName,
         status: resolvedQrCodeBase64 || pairingCode ? "qr_ready" : "pending",
         qr_code_base64: resolvedQrCodeBase64, pairing_code: pairingCode,
         updated_at: new Date().toISOString(),
@@ -229,7 +237,7 @@ serve(async (req) => {
     const { qrCodeBase64, pairingCode } = connectionData;
 
     await supabase.from("whatsapp_instances").upsert({
-      user_id: userId, instance_name: instanceName,
+      user_id: userId, account_id: accountId, instance_name: instanceName,
       status: "qr_ready", qr_code_base64: qrCodeBase64, pairing_code: pairingCode,
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id" });
