@@ -121,6 +121,13 @@ export default function WhatsApp() {
     return () => clearInterval(timer);
   }, [instance?.status, instance?.qr_code_base64, cachedQRCode, refreshQRCode, connectionMode]);
 
+  const qrCodeValue = cachedQRCode || instance?.qr_code_base64 || null;
+  const qrImageSrc = qrCodeValue
+    ? qrCodeValue.startsWith("data:image")
+      ? qrCodeValue
+      : `data:image/png;base64,${qrCodeValue}`
+    : null;
+
   const getStatusBadge = () => {
     switch (instance?.status) {
       case "connected":
@@ -267,11 +274,11 @@ export default function WhatsApp() {
 
                 <TabsContent value="qr" className="flex flex-col items-center">
                   <div className="space-y-4 text-center">
-                    {(cachedQRCode || instance?.qr_code_base64) ? (
+                    {qrImageSrc ? (
                       <>
                         <div className="relative rounded-lg border bg-white p-4">
                           <img 
-                            src={`data:image/png;base64,${cachedQRCode || instance?.qr_code_base64}`}
+                            src={qrImageSrc}
                             alt="QR Code"
                             className={cn("h-64 w-64 transition-opacity duration-300", isRefreshing && "opacity-50")}
                           />
