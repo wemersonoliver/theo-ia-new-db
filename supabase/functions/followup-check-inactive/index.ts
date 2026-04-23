@@ -79,9 +79,13 @@ serve(async (req) => {
           if (messages.length === 0) continue;
 
           const lastMsg = messages[messages.length - 1];
-          // Only follow up if the last message was NOT a human-sent outgoing message
-          // (follow-up AI messages are ok to follow up on since they're automated)
-          if (lastMsg.from_me && lastMsg.sent_by !== "followup_ai") {
+          // Skip ONLY if the last message was sent manually by a human operator
+          // (handoff in progress — operator should keep control).
+          // We DO want to follow up when:
+          //  - Last message was from the client (classic case)
+          //  - Last message was from the AI and the lead went silent (MAIN target case)
+          //  - Last message was a previous follow-up that didn't get a reply
+          if (lastMsg.from_me && lastMsg.sent_by === "human") {
             continue;
           }
 

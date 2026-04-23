@@ -142,6 +142,13 @@ serve(async (req) => {
           .map((m: any) => `${m.from_me ? "Atendente" : "Cliente"}: ${m.content}`)
           .join("\n");
 
+        // Detect engagement pattern: did the lead EVER reply?
+        // Ignore follow-up messages when judging "client ever responded"
+        const clientHasEverReplied = messages.some((m: any) => !m.from_me);
+        const lastClientMsg = [...messages].reverse().find((m: any) => !m.from_me);
+        const lastClientSnippet = lastClientMsg?.content?.slice(0, 120) || "";
+        const silencePattern = clientHasEverReplied ? "DROPPED_OFF" : "NEVER_REPLIED";
+
         // Build persuasion prompt based on day
         const agentName = aiConfig?.agent_name || "Assistente";
         const contactName = conversation.contact_name || "cliente";
@@ -185,6 +192,24 @@ DIA DO FOLLOW-UP: ${currentDay} de ${maxDays}
 TURNO: ${isMorning ? "Manhã" : "Tarde"}
 TENTATIVA: ${item.current_step} de ${maxDays * 2}
 
+PADRÃO DE SILÊNCIO DETECTADO: ${silencePattern}
+${silencePattern === "NEVER_REPLIED" ? `
+⚠️ ATENÇÃO: Este lead NUNCA respondeu nenhuma mensagem. Ele recebeu o pitch/abordagem inicial e ficou em silêncio total.
+ESTRATÉGIA OBRIGATÓRIA PARA "NUNCA RESPONDEU":
+- NÃO repita a oferta nem reforce argumentos de venda — isso espanta ainda mais
+- Tom 100% leve, humano, quase casual — como se fosse um amigo curioso, não vendedor
+- Faça UMA pergunta MUITO simples, fechada e fácil de responder (de preferência de 1 palavra ou sim/não)
+- Reconheça implicitamente o silêncio sem cobrar ("vi que ainda não rolou de a gente conversar...", "imagino que você esteja na correria...")
+- Dê opção ao lead de escolher o canal/formato de resposta para reduzir atrito
+- Exemplos de boas perguntas: "Faz mais sentido conversarmos por aqui ou prefere uma call rápida?", "Posso te mandar agora ou prefere depois?", "Ainda faz sentido pra você?"
+- NUNCA mande mensagem longa — máximo 2 linhas` : `
+✅ Este lead JÁ respondeu antes e parou no meio da conversa.
+ÚLTIMA MENSAGEM DO CLIENTE: "${lastClientSnippet}"
+ESTRATÉGIA OBRIGATÓRIA PARA "SUMIU NO MEIO":
+- Retome o FIO da conversa explicitamente — referencie o último ponto que ele tocou
+- Use frases como "Você tinha comentado sobre...", "Ficou aquela dúvida sobre...", "Conseguiu pensar sobre o que conversamos?"
+- Pergunta-gancho específica relacionada ao que ele disse, não genérica`}
+
 ${persuasionStrategy}
 
 REGRAS OBRIGATÓRIAS:
@@ -196,6 +221,7 @@ REGRAS OBRIGATÓRIAS:
 6. NÃO use emojis em excesso (máximo 1-2)
 7. ${currentDay < 5 ? "NÃO ofereça descontos ou promoções ainda — isso é reservado para os últimos dias" : "Pode usar as armas de negociação disponíveis"}
 8. Baseie-se nos livros "As Armas da Persuasão" (Cialdini) e "Never Split the Difference" (Chris Voss)
+9. OBRIGATÓRIO: a mensagem DEVE terminar com UMA pergunta clara e fácil de responder (gancho de engajamento). Sem pergunta = mensagem ruim.
 
 Responda APENAS com a mensagem a ser enviada, sem explicações.`;
 
