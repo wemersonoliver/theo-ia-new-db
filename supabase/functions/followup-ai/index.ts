@@ -322,118 +322,129 @@ serve(async (req) => {
         const lastClientSnippet = lastClientMsg?.content?.slice(0, 120) || "";
         const silencePattern = clientHasEverReplied ? "DROPPED_OFF" : "NEVER_REPLIED";
 
-        // Build persuasion prompt based on day
         const agentName = aiConfig?.agent_name || "Assistente";
-        const contactName = conversation.contact_name || "cliente";
-        
-        let persuasionStrategy = "";
-        if (currentDay <= 2) {
-          persuasionStrategy = `
-ESTRATÉGIA: Dias 1-2 — COERÊNCIA E COMPROMISSO (Cialdini)
-- Relembre algo que o cliente mencionou querer ou precisar
-- Use frases como "Você comentou que...", "Lembro que você mencionou..."
-- Faça uma pergunta simples que reative o diálogo
-- Tom: Amigável, casual, sem pressão`;
-        } else if (currentDay <= 4) {
-          persuasionStrategy = `
-ESTRATÉGIA: Dias 3-4 — PROVA SOCIAL E RECIPROCIDADE (Cialdini)
-- Compartilhe resultados de outros clientes (sem nomes específicos)
-- Ofereça um conteúdo de valor grátis ou dica relevante
-- Use frases como "Muitos clientes que tinham a mesma dúvida...", "Separei essa informação especialmente para você..."
-- Tom: Prestativo, gerando valor sem cobrar nada`;
-        } else {
-          const bargainingTools = config.bargaining_tools || "condição especial";
-          persuasionStrategy = `
-ESTRATÉGIA: Dias 5-6 — ESCASSEZ E URGÊNCIA + CARTADA FINAL (Chris Voss + Cialdini)
-- É hora de usar as ARMAS DE NEGOCIAÇÃO: ${bargainingTools}
-- Use gatilhos de escassez: "Essa condição é válida só até...", "Últimas vagas..."
-- Use a técnica do "rótulo" de Chris Voss: "Parece que algo te impediu de seguir..."
-- Faça uma oferta concreta e com prazo
-- Tom: Direto mas empático, criando senso de urgência real
-- IMPORTANTE: Esta é a cartada final, use tudo que tem disponível`;
-        }
+        const rawContactName = conversation.contact_name || null;
 
-        const systemPrompt = `Você é ${agentName}, um especialista em reativação de leads por WhatsApp.
-
-CONTEXTO DA CONVERSA ANTERIOR:
-${contextText}
-
-${item.context_summary ? `RESUMO DO CONTEXTO: ${item.context_summary}` : ""}
-
-NOME DO CLIENTE: ${contactName}
-DIA DO FOLLOW-UP: ${currentDay} de ${maxDays}
-TURNO: ${isMorning ? "Manhã" : "Tarde"}
-TENTATIVA: ${item.current_step} de ${maxDays * 2}
-
-PADRÃO DE SILÊNCIO DETECTADO: ${silencePattern}
-${silencePattern === "NEVER_REPLIED" ? `
-⚠️ ATENÇÃO: Este lead NUNCA respondeu nenhuma mensagem. Ele recebeu o pitch/abordagem inicial e ficou em silêncio total.
-ESTRATÉGIA OBRIGATÓRIA PARA "NUNCA RESPONDEU":
-- NÃO repita a oferta nem reforce argumentos de venda — isso espanta ainda mais
-- Tom 100% leve, humano, quase casual — como se fosse um amigo curioso, não vendedor
-- Faça UMA pergunta MUITO simples, fechada e fácil de responder (de preferência de 1 palavra ou sim/não)
-- Reconheça implicitamente o silêncio sem cobrar ("vi que ainda não rolou de a gente conversar...", "imagino que você esteja na correria...")
-- Dê opção ao lead de escolher o canal/formato de resposta para reduzir atrito
-- Exemplos de boas perguntas: "Faz mais sentido conversarmos por aqui ou prefere uma call rápida?", "Posso te mandar agora ou prefere depois?", "Ainda faz sentido pra você?"
-- NUNCA mande mensagem longa — máximo 2 linhas` : `
-✅ Este lead JÁ respondeu antes e parou no meio da conversa.
-ÚLTIMA MENSAGEM DO CLIENTE: "${lastClientSnippet}"
-ESTRATÉGIA OBRIGATÓRIA PARA "SUMIU NO MEIO":
-- Retome o FIO da conversa explicitamente — referencie o último ponto que ele tocou
-- Use frases como "Você tinha comentado sobre...", "Ficou aquela dúvida sobre...", "Conseguiu pensar sobre o que conversamos?"
-- Pergunta-gancho específica relacionada ao que ele disse, não genérica`}
-
-${persuasionStrategy}
-
-REGRAS OBRIGATÓRIAS:
-1. Mensagem CURTA (máximo 3 linhas, estilo WhatsApp)
-2. NUNCA mencione que é uma IA ou follow-up automático
-3. Pareça uma mensagem natural e espontânea
-4. Use o nome do cliente se disponível
-5. Personalize baseado no contexto da conversa anterior
-6. NÃO use emojis em excesso (máximo 1-2)
-7. ${currentDay < 5 ? "NÃO ofereça descontos ou promoções ainda — isso é reservado para os últimos dias" : "Pode usar as armas de negociação disponíveis"}
-8. Baseie-se nos livros "As Armas da Persuasão" (Cialdini) e "Never Split the Difference" (Chris Voss)
-9. OBRIGATÓRIO: a mensagem DEVE terminar com UMA pergunta clara e fácil de responder (gancho de engajamento). Sem pergunta = mensagem ruim.
-
-Responda APENAS com a mensagem a ser enviada, sem explicações.`;
-
-        // Call Gemini
-        const geminiResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
-              generationConfig: {
-                temperature: 0.9,
-                maxOutputTokens: 200,
-              },
-            }),
-          }
+        // ─── Etapa A: Análise estruturada ──────────────────────────────
+        const analysis = await analyzeConversation(
+          geminiKey,
+          contextText,
+          rawContactName,
+          silencePattern,
+          lastClientSnippet,
+          currentDay,
+          maxDays,
         );
 
-        if (!geminiResponse.ok) {
-          const errText = await geminiResponse.text();
-          console.error("Gemini error:", errText);
-          // On rate limit, skip this item - it'll be retried next run
-          if (geminiResponse.status === 429) {
-            console.log("Gemini rate limited, stopping batch");
-            break;
-          }
+        if (!analysis) {
+          console.error(`Skipping ${item.phone}: analysis failed`);
           continue;
         }
 
-        const geminiData = await geminiResponse.json();
-        const aiMessage = geminiData.candidates?.[0]?.content?.parts
-          ?.filter((p: any) => p.text && !p.thoughtSignature)
-          ?.map((p: any) => p.text)
-          ?.join("")
-          ?.trim();
+        console.log(`[${item.phone}] Analysis:`, JSON.stringify(analysis));
+
+        // Override hook based on day rules (segurança extra)
+        let hookKey = analysis.recommended_hook;
+        if (hookKey === "escassez" && currentDay < 5) hookKey = "coerencia_cialdini";
+        if (hookKey === "pergunta_de_saida" && currentDay < maxDays) hookKey = "rotulo_voss";
+        const hook = HOOK_LIBRARY[hookKey] || HOOK_LIBRARY.pergunta_calibrada;
+
+        const nameForGreeting = analysis.name_is_valid && analysis.sanitized_name
+          ? analysis.sanitized_name
+          : null;
+
+        const bargainingTools = config.bargaining_tools || "";
+
+        // ─── Etapa B: Geração da mensagem (com retry anti-genérico) ────
+        const generationPrompt = `Você é ${agentName}, um vendedor humano experiente reativando um lead por WhatsApp. Use técnicas dos livros "As Armas da Persuasão" (Cialdini) e "Never Split the Difference" (Chris Voss).
+
+ANÁLISE DA CONVERSA (FATOS — use exatamente isso):
+- Item oferecido pelo atendente: ${analysis.offered_item}
+- O que o cliente precisa fazer/avaliar: ${analysis.pending_object}
+- Último ponto em aberto: ${analysis.last_open_point || "(nenhum)"}
+- Temperatura do lead: ${analysis.lead_temperature}
+- Padrão de silêncio: ${silencePattern}
+- Dia atual: ${currentDay} de ${maxDays} | Tentativa: ${item.current_step}
+${nameForGreeting ? `- Nome do cliente (validado): ${nameForGreeting}` : `- Nome do cliente: INVÁLIDO/AUSENTE — NÃO use nome, use saudação neutra ("Oi!", "E aí!")`}
+${currentDay >= 5 && bargainingTools ? `- Armas de negociação disponíveis: ${bargainingTools}` : ""}
+
+GANCHO DE PERSUASÃO ESCOLHIDO: ${hook.name}
+Como aplicar: ${hook.instruction}
+Exemplo do estilo: "${hook.example}"
+
+CONTEXTO DA CONVERSA (apenas referência — não copie):
+${contextText || "(sem histórico)"}
+
+REGRAS OBRIGATÓRIAS — quebrar = mensagem rejeitada:
+1. ❌ PROIBIDO começar com "Olá, tudo bem?", "Oi, tudo bem?" sozinho ou variações vazias
+2. ❌ PROIBIDO usar "Como você está?" como pergunta principal
+3. ❌ PROIBIDO usar nomes inválidos (ver acima)
+4. ❌ PROIBIDO mencionar que é IA, automático ou follow-up
+5. ❌ PROIBIDO oferecer desconto/promoção antes do dia 5
+6. ✅ A mensagem DEVE referenciar concretamente "${analysis.offered_item}" ou "${analysis.last_open_point || analysis.pending_object}"
+7. ✅ A mensagem DEVE terminar com UMA pergunta específica (não genérica) ligada ao gancho escolhido
+8. ✅ Máximo 2-3 linhas, estilo WhatsApp natural
+9. ✅ Máximo 1 emoji (opcional)
+10. ✅ Tom humano e espontâneo, como amigo profissional
+
+Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas, sem prefixos.`;
+
+        let aiMessage: string | null = null;
+        let rateLimited = false;
+
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const promptToUse = attempt === 0
+            ? generationPrompt
+            : generationPrompt + `\n\n⚠️ TENTATIVA ANTERIOR FOI REJEITADA POR SER GENÉRICA. Reescreva começando IMEDIATAMENTE com referência concreta ao item oferecido ou ao último ponto da conversa. NÃO comece com "Olá" + saudação vazia.`;
+
+          const geminiResponse = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ role: "user", parts: [{ text: promptToUse }] }],
+                generationConfig: { temperature: 0.7, maxOutputTokens: 200 },
+              }),
+            },
+          );
+
+          if (!geminiResponse.ok) {
+            const errText = await geminiResponse.text();
+            console.error("Gemini generation error:", geminiResponse.status, errText);
+            if (geminiResponse.status === 429) { rateLimited = true; break; }
+            break;
+          }
+
+          const geminiData = await geminiResponse.json();
+          const candidate = geminiData.candidates?.[0]?.content?.parts
+            ?.filter((p: any) => p.text && !p.thoughtSignature)
+            ?.map((p: any) => p.text)
+            ?.join("")
+            ?.trim()
+            ?.replace(/^["'`]+|["'`]+$/g, "");
+
+          if (!candidate) {
+            console.error("No candidate generated for", item.phone, "attempt", attempt);
+            continue;
+          }
+
+          if (isGenericGreeting(candidate)) {
+            console.warn(`[${item.phone}] Rejected generic greeting (attempt ${attempt + 1}): "${candidate}"`);
+            continue;
+          }
+
+          aiMessage = candidate;
+          break;
+        }
+
+        if (rateLimited) {
+          console.log("Gemini rate limited, stopping batch");
+          break;
+        }
 
         if (!aiMessage) {
-          console.error("No AI message generated for", item.phone);
+          console.error("No valid AI message generated for", item.phone, "after retries");
           continue;
         }
 
