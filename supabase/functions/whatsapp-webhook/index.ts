@@ -86,8 +86,9 @@ serve(async (req) => {
       if (event === "connection.update" || event === "CONNECTION_UPDATE") {
         const state = data?.state || data?.status;
         if (state === "open" || state === "connected") {
-          const phoneNumber = data?.pushName ? null : data?.wid?.split("@")[0];
-          const profileName = data?.pushName || null;
+          const ownerJid = data?.wuid || data?.wid || data?.ownerJid || null;
+          const phoneNumber = ownerJid ? String(ownerJid).split("@")[0] : null;
+          const profileName = data?.profileName || data?.pushName || null;
           await supabase.from("system_whatsapp_instance").update({
             status: "connected",
             qr_code_base64: null,
@@ -341,8 +342,9 @@ serve(async (req) => {
       
       if (state === "open" || state === "connected") {
         // Get phone info
-        const phoneNumber = data?.pushName ? null : data?.wid?.split("@")[0];
-        const profileName = data?.pushName || null;
+        const ownerJid = data?.wuid || data?.wid || data?.ownerJid || null;
+        const phoneNumber = ownerJid ? String(ownerJid).split("@")[0] : null;
+        const profileName = data?.profileName || data?.pushName || null;
 
         await supabase
           .from("whatsapp_instances")

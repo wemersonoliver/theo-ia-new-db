@@ -15,22 +15,12 @@ const json = (body: Record<string, unknown>, status = 200) =>
 
 function pickStatus(item: any): string {
   // Detecta logout silencioso: Evolution mantém connectionStatus "open" mesmo após
-  // o WhatsApp invalidar a sessão (Baileys recebe 401). Nesse caso há um
-  // disconnectionReasonCode/disconnectionAt mais recente que o updatedAt da conexão.
+  // o WhatsApp invalidar a sessão (Baileys recebe 401). Mas se houve reconexão
+  // posterior (updatedAt > disconnectionAt + tolerância), a sessão é válida.
   const disconnectionCode = item?.disconnectionReasonCode ?? item?.instance?.disconnectionReasonCode;
   const disconnectionAt = item?.disconnectionAt ?? item?.instance?.disconnectionAt;
-  if (disconnectionCode === 401 || disconnectionCode === 403) {
-    // Se o disconnectionAt é o evento mais recente (ou não há reconexão posterior), está deslogado
-    const updatedAt = item?.updatedAt ?? item?.instance?.updatedAt;
-    if (!updatedAt || !disconnectionAt || new Date(disconnectionAt) >= new Date(updatedAt) - 1000 * 60) {
-      // Permite até 1min de tolerância: reconexões geralmente atualizam updatedAt logo depois
-    }
-    // Critério simples e seguro: se há código 401/403 registrado, tratamos como desconectado
-    // (uma reconexão bem-sucedida limpa o disconnectionReasonCode na Evolution)
-    return "disconnected";
-  }
-
-  const raw = String(
+  const updatedAt = item?.updatedAt ?? item?.instance?.updatedAt;
+  const rawState = String(
     item?.connectionStatus ??
       item?.status ??
       item?.state ??
@@ -38,10 +28,21 @@ function pickStatus(item: any): string {
       item?.instance?.status ??
       "",
   ).toLowerCase();
-  if (raw === "open" || raw === "connected") return "connected";
-  if (raw === "connecting" || raw === "qr" || raw === "qrcode") return "qr_ready";
-  if (raw === "close" || raw === "closed" || raw === "disconnected" || raw === "logout") return "disconnected";
-  return raw || "unknown";
+
+  if ((disconnectionCode === 401 || disconnectionCode === 403) && disconnectionAt) {
+    // Se houve reconexão (updatedAt mais recente que disconnectionAt + 30s) E o estado é "open",
+    // a sessão foi reestabelecida. Caso contrário, tratamos como desconectado.
+    const reconnected =
+      rawState === "open" &&
+      updatedAt &&
+      new Date(updatedAt).getTime() > new Date(disconnectionAt).getTime() + 30 * 1000;
+    if (!reconnected) return "disconnected";
+  }
+
+  if (rawState === "open" || rawState === "connected") return "connected";
+  if (rawState === "connecting" || rawState === "qr" || rawState === "qrcode") return "qr_ready";
+  if (rawState === "close" || rawState === "closed" || rawState === "disconnected" || rawState === "logout") return "disconnected";
+  return rawState || "unknown";
 }
 
 function pickName(item: any): string | null {
