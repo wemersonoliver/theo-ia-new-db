@@ -142,6 +142,13 @@ serve(async (req) => {
           .map((m: any) => `${m.from_me ? "Atendente" : "Cliente"}: ${m.content}`)
           .join("\n");
 
+        // Detect engagement pattern: did the lead EVER reply?
+        // Ignore follow-up messages when judging "client ever responded"
+        const clientHasEverReplied = messages.some((m: any) => !m.from_me);
+        const lastClientMsg = [...messages].reverse().find((m: any) => !m.from_me);
+        const lastClientSnippet = lastClientMsg?.content?.slice(0, 120) || "";
+        const silencePattern = clientHasEverReplied ? "DROPPED_OFF" : "NEVER_REPLIED";
+
         // Build persuasion prompt based on day
         const agentName = aiConfig?.agent_name || "Assistente";
         const contactName = conversation.contact_name || "cliente";
