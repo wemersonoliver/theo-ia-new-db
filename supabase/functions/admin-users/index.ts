@@ -71,6 +71,7 @@ serve(async (req) => {
           phone: profile?.phone || "",
           user_code: profile?.user_code || null,
           is_blocked: profile?.is_blocked || false,
+          feature_keyword_triggers: profile?.feature_keyword_triggers || false,
           created_at: u.created_at,
           last_sign_in_at: u.last_sign_in_at,
           roles: userRoles,
@@ -94,6 +95,28 @@ serve(async (req) => {
       const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password });
       if (error) throw error;
       return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "toggle_feature_keyword_triggers") {
+      if (!userId) throw new Error("userId required");
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("feature_keyword_triggers")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const newStatus = !(profile?.feature_keyword_triggers || false);
+
+      const { error } = await supabaseAdmin
+        .from("profiles")
+        .update({ feature_keyword_triggers: newStatus })
+        .eq("user_id", userId);
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ success: true, feature_keyword_triggers: newStatus }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Search, Pencil, Trash2, LogIn } from "lucide-react";
+import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Search, Pencil, Trash2, LogIn, Zap, ZapOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { startImpersonation } from "@/lib/impersonation";
 
@@ -43,6 +43,7 @@ interface AdminUser {
   phone: string;
   user_code: number | null;
   is_blocked: boolean;
+  feature_keyword_triggers: boolean;
   created_at: string;
   last_sign_in_at: string | null;
   roles: string[];
@@ -103,6 +104,27 @@ export default function AdminUsers() {
         prev.map((u) => (u.id === userId ? { ...u, is_blocked: data.is_blocked } : u))
       );
       toast({ title: "Sucesso", description: data.is_blocked ? "Usuário bloqueado" : "Usuário desbloqueado" });
+    }
+    setActionLoading(false);
+  };
+
+  const handleToggleKeywordTriggers = async (userId: string) => {
+    setActionLoading(true);
+    const { data, error } = await supabase.functions.invoke("admin-users", {
+      body: { action: "toggle_feature_keyword_triggers", userId },
+    });
+    if (error) {
+      toast({ title: "Erro", description: "Falha ao alterar funcionalidade Gatilhos", variant: "destructive" });
+    } else {
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, feature_keyword_triggers: data.feature_keyword_triggers } : u))
+      );
+      toast({
+        title: "Sucesso",
+        description: data.feature_keyword_triggers
+          ? "Funcionalidade Gatilhos ATIVADA para o usuário"
+          : "Funcionalidade Gatilhos DESATIVADA para o usuário",
+      });
     }
     setActionLoading(false);
   };
@@ -388,6 +410,16 @@ export default function AdminUsers() {
                             title="Alterar senha"
                           >
                             <KeyRound className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleToggleKeywordTriggers(u.id)}
+                            disabled={actionLoading}
+                            title={u.feature_keyword_triggers ? "Desativar funcionalidade Gatilhos" : "Ativar funcionalidade Gatilhos"}
+                            className={u.feature_keyword_triggers ? "text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10" : "text-slate-400 border-slate-600/40 hover:bg-slate-700/40"}
+                          >
+                            {u.feature_keyword_triggers ? <Zap className="h-4 w-4" /> : <ZapOff className="h-4 w-4" />}
                           </Button>
                           {!u.roles.includes("super_admin") && (
                             <>

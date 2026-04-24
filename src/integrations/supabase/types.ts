@@ -1162,6 +1162,7 @@ export type Database = {
           avatar_url: string | null
           created_at: string | null
           email: string | null
+          feature_keyword_triggers: boolean
           full_name: string | null
           id: string
           is_blocked: boolean | null
@@ -1175,6 +1176,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string | null
           email?: string | null
+          feature_keyword_triggers?: boolean
           full_name?: string | null
           id?: string
           is_blocked?: boolean | null
@@ -1188,6 +1190,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string | null
           email?: string | null
+          feature_keyword_triggers?: boolean
           full_name?: string | null
           id?: string
           is_blocked?: boolean | null
