@@ -61,9 +61,6 @@ export default function Register() {
       if (typeof window !== 'undefined' && (window as any).fbq) {
         (window as any).fbq('track', 'StartTrial');
       }
-      supabase.functions.invoke("notify-new-user", {
-        body: { full_name: fullName, email },
-      }).catch(() => {});
       toast.success("Conta criada com sucesso!");
       navigate("/onboarding");
     }
