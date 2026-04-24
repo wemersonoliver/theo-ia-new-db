@@ -1281,7 +1281,8 @@ export default function AIAgent() {
           </Button>
         </TabsContent>
 
-        {/* ── ABA GATILHOS ── */}
+        {/* ── ABA GATILHOS (visível somente quando liberada por admin) ── */}
+        {flags.keyword_triggers && (
         <TabsContent value="triggers" className="space-y-6">
           <Card>
             <CardHeader>
@@ -1358,6 +1359,7 @@ export default function AIAgent() {
             Salvar Configurações
           </Button>
         </TabsContent>
+        )}
 
         {/* ── ABA LEMBRETES ── */}
         <TabsContent value="reminders" className="space-y-6">
