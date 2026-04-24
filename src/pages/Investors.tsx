@@ -335,28 +335,27 @@ const Problem = () => (
 
 const MarketFunnel = () => (
   <div className="relative aspect-square w-full max-w-[440px] mx-auto">
-    {/* TAM */}
-    <div className="absolute inset-0 rounded-full border border-[hsl(217,91%,60%)]/30 bg-gradient-to-br from-[hsl(217,91%,60%)]/12 to-transparent flex items-start justify-center pt-6">
-      <div className="text-center">
-        <div className="text-[10px] uppercase tracking-[0.3em] text-[hsl(217,91%,75%)]">TAM</div>
-        <div className="text-2xl font-bold mt-1">21,4 mi</div>
-        <div className="text-[11px] text-white/55">PMEs no Brasil</div>
-      </div>
+    {/* TAM — anel externo, label na borda superior */}
+    <div className="absolute inset-0 rounded-full border border-[hsl(217,91%,60%)]/30 bg-gradient-to-br from-[hsl(217,91%,60%)]/12 to-transparent" />
+    <div className="absolute left-1/2 -translate-x-1/2 top-3 text-center z-10">
+      <div className="text-[10px] uppercase tracking-[0.3em] text-[hsl(217,91%,75%)]">TAM</div>
+      <div className="text-xl font-bold text-white leading-tight">21,4 mi</div>
+      <div className="text-[10px] text-white/55">PMEs no Brasil</div>
     </div>
-    {/* SAM */}
-    <div className="absolute inset-[18%] rounded-full border border-[hsl(190,90%,60%)]/40 bg-gradient-to-br from-[hsl(190,90%,60%)]/16 to-transparent flex items-start justify-center pt-5">
-      <div className="text-center">
-        <div className="text-[10px] uppercase tracking-[0.3em] text-[hsl(190,90%,75%)]">SAM</div>
-        <div className="text-xl font-bold mt-1">6 mi</div>
-        <div className="text-[11px] text-white/55">vendem por WhatsApp</div>
-      </div>
+
+    {/* SAM — anel intermediário, label na borda inferior do anel */}
+    <div className="absolute inset-[20%] rounded-full border border-[hsl(190,90%,60%)]/40 bg-gradient-to-br from-[hsl(190,90%,60%)]/16 to-transparent" />
+    <div className="absolute left-1/2 -translate-x-1/2 bottom-[24%] text-center z-10">
+      <div className="text-[10px] uppercase tracking-[0.3em] text-[hsl(190,90%,75%)]">SAM</div>
+      <div className="text-lg font-bold text-white leading-tight">6 mi</div>
+      <div className="text-[10px] text-white/55">vendem por WhatsApp</div>
     </div>
-    {/* SOM */}
-    <div className="absolute inset-[36%] rounded-full border border-[hsl(142,76%,56%)]/60 bg-gradient-to-br from-[hsl(142,76%,46%)]/30 to-[hsl(142,76%,46%)]/10 flex items-center justify-center shadow-[0_0_60px_-10px_hsl(142,76%,46%)]">
+
+    {/* SOM — núcleo central */}
+    <div className="absolute inset-[40%] rounded-full border border-[hsl(142,76%,56%)]/60 bg-gradient-to-br from-[hsl(142,76%,46%)]/35 to-[hsl(142,76%,46%)]/10 shadow-[0_0_60px_-10px_hsl(142,76%,46%)] flex items-center justify-center">
       <div className="text-center">
-        <div className="text-[10px] uppercase tracking-[0.3em] text-[hsl(142,76%,76%)]">SOM</div>
-        <div className="text-lg font-bold mt-0.5">600 mil</div>
-        <div className="text-[10px] text-white/65">prontas p/ IA</div>
+        <div className="text-[9px] uppercase tracking-[0.25em] text-[hsl(142,76%,76%)]">SOM</div>
+        <div className="text-base font-bold text-white leading-tight">600 mil</div>
       </div>
     </div>
   </div>
