@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAIConfig } from "@/hooks/useAIConfig";
+import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -947,6 +948,7 @@ function PromptTestTab() {
 
 export default function AIAgent() {
   const { config, isLoading, saveConfig, toggleActive } = useAIConfig();
+  const { flags } = useFeatureFlags();
   const [activeTab, setActiveTab] = useState("general");
 
   const [formData, setFormData] = useState({
@@ -1066,7 +1068,9 @@ export default function AIAgent() {
         <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
           <TabsTrigger value="general" className="min-w-fit">Geral</TabsTrigger>
           <TabsTrigger value="hours" className="min-w-fit">Horário</TabsTrigger>
-          <TabsTrigger value="triggers" className="min-w-fit">Gatilhos</TabsTrigger>
+          {flags.keyword_triggers && (
+            <TabsTrigger value="triggers" className="min-w-fit">Gatilhos</TabsTrigger>
+          )}
           <TabsTrigger value="reminders" className="min-w-fit">Lembretes</TabsTrigger>
           <TabsTrigger value="interview" className="min-w-fit gap-1.5">
             <Sparkles className="h-3.5 w-3.5" />
