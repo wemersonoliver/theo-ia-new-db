@@ -23,6 +23,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
   const [needsPhone, setNeedsPhone] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   useEffect(() => {
     const checkAccess = async () => {
@@ -47,7 +48,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       // Resolve account: own account (owner) OR account where user is a member
       const { data: membership } = await supabase
         .from("account_members")
-        .select("account_id, role, accounts!inner(owner_user_id, created_at)")
+        .select("account_id, role, must_change_password, accounts!inner(owner_user_id, created_at)")
         .eq("user_id", user.id)
         .eq("status", "active")
         .order("role", { ascending: true })
@@ -55,6 +56,13 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         .maybeSingle();
 
       const accountOwnerId = (membership as any)?.accounts?.owner_user_id || user.id;
+
+      // Força troca de senha no primeiro acesso de membros convidados
+      if ((membership as any)?.must_change_password === true) {
+        setMustChangePassword(true);
+        setCheckingAccess(false);
+        return;
+      }
 
       // Check active subscription for the account owner (subscription is shared)
       const { data: subscription } = await supabase
@@ -129,6 +137,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (mustChangePassword) {
+    return <Navigate to="/force-change-password" replace />;
   }
 
   // Show checkout screen for trial expired or blocked users (not super_admin)
