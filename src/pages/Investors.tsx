@@ -219,7 +219,22 @@ const CoverSlide = () => (
         </p>
       </div>
 
-      <div className="mt-8 flex items-center gap-6 text-xs text-white/40 uppercase tracking-widest">
+      <div className="mt-8 flex flex-wrap items-center gap-3">
+        <a
+          href="#contato"
+          className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[hsl(217,91%,60%)] to-[hsl(142,76%,46%)] px-6 py-3 text-base font-semibold text-white shadow-lg shadow-[hsl(217,91%,60%)]/30 transition hover:shadow-[hsl(217,91%,60%)]/50"
+        >
+          <Rocket className="h-4 w-4" /> Quero investir
+        </a>
+        <a
+          href="#problema"
+          className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-base font-medium text-white/85 backdrop-blur transition hover:bg-white/10"
+        >
+          Conhecer a oportunidade
+        </a>
+      </div>
+
+      <div className="mt-12 flex items-center gap-6 text-xs text-white/40 uppercase tracking-widest">
         <span>Pitch para Investidores</span>
         <span className="h-px w-12 bg-white/20" />
         <span>2026</span>
