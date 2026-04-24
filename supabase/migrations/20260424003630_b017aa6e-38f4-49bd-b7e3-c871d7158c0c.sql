@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Team members manage platform settings" ON public.platform_settings;
