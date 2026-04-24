@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.verify-recaptcha]
 verify_jwt = false
+
+[functions.send-task-reminders]
+verify_jwt = false
