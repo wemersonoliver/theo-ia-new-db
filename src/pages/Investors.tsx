@@ -461,19 +461,19 @@ const TractionSlide = () => (
     <Title
       eyebrow="Tração e Dados"
       eyebrowIcon={BarChart3}
-      title={<>Aquisição validada. <br /><span className="text-white/40">Custo previsível.</span></>}
+      title={<>Produto validado. <br /><span className="text-white/40">Pronto para escalar.</span></>}
     />
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <BigStat value="R$ 15" label="Custo por trial" accent="blue" />
-      <BigStat value="R$ 97" label="Ticket mensal" accent="green" />
-      <BigStat value="6,5x" label="LTV / CAC potencial" accent="purple" />
+      <BigStat value="R$ 97" label="Ticket mensal recorrente" accent="blue" />
+      <BigStat value="100%" label="SaaS · Receita recorrente" accent="green" />
+      <BigStat value="Alto" label="Potencial de retenção" accent="purple" />
     </div>
 
     <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
       <FeatureCard icon={CheckCircle2} title="Produto validado" desc="Testado em ambiente real com usuários pagantes." />
-      <FeatureCard icon={Target} title="Funil previsível" desc="Conversão e retenção mensuráveis ponta a ponta." />
+      <FeatureCard icon={Target} title="Funil mensurável" desc="Conversão e retenção acompanhadas ponta a ponta." />
     </div>
-    <Quote>Já existe validação real com custo previsível de aquisição.</Quote>
+    <Quote>Produto validado, com forte potencial de conversão e retenção.</Quote>
   </div>
 );
 
