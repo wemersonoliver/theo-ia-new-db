@@ -28,6 +28,7 @@ import Products from "./pages/Products";
 import LandingPage from "./pages/LandingPage";
 import Onboarding from "./pages/Onboarding";
 import Support from "./pages/Support";
+import Investors from "./pages/Investors";
 
 // Admin pages
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -77,6 +78,7 @@ const App = () => (
               <Route path="/crm" element={<ProtectedRoute><CRM /></ProtectedRoute>} />
               {/* <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} /> */}{/* Oculto temporariamente */}
               <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
+              <Route path="/investors" element={<Investors />} />
 
               {/* Admin Panel */}
               <Route path="/admin/login" element={<AdminLogin />} />
