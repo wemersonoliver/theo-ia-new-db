@@ -83,6 +83,9 @@ export function useTeamMembers() {
       role?: "manager" | "seller" | "agent";
       permissions?: Record<string, boolean>;
       status?: "active" | "suspended";
+      full_name?: string;
+      phone?: string;
+      email?: string;
     }) => {
       const { data, error } = await supabase.functions.invoke("team-manage", {
         body: { action: "update", ...input },
