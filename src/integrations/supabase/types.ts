@@ -663,6 +663,8 @@ export type Database = {
           description: string | null
           due_date: string | null
           id: string
+          reminder_sent: boolean
+          reminder_sent_at: string | null
           title: string
           updated_at: string
           user_id: string
@@ -678,6 +680,8 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          reminder_sent?: boolean
+          reminder_sent_at?: string | null
           title: string
           updated_at?: string
           user_id: string
@@ -693,6 +697,8 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          reminder_sent?: boolean
+          reminder_sent_at?: string | null
           title?: string
           updated_at?: string
           user_id?: string
