@@ -1,0 +1,1 @@
+DELETE FROM whatsapp_instances WHERE instance_name = 'solpositivosolar_d09db41f';
