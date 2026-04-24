@@ -51,7 +51,9 @@ export function TeamMemberDialog({ open, onOpenChange, member }: Props) {
     if (member) {
       setFullName(member.full_name || "");
       setPhone(member.phone || "");
-      setEmail(member.email || "");
+      // Esconde emails placeholder gerados pelo sistema (cadastros antigos)
+      const memberEmail = member.email || "";
+      setEmail(memberEmail.endsWith(".theoia.local") ? "" : memberEmail);
       setRole(member.role === "owner" ? "manager" : (member.role as any));
       setOverrides(member.permissions || {});
     } else {
@@ -79,7 +81,28 @@ export function TeamMemberDialog({ open, onOpenChange, member }: Props) {
 
   const onSubmit = async () => {
     if (isEditing && member) {
-      await update.mutateAsync({ member_id: member.id, role, permissions: overrides });
+      const emailTrimmed = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const originalEmail = (member.email || "").toLowerCase();
+      const isPlaceholder = originalEmail.endsWith(".theoia.local");
+      const emailChanged = emailTrimmed && emailTrimmed !== originalEmail;
+
+      // Se o email original era placeholder, exigimos email real para salvar
+      if (isPlaceholder && !emailTrimmed) {
+        return;
+      }
+      if (emailTrimmed && !emailRegex.test(emailTrimmed)) {
+        return;
+      }
+
+      await update.mutateAsync({
+        member_id: member.id,
+        role,
+        permissions: overrides,
+        full_name: fullName.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: emailChanged || isPlaceholder ? emailTrimmed : undefined,
+      });
     } else {
       const emailTrimmed = email.trim().toLowerCase();
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -108,32 +131,30 @@ export function TeamMemberDialog({ open, onOpenChange, member }: Props) {
         </DialogHeader>
 
         <div className="space-y-4">
-          {!isEditing && (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Nome completo *</Label>
-                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>WhatsApp *</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(11) 99999-9999" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Email *</Label>
-                <Input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  type="email"
-                  placeholder="email@exemplo.com"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Será usado pelo membro para fazer login e recuperar a senha.
-                </p>
-              </div>
-            </>
-          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Nome completo {!isEditing && "*"}</Label>
+              <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nome do membro" />
+            </div>
+            <div className="space-y-2">
+              <Label>WhatsApp {!isEditing && "*"}</Label>
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(11) 99999-9999" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Email {!isEditing && "*"}</Label>
+            <Input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              placeholder="email@exemplo.com"
+            />
+            <p className="text-xs text-muted-foreground">
+              {isEditing
+                ? "Alterar o email muda o login do membro. Ele continuará usando a mesma senha."
+                : "Será usado pelo membro para fazer login e recuperar a senha."}
+            </p>
+          </div>
 
           <div className="space-y-2">
             <Label>Papel</Label>
