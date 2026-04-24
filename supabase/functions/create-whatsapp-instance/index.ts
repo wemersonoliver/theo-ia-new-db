@@ -98,7 +98,6 @@ serve(async (req) => {
     }
 
     const userId = claimsData.user.id;
-    const userEmail = claimsData.user.email || "";
 
     // Resolve account_id (owner) so the instance is visible to the frontend
     const { data: ownedAccount } = await supabase
@@ -114,7 +113,8 @@ serve(async (req) => {
       return jsonResponse({ error: "Erro de configuração do servidor" }, 500);
     }
 
-    const instanceName = userEmail.split("@")[0].replace(/[^a-zA-Z0-9]/g, "_") + "_" + userId.slice(0, 8);
+    // Padrão de nomeação: user_id completo (UUID). Garante unicidade absoluta por usuário.
+    const instanceName = userId;
 
     // Check if instance exists
     let instanceExists = false;
