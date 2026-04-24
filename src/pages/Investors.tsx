@@ -333,33 +333,61 @@ const Problem = () => (
 
 /* ============================== Market: TAM/SAM/SOM ============================== */
 
-const MarketFunnel = () => (
-  <div className="relative aspect-square w-full max-w-[440px] mx-auto">
-    {/* TAM — anel externo, label na borda superior */}
-    <div className="absolute inset-0 rounded-full border border-[hsl(217,91%,60%)]/30 bg-gradient-to-br from-[hsl(217,91%,60%)]/12 to-transparent" />
-    <div className="absolute left-1/2 -translate-x-1/2 top-3 text-center z-10">
-      <div className="text-[10px] uppercase tracking-[0.3em] text-[hsl(217,91%,75%)]">TAM</div>
-      <div className="text-xl font-bold text-white leading-tight">21,4 mi</div>
-      <div className="text-[10px] text-white/55">PMEs no Brasil</div>
-    </div>
+const MarketFunnel = () => {
+  const layers = [
+    {
+      tier: "TAM",
+      value: "21,4 mi",
+      caption: "PMEs no Brasil",
+      width: "w-full",
+      from: "from-[hsl(217,91%,60%)]/30",
+      to: "to-[hsl(217,91%,60%)]/5",
+      border: "border-[hsl(217,91%,60%)]/40",
+      tierColor: "text-[hsl(217,91%,80%)]",
+    },
+    {
+      tier: "SAM",
+      value: "6 mi",
+      caption: "vendem por WhatsApp",
+      width: "w-[72%]",
+      from: "from-[hsl(190,90%,60%)]/35",
+      to: "to-[hsl(190,90%,60%)]/8",
+      border: "border-[hsl(190,90%,60%)]/50",
+      tierColor: "text-[hsl(190,90%,80%)]",
+    },
+    {
+      tier: "SOM",
+      value: "600 mil",
+      caption: "prontas para IA",
+      width: "w-[44%]",
+      from: "from-[hsl(142,76%,46%)]/45",
+      to: "to-[hsl(142,76%,46%)]/10",
+      border: "border-[hsl(142,76%,56%)]/70",
+      tierColor: "text-[hsl(142,76%,80%)]",
+    },
+  ];
 
-    {/* SAM — anel intermediário, label na borda inferior do anel */}
-    <div className="absolute inset-[20%] rounded-full border border-[hsl(190,90%,60%)]/40 bg-gradient-to-br from-[hsl(190,90%,60%)]/16 to-transparent" />
-    <div className="absolute left-1/2 -translate-x-1/2 bottom-[24%] text-center z-10">
-      <div className="text-[10px] uppercase tracking-[0.3em] text-[hsl(190,90%,75%)]">SAM</div>
-      <div className="text-lg font-bold text-white leading-tight">6 mi</div>
-      <div className="text-[10px] text-white/55">vendem por WhatsApp</div>
+  return (
+    <div className="w-full max-w-[440px] mx-auto flex flex-col items-center gap-3">
+      {layers.map((l) => (
+        <div
+          key={l.tier}
+          className={`${l.width} rounded-2xl border ${l.border} bg-gradient-to-b ${l.from} ${l.to} px-6 py-5 backdrop-blur transition-all`}
+        >
+          <div className="flex items-baseline justify-between gap-3">
+            <span className={`text-[10px] uppercase tracking-[0.3em] font-semibold ${l.tierColor}`}>
+              {l.tier}
+            </span>
+            <span className="text-[11px] text-white/55">{l.caption}</span>
+          </div>
+          <div className="mt-1 text-3xl md:text-4xl font-bold text-white tracking-tight">
+            {l.value}
+          </div>
+        </div>
+      ))}
     </div>
-
-    {/* SOM — núcleo central */}
-    <div className="absolute inset-[40%] rounded-full border border-[hsl(142,76%,56%)]/60 bg-gradient-to-br from-[hsl(142,76%,46%)]/35 to-[hsl(142,76%,46%)]/10 shadow-[0_0_60px_-10px_hsl(142,76%,46%)] flex items-center justify-center">
-      <div className="text-center">
-        <div className="text-[9px] uppercase tracking-[0.25em] text-[hsl(142,76%,76%)]">SOM</div>
-        <div className="text-base font-bold text-white leading-tight">600 mil</div>
-      </div>
-    </div>
-  </div>
-);
+  );
+};
 
 const Market = () => (
   <div>
