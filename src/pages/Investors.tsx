@@ -90,7 +90,7 @@ const Investors = () => {
         <Section><Problem /></Section>
         <Section id="mercado"><Market /></Section>
         <Section id="gap"><Gap /></Section>
-        <Section id="matematica"><Math /></Section>
+        <Section id="matematica"><MathSection /></Section>
         <Section id="solucao"><Solution /></Section>
         <Section id="crm"><CRM /></Section>
         <Section><Audience /></Section>
@@ -521,7 +521,7 @@ const MathRow = ({
   );
 };
 
-const Math = () => (
+const MathSection = () => (
   <div>
     <Title
       eyebrow="A Matemática da Meta"
