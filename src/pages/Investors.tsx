@@ -1,8 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  ChevronLeft,
-  ChevronRight,
   MessageCircle,
   Zap,
   Clock,
@@ -32,54 +29,29 @@ import {
   User,
 } from "lucide-react";
 
-type Slide = {
-  id: string;
-  render: () => JSX.Element;
-};
+const NAV_SECTIONS = [
+  { id: "problema", label: "Problema" },
+  { id: "solucao", label: "Solução" },
+  { id: "crm", label: "CRM" },
+  { id: "mercado", label: "Mercado" },
+  { id: "modelo", label: "Modelo" },
+  { id: "crescimento", label: "Crescimento" },
+  { id: "visao", label: "Visão" },
+];
 
 const Investors = () => {
-  const [index, setIndex] = useState(0);
-
-  const slides: Slide[] = [
-    { id: "cover", render: () => <CoverSlide /> },
-    { id: "problem", render: () => <ProblemSlide /> },
-    { id: "solution", render: () => <SolutionSlide /> },
-    { id: "crm", render: () => <CRMSlide /> },
-    { id: "market", render: () => <MarketSlide /> },
-    { id: "audience", render: () => <AudienceSlide /> },
-    { id: "model", render: () => <ModelSlide /> },
-    { id: "traction", render: () => <TractionSlide /> },
-    { id: "growth", render: () => <GrowthSlide /> },
-    { id: "strategy", render: () => <StrategySlide /> },
-    { id: "edge", render: () => <EdgeSlide /> },
-    { id: "vision", render: () => <VisionSlide /> },
-    { id: "closing", render: () => <ClosingSlide /> },
-  ];
-
-  const next = useCallback(() => setIndex((i) => Math.min(i + 1, slides.length - 1)), [slides.length]);
-  const prev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") next();
-      if (e.key === "ArrowLeft" || e.key === "PageUp") prev();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [next, prev]);
-
   return (
-    <div className="min-h-screen w-full bg-[hsl(222,47%,4%)] text-white overflow-hidden relative">
+    <div className="min-h-screen w-full bg-[hsl(222,47%,4%)] text-white relative overflow-x-hidden">
       {/* Ambient gradient backdrop */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full bg-[hsl(217,91%,60%)]/20 blur-[120px]" />
-        <div className="absolute -bottom-40 -right-40 h-[600px] w-[600px] rounded-full bg-[hsl(142,76%,36%)]/15 blur-[140px]" />
-        <div className="absolute top-1/2 left-1/2 h-[400px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[hsl(280,80%,60%)]/10 blur-[120px]" />
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div className="absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full bg-[hsl(217,91%,60%)]/15 blur-[120px]" />
+        <div className="absolute top-1/3 -right-40 h-[600px] w-[600px] rounded-full bg-[hsl(142,76%,36%)]/12 blur-[140px]" />
+        <div className="absolute bottom-0 left-1/3 h-[400px] w-[400px] rounded-full bg-[hsl(280,80%,60%)]/10 blur-[120px]" />
       </div>
 
       {/* Grid pattern */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.04]"
+        className="pointer-events-none fixed inset-0 z-0 opacity-[0.04]"
         style={{
           backgroundImage:
             "linear-gradient(white 1px, transparent 1px), linear-gradient(90deg, white 1px, transparent 1px)",
@@ -87,74 +59,72 @@ const Investors = () => {
         }}
       />
 
-      {/* Top bar */}
-      <header className="relative z-20 flex items-center justify-between px-6 md:px-12 py-5">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[hsl(217,91%,60%)] to-[hsl(142,76%,46%)] flex items-center justify-center">
-            <Bot className="h-5 w-5 text-white" />
-          </div>
-          <span className="font-semibold tracking-tight">Theo IA</span>
-          <span className="text-xs text-white/40 ml-3 hidden sm:inline">Investor Deck · 2026</span>
-        </div>
-        <div className="text-xs text-white/50 font-mono">
-          {String(index + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}
+      {/* Sticky nav */}
+      <header className="sticky top-0 z-40 border-b border-white/5 bg-[hsl(222,47%,4%)]/70 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 md:px-10 py-4">
+          <a href="#top" className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[hsl(217,91%,60%)] to-[hsl(142,76%,46%)] flex items-center justify-center">
+              <Bot className="h-5 w-5 text-white" />
+            </div>
+            <span className="font-semibold tracking-tight">Theo IA</span>
+          </a>
+
+          <nav className="hidden lg:flex items-center gap-7 text-sm text-white/65">
+            {NAV_SECTIONS.map((s) => (
+              <a key={s.id} href={`#${s.id}`} className="transition hover:text-white">
+                {s.label}
+              </a>
+            ))}
+          </nav>
+
+          <a
+            href="#contato"
+            className="rounded-full bg-gradient-to-r from-[hsl(217,91%,60%)] to-[hsl(142,76%,46%)] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-[hsl(217,91%,60%)]/20 transition hover:shadow-[hsl(217,91%,60%)]/40"
+          >
+            Falar com o time
+          </a>
         </div>
       </header>
 
-      {/* Slide canvas */}
-      <main className="relative z-10 px-6 md:px-16 lg:px-24 pb-32 pt-4 min-h-[calc(100vh-80px)] flex items-center">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={slides[index].id}
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -16 }}
-            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full max-w-7xl mx-auto"
-          >
-            {slides[index].render()}
-          </motion.div>
-        </AnimatePresence>
-      </main>
+      <main id="top" className="relative z-10">
+        <Section><CoverSlide /></Section>
+        <Section id="problema"><ProblemSlide /></Section>
+        <Section id="solucao"><SolutionSlide /></Section>
+        <Section id="crm"><CRMSlide /></Section>
+        <Section id="mercado"><MarketSlide /></Section>
+        <Section><AudienceSlide /></Section>
+        <Section id="modelo"><ModelSlide /></Section>
+        <Section><TractionSlide /></Section>
+        <Section id="crescimento"><GrowthSlide /></Section>
+        <Section><StrategySlide /></Section>
+        <Section><EdgeSlide /></Section>
+        <Section id="visao"><VisionSlide /></Section>
+        <Section id="contato"><ClosingSlide /></Section>
 
-      {/* Footer controls */}
-      <footer className="fixed bottom-0 left-0 right-0 z-30 px-6 md:px-12 py-5 bg-gradient-to-t from-[hsl(222,47%,4%)] to-transparent">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <button
-            onClick={prev}
-            disabled={index === 0}
-            className="group flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium backdrop-blur transition hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Anterior
-          </button>
-
-          <div className="flex items-center gap-1.5">
-            {slides.map((s, i) => (
-              <button
-                key={s.id}
-                onClick={() => setIndex(i)}
-                aria-label={`Ir para slide ${i + 1}`}
-                className={`h-1.5 rounded-full transition-all ${
-                  i === index ? "w-8 bg-white" : "w-1.5 bg-white/25 hover:bg-white/50"
-                }`}
-              />
-            ))}
+        <footer className="relative border-t border-white/5 px-6 md:px-10 py-10 text-center text-xs text-white/40">
+          <div className="mx-auto max-w-7xl flex flex-col md:flex-row items-center justify-between gap-3">
+            <div>© 2026 Theo IA · Todos os direitos reservados</div>
+            <div className="uppercase tracking-[0.3em]">Pitch para Investidores</div>
           </div>
-
-          <button
-            onClick={next}
-            disabled={index === slides.length - 1}
-            className="group flex items-center gap-2 rounded-full bg-gradient-to-r from-[hsl(217,91%,60%)] to-[hsl(142,76%,46%)] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-[hsl(217,91%,60%)]/20 transition hover:shadow-[hsl(217,91%,60%)]/40 disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            Próximo
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      </footer>
+        </footer>
+      </main>
     </div>
   );
 };
+
+const Section = ({ id, children }: { id?: string; children: React.ReactNode }) => (
+  <section id={id} className="px-6 md:px-10 lg:px-16 py-20 md:py-28 scroll-mt-20">
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      className="mx-auto max-w-7xl"
+    >
+      {children}
+    </motion.div>
+  </section>
+);
 
 /* ---------- Reusable bits ---------- */
 
@@ -249,7 +219,22 @@ const CoverSlide = () => (
         </p>
       </div>
 
-      <div className="mt-8 flex items-center gap-6 text-xs text-white/40 uppercase tracking-widest">
+      <div className="mt-8 flex flex-wrap items-center gap-3">
+        <a
+          href="#contato"
+          className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[hsl(217,91%,60%)] to-[hsl(142,76%,46%)] px-6 py-3 text-base font-semibold text-white shadow-lg shadow-[hsl(217,91%,60%)]/30 transition hover:shadow-[hsl(217,91%,60%)]/50"
+        >
+          <Rocket className="h-4 w-4" /> Quero investir
+        </a>
+        <a
+          href="#problema"
+          className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-base font-medium text-white/85 backdrop-blur transition hover:bg-white/10"
+        >
+          Conhecer a oportunidade
+        </a>
+      </div>
+
+      <div className="mt-12 flex items-center gap-6 text-xs text-white/40 uppercase tracking-widest">
         <span>Pitch para Investidores</span>
         <span className="h-px w-12 bg-white/20" />
         <span>2026</span>
