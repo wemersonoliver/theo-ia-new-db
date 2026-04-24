@@ -221,7 +221,7 @@ serve(async (req) => {
 
     // ========== UPDATE ==========
     if (action === "update") {
-      const { member_id, role, permissions, status } = body;
+      const { member_id, role, permissions, status, full_name, phone, email } = body;
       if (!member_id) {
         return new Response(JSON.stringify({ error: "member_id obrigatório" }), {
           status: 400,
@@ -231,7 +231,7 @@ serve(async (req) => {
 
       const { data: m } = await admin
         .from("account_members")
-        .select("id, account_id, role")
+        .select("id, account_id, role, user_id")
         .eq("id", member_id)
         .maybeSingle();
 
@@ -253,12 +253,54 @@ serve(async (req) => {
       if (permissions !== undefined) updates.permissions = permissions;
       if (status && ["active", "suspended"].includes(status)) updates.status = status;
 
-      const { error } = await admin.from("account_members").update(updates).eq("id", member_id);
-      if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+      if (Object.keys(updates).length > 0) {
+        const { error } = await admin.from("account_members").update(updates).eq("id", member_id);
+        if (error) {
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      // Atualiza profile (nome / telefone)
+      const profileUpdates: Record<string, unknown> = {};
+      if (typeof full_name === "string" && full_name.trim().length > 0) {
+        profileUpdates.full_name = full_name.trim();
+      }
+      if (typeof phone === "string" && phone.trim().length > 0) {
+        profileUpdates.phone = normalizePhone(phone);
+      }
+      if (Object.keys(profileUpdates).length > 0) {
+        await admin.from("profiles").update(profileUpdates).eq("user_id", m.user_id);
+        if (profileUpdates.full_name) {
+          await admin.auth.admin.updateUserById(m.user_id, {
+            user_metadata: { full_name: profileUpdates.full_name },
+          });
+        }
+      }
+
+      // Atualiza email no auth + profile
+      if (typeof email === "string" && email.trim().length > 0) {
+        const emailTrimmed = email.trim().toLowerCase();
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(emailTrimmed) || emailTrimmed.endsWith(".theoia.local")) {
+          return new Response(JSON.stringify({ error: "Informe um email válido" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const { error: emailErr } = await admin.auth.admin.updateUserById(m.user_id, {
+          email: emailTrimmed,
+          email_confirm: true,
         });
+        if (emailErr) {
+          return new Response(JSON.stringify({ error: emailErr.message }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        await admin.from("profiles").update({ email: emailTrimmed }).eq("user_id", m.user_id);
       }
 
       return new Response(JSON.stringify({ success: true }), {
