@@ -22,6 +22,7 @@ export type Database = {
           invited_at: string
           invited_by: string | null
           last_seen_at: string | null
+          must_change_password: boolean
           permissions: Json
           role: Database["public"]["Enums"]["account_role"]
           status: Database["public"]["Enums"]["account_member_status"]
@@ -35,6 +36,7 @@ export type Database = {
           invited_at?: string
           invited_by?: string | null
           last_seen_at?: string | null
+          must_change_password?: boolean
           permissions?: Json
           role?: Database["public"]["Enums"]["account_role"]
           status?: Database["public"]["Enums"]["account_member_status"]
@@ -48,6 +50,7 @@ export type Database = {
           invited_at?: string
           invited_by?: string | null
           last_seen_at?: string | null
+          must_change_password?: boolean
           permissions?: Json
           role?: Database["public"]["Enums"]["account_role"]
           status?: Database["public"]["Enums"]["account_member_status"]
