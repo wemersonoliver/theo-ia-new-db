@@ -246,7 +246,7 @@ const StatCard = ({
   source?: string;
 }) => (
   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur">
-    <div className="text-4xl md:text-5xl font-bold tracking-tight bg-gradient-to-r from-[hsl(217,91%,75%)] to-[hsl(142,76%,66%)] bg-clip-text text-transparent">
+    <div className="text-4xl md:text-5xl font-bold tracking-tight text-white">
       {value}
     </div>
     <div className="mt-2 text-sm text-white/80 leading-snug">{label}</div>
