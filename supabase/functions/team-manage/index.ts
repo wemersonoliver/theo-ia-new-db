@@ -180,6 +180,7 @@ serve(async (req) => {
         permissions: permissions || {},
         status: "active",
         invited_by: callerId,
+        must_change_password: true,
       });
 
       if (memberErr) {
@@ -198,7 +199,7 @@ serve(async (req) => {
           `🔑 *Acesse:* https://theoia.com.br/login\n` +
           `📧 *Email:* ${memberEmail}\n` +
           `🔒 *Senha provisória:* ${provisionalPassword}\n\n` +
-          `Recomendamos trocar a senha após o primeiro acesso em Configurações → Segurança.`;
+          `🔐 No primeiro acesso, você será solicitado(a) a *criar uma nova senha*.`;
 
         await admin.functions.invoke("send-whatsapp-message", {
           body: { phone: normalizedPhone, content: message, system: true },
@@ -321,6 +322,12 @@ serve(async (req) => {
 
       const newPwd = randomPassword();
       await admin.auth.admin.updateUserById(m.user_id, { password: newPwd });
+
+      // Marca para forçar troca de senha no próximo acesso
+      await admin
+        .from("account_members")
+        .update({ must_change_password: true })
+        .eq("id", member_id);
 
       // Envia nova senha via WhatsApp
       const { data: prof } = await admin
