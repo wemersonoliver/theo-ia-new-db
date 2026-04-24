@@ -273,6 +273,7 @@ export function DealDetailsDrawer({
           side="right"
           className="w-full sm:max-w-[520px] p-0 flex flex-col gap-0 border-l-4"
           style={{ borderLeftColor: stageColor }}
+          hideClose
         >
           {/* Header */}
           <div className="flex items-start justify-between gap-2 px-5 pt-5 pb-3 border-b">
