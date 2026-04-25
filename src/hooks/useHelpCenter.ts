@@ -20,6 +20,8 @@ export interface HelpArticle {
   position: number;
   published: boolean;
   updated_at: string;
+  video_url: string | null;
+  video_provider: string | null;
 }
 
 export interface HelpArticleImage {
