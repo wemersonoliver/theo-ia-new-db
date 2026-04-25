@@ -32,16 +32,24 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
-    supabase
-      .from("profiles")
-      .select("onboarding_completed")
-      .eq("user_id", user.id)
-      .single()
-      .then(({ data }) => {
-        if (data && !(data as any).onboarding_completed) {
-          navigate("/onboarding", { replace: true });
-        }
-      });
+    (async () => {
+      // Membros secundários (não-owner) não passam por onboarding
+      const { data: ownAccount } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("owner_user_id", user.id)
+        .maybeSingle();
+      if (!ownAccount) return;
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("onboarding_completed")
+        .eq("user_id", user.id)
+        .single();
+      if (data && !(data as any).onboarding_completed) {
+        navigate("/onboarding", { replace: true });
+      }
+    })();
   }, [user, navigate]);
 
   const range = useMemo(() => presetRange(period), [period]);
