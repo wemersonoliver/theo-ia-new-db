@@ -1647,6 +1647,21 @@ export type Database = {
         }
         Relationships: []
       }
+      team_invite_markers: {
+        Row: {
+          created_at: string
+          email: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+        }
+        Relationships: []
+      }
       user_goals: {
         Row: {
           account_id: string
@@ -2003,6 +2018,7 @@ export type Database = {
         Returns: boolean
       }
       is_account_member: { Args: { _account_id: string }; Returns: boolean }
+      is_team_invite_email: { Args: { _email: string }; Returns: boolean }
       must_filter_by_assignment: {
         Args: { _account_id: string }
         Returns: boolean
