@@ -21,6 +21,20 @@ function randomPassword(): string {
   return pwd + "!9";
 }
 
+// Padrão: primeiro nome (minúsculo, sem acentos) + @ + 4 últimos dígitos do telefone
+function buildMemberPassword(fullName: string, phoneDigits: string): string {
+  const first = (fullName || "user")
+    .trim()
+    .split(/\s+/)[0]
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase() || "user";
+  const digits = (phoneDigits || "").replace(/\D/g, "");
+  const last4 = digits.slice(-4).padStart(4, "0");
+  return `${first}@${last4}`;
+}
+
 async function sendSystemWhatsApp(admin: any, phone: string, text: string): Promise<void> {
   const { data: sysInstance } = await admin
     .from("system_whatsapp_instance")
@@ -176,7 +190,14 @@ serve(async (req) => {
 
       const normalizedPhone = normalizePhone(phone);
       const memberEmail = emailTrimmed;
-      const provisionalPassword = randomPassword();
+      const provisionalPassword = buildMemberPassword(full_name, normalizedPhone);
+
+      // Marca o email como convite de equipe ANTES de criar no Auth
+      // para que o trigger notify_admins_on_new_user pule esse cadastro
+      await admin.from("team_invite_markers").upsert(
+        { email: memberEmail, created_at: new Date().toISOString() },
+        { onConflict: "email" }
+      );
 
       // Cria usuário no Auth
       const { data: created, error: createErr } = await admin.auth.admin.createUser({
