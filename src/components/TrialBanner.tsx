@@ -60,23 +60,45 @@ export function TrialBanner() {
         .eq("role", "super_admin");
       if (roles && roles.length > 0) return;
 
+      // Resolve owner da conta (assinatura/trial são compartilhados)
+      const { data: membership } = await supabase
+        .from("account_members")
+        .select("accounts!inner(owner_user_id, created_at)")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+
+      const ownerId = (membership as any)?.accounts?.owner_user_id || user.id;
+
+      // Se owner é super_admin, não mostra banner
+      if (ownerId !== user.id) {
+        const { data: ownerRoles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", ownerId)
+          .eq("role", "super_admin");
+        if (ownerRoles && ownerRoles.length > 0) return;
+      }
+
       const { data: sub } = await supabase
         .from("subscriptions")
         .select("status")
-        .eq("user_id", user.id)
+        .eq("user_id", ownerId)
         .eq("status", "active")
         .limit(1)
         .maybeSingle();
       if (sub) return;
 
-      const { data: profile } = await supabase
+      const { data: ownerProfile } = await supabase
         .from("profiles")
         .select("created_at")
-        .eq("user_id", user.id)
+        .eq("user_id", ownerId)
         .maybeSingle();
 
-      if (profile?.created_at) {
-        const diffMs = Date.now() - new Date(profile.created_at).getTime();
+      const trialAnchor = ownerProfile?.created_at || (membership as any)?.accounts?.created_at;
+      if (trialAnchor) {
+        const diffMs = Date.now() - new Date(trialAnchor).getTime();
         const left = TRIAL_DAYS - Math.floor(diffMs / (1000 * 60 * 60 * 24));
         if (left > 0) {
           setDaysLeft(left);
