@@ -21,6 +21,7 @@ import {
   Kanban,
   Package,
   Ticket,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
@@ -46,6 +47,7 @@ const navItems = [
   { to: "/settings", icon: Settings, label: "Configurações", perm: "settings" },
   { to: "/subscriptions", icon: CreditCard, label: "Assinaturas", perm: "billing" },
   { to: "/support", icon: Ticket, label: "Suporte", perm: "support" },
+  { to: "/help-center", icon: BookOpen, label: "Central de Ajuda", perm: null },
 ];
 
 const SUPPORT_PHONE = "5547991293662";
