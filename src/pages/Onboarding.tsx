@@ -76,6 +76,21 @@ export default function Onboarding() {
   const [usesAppointments, setUsesAppointments] = useState<boolean | null>(null);
   const [hasPublicLocation, setHasPublicLocation] = useState<boolean | null>(null);
 
+  // Membros secundários (não-owner) não fazem onboarding
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { data: ownAccount } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("owner_user_id", user.id)
+        .maybeSingle();
+      if (!ownAccount) {
+        navigate("/dashboard", { replace: true });
+      }
+    })();
+  }, [user, navigate]);
+
   // Calculate visible steps (removing skipped)
   const visibleSteps = STEP_ORDER.filter(s => !skippedSteps.has(s));
   const currentIndex = visibleSteps.indexOf(currentStep);
