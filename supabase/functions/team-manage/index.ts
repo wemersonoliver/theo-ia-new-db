@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,6 +19,41 @@ function randomPassword(): string {
   let pwd = "";
   for (let i = 0; i < 12; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
   return pwd + "!9";
+}
+
+async function sendSystemWhatsApp(admin: any, phone: string, text: string): Promise<void> {
+  const { data: sysInstance } = await admin
+    .from("system_whatsapp_instance")
+    .select("instance_name, status")
+    .maybeSingle();
+
+  if (!sysInstance || sysInstance.status !== "connected") {
+    console.error("[team-manage] system whatsapp not connected");
+    return;
+  }
+
+  const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
+  const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+
+  if (!evolutionUrl || !evolutionKey) {
+    console.error("[team-manage] Evolution API not configured");
+    return;
+  }
+
+  const res = await evolutionRequest({
+    evolutionUrl,
+    evolutionKey,
+    path: `/message/sendText/${sysInstance.instance_name}`,
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ number: phone, text }),
+  });
+
+  if (!res.ok) {
+    console.error(`[team-manage] evolution send failed: status=${res.status} body=${res.text}`);
+  } else {
+    console.log(`[team-manage] whatsapp enviado para ${phone}`);
+  }
 }
 
 async function getPlanLimit(admin: any, accountId: string): Promise<number> {
@@ -201,9 +237,7 @@ serve(async (req) => {
           `🔒 *Senha provisória:* ${provisionalPassword}\n\n` +
           `🔐 No primeiro acesso, você será solicitado(a) a *criar uma nova senha*.`;
 
-        await admin.functions.invoke("send-whatsapp-message", {
-          body: { phone: normalizedPhone, content: message, system: true },
-        });
+        await sendSystemWhatsApp(admin, normalizedPhone, message);
       } catch (e) {
         console.error("[team-manage] erro ao enviar whatsapp", e);
       }
@@ -381,9 +415,7 @@ serve(async (req) => {
       if (prof?.phone) {
         try {
           const msg = `🔒 *Nova senha provisória*\n\nOlá ${prof.full_name || ""}! Sua nova senha de acesso ao Theo IA é:\n\n*${newPwd}*\n\nAcesse em https://theoia.com.br/login`;
-          await admin.functions.invoke("send-whatsapp-message", {
-            body: { phone: normalizePhone(prof.phone), content: msg, system: true },
-          });
+          await sendSystemWhatsApp(admin, normalizePhone(prof.phone), msg);
         } catch (e) {
           console.error("[team-manage] erro whatsapp reset", e);
         }
