@@ -1,113 +1,149 @@
 
-# Plano — Página de Investidores Data-Driven
+# 📋 Plano: Central de Ajuda do Theo IA
 
-Reescrever completamente `src/pages/Investors.tsx` para transformar a página em uma tese de investimento persuasiva, orientada a dados, com foco em **tamanho de mercado**, **gap de adoção de IA** e **matemática de penetração** que mostra ser preciso converter <0,2% do mercado endereçável para bater a meta.
+## 🎯 Objetivo
+Criar uma central de ajuda detalhada, voltada para público leigo, com tutoriais passo a passo, suporte a uploads de prints/screenshots e editor visual estilo Word para os admins criarem/editarem o conteúdo.
 
-## Estrutura nova (scroll vertical único)
+---
 
-### 1. Header sticky
-- Logo "Theo IA" + navegação âncora: Mercado · Gap · Matemática · Solução · CRM · Projeção · Visão
-- CTA "Quero investir"
+## 🗄️ 1. Banco de Dados (1 migração)
 
-### 2. Hero
-- Título forte: "O atendimento de milhões de empresas brasileiras ainda é feito por humanos cansados."
-- Subtítulo posicionando Theo IA como o atendente digital 24/7
-- 3 `StatCounter` animados:
-  - **21,4 milhões** de PMEs no Brasil
-  - **78%** ainda não usam IA no atendimento
-  - **R$ 1,1 mi** ARR projetado em 12 meses
-- 2 CTAs: "Quero investir" / "Ver a oportunidade"
+### Tabela `help_categories`
+- `id`, `slug` (único), `name`, `description`, `icon` (nome lucide), `position`, `created_at`, `updated_at`
+- RLS: leitura para qualquer autenticado; escrita apenas `super_admin`.
 
-### 3. O Problema (com dados)
-- 4 cards estatísticos:
-  - 79% dos consumidores desistem após 1h sem resposta
-  - 64% preferem WhatsApp como canal de atendimento
-  - 90% das PMEs não atendem 24h
-  - Tempo médio de 1ª resposta > 9 horas
-- Frase âncora: "Cada hora sem resposta = um cliente perdido"
+### Tabela `help_articles`
+- `id`, `category_id`, `slug` (único), `title`, `summary`, `content` (HTML do Tiptap), `position`, `published` (bool), `created_at`, `updated_at`
+- RLS: leitura para autenticados (somente `published=true`); escrita apenas `super_admin`.
 
-### 4. Tamanho do Mercado — TAM / SAM / SOM
-- Componente `MarketFunnel` (3 círculos concêntricos):
-  - **TAM**: 21,4M PMEs no Brasil
-  - **SAM**: 6M PMEs com WhatsApp como canal principal de vendas
-  - **SOM**: 600 mil PMEs prontas para adotar IA em 24 meses
-- Texto curto explicando cada camada
+### Tabela `help_article_images`
+- `id`, `article_id`, `storage_path`, `caption`, `position`, `created_at`
+- RLS: leitura para autenticados; escrita apenas `super_admin`.
 
-### 5. O Gap de Adoção (a oportunidade)
-- Componente `GapChart` (barras horizontais animadas):
-  - Precisam de automação no atendimento: **86%**
-  - Já usam alguma IA hoje: **22%**
-  - **Gap = 64% do mercado descoberto**
-- Frase: "64% das PMEs sabem que precisam — e ainda não têm solução"
+### Bucket `help-center-images` (público para leitura)
+- Policy: SELECT público; INSERT/UPDATE/DELETE apenas `super_admin`.
 
-### 6. A Matemática da Meta (sessão-chave)
-- Componente `MathBreakdown` revelando linha a linha:
-  ```
-  SOM ........................ 600.000 empresas
-  Precisamos converter ....... 0,167%
-  = Meta 2026 ................ 1.000 clientes ativos
-  × R$ 97/mês ................ R$ 97.000 MRR
-  × 12 meses ................. R$ 1.164.000 ARR
-  ```
-- Destaque: "Menos de 2 a cada 1.000 empresas do nosso SOM"
-- Frase: "Não é uma aposta. É aritmética."
+### Seed inicial
+- 8 categorias: Primeiros Passos, WhatsApp, Agente IA, Base de Conhecimento, CRM, Agendamentos, Equipe, Assinaturas.
+- ~25 artigos pré-preenchidos com texto detalhado para leigos, com placeholders `[PRINT 1]`, `[PRINT 2]` indicando onde você fará upload depois.
 
-### 7. A Solução — Theo IA
-- Grid de 6 features com ícone:
-  - Atendimento 24/7 no WhatsApp
-  - Entende áudio e imagem
-  - Qualifica e agenda automaticamente
-  - Follow-up inteligente
-  - Treinado por negócio
-  - Substitui pré-venda + SDR + organização
+---
 
-### 8. CRM Integrado (diferencial)
-- Mock visual do Kanban (4 colunas: Novo · Qualificado · Proposta · Ganho)
-- 3 bullets: gestão em tempo real · histórico unificado · pipeline customizável
+## 📦 2. Dependências
+Adicionar:
+- `@tiptap/react`
+- `@tiptap/starter-kit`
+- `@tiptap/extension-link`
+- `@tiptap/extension-image`
+- `@tiptap/extension-placeholder`
 
-### 9. Público-Alvo
-- Grid 8 nichos com ícone (autônomos, clínicas, advogados, restaurantes, academias, energia solar, prestadores, e-commerce)
+---
 
-### 10. Modelo de Negócio
-- Card único: R$ 97/mês · SaaS · receita recorrente · alta retenção esperada
+## 🎨 3. Páginas do usuário
 
-### 11. Projeção de Crescimento (roadmap)
-- Componente `ProjectionTable` com colunas Período · Clientes · MRR · ARR:
-  - Dez/2026 — 1.000 — R$ 97 mil — R$ 1,16 mi
-  - Dez/2027 — 5.000 — R$ 485 mil — R$ 5,82 mi
-  - Dez/2028 — 15.000 — R$ 1,45 mi — R$ 17,4 mi
-- Frase: "Crescimento previsível, não especulativo"
+### `/help-center` (acessível por todos: owner + equipe)
+- Cabeçalho com busca global por título/conteúdo.
+- Grade de cards de categorias (ícone + nome + descrição + contagem de artigos).
 
-### 12. Estratégia de Crescimento
-- 5 pilares: tráfego pago validado · expansão por nicho · indicação · evolução do produto · upsell
+### `/help-center/:categorySlug`
+- Lista de artigos da categoria selecionada.
+- Botão "Voltar para categorias".
 
-### 13. Diferenciais Competitivos
-- 5 cards comparando "Chatbots tradicionais" vs "Theo IA"
+### `/help-center/:categorySlug/:articleSlug`
+- Conteúdo HTML formatado.
+- Imagens (prints) com legendas exibidas inline.
+- Navegação anterior/próximo artigo.
+- Botão fixo "Falar com Suporte" (WhatsApp +55 47 99129-3662).
 
-### 14. Visão de Futuro
-- Texto curto: "Tornar o Theo IA o padrão de atendimento das PMEs brasileiras"
+---
 
-### 15. CTA Final
-- "O momento de entrar é agora"
-- Botão grande "Falar com fundadores"
+## 🛠️ 4. Painel Admin: `/admin/help-center`
 
-### 16. Footer institucional
-- Copyright + nota: "Projeções internas baseadas em dados públicos Sebrae/IBGE/Meta — não constituem garantia"
+- **Categorias**: listar, criar, editar, excluir, reordenar (drag-and-drop).
+- **Artigos** (por categoria): listar, criar, editar, excluir, reordenar, publicar/despublicar.
+- **Editor de artigo**:
+  - Editor WYSIWYG **Tiptap** (negrito, itálico, sublinhado, títulos H2/H3, listas, links, citações).
+  - Seção dedicada para upload de prints com:
+    - Upload múltiplo (drag-and-drop).
+    - Legenda editável por imagem.
+    - Reordenação por arrastar.
+    - Excluir imagem.
+- Toggle "Publicado" para esconder rascunhos dos usuários.
 
-## Componentes internos novos (no mesmo arquivo)
-- `StatCounter` — número animado com interpolação ao entrar no viewport
-- `MarketFunnel` — 3 círculos concêntricos SVG/CSS com labels
-- `GapChart` — barras horizontais animadas em viewport
-- `MathBreakdown` — bloco estilo "cálculo no quadro" com linhas em cascata
-- `ProjectionTable` — tabela estilizada com hover
-- `Section` — wrapper `whileInView` fade-up (mantido)
+---
 
-## Design
-- Paleta dark já em uso (slate/zinc + âmbar/violeta accents)
-- Tipografia grande (text-5xl/6xl) nos títulos
-- `framer-motion` viewport-triggered (já instalado — sem novas dependências)
-- Estatísticas marcadas claramente como projeções no rodapé
+## 🧩 5. Componentes e Hooks
 
-## Arquivos
-- **Editar**: `src/pages/Investors.tsx` (reescrita completa)
-- **Sem alterações**: rotas, banco de dados, edge functions, dependências
+**Novos componentes:**
+- `src/components/help/RichTextEditor.tsx` — wrapper Tiptap reutilizável.
+- `src/components/help/HelpArticleEditor.tsx` — editor completo (campos + Tiptap + galeria).
+- `src/components/help/HelpImageUploader.tsx` — upload e gestão de prints.
+- `src/components/help/HelpArticleView.tsx` — render do artigo com prints intercalados.
+- `src/components/help/HelpCategoryCard.tsx` — card de categoria.
+
+**Novos hooks:**
+- `src/hooks/useHelpCenter.ts` — leitura pública de categorias/artigos/imagens.
+- `src/hooks/useHelpAdmin.ts` — CRUD admin com TanStack Query (otimista).
+
+**Novas páginas:**
+- `src/pages/HelpCenter.tsx`
+- `src/pages/HelpCategory.tsx`
+- `src/pages/HelpArticle.tsx`
+- `src/pages/admin/AdminHelpCenter.tsx`
+
+---
+
+## 🔗 6. Navegação
+
+- **Sidebar do usuário** (`src/components/Sidebar.tsx`): novo item "Central de Ajuda" com ícone `BookOpen`, visível para todos os membros (sem checagem de permissão).
+- **Sidebar admin** (`src/components/admin/AdminSidebar.tsx`): novo item "Central de Ajuda" com ícone `BookOpen`.
+- **App.tsx**: registrar 4 novas rotas (3 públicas autenticadas + 1 admin).
+
+---
+
+## 📝 7. Conteúdo inicial (exemplo do tom para leigos)
+
+Cada artigo virá assim:
+
+> **Título:** Conectando seu WhatsApp via QR Code
+>
+> **Passo 1 — Acesse a página WhatsApp**
+> No menu lateral esquerdo, clique em **"WhatsApp"** (ícone do celular).
+> `[PRINT 1: Menu lateral com WhatsApp destacado]`
+>
+> **Passo 2 — Clique em "Conectar WhatsApp"**
+> ...
+
+Você abre o painel admin depois e faz upload dos prints reais nos slots marcados.
+
+---
+
+## ✅ 8. Lista de arquivos a criar/editar
+
+**Migração:** 1 arquivo SQL (tabelas + RLS + bucket + seed)
+
+**Criar:**
+- `src/pages/HelpCenter.tsx`
+- `src/pages/HelpCategory.tsx`
+- `src/pages/HelpArticle.tsx`
+- `src/pages/admin/AdminHelpCenter.tsx`
+- `src/components/help/RichTextEditor.tsx`
+- `src/components/help/HelpArticleEditor.tsx`
+- `src/components/help/HelpImageUploader.tsx`
+- `src/components/help/HelpArticleView.tsx`
+- `src/components/help/HelpCategoryCard.tsx`
+- `src/hooks/useHelpCenter.ts`
+- `src/hooks/useHelpAdmin.ts`
+
+**Editar:**
+- `src/App.tsx` (rotas)
+- `src/components/Sidebar.tsx` (item menu)
+- `src/components/admin/AdminSidebar.tsx` (item menu)
+- `package.json` (deps Tiptap)
+
+---
+
+## ⚠️ Observações
+- A Central de Ajuda **não substitui** a Base de Conhecimento da IA — são coisas separadas (esta é manual do usuário; aquela alimenta o agente).
+- Após implementação, você acessa `/admin/help-center` para fazer upload dos prints reais nos artigos pré-prontos.
+
