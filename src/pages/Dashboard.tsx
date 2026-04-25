@@ -60,7 +60,7 @@ export default function Dashboard() {
       <TrialBanner />
       <TutorialPopup externalOpen={tutorialOpen} onExternalClose={() => setTutorialOpen(false)} />
 
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 mb-4">
         <DashboardFilters
           period={period}
           onPeriod={setPeriod}
@@ -69,7 +69,7 @@ export default function Dashboard() {
           pipelineId={pipelineId}
           onPipeline={setPipelineId}
         />
-        <Button variant="outline" onClick={() => setTutorialOpen(true)} className="gap-2">
+        <Button variant="outline" onClick={() => setTutorialOpen(true)} className="gap-2 w-full sm:w-auto">
           <PlayCircle className="h-4 w-4" />
           Tutorial
         </Button>

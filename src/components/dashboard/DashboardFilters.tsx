@@ -18,9 +18,9 @@ export function DashboardFilters({ period, onPeriod, sellerId, onSeller, pipelin
   const { pipelines } = useCRMPipelines();
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
       <Select value={period} onValueChange={(v) => onPeriod(v as PeriodPreset)}>
-        <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="w-full sm:w-[140px] min-w-0"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="today">Hoje</SelectItem>
           <SelectItem value="7d">7 dias</SelectItem>
@@ -30,7 +30,7 @@ export function DashboardFilters({ period, onPeriod, sellerId, onSeller, pipelin
       </Select>
 
       <Select value={sellerId} onValueChange={onSeller}>
-        <SelectTrigger className="w-[180px]"><SelectValue placeholder="Atendente" /></SelectTrigger>
+        <SelectTrigger className="w-[calc(50%-0.25rem)] sm:w-[180px] min-w-0"><SelectValue placeholder="Atendente" /></SelectTrigger>
         <SelectContent>
           <SelectItem value="all">Todos os atendentes</SelectItem>
           {members.map((m) => (
@@ -42,7 +42,7 @@ export function DashboardFilters({ period, onPeriod, sellerId, onSeller, pipelin
       </Select>
 
       <Select value={pipelineId} onValueChange={onPipeline}>
-        <SelectTrigger className="w-[180px]"><SelectValue placeholder="Funil" /></SelectTrigger>
+        <SelectTrigger className="w-[calc(50%-0.25rem)] sm:w-[180px] min-w-0"><SelectValue placeholder="Funil" /></SelectTrigger>
         <SelectContent>
           <SelectItem value="all">Todos os funis</SelectItem>
           {pipelines.map((p) => (
