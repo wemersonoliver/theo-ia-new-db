@@ -261,7 +261,7 @@ export default function Conversations() {
   if (isMobile) {
     return (
       <DashboardLayout title="Conversas">
-        <div className="space-y-2">
+        <div className="space-y-2 w-full max-w-full overflow-x-hidden">
           {conversations.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
@@ -279,12 +279,12 @@ export default function Conversations() {
                   onClick={() => setSelectedPhone(conv.phone)}
                 >
                   <CardContent className="p-3">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2 min-w-0">
                       <WhatsAppAvatar
                         name={conv.contact_name}
                         phone={conv.phone}
                         pictureUrl={getConversationPicture(conv.phone, (conv as any).profile_picture_url)}
-                        className="h-11 w-11"
+                        className="h-11 w-11 shrink-0"
                       />
                       <div className="min-w-0 flex-1">
                         <p className="font-medium truncate">
@@ -296,14 +296,14 @@ export default function Conversations() {
                           </p>
                         )}
                       </div>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
+                      <div className="flex flex-col items-end gap-1 shrink-0 max-w-[35%]">
                         {conv.ai_active ? (
                           <Badge variant="outline" className="text-xs">IA</Badge>
                         ) : (
                           <Badge variant="secondary" className="text-xs">Humano</Badge>
                         )}
                         {conv.last_message_at && (
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-[10px] text-muted-foreground text-right leading-tight">
                             {formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true, locale: ptBR })}
                           </span>
                         )}
