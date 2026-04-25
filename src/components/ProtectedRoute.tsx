@@ -81,12 +81,11 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
       // Se o owner da conta é super_admin, libera acesso para todos os membros
       if (accountOwnerId !== user.id) {
-        const { data: ownerRoles } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", accountOwnerId)
-          .eq("role", "super_admin");
-        if (ownerRoles && ownerRoles.length > 0) {
+        const { data: ownerIsSuperAdmin } = await supabase.rpc("has_role", {
+          _user_id: accountOwnerId,
+          _role: "super_admin",
+        });
+        if (ownerIsSuperAdmin) {
           setHasActiveSubscription(true);
           setCheckingAccess(false);
           return;
