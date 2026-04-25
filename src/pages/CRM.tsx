@@ -45,7 +45,7 @@ export default function CRM() {
 
   return (
     <DashboardLayout title="CRM" description="Gerencie suas negociações no funil de vendas">
-      <div className="space-y-4">
+      <div className="space-y-4 min-w-0 max-w-full overflow-x-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="sm:ml-auto">
             <PipelineSelector

@@ -129,7 +129,7 @@ export function KanbanBoard({ stages, deals, contacts, products, availableTags, 
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex gap-2 pb-4 px-1 w-full">
+        <div className="flex gap-2 pb-4 overflow-x-auto lg:overflow-x-visible lg:w-full px-1">
           {stages.map((stage) => (
             <KanbanColumn
               key={stage.id}
