@@ -45,6 +45,7 @@ import {
 import type { HelpArticle, HelpCategory } from "@/hooks/useHelpCenter";
 import { RichTextEditor } from "@/components/help/RichTextEditor";
 import { HelpImageUploader } from "@/components/help/HelpImageUploader";
+import { HelpVideoEmbed } from "@/components/help/HelpVideoEmbed";
 
 type View =
   | { kind: "categories" }
@@ -385,6 +386,7 @@ function ArticleEditor({
   const [content, setContent] = useState("");
   const [position, setPosition] = useState(0);
   const [published, setPublished] = useState(true);
+  const [videoUrl, setVideoUrl] = useState("");
   const [savedId, setSavedId] = useState<string | null>(articleId);
 
   useEffect(() => {
@@ -395,6 +397,7 @@ function ArticleEditor({
       setContent(data.article.content ?? "");
       setPosition(data.article.position);
       setPublished(data.article.published);
+      setVideoUrl(data.article.video_url ?? "");
       setSavedId(data.article.id);
     } else if (!articleId) {
       setTitle("");
@@ -403,6 +406,7 @@ function ArticleEditor({
       setContent("");
       setPosition(0);
       setPublished(true);
+      setVideoUrl("");
       setSavedId(null);
     }
   }, [data, articleId]);
@@ -417,6 +421,7 @@ function ArticleEditor({
       content,
       position,
       published,
+      video_url: videoUrl.trim() || null,
     });
     if (result?.id) setSavedId(result.id);
   };
@@ -483,6 +488,26 @@ function ArticleEditor({
           Use marcadores como <code className="bg-slate-800 px-1 rounded">[PRINT 1]</code>, <code className="bg-slate-800 px-1 rounded">[PRINT 2]</code>... no texto. Eles serão substituídos pelas imagens da galeria abaixo na ordem cadastrada.
         </p>
         <RichTextEditor value={content} onChange={setContent} />
+      </Card>
+
+      <Card className="p-4 bg-slate-900/40 border-slate-800 space-y-3">
+        <div>
+          <h3 className="font-semibold text-white">Vídeo do tutorial (opcional)</h3>
+          <p className="text-xs text-slate-500">
+            Cole a URL de um vídeo do YouTube, Vimeo, Loom ou um link direto .mp4.
+            O vídeo aparece no topo do artigo, antes do texto.
+          </p>
+        </div>
+        <Input
+          value={videoUrl}
+          onChange={(e) => setVideoUrl(e.target.value)}
+          placeholder="https://www.youtube.com/watch?v=..."
+        />
+        {videoUrl.trim() ? (
+          <div className="pt-2">
+            <HelpVideoEmbed url={videoUrl.trim()} />
+          </div>
+        ) : null}
       </Card>
 
       <Card className="p-4 bg-slate-900/40 border-slate-800 space-y-3">
