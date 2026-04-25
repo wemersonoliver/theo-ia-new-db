@@ -57,19 +57,19 @@ export function KPICards({ metrics }: Props) {
   ];
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
       {items.map((it) => (
         <Card key={it.label}>
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-start justify-between">
-              <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${it.tone}`}>
+              <div className={`flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg ${it.tone}`}>
                 <it.Icon className="h-4 w-4" />
               </div>
               <VarBadge value={it.variation} />
             </div>
-            <p className="mt-3 text-sm text-muted-foreground">{it.label}</p>
-            <p className="text-2xl font-bold">{it.value.toLocaleString("pt-BR")}</p>
-            {it.sub && <p className="text-xs text-muted-foreground mt-1">{it.sub}</p>}
+            <p className="mt-2 sm:mt-3 text-xs sm:text-sm text-muted-foreground truncate">{it.label}</p>
+            <p className="text-xl sm:text-2xl font-bold truncate">{it.value.toLocaleString("pt-BR")}</p>
+            {it.sub && <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 truncate">{it.sub}</p>}
           </CardContent>
         </Card>
       ))}

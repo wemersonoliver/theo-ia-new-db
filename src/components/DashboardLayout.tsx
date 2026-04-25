@@ -21,7 +21,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
         <Sidebar />
       </div>
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col min-w-0">
         {/* Header Mobile com Hambúrguer - CSS-first: visível até lg */}
         <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background px-4 lg:hidden">
           <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
@@ -40,8 +40,8 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
 
         <WhatsAppDisconnectedBanner />
 
-        <main className="flex-1 overflow-auto">
-          <div className="container py-4 md:py-6">
+        <main className="flex-1 overflow-x-hidden overflow-y-auto">
+          <div className="container py-4 md:py-6 max-w-full">
             {/* Título desktop - hidden em mobile, block em lg+ */}
             <div className="mb-6 hidden lg:block">
               <h1 className="text-2xl font-bold text-foreground">{title}</h1>
