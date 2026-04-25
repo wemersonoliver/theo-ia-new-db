@@ -73,12 +73,11 @@ export function TrialBanner() {
 
       // Se owner é super_admin, não mostra banner
       if (ownerId !== user.id) {
-        const { data: ownerRoles } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", ownerId)
-          .eq("role", "super_admin");
-        if (ownerRoles && ownerRoles.length > 0) return;
+        const { data: ownerIsSuperAdmin } = await supabase.rpc("has_role", {
+          _user_id: ownerId,
+          _role: "super_admin",
+        });
+        if (ownerIsSuperAdmin) return;
       }
 
       const { data: sub } = await supabase
