@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
 import { useHelpArticle } from "@/hooks/useHelpCenter";
 import { HelpArticleView } from "@/components/help/HelpArticleView";
+import { HelpVideoEmbed } from "@/components/help/HelpVideoEmbed";
 
 const SUPPORT_PHONE = "5547991293662";
 const SUPPORT_MSG = encodeURIComponent("Olá! Preciso de ajuda com o Theo IA.");
@@ -47,6 +48,11 @@ export default function HelpArticle() {
         </Button>
 
         <Card className="p-6 md:p-8">
+          {article.video_url ? (
+            <div className="mb-6">
+              <HelpVideoEmbed url={article.video_url} />
+            </div>
+          ) : null}
           <HelpArticleView content={article.content} images={images} />
         </Card>
 
