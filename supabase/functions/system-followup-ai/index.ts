@@ -65,6 +65,31 @@ const HOOK_LIBRARY: Record<string, { name: string; instruction: string; example:
     instruction: "USE APENAS NO ÚLTIMO DIA. Encerramento elegante que dá ao cliente a opção de fechar a porta com dignidade.",
     example: "Faz sentido a gente pausar por aqui, ou ainda quer seguir adiante?",
   },
+  dor_lead_perdido: {
+    name: "Dor: Lead que some sem comprar",
+    instruction: "Bata na dor de perder leads que param de responder. Mostre que o Theo IA faz EXATAMENTE o que você está fazendo agora: recuperar quem sumiu. Conecte com aumento de faturamento. Termine convidando pro teste grátis de 15 dias.",
+    example: "Imagina seu WhatsApp recuperando sozinho aquele cliente que sumiu — exatamente como eu estou fazendo com você agora. 90% dos negócios não fazem isso e perdem faturamento todo mês. Bora ativar seu teste grátis de 15 dias?",
+  },
+  dor_atendimento_24_7: {
+    name: "Dor: Vendas perdidas fora do horário",
+    instruction: "Ataque a dor de perder venda à noite, fim de semana, feriado. Mostre que o Theo responde em segundos, 24h. Convide pro teste grátis.",
+    example: "Quantas vendas você acha que perde de noite ou no fim de semana porque ninguém responde? O Theo atende em segundos, 24h. Quer testar 15 dias grátis no seu WhatsApp?",
+  },
+  dor_resposta_demorada: {
+    name: "Dor: Lead quente que esfria",
+    instruction: "Mostre que cliente quente espera no máximo 2-5 minutos antes de ir pro concorrente. Posicione o Theo como a resposta instantânea que salva a venda.",
+    example: "Cliente quente espera 2 minutos. Depois disso, ele já tá no concorrente. Quer ver o Theo respondendo no seu WhatsApp em segundos?",
+  },
+  solucao_agendamento: {
+    name: "Solução: Agendamento automático",
+    instruction: "Mostre que o Theo agenda reuniões/atendimentos sozinho dentro do WhatsApp, sem o dono abrir agenda. Foque na economia de tempo.",
+    example: "E se o próprio WhatsApp já agendasse a reunião com o cliente, sem você abrir agenda? É exatamente o que o Theo faz. Quer ver funcionando no seu número?",
+  },
+  solucao_qualificacao: {
+    name: "Solução: Qualificação automática + handoff",
+    instruction: "Mostre que o Theo conversa com todos os leads, qualifica, e só te chama quando o cara tá pronto pra fechar. Você só entra na conversa que importa.",
+    example: "O Theo qualifica os leads sozinho e te chama só quando tá pronto pra fechar. Você só entra na conversa que importa. Quer testar 15 dias grátis?",
+  },
 };
 
 function isGenericGreeting(msg: string): boolean {
@@ -85,6 +110,7 @@ interface ConversationAnalysis {
   name_is_valid: boolean;
   sanitized_name: string | null;
   recommended_hook: string;
+  scenario: "curiosidade_inicial" | "conversa_interrompida" | "nunca_respondeu";
   reasoning: string;
 }
 
@@ -96,6 +122,7 @@ async function analyzeConversation(
   lastClientSnippet: string,
   currentDay: number,
   maxDays: number,
+  clientMessageCount: number,
 ): Promise<ConversationAnalysis | null> {
   const sanitized = sanitizeContactName(rawContactName);
 
@@ -109,7 +136,13 @@ METADADOS:
 - Nome sanitizado: "${sanitized || "(inválido)"}"
 - Padrão de silêncio: ${silencePattern}
 - Última mensagem do cliente: "${lastClientSnippet || "(nunca respondeu)"}"
+- Total de mensagens enviadas pelo cliente: ${clientMessageCount}
 - Dia atual: ${currentDay} de ${maxDays}
+
+CLASSIFICAÇÃO DE CENÁRIO (campo scenario):
+- "nunca_respondeu": cliente nunca enviou mensagem nenhuma (clientMessageCount = 0)
+- "curiosidade_inicial": cliente enviou 1-3 mensagens curtas demonstrando interesse genérico ("quero saber mais", "como funciona", "tem teste?", "qual valor?") e sumiu antes de aprofundar contexto/objeção
+- "conversa_interrompida": cliente enviou 4+ mensagens OU mensagens com contexto específico (problemas reais do negócio, objeções concretas, perguntas técnicas, comparações) e parou em algum ponto identificável da negociação
 
 Retorne via tool call um JSON estruturado. Seja FACTUAL — extraia informações REAIS da conversa, não invente.`;
 
@@ -128,11 +161,15 @@ Retorne via tool call um JSON estruturado. Seja FACTUAL — extraia informaçõe
           sanitized_name: { type: "string" },
           recommended_hook: {
             type: "string",
-            enum: ["confirmacao_de_leitura", "rotulo_voss", "pergunta_calibrada", "coerencia_cialdini", "prova_social", "reciprocidade", "escassez", "pergunta_de_saida"],
+            enum: ["confirmacao_de_leitura", "rotulo_voss", "pergunta_calibrada", "coerencia_cialdini", "prova_social", "reciprocidade", "escassez", "pergunta_de_saida", "dor_lead_perdido", "dor_atendimento_24_7", "dor_resposta_demorada", "solucao_agendamento", "solucao_qualificacao"],
+          },
+          scenario: {
+            type: "string",
+            enum: ["curiosidade_inicial", "conversa_interrompida", "nunca_respondeu"],
           },
           reasoning: { type: "string" },
         },
-        required: ["offered_item", "pending_object", "lead_temperature", "last_open_point", "name_is_valid", "sanitized_name", "recommended_hook", "reasoning"],
+        required: ["offered_item", "pending_object", "lead_temperature", "last_open_point", "name_is_valid", "sanitized_name", "recommended_hook", "scenario", "reasoning"],
       },
     }],
   };
@@ -169,6 +206,7 @@ Retorne via tool call um JSON estruturado. Seja FACTUAL — extraia informaçõe
     name_is_valid: args.name_is_valid === true,
     sanitized_name: args.name_is_valid ? (args.sanitized_name || sanitized) : null,
     recommended_hook: args.recommended_hook || "pergunta_calibrada",
+    scenario: args.scenario || (clientMessageCount === 0 ? "nunca_respondeu" : clientMessageCount <= 3 ? "curiosidade_inicial" : "conversa_interrompida"),
     reasoning: args.reasoning || "",
   };
 }

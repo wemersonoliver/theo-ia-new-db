@@ -1,149 +1,86 @@
 
-# 📋 Plano: Central de Ajuda do Theo IA
-
 ## 🎯 Objetivo
-Criar uma central de ajuda detalhada, voltada para público leigo, com tutoriais passo a passo, suporte a uploads de prints/screenshots e editor visual estilo Word para os admins criarem/editarem o conteúdo.
+
+Tornar o agente de follow-up do **suporte** mais inteligente: que ele **detecte automaticamente em qual cenário o lead está** e gere mensagens persuasivas falando diretamente das **dores reais de quem tem WhatsApp como canal de venda** e das **soluções concretas que o Theo IA entrega**.
 
 ---
 
-## 🗄️ 1. Banco de Dados (1 migração)
+## 🧠 O que vai mudar (apenas em `supabase/functions/system-followup-ai/index.ts`)
 
-### Tabela `help_categories`
-- `id`, `slug` (único), `name`, `description`, `icon` (nome lucide), `position`, `created_at`, `updated_at`
-- RLS: leitura para qualquer autenticado; escrita apenas `super_admin`.
+### 1. Análise da conversa — detectar o **cenário**
 
-### Tabela `help_articles`
-- `id`, `category_id`, `slug` (único), `title`, `summary`, `content` (HTML do Tiptap), `position`, `published` (bool), `created_at`, `updated_at`
-- RLS: leitura para autenticados (somente `published=true`); escrita apenas `super_admin`.
+Hoje a IA classifica só "temperatura" (frio/morno/quente). Vou adicionar um novo campo obrigatório `scenario` na análise, com 3 valores:
 
-### Tabela `help_article_images`
-- `id`, `article_id`, `storage_path`, `caption`, `position`, `created_at`
-- RLS: leitura para autenticados; escrita apenas `super_admin`.
+| Cenário | Quando se aplica |
+|---|---|
+| `curiosidade_inicial` | Lead mandou 1-3 mensagens curtas demonstrando interesse ("quero saber mais", "como funciona", "tem teste grátis?") e sumiu antes de a IA aprofundar |
+| `conversa_interrompida` | Lead já trocou várias mensagens, falou de problemas/contexto/objeções específicos, mas parou em algum ponto sem fechar |
+| `nunca_respondeu` | Lead nunca respondeu nada (ex: chegou via anúncio e não abriu) |
 
-### Bucket `help-center-images` (público para leitura)
-- Policy: SELECT público; INSERT/UPDATE/DELETE apenas `super_admin`.
+### 2. Nova **biblioteca de ganchos específicos do Theo IA** (dores + soluções)
 
-### Seed inicial
-- 8 categorias: Primeiros Passos, WhatsApp, Agente IA, Base de Conhecimento, CRM, Agendamentos, Equipe, Assinaturas.
-- ~25 artigos pré-preenchidos com texto detalhado para leigos, com placeholders `[PRINT 1]`, `[PRINT 2]` indicando onde você fará upload depois.
+Vou adicionar 5 novos hooks focados nas **dores reais** do público-alvo (dono de negócio que atende no WhatsApp), usados especialmente no cenário `curiosidade_inicial`:
 
----
+| Hook | Dor que ataca | Exemplo de mensagem |
+|---|---|---|
+| `dor_lead_perdido` | Lead que para de responder e some pra sempre | *"Imagina seu WhatsApp recuperando sozinho aquele cliente que sumiu — exatamente como eu estou fazendo com você agora. 90% dos negócios não fazem isso e perdem faturamento todo mês."* |
+| `dor_atendimento_24_7` | Perder venda fora do horário comercial | *"Quantas vendas você acha que perde de noite ou no fim de semana porque não tem ninguém respondendo? O Theo responde em segundos, 24h."* |
+| `dor_resposta_demorada` | Cliente quente que esfria por demora | *"Cliente quente espera 2 minutos. Depois disso, ele já tá no concorrente. Quer ver o Theo respondendo no seu WhatsApp em segundos?"* |
+| `solucao_agendamento` | Tempo perdido com agenda manual | *"E se o próprio WhatsApp já agendasse a reunião com o cliente, sem você abrir a agenda? É exatamente o que o Theo faz."* |
+| `solucao_qualificacao` | Atender lead frio enquanto o quente espera | *"O Theo qualifica os leads sozinho e te chama só quando tá pronto pra fechar. Você só entra na conversa que importa."* |
 
-## 📦 2. Dependências
-Adicionar:
-- `@tiptap/react`
-- `@tiptap/starter-kit`
-- `@tiptap/extension-link`
-- `@tiptap/extension-image`
-- `@tiptap/extension-placeholder`
+Os 8 hooks atuais (Cialdini/Voss) continuam disponíveis e ganham reforço.
 
----
+### 3. **Lógica de seleção do hook por cenário**
 
-## 🎨 3. Páginas do usuário
+A IA da etapa de análise vai recomendar o hook, mas com **regras automáticas de override**:
 
-### `/help-center` (acessível por todos: owner + equipe)
-- Cabeçalho com busca global por título/conteúdo.
-- Grade de cards de categorias (ícone + nome + descrição + contagem de artigos).
+- `curiosidade_inicial` → prioriza `dor_lead_perdido`, `dor_atendimento_24_7`, `dor_resposta_demorada`, `solucao_agendamento`, `solucao_qualificacao` (rotaciona pra não repetir)
+- `conversa_interrompida` → prioriza `coerencia_cialdini` (relembrar o que ele JÁ disse), `rotulo_voss` (nomear a objeção), `pergunta_calibrada`
+- `nunca_respondeu` → prioriza `dor_lead_perdido` ou `reciprocidade` (oferecer dica)
+- Dias 5-6 continuam podendo usar `escassez` com as armas de negociação
 
-### `/help-center/:categorySlug`
-- Lista de artigos da categoria selecionada.
-- Botão "Voltar para categorias".
+Para evitar repetição: vou registrar o último hook usado por lead (em `engagement_data` no `system_followup_tracking`, que já existe) e a IA evita repetir o mesmo hook em sequência.
 
-### `/help-center/:categorySlug/:articleSlug`
-- Conteúdo HTML formatado.
-- Imagens (prints) com legendas exibidas inline.
-- Navegação anterior/próximo artigo.
-- Botão fixo "Falar com Suporte" (WhatsApp +55 47 99129-3662).
+### 4. **Prompt de geração reescrito**
 
----
+O prompt vai receber explicitamente:
+- O **cenário detectado** com instruções específicas de tom
+- **Para `curiosidade_inicial`**: ordem de "ataque a dor → mostrar solução concreta do Theo → CTA pra teste grátis"
+- **Para `conversa_interrompida`**: ordem de "referenciar EXATAMENTE o último ponto que ele falou → resolver a objeção → próximo passo"
+- Lista de **funcionalidades concretas do Theo IA** que podem ser citadas: atendimento 24/7, recuperação de leads inativos, agendamento automático, qualificação de leads, transferência inteligente para humano, base de conhecimento personalizada
+- CTA padrão para curiosidade inicial: convidar pro **teste grátis de 15 dias** (já é o que existe no plano)
 
-## 🛠️ 4. Painel Admin: `/admin/help-center`
+### 5. **Variação de mensagem por tentativa**
 
-- **Categorias**: listar, criar, editar, excluir, reordenar (drag-and-drop).
-- **Artigos** (por categoria): listar, criar, editar, excluir, reordenar, publicar/despublicar.
-- **Editor de artigo**:
-  - Editor WYSIWYG **Tiptap** (negrito, itálico, sublinhado, títulos H2/H3, listas, links, citações).
-  - Seção dedicada para upload de prints com:
-    - Upload múltiplo (drag-and-drop).
-    - Legenda editável por imagem.
-    - Reordenação por arrastar.
-    - Excluir imagem.
-- Toggle "Publicado" para esconder rascunhos dos usuários.
+Pra mensagens não ficarem repetitivas ao longo dos 12 disparos, vou passar pra IA a contagem de tentativa e os hooks já usados, instruindo a variar dor/solução a cada disparo.
 
 ---
 
-## 🧩 5. Componentes e Hooks
+## 📁 Arquivos modificados
 
-**Novos componentes:**
-- `src/components/help/RichTextEditor.tsx` — wrapper Tiptap reutilizável.
-- `src/components/help/HelpArticleEditor.tsx` — editor completo (campos + Tiptap + galeria).
-- `src/components/help/HelpImageUploader.tsx` — upload e gestão de prints.
-- `src/components/help/HelpArticleView.tsx` — render do artigo com prints intercalados.
-- `src/components/help/HelpCategoryCard.tsx` — card de categoria.
+1. **`supabase/functions/system-followup-ai/index.ts`** — única alteração relevante
+   - Adicionar `scenario` no tool call de análise
+   - Adicionar 5 hooks novos no `HOOK_LIBRARY`
+   - Adicionar lógica de seleção/anti-repetição de hook por cenário
+   - Reescrever o `generationPrompt` com blocos condicionais por cenário e lista de funcionalidades do Theo
+   - Persistir `last_hook_used` em `engagement_data` ao enviar
 
-**Novos hooks:**
-- `src/hooks/useHelpCenter.ts` — leitura pública de categorias/artigos/imagens.
-- `src/hooks/useHelpAdmin.ts` — CRUD admin com TanStack Query (otimista).
-
-**Novas páginas:**
-- `src/pages/HelpCenter.tsx`
-- `src/pages/HelpCategory.tsx`
-- `src/pages/HelpArticle.tsx`
-- `src/pages/admin/AdminHelpCenter.tsx`
+**Sem alterações de banco, UI ou outras edge functions.**
 
 ---
 
-## 🔗 6. Navegação
+## ✅ Resultado esperado
 
-- **Sidebar do usuário** (`src/components/Sidebar.tsx`): novo item "Central de Ajuda" com ícone `BookOpen`, visível para todos os membros (sem checagem de permissão).
-- **Sidebar admin** (`src/components/admin/AdminSidebar.tsx`): novo item "Central de Ajuda" com ícone `BookOpen`.
-- **App.tsx**: registrar 4 novas rotas (3 públicas autenticadas + 1 admin).
-
----
-
-## 📝 7. Conteúdo inicial (exemplo do tom para leigos)
-
-Cada artigo virá assim:
-
-> **Título:** Conectando seu WhatsApp via QR Code
->
-> **Passo 1 — Acesse a página WhatsApp**
-> No menu lateral esquerdo, clique em **"WhatsApp"** (ícone do celular).
-> `[PRINT 1: Menu lateral com WhatsApp destacado]`
->
-> **Passo 2 — Clique em "Conectar WhatsApp"**
-> ...
-
-Você abre o painel admin depois e faz upload dos prints reais nos slots marcados.
+- Lead que falou "quero saber mais e sumiu" → recebe mensagem batendo na dor de perder leads + mostrando que o Theo faz exatamente isso + CTA pro teste grátis
+- Lead que conversou bastante e parou → recebe mensagem retomando o ponto exato onde ele parou, sem repetir argumentos genéricos
+- Mensagens ao longo dos 6 dias variam de ângulo (dor diferente, funcionalidade diferente) sem soar robotizadas
 
 ---
 
-## ✅ 8. Lista de arquivos a criar/editar
+## ❓ Pontos pra confirmar antes de executar
 
-**Migração:** 1 arquivo SQL (tabelas + RLS + bucket + seed)
-
-**Criar:**
-- `src/pages/HelpCenter.tsx`
-- `src/pages/HelpCategory.tsx`
-- `src/pages/HelpArticle.tsx`
-- `src/pages/admin/AdminHelpCenter.tsx`
-- `src/components/help/RichTextEditor.tsx`
-- `src/components/help/HelpArticleEditor.tsx`
-- `src/components/help/HelpImageUploader.tsx`
-- `src/components/help/HelpArticleView.tsx`
-- `src/components/help/HelpCategoryCard.tsx`
-- `src/hooks/useHelpCenter.ts`
-- `src/hooks/useHelpAdmin.ts`
-
-**Editar:**
-- `src/App.tsx` (rotas)
-- `src/components/Sidebar.tsx` (item menu)
-- `src/components/admin/AdminSidebar.tsx` (item menu)
-- `package.json` (deps Tiptap)
-
----
-
-## ⚠️ Observações
-- A Central de Ajuda **não substitui** a Base de Conhecimento da IA — são coisas separadas (esta é manual do usuário; aquela alimenta o agente).
-- Após implementação, você acessa `/admin/help-center` para fazer upload dos prints reais nos artigos pré-prontos.
-
+1. Posso aprovar os **5 hooks novos** acima ou você quer ajustar/adicionar algum?
+2. As **funcionalidades do Theo** que listei (24/7, recuperação, agendamento, qualificação, handoff, base de conhecimento) cobrem bem? Quer adicionar/remover alguma?
+3. CTA padrão do cenário `curiosidade_inicial` deve ser **"teste grátis 15 dias"** ou prefere outro (ex: agendar uma demo)?
+4. Os erros de build atuais (em `elevenlabs-tts`, `manage-system-whatsapp`, `whatsapp-webhook`, etc.) **não têm relação com este trabalho** — quer que eu corrija junto ou deixo pra outra rodada?
