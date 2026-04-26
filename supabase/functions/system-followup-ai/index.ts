@@ -329,6 +329,7 @@ serve(async (req) => {
         const lastClientMsg = [...messages].reverse().find((m: any) => !m.from_me);
         const lastClientSnippet = lastClientMsg?.content?.slice(0, 120) || "";
         const silencePattern = clientHasEverReplied ? "DROPPED_OFF" : "NEVER_REPLIED";
+        const clientMessageCount = messages.filter((m: any) => !m.from_me).length;
 
         const rawContactName = conversation.contact_name || null;
 
@@ -340,49 +341,134 @@ serve(async (req) => {
           lastClientSnippet,
           currentDay,
           maxDays,
+          clientMessageCount,
         );
 
         if (!analysis) continue;
 
+        // Hooks usados anteriormente neste lead (anti-repetição)
+        const engagementData = (item.engagement_data as any) || {};
+        const usedHooks: string[] = Array.isArray(engagementData.used_hooks) ? engagementData.used_hooks : [];
+        const lastHook: string | null = engagementData.last_hook || null;
+
+        // Pools por cenário
+        const POOL_CURIOSIDADE = ["dor_lead_perdido", "dor_atendimento_24_7", "dor_resposta_demorada", "solucao_agendamento", "solucao_qualificacao"];
+        const POOL_INTERROMPIDA = ["coerencia_cialdini", "rotulo_voss", "pergunta_calibrada", "confirmacao_de_leitura", "prova_social"];
+        const POOL_NUNCA = ["dor_lead_perdido", "reciprocidade", "dor_atendimento_24_7", "solucao_qualificacao"];
+
+        const pickFromPool = (pool: string[]): string => {
+          // Prefere hooks ainda não usados, e nunca repete o último
+          const fresh = pool.filter((h) => !usedHooks.includes(h) && h !== lastHook);
+          if (fresh.length > 0) return fresh[Math.floor(Math.random() * fresh.length)];
+          const notLast = pool.filter((h) => h !== lastHook);
+          return notLast.length > 0
+            ? notLast[Math.floor(Math.random() * notLast.length)]
+            : pool[Math.floor(Math.random() * pool.length)];
+        };
+
         let hookKey = analysis.recommended_hook;
+
+        // Override por cenário: se o hook recomendado não for adequado ao cenário, escolhe do pool certo
+        if (analysis.scenario === "curiosidade_inicial" && !POOL_CURIOSIDADE.includes(hookKey)) {
+          hookKey = pickFromPool(POOL_CURIOSIDADE);
+        } else if (analysis.scenario === "conversa_interrompida" && !POOL_INTERROMPIDA.includes(hookKey)) {
+          hookKey = pickFromPool(POOL_INTERROMPIDA);
+        } else if (analysis.scenario === "nunca_respondeu" && !POOL_NUNCA.includes(hookKey)) {
+          hookKey = pickFromPool(POOL_NUNCA);
+        }
+
+        // Evita repetir o mesmo hook 2x seguidas
+        if (hookKey === lastHook) {
+          const pool = analysis.scenario === "curiosidade_inicial" ? POOL_CURIOSIDADE
+            : analysis.scenario === "conversa_interrompida" ? POOL_INTERROMPIDA
+            : POOL_NUNCA;
+          hookKey = pickFromPool(pool);
+        }
+
+        // Travas de fase
         if (hookKey === "escassez" && currentDay < 5) hookKey = "coerencia_cialdini";
         if (hookKey === "pergunta_de_saida" && currentDay < maxDays) hookKey = "rotulo_voss";
+
         const hook = HOOK_LIBRARY[hookKey] || HOOK_LIBRARY.pergunta_calibrada;
 
         const nameForGreeting = analysis.name_is_valid && analysis.sanitized_name
           ? analysis.sanitized_name
           : null;
 
-        const generationPrompt = `Você é ${agentName}, um consultor humano experiente do time de suporte/vendas reativando um lead por WhatsApp. Use técnicas de Cialdini ("As Armas da Persuasão") e Chris Voss ("Never Split the Difference").
+        // Bloco de instruções específico do cenário
+        const scenarioBlock =
+          analysis.scenario === "curiosidade_inicial"
+            ? `🎯 CENÁRIO: CURIOSIDADE INICIAL
+O lead demonstrou interesse genérico ("quero saber mais", "como funciona", etc.) e sumiu antes de aprofundar. Ele NÃO sabe ainda o que o Theo IA realmente entrega.
+
+ESTRUTURA OBRIGATÓRIA da mensagem (2-3 linhas):
+1. Abra batendo na DOR REAL de quem vende pelo WhatsApp (use o gancho escolhido)
+2. Mostre 1 SOLUÇÃO CONCRETA do Theo IA conectada à dor (não venda tudo, foque em UMA)
+3. Termine convidando pro TESTE GRÁTIS DE 15 DIAS com pergunta direta
+
+FUNCIONALIDADES DO THEO IA que você pode citar (escolha 1 alinhada à dor):
+- Recupera leads inativos automaticamente (igual a esta mensagem)
+- Atendimento 24/7 (responde de noite, fim de semana, feriado)
+- Resposta em segundos (não deixa cliente quente esfriar)
+- Agendamento automático dentro do WhatsApp (sem abrir agenda)
+- Qualifica leads sozinho e te chama só quando tá pronto pra fechar
+- Transferência inteligente pra humano quando precisa
+- Aprende com a base de conhecimento do seu negócio`
+            : analysis.scenario === "conversa_interrompida"
+            ? `🎯 CENÁRIO: CONVERSA INTERROMPIDA
+O lead já trocou várias mensagens e parou em um ponto específico. Ele JÁ CONHECE o produto — não venda do zero.
+
+ESTRUTURA OBRIGATÓRIA da mensagem (2-3 linhas):
+1. Referencie EXATAMENTE o último ponto que ele falou ("${analysis.last_open_point || analysis.pending_object}") — sem inventar
+2. Resolva a objeção implícita ou nomeie o sentimento (use o gancho escolhido)
+3. Termine com pergunta calibrada que destrava o próximo passo concreto
+
+❌ PROIBIDO neste cenário: argumentar de novo sobre features que ele já conhece, repetir pitch genérico.`
+            : `🎯 CENÁRIO: NUNCA RESPONDEU
+O lead recebeu mensagens mas nunca respondeu. Pode ter chegado por anúncio sem contexto.
+
+ESTRUTURA OBRIGATÓRIA da mensagem (2-3 linhas):
+1. Abra com a dor mais universal de quem vende no WhatsApp (use o gancho)
+2. Mostre que o Theo resolve isso (1 funcionalidade concreta)
+3. Termine com pergunta de baixo atrito ("posso te explicar em 30 segundos?")`;
+
+        const generationPrompt = `Você é ${agentName}, um consultor humano experiente do time de vendas do Theo IA reativando um lead por WhatsApp. Theo IA é um sistema de atendimento automatizado por IA para WhatsApp voltado a donos de negócio que vendem/atendem pelo WhatsApp.
+
+Use técnicas de Cialdini ("As Armas da Persuasão") e Chris Voss ("Never Split the Difference").
 
 ANÁLISE DA CONVERSA (FATOS — use exatamente isso):
 - Item oferecido: ${analysis.offered_item}
 - O que o cliente precisa fazer: ${analysis.pending_object}
 - Último ponto em aberto: ${analysis.last_open_point || "(nenhum)"}
 - Temperatura do lead: ${analysis.lead_temperature}
+- Mensagens já enviadas pelo cliente: ${clientMessageCount}
 - Padrão de silêncio: ${silencePattern}
 - Dia atual: ${currentDay} de ${maxDays} | Tentativa: ${item.current_step}
 ${nameForGreeting ? `- Nome do cliente (validado): ${nameForGreeting}` : `- Nome do cliente: INVÁLIDO/AUSENTE — NÃO use nome, use saudação neutra ("Oi!", "E aí!")`}
-${currentDay >= 5 && bargainingTools ? `- Armas de negociação disponíveis: ${bargainingTools}` : ""}
+${currentDay >= 5 && bargainingTools ? `- Armas de negociação disponíveis (use APENAS agora): ${bargainingTools}` : ""}
+${usedHooks.length > 0 ? `- Ângulos JÁ USADOS com este lead (NÃO repetir o mesmo argumento): ${usedHooks.join(", ")}` : ""}
 
-GANCHO DE PERSUASÃO ESCOLHIDO: ${hook.name}
+${scenarioBlock}
+
+GANCHO DE PERSUASÃO ESCOLHIDO PARA ESTA MENSAGEM: ${hook.name}
 Como aplicar: ${hook.instruction}
-Exemplo do estilo: "${hook.example}"
+Exemplo do ESTILO (não copie literalmente): "${hook.example}"
 
-CONTEXTO DA CONVERSA (apenas referência — não copie):
+CONTEXTO DA CONVERSA (apenas referência — não copie literalmente):
 ${contextText || "(sem histórico)"}
 
 REGRAS OBRIGATÓRIAS — quebrar = mensagem rejeitada:
 1. ❌ PROIBIDO começar com "Olá, tudo bem?", "Oi, tudo bem?" sozinho
 2. ❌ PROIBIDO usar "Como você está?" como pergunta principal
 3. ❌ PROIBIDO usar nomes inválidos
-4. ❌ PROIBIDO mencionar que é IA, automático ou follow-up
+4. ❌ PROIBIDO mencionar que é IA, automático, robô, bot ou follow-up
 5. ❌ PROIBIDO oferecer desconto/promoção antes do dia 5
-6. ✅ A mensagem DEVE referenciar concretamente "${analysis.offered_item}" ou "${analysis.last_open_point || analysis.pending_object}"
-7. ✅ A mensagem DEVE terminar com UMA pergunta específica ligada ao gancho
-8. ✅ Máximo 2-3 linhas, estilo WhatsApp natural
-9. ✅ Máximo 1 emoji (opcional)
-10. ✅ Tom humano e espontâneo, como amigo profissional
+6. ❌ PROIBIDO repetir os ângulos já usados (listados acima)
+7. ✅ A mensagem DEVE seguir a ESTRUTURA OBRIGATÓRIA do cenário acima
+8. ✅ A mensagem DEVE terminar com UMA pergunta direta
+9. ✅ Máximo 3 linhas curtas, estilo WhatsApp natural (frases diretas, sem firula)
+10. ✅ Máximo 1 emoji (opcional)
+11. ✅ Tom humano, confiante, espontâneo — como consultor experiente, não vendedor desesperado
 
 Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas, sem prefixos.`;
 
@@ -507,6 +593,12 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
             next_scheduled_at: nextScheduledAt,
             status: newStatus,
             context_summary: contextSummary,
+            engagement_data: {
+              ...engagementData,
+              last_hook: hookKey,
+              last_scenario: analysis.scenario,
+              used_hooks: Array.from(new Set([...usedHooks, hookKey])),
+            },
           })
           .eq("id", item.id);
 
