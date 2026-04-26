@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveAccountId } from "../_account.ts";
+import { cleanAIText } from "../_ai_text.ts";
 import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts";
 
 const corsHeaders = {
@@ -720,6 +721,8 @@ Regras adicionais:
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
       });
     }
+
+    aiReply = cleanAIText(aiReply);
 
     // Safeguard: detect if AI claims appointment was created without calling the tool
     const claimsAppointmentCreated = /agendamento\s*(confirmado|criado|marcado|realizado|feito)/i.test(aiReply) 
