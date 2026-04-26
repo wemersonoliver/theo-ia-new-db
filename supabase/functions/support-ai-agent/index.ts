@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cleanAIText } from "../_ai_text.ts";
 import { evolutionRequest } from "../_evolution.ts";
 
 const corsHeaders = {
@@ -728,7 +729,8 @@ async function executeTool(supabase: any, toolName: string, args: any, phone: st
     }
   } catch (error) {
     console.error(`Error executing tool ${toolName}:`, error);
-    return JSON.stringify({ error: `Erro ao executar ${toolName}: ${error.message}` });
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return JSON.stringify({ error: `Erro ao executar ${toolName}: ${message}` });
   }
 }
 
@@ -1058,12 +1060,12 @@ async function callGeminiWithTools(
     // Extract text response (filter thinking parts)
     const textParts = parts.filter((p: any) => p.text && !p.thought);
     if (textParts.length > 0) {
-      return textParts.map((p: any) => p.text).join("\n");
+      return cleanAIText(textParts.map((p: any) => p.text).join("\n"));
     }
 
     // Fallback: any text
     const anyText = parts.find((p: any) => p.text);
-    if (anyText) return anyText.text;
+    if (anyText) return cleanAIText(anyText.text);
 
     return "Desculpe, não consegui processar sua solicitação. Deseja falar com um atendente?";
   }
@@ -1294,7 +1296,8 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("Support AI Agent error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
