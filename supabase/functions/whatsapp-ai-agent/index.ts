@@ -568,7 +568,7 @@ Regras adicionais:
     conversationMessages.push({ role: "user", parts: currentMessageParts });
 
     // Call Gemini with function calling
-    const geminiPayload = {
+    const geminiPayload: any = {
       contents: [
         { role: "user", parts: [{ text: systemPrompt }] },
         { role: "model", parts: [{ text: "Entendido. Vou seguir essas instruções e usar as ferramentas de agendamento quando necessário." }] },
