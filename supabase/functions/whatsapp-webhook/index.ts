@@ -286,6 +286,18 @@ serve(async (req) => {
                 console.error("Error triggering support AI:", err)
               );
             }
+
+            // Mark follow-up tracking as engaged when lead replies
+            if (!isFromMe) {
+              supabase
+                .from("system_followup_tracking")
+                .update({ status: "engaged", updated_at: new Date().toISOString() })
+                .eq("phone", phone)
+                .eq("status", "pending")
+                .then(({ error }) => {
+                  if (error) console.error("Error marking system follow-up engaged:", error);
+                });
+            }
           } else {
             await supabase
               .from("system_whatsapp_conversations")

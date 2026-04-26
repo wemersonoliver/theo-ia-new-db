@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { useSystemAIConfig } from "@/hooks/useSystemAIConfig";
 import { useAdminNotificationContacts } from "@/hooks/useAdminNotificationContacts";
 import { useWelcomeQueue } from "@/hooks/useWelcomeQueue";
-import { Bot, Save, Loader2, Plus, Trash2, Bell, Clock, Volume2, MessageSquare, Send, ArrowUp, ArrowDown, Play } from "lucide-react";
+import { Bot, Save, Loader2, Plus, Trash2, Bell, Clock, Volume2, MessageSquare, Send, ArrowUp, ArrowDown, Play, Repeat } from "lucide-react";
+import { AdminSystemFollowupTab } from "@/components/admin/AdminSystemFollowupTab";
 
 const DEFAULT_WELCOME_MESSAGES = [
   "Oi {primeiro_nome}! 👋",
@@ -131,6 +132,9 @@ export default function AdminAIConfig() {
             </TabsTrigger>
             <TabsTrigger value="notifications" className="data-[state=active]:bg-amber-500/10 data-[state=active]:text-amber-400">
               <Bell className="h-4 w-4 mr-2" /> Notificações
+            </TabsTrigger>
+            <TabsTrigger value="followup" className="data-[state=active]:bg-amber-500/10 data-[state=active]:text-amber-400">
+              <Repeat className="h-4 w-4 mr-2" /> Follow-Up
             </TabsTrigger>
           </TabsList>
 
