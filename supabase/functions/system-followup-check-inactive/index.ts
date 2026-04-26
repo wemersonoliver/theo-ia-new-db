@@ -29,7 +29,8 @@ serve(async (req) => {
       });
     }
 
-    const inactivityMs = (config.inactivity_hours || 24) * 60 * 60 * 1000;
+    // Campo inactivity_hours é reinterpretado como MINUTOS na UI/lógica do suporte
+    const inactivityMs = (config.inactivity_hours || 60) * 60 * 1000;
     const cutoffTime = new Date(Date.now() - inactivityMs).toISOString();
 
     const { data: conversations } = await supabase

@@ -98,14 +98,14 @@ export function AdminSystemFollowupTab() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2 text-slate-300">
-                    <Clock className="h-4 w-4" /> Horas de inatividade para iniciar
+                    <Clock className="h-4 w-4" /> Minutos de inatividade para iniciar
                   </Label>
                   <Input
                     type="number"
                     value={formData.inactivity_hours}
-                    onChange={(e) => setFormData({ ...formData, inactivity_hours: parseInt(e.target.value) || 24 })}
+                    onChange={(e) => setFormData({ ...formData, inactivity_hours: parseInt(e.target.value) || 60 })}
                     min={1}
-                    max={168}
+                    max={10080}
                   />
                   <p className="text-xs text-slate-500">Após esse tempo sem resposta, o follow-up inicia.</p>
                 </div>
