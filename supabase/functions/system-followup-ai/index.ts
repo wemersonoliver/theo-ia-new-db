@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cleanAIText } from "../_ai_text.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -498,12 +499,12 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
           }
 
           const geminiData = await geminiResponse.json();
-          const candidate = geminiData.candidates?.[0]?.content?.parts
+          const candidate = cleanAIText(geminiData.candidates?.[0]?.content?.parts
             ?.filter((p: any) => p.text && !p.thoughtSignature)
             ?.map((p: any) => p.text)
             ?.join("")
             ?.trim()
-            ?.replace(/^["'`]+|["'`]+$/g, "");
+            ?.replace(/^["'`]+|["'`]+$/g, ""));
 
           if (!candidate) continue;
           if (isGenericGreeting(candidate)) continue;
