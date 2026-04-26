@@ -1630,6 +1630,90 @@ export type Database = {
         }
         Relationships: []
       }
+      system_followup_config: {
+        Row: {
+          bargaining_tools: string | null
+          created_at: string
+          enabled: boolean
+          evening_window_end: string
+          evening_window_start: string
+          exclude_handoff: boolean
+          id: string
+          inactivity_hours: number
+          max_days: number
+          morning_window_end: string
+          morning_window_start: string
+          updated_at: string
+        }
+        Insert: {
+          bargaining_tools?: string | null
+          created_at?: string
+          enabled?: boolean
+          evening_window_end?: string
+          evening_window_start?: string
+          exclude_handoff?: boolean
+          id?: string
+          inactivity_hours?: number
+          max_days?: number
+          morning_window_end?: string
+          morning_window_start?: string
+          updated_at?: string
+        }
+        Update: {
+          bargaining_tools?: string | null
+          created_at?: string
+          enabled?: boolean
+          evening_window_end?: string
+          evening_window_start?: string
+          exclude_handoff?: boolean
+          id?: string
+          inactivity_hours?: number
+          max_days?: number
+          morning_window_end?: string
+          morning_window_start?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      system_followup_tracking: {
+        Row: {
+          context_summary: string | null
+          created_at: string
+          current_step: number
+          engagement_data: Json | null
+          id: string
+          last_sent_at: string | null
+          next_scheduled_at: string | null
+          phone: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          context_summary?: string | null
+          created_at?: string
+          current_step?: number
+          engagement_data?: Json | null
+          id?: string
+          last_sent_at?: string | null
+          next_scheduled_at?: string | null
+          phone: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          context_summary?: string | null
+          created_at?: string
+          current_step?: number
+          engagement_data?: Json | null
+          id?: string
+          last_sent_at?: string | null
+          next_scheduled_at?: string | null
+          phone?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       system_pending_responses: {
         Row: {
           created_at: string | null
