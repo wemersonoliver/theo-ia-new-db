@@ -360,6 +360,11 @@ export default function AdminAIConfig() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* FOLLOW-UP */}
+          <TabsContent value="followup" className="space-y-6">
+            <AdminSystemFollowupTab />
+          </TabsContent>
         </Tabs>
       </div>
     </AdminLayout>
