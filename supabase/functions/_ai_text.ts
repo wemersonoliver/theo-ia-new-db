@@ -15,7 +15,7 @@ export function cleanAIText(text: string | null | undefined): string {
     .replace(/([!?])(?=\S)/gu, "$1 ")
     .replace(/([,;])(?=[^\s\d])/gu, "$1 ")
     .replace(/:(?!\/\/)(?=[^\s\d])/gu, ": ")
-    .replace(/\.(?=[A-ZÀ-Ý])/gu, ". ")
+    .replace(/\.(?=[A-Za-zÀ-ÿ])/gu, ". ")
     .replace(/([([{])\s+/g, "$1")
     .replace(/\s+([)\]}])/g, "$1")
     .replace(/[ \t]{2,}/g, " ")
