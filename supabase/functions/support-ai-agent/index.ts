@@ -729,7 +729,8 @@ async function executeTool(supabase: any, toolName: string, args: any, phone: st
     }
   } catch (error) {
     console.error(`Error executing tool ${toolName}:`, error);
-    return JSON.stringify({ error: `Erro ao executar ${toolName}: ${error.message}` });
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return JSON.stringify({ error: `Erro ao executar ${toolName}: ${message}` });
   }
 }
 
