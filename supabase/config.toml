@@ -50,3 +50,9 @@ verify_jwt = false
 
 [functions.send-task-reminders]
 verify_jwt = false
+
+[functions.system-followup-check-inactive]
+verify_jwt = false
+
+[functions.system-followup-ai]
+verify_jwt = false
