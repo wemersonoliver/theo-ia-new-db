@@ -1,91 +1,78 @@
-# Personalização dos prompts por nicho de negócio
+## Objetivo
 
-## Problema
+Adicionar na tela `/conversations` (desktop e mobile) um botão de anexar arquivos ao lado do input de mensagem, igual ao WhatsApp Web — permitindo enviar **imagens, vídeos, documentos e áudios** para o lead, além do texto que já existe.
 
-Hoje todos os agentes de IA dos usuários (atendimento WhatsApp + follow-up) usam prompts **genéricos** — só sabem o `agent_name`. Não importa se o cliente é uma clínica de estética, uma loja de roupas ou um escritório de advocacia: a IA fala do mesmo jeito.
+## Como vai funcionar (visão do usuário)
 
-Quero que cada agente seja **especializado no negócio do usuário**, com a frase modelo:
+Ao lado do campo de digitar mensagem aparece um ícone de clipe (📎). Ao clicar:
 
-> *"Você é ${agentName}, um vendedor humano experiente **no nicho ${businessNiche}** reativando um lead..."*
+- Menu com 3 opções: **Foto/Vídeo**, **Documento**, **Áudio**.
+- Após selecionar o arquivo, abre um pré-visualizador (preview da imagem/vídeo, ícone do documento ou player de áudio) com:
+  - Campo de **legenda** opcional (para imagem/vídeo/documento).
+  - Botões **Cancelar** e **Enviar**.
+- Ao confirmar: arquivo é enviado ao WhatsApp do lead, aparece imediatamente no chat (com o mesmo `MediaBubble` já usado para mídias recebidas) e fica salvo na conversa.
 
-## Solução
+Limites: **16 MB por arquivo** (limite prático da Evolution API). Tipos aceitos:
+- Imagem: jpg, png, webp, gif
+- Vídeo: mp4, 3gp, mov
+- Áudio: ogg, mp3, m4a, wav (enviado como nota de voz quando ogg/opus)
+- Documento: pdf, doc/docx, xls/xlsx, txt, csv, zip
 
-### 1. Banco — adicionar 2 campos novos em `whatsapp_ai_config`
+## Mudanças técnicas
 
-| Campo | Tipo | Para quê |
-|---|---|---|
-| `business_niche` | `text` | Segmento curto, ex: "Clínica de estética", "Loja de calçados", "Imobiliária" |
-| `business_description` | `text` (opcional) | 1-3 frases livres sobre o que o negócio vende/oferece (diferencial, ticket médio, perfil de cliente). Dá mais contexto sem o usuário precisar reescrever o prompt inteiro. |
+### 1. Storage
+Reusar o bucket público existente `whatsapp-media`. Pasta: `{accountId|userId}/{phone}/outgoing/{timestamp}_{nome}.{ext}`.
 
-Migração simples (`ALTER TABLE … ADD COLUMN`), nullable, sem default — usuários antigos continuam funcionando (com fallback genérico).
+### 2. Nova edge function `send-whatsapp-media`
+Arquivo: `supabase/functions/send-whatsapp-media/index.ts` (com `verify_jwt = false` + validação manual via `auth.getUser`, mesmo padrão do `send-whatsapp-message`).
 
-### 2. UI — campo seletor + textarea no AI Agent
+Recebe `{ phone, mediaUrl, mediaType: "image"|"video"|"audio"|"document", filename?, caption?, mimetype?, system? }` e:
 
-Na aba de configuração do agente (`/ai-agent`), adicionar logo abaixo do "Nome do agente":
+1. Resolve `account_id` + instância conectada (mesma lógica do `send-whatsapp-message`).
+2. Chama Evolution API:
+   - `POST /message/sendMedia/{instance}` com `{ number, mediatype, mimetype, caption, media: <url>, fileName }` para imagem/vídeo/documento.
+   - `POST /message/sendWhatsAppAudio/{instance}` com `{ number, audio: <url> }` para áudio (envia como voice note).
+   - Faz fallback do 9º dígito (mesmo helper `getBrazilianPhoneVariant` já usado).
+3. Acrescenta a mensagem em `whatsapp_conversations.messages` (ou `system_whatsapp_conversations`) com:
+   ```
+   { id, timestamp, from_me: true, type: "image"|"video"|"audio"|"document",
+     content: caption || "", media_url, media_mime, media_filename,
+     sent_by: "human", attendant_name, attendant_user_id }
+   ```
+4. Marca sessão de IA como `handed_off` (igual o `send-whatsapp-message`).
 
-- **Nicho do negócio** — `<Input>` simples com placeholder *"Ex: Clínica odontológica, Loja de roupas femininas, Imobiliária…"* + um botão de sugestões rápidas (chips) com os nichos mais comuns: Estética, Saúde, Educação, Imobiliária, E-commerce, Restaurante, Consultoria, Advocacia, Outros.
-- **Descrição rápida do negócio** — `<Textarea>` com 2-3 linhas, placeholder *"O que vocês vendem, ticket médio, perfil do cliente ideal…"*. Opcional.
+### 3. Hook `useConversations` / `useSystemConversations`
+Adicionar mutation `sendMedia` que:
+1. Faz `supabase.storage.from("whatsapp-media").upload(...)` do `File` selecionado.
+2. Pega a `publicUrl`.
+3. Chama `supabase.functions.invoke("send-whatsapp-media", { body: { phone, mediaUrl, mediaType, filename, caption, mimetype, system? } })`.
+4. Invalida queries de conversa.
 
-Hook `useAIConfig` já existe — só adicionar os 2 campos no save.
+### 4. Novo componente `MediaAttachButton`
+Arquivo: `src/components/MediaAttachButton.tsx`.
 
-### 3. Edge Functions — injetar nos prompts
+- Botão com ícone `Paperclip` + `DropdownMenu` (Foto/Vídeo, Documento, Áudio).
+- `<input type="file" hidden>` com `accept` filtrado por tipo escolhido.
+- Ao escolher arquivo, abre `Dialog` de preview com:
+  - Preview da mídia (img/video/audio/ícone).
+  - `Textarea` de legenda (oculto p/ áudio).
+  - Validação de tamanho (≤16 MB) e tipo.
+  - Botão **Enviar** chama `sendMedia.mutateAsync(...)` e fecha.
 
-**3 arquivos editados** (todos buscam `whatsapp_ai_config` e montam prompt):
+Aceita props `{ phone, system?, disabled? }` para reuso em conversas do usuário e do sistema (admin support).
 
-#### a) `whatsapp-ai-agent/index.ts` (atendimento principal do usuário)
-Trocar:
-```ts
-`Você é ${aiConfig.agent_name} de atendimento via WhatsApp.`
-```
-Por:
-```ts
-`Você é ${aiConfig.agent_name}, atendente especializado em ${aiConfig.business_niche || "atendimento"} via WhatsApp.
-${aiConfig.business_description ? `SOBRE O NEGÓCIO: ${aiConfig.business_description}` : ""}
-Use linguagem, exemplos e objeções típicas desse segmento.`
-```
+### 5. Integração na UI
+Em `src/pages/Conversations.tsx` (desktop **e** mobile), inserir `<MediaAttachButton phone={selectedPhone} />` à esquerda do `Input` em ambos os blocos (linhas ~432 mobile e ~644 desktop). Mesma adição em `src/pages/admin/AdminConversations.tsx` e `src/components/admin/AdminSystemFollowupTab.tsx` se também tiverem input de envio (verificar e replicar passando `system: true`).
 
-#### b) `followup-ai/index.ts` (follow-up dos usuários — Etapa B de geração)
-Trocar a primeira linha do `generationPrompt`:
-```ts
-`Você é ${agentName}, um vendedor humano experiente no nicho de ${businessNiche} reativando um lead por WhatsApp.
-${businessDescription ? `CONTEXTO DO NEGÓCIO: ${businessDescription}` : ""}
-Use técnicas dos livros …`
-```
-E na **Etapa A (análise)** passar o nicho como pista para a IA escolher melhor o gancho (ex: nicho "estética" pesa mais em `prova_social`, nicho "imobiliária" em `pergunta_calibrada`).
+### 6. Renderização
+`MediaBubble` já trata `image/audio/video/document` quando há `media_url` — não precisa mexer.
 
-Buscar os 2 campos novos no mesmo SELECT que já roda:
-```ts
-.select("agent_name, custom_prompt, business_niche, business_description")
-```
+## Pontos abertos
 
-#### c) `system-followup-ai/index.ts` — **NÃO mexer**
-Esse é o follow-up do **suporte do Theo IA** falando com leads do Theo. O nicho ali é fixo ("SaaS de IA pra WhatsApp"), já é tratado com a estratégia do plano em `.lovable/plan.md`. Sem alteração.
+- **Áudio gravado pelo navegador** (ícone de microfone): hoje `AudioRecordButton` só transcreve. Mantemos o comportamento atual; o novo botão de anexos cobre upload de áudio existente. Posso unificar depois se você quiser.
+- Sem compressão de mídia client-side (Evolution aceita até ~16 MB; arquivos maiores são bloqueados com mensagem amigável).
 
-### 4. Fallback / retrocompatibilidade
+## Arquivos afetados
 
-Se `business_niche` for `null` (usuário antigo que ainda não preencheu):
-- Atendimento: cai no texto atual genérico
-- Follow-up: usa "vendedor experiente" sem o "no nicho de X"
-- Banner não-bloqueante na tela `/ai-agent`: *"Adicione o nicho do seu negócio para deixar a IA mais inteligente"* — sem forçar, sem quebrar nada.
-
-## Arquivos modificados
-
-1. **Migração SQL** — `ALTER TABLE whatsapp_ai_config ADD COLUMN business_niche text, ADD COLUMN business_description text`
-2. **`src/pages/AIAgent.tsx`** — adicionar os 2 campos no formulário + chips de sugestão
-3. **`src/hooks/useAIConfig.ts`** — incluir os 2 campos nos tipos/save
-4. **`supabase/functions/whatsapp-ai-agent/index.ts`** — injetar nicho no `systemPrompt`
-5. **`supabase/functions/followup-ai/index.ts`** — injetar nicho no SELECT, na análise (Etapa A) e na geração (Etapa B)
-
-**Sem alterações** em UI de admin, nem em `system-followup-ai`, nem em outras edge functions.
-
-## Resultado esperado
-
-- Usuário dono de **clínica de estética** preenche nicho → IA passa a falar de "procedimentos", "agendamento de avaliação", "antes e depois", e o follow-up diz *"Você é Marina, vendedora experiente no nicho de estética…"* gerando objeções/ganchos do segmento.
-- Usuário **imobiliário** preenche → IA fala de "visita ao imóvel", "documentação", "financiamento", e o follow-up usa o tom certo.
-- Sem nenhum nicho preenchido → tudo continua funcionando como hoje (fallback).
-
-## Pontos pra confirmar antes de executar
-
-1. **Lista de chips sugeridos** — concorda com Estética / Saúde / Educação / Imobiliária / E-commerce / Restaurante / Consultoria / Advocacia / Outros, ou quer adicionar/remover algum?
-2. Quer também aplicar o nicho no **`prompt-generator-ai`** (a IA que ajuda o usuário a escrever o prompt) pra que ela já gere prompts personalizados pro segmento? Recomendo **sim**, mas só se você quiser nesta rodada.
-3. Os campos novos devem ser **obrigatórios no onboarding** dos novos usuários ou só opcionais por enquanto?
+- **Novos**: `supabase/functions/send-whatsapp-media/index.ts`, `src/components/MediaAttachButton.tsx`
+- **Editados**: `src/hooks/useConversations.ts`, `src/hooks/useSystemConversations.ts`, `src/pages/Conversations.tsx`, possivelmente `src/components/admin/AdminSystemFollowupTab.tsx` / `src/pages/admin/AdminConversations.tsx`, `supabase/config.toml` (registrar nova função com `verify_jwt = false`)
