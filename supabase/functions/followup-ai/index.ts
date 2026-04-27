@@ -432,7 +432,10 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
             ?.replace(/^["'`]+|["'`]+$/g, ""));
 
           if (!candidate) {
-            console.error("No candidate generated for", item.phone, "attempt", attempt);
+            console.error("No candidate generated for", item.phone, "attempt", attempt,
+              "finishReason:", geminiData.candidates?.[0]?.finishReason,
+              "usage:", JSON.stringify(geminiData.usageMetadata),
+              "parts:", JSON.stringify(geminiData.candidates?.[0]?.content?.parts)?.slice(0, 500));
             continue;
           }
 
