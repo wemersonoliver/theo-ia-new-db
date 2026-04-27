@@ -102,6 +102,7 @@ async function analyzeConversation(
   lastClientSnippet: string,
   currentDay: number,
   maxDays: number,
+  businessNiche: string | null,
 ): Promise<ConversationAnalysis | null> {
   const sanitized = sanitizeContactName(rawContactName);
 
@@ -116,6 +117,7 @@ METADADOS:
 - Padrão de silêncio: ${silencePattern}
 - Última mensagem do cliente: "${lastClientSnippet || "(nunca respondeu)"}"
 - Dia atual do follow-up: ${currentDay} de ${maxDays}
+${businessNiche ? `- Nicho do negócio do atendente: ${businessNiche} (escolha o gancho considerando objeções típicas desse segmento)` : ""}
 
 Retorne via tool call um JSON estruturado. Seja FACTUAL — extraia informações REAIS da conversa, não invente.`;
 
@@ -291,7 +293,7 @@ serve(async (req) => {
         // Load user's AI config for agent name
         const { data: aiConfig } = await supabase
           .from("whatsapp_ai_config")
-          .select("agent_name, custom_prompt")
+          .select("agent_name, custom_prompt, business_niche, business_description")
           .eq("user_id", item.user_id)
           .maybeSingle();
 
@@ -324,6 +326,8 @@ serve(async (req) => {
         const silencePattern = clientHasEverReplied ? "DROPPED_OFF" : "NEVER_REPLIED";
 
         const agentName = aiConfig?.agent_name || "Assistente";
+        const businessNiche = aiConfig?.business_niche?.trim() || null;
+        const businessDescription = aiConfig?.business_description?.trim() || null;
         const rawContactName = conversation.contact_name || null;
 
         // ─── Etapa A: Análise estruturada ──────────────────────────────
@@ -335,6 +339,7 @@ serve(async (req) => {
           lastClientSnippet,
           currentDay,
           maxDays,
+          businessNiche,
         );
 
         if (!analysis) {
@@ -357,7 +362,8 @@ serve(async (req) => {
         const bargainingTools = config.bargaining_tools || "";
 
         // ─── Etapa B: Geração da mensagem (com retry anti-genérico) ────
-        const generationPrompt = `Você é ${agentName}, um vendedor humano experiente reativando um lead por WhatsApp. Use técnicas dos livros "As Armas da Persuasão" (Cialdini) e "Never Split the Difference" (Chris Voss).
+        const generationPrompt = `Você é ${agentName}, um vendedor humano experiente${businessNiche ? ` no nicho de ${businessNiche}` : ""} reativando um lead por WhatsApp. Use técnicas dos livros "As Armas da Persuasão" (Cialdini) e "Never Split the Difference" (Chris Voss).
+${businessDescription ? `\nCONTEXTO DO NEGÓCIO (use pra adaptar tom, exemplos e objeções):\n${businessDescription}\n` : ""}${businessNiche ? `\nFale como quem realmente entende do segmento de ${businessNiche} — use vocabulário, dores e gatilhos típicos desse mercado.\n` : ""}
 
 ANÁLISE DA CONVERSA (FATOS — use exatamente isso):
 - Item oferecido pelo atendente: ${analysis.offered_item}
