@@ -147,7 +147,7 @@ Retorne via tool call um JSON estruturado. Seja FACTUAL — extraia informaçõe
   };
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -405,13 +405,13 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
             : generationPrompt + `\n\n⚠️ TENTATIVA ANTERIOR FOI REJEITADA POR SER GENÉRICA. Reescreva começando IMEDIATAMENTE com referência concreta ao item oferecido ou ao último ponto da conversa. NÃO comece com "Olá" + saudação vazia.`;
 
           const geminiResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 contents: [{ role: "user", parts: [{ text: promptToUse }] }],
-                generationConfig: { temperature: 0.7, maxOutputTokens: 400 },
+                generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
               }),
             },
           );
@@ -425,14 +425,17 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
 
           const geminiData = await geminiResponse.json();
           const candidate = cleanAIText(geminiData.candidates?.[0]?.content?.parts
-            ?.filter((p: any) => p.text && !p.thoughtSignature)
+            ?.filter((p: any) => p.text && !p.thought)
             ?.map((p: any) => p.text)
             ?.join("")
             ?.trim()
             ?.replace(/^["'`]+|["'`]+$/g, ""));
 
           if (!candidate) {
-            console.error("No candidate generated for", item.phone, "attempt", attempt);
+            console.error("No candidate generated for", item.phone, "attempt", attempt,
+              "finishReason:", geminiData.candidates?.[0]?.finishReason,
+              "usage:", JSON.stringify(geminiData.usageMetadata),
+              "parts:", JSON.stringify(geminiData.candidates?.[0]?.content?.parts)?.slice(0, 500));
             continue;
           }
 
