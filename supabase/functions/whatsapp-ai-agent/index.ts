@@ -483,7 +483,17 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
     }
 
     // Build system prompt with scheduling capabilities
-    const systemPrompt = `Você é ${aiConfig.agent_name || "um assistente virtual"} de atendimento via WhatsApp.
+    const nicheLine = aiConfig.business_niche
+      ? `Você é ${aiConfig.agent_name || "um assistente virtual"}, atendente especializado(a) no nicho de ${aiConfig.business_niche} via WhatsApp.
+Use linguagem, exemplos práticos, gírias técnicas e objeções típicas desse segmento. Fale como quem entende profundamente desse mercado.`
+      : `Você é ${aiConfig.agent_name || "um assistente virtual"} de atendimento via WhatsApp.`;
+
+    const businessDescriptionBlock = aiConfig.business_description
+      ? `\nSOBRE O NEGÓCIO:\n${aiConfig.business_description}\n`
+      : "";
+
+    const systemPrompt = `${nicheLine}
+${businessDescriptionBlock}
 
 ${aiConfig.custom_prompt || "Seja cordial, profissional e prestativo."}
 
