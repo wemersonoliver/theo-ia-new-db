@@ -1940,11 +1940,13 @@ export type Database = {
           agent_name: string | null
           business_address: string | null
           business_days: number[] | null
+          business_description: string | null
           business_hours_end: string | null
           business_hours_start: string | null
           business_latitude: number | null
           business_location_name: string | null
           business_longitude: number | null
+          business_niche: string | null
           created_at: string | null
           custom_prompt: string | null
           delay_between_messages: number | null
@@ -1971,11 +1973,13 @@ export type Database = {
           agent_name?: string | null
           business_address?: string | null
           business_days?: number[] | null
+          business_description?: string | null
           business_hours_end?: string | null
           business_hours_start?: string | null
           business_latitude?: number | null
           business_location_name?: string | null
           business_longitude?: number | null
+          business_niche?: string | null
           created_at?: string | null
           custom_prompt?: string | null
           delay_between_messages?: number | null
@@ -2002,11 +2006,13 @@ export type Database = {
           agent_name?: string | null
           business_address?: string | null
           business_days?: number[] | null
+          business_description?: string | null
           business_hours_end?: string | null
           business_hours_start?: string | null
           business_latitude?: number | null
           business_location_name?: string | null
           business_longitude?: number | null
+          business_niche?: string | null
           created_at?: string | null
           custom_prompt?: string | null
           delay_between_messages?: number | null

@@ -32,6 +32,8 @@ export interface AIConfig {
   business_latitude: number | null;
   business_longitude: number | null;
   business_location_name: string | null;
+  business_niche: string | null;
+  business_description: string | null;
   created_at: string;
   updated_at: string;
 }

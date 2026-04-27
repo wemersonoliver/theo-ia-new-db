@@ -953,6 +953,8 @@ export default function AIAgent() {
 
   const [formData, setFormData] = useState({
     agent_name: "Assistente Virtual",
+    business_niche: "",
+    business_description: "",
     custom_prompt: "",
     business_hours_start: "00:00",
     business_hours_end: "23:59",
@@ -975,6 +977,8 @@ export default function AIAgent() {
     if (config) {
       setFormData({
         agent_name: config.agent_name || "Assistente Virtual",
+        business_niche: config.business_niche || "",
+        business_description: config.business_description || "",
         custom_prompt: config.custom_prompt || "",
         business_hours_start: config.business_hours_start || "00:00",
         business_hours_end: config.business_hours_end || "23:59",
@@ -1106,6 +1110,54 @@ export default function AIAgent() {
                   onChange={(e) => setFormData({ ...formData, agent_name: e.target.value })}
                   placeholder="Assistente Virtual"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="business_niche">Nicho do Negócio</Label>
+                <Input
+                  id="business_niche"
+                  value={formData.business_niche}
+                  onChange={(e) => setFormData({ ...formData, business_niche: e.target.value })}
+                  placeholder="Ex: Clínica odontológica, Loja de roupas femininas, Imobiliária…"
+                />
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {[
+                    "Estética",
+                    "Saúde",
+                    "Educação",
+                    "Imobiliária",
+                    "E-commerce",
+                    "Restaurante",
+                    "Consultoria",
+                    "Advocacia",
+                  ].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, business_niche: suggestion })}
+                      className="text-xs px-2.5 py-1 rounded-full border border-border bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Define o segmento em que a IA atua. Quanto mais específico, mais natural a conversa.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="business_description">Descrição rápida do negócio</Label>
+                <Textarea
+                  id="business_description"
+                  value={formData.business_description}
+                  onChange={(e) => setFormData({ ...formData, business_description: e.target.value })}
+                  placeholder="O que vocês vendem, ticket médio, perfil do cliente ideal, principais diferenciais…"
+                  rows={3}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Opcional. Dá contexto extra pra IA usar exemplos e tom adequados ao seu negócio.
+                </p>
               </div>
 
               <div className="space-y-2">
