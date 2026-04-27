@@ -10,6 +10,7 @@ export interface FollowupConfig {
   user_id: string;
   enabled: boolean;
   inactivity_hours: number;
+  inactivity_unit: "minutes" | "hours";
   max_days: number;
   morning_window_start: string;
   morning_window_end: string;

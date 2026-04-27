@@ -34,7 +34,10 @@ serve(async (req) => {
 
     for (const config of configs) {
       try {
-        const inactivityMs = (config.inactivity_hours || 24) * 60 * 60 * 1000;
+        const unit = (config.inactivity_unit || "hours") as "minutes" | "hours";
+        const value = config.inactivity_hours || (unit === "minutes" ? 60 : 24);
+        const inactivityMs =
+          unit === "minutes" ? value * 60 * 1000 : value * 60 * 60 * 1000;
         const cutoffTime = new Date(Date.now() - inactivityMs).toISOString();
         const accountId = config.account_id || (await resolveAccountId(supabase, config.user_id));
 

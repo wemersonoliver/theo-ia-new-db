@@ -901,6 +901,7 @@ export type Database = {
           exclude_handoff: boolean
           id: string
           inactivity_hours: number
+          inactivity_unit: string
           max_days: number
           morning_window_end: string
           morning_window_start: string
@@ -917,6 +918,7 @@ export type Database = {
           exclude_handoff?: boolean
           id?: string
           inactivity_hours?: number
+          inactivity_unit?: string
           max_days?: number
           morning_window_end?: string
           morning_window_start?: string
@@ -933,6 +935,7 @@ export type Database = {
           exclude_handoff?: boolean
           id?: string
           inactivity_hours?: number
+          inactivity_unit?: string
           max_days?: number
           morning_window_end?: string
           morning_window_start?: string
