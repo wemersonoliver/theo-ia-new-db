@@ -425,7 +425,7 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
 
           const geminiData = await geminiResponse.json();
           const candidate = cleanAIText(geminiData.candidates?.[0]?.content?.parts
-            ?.filter((p: any) => p.text && !p.thoughtSignature)
+            ?.filter((p: any) => p.text && !p.thought)
             ?.map((p: any) => p.text)
             ?.join("")
             ?.trim()
