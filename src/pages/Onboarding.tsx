@@ -28,21 +28,21 @@ import {
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-type OnboardingStep = "welcome" | "whatsapp" | "appointments_question" | "appointments_config" | "interview" | "location_question" | "location" | "test_prompt" | "completed";
+type OnboardingStep = "welcome" | "appointments_question" | "appointments_config" | "interview" | "whatsapp" | "location_question" | "location" | "test_prompt" | "completed";
 
 type InterviewMessage = { role: "user" | "assistant"; content: string };
 
 const STEP_ORDER: OnboardingStep[] = [
-  "welcome", "whatsapp", "appointments_question", "appointments_config",
-  "interview", "location_question", "location", "test_prompt", "completed"
+  "welcome", "appointments_question", "appointments_config",
+  "interview", "whatsapp", "location_question", "location", "test_prompt", "completed"
 ];
 
 const STEP_LABELS: Record<string, string> = {
   welcome: "Boas-vindas",
-  whatsapp: "Conectar WhatsApp",
   appointments_question: "Agendamentos",
   appointments_config: "Configurar Horários",
   interview: "Entrevista IA",
+  whatsapp: "Conectar WhatsApp",
   location_question: "Local de Atendimento",
   location: "Endereço",
   test_prompt: "Testar Prompt",
@@ -207,7 +207,7 @@ export default function Onboarding() {
         <main className="flex-1 p-4 md:p-8 overflow-y-auto">
           <div className={cn("mx-auto", currentStep === "test_prompt" ? "max-w-6xl" : "max-w-3xl")}>
             {currentStep === "welcome" && (
-              <WelcomeStep onNext={() => goToStep("whatsapp")} />
+              <WelcomeStep onNext={() => goToStep("appointments_question")} />
             )}
             {currentStep === "whatsapp" && (
               <WhatsAppStep onNext={goNext} />
