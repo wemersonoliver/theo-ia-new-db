@@ -12,25 +12,39 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const runId = crypto.randomUUID().slice(0, 8);
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Fetch all users with follow-up enabled
+    console.log(`[${runId}] === Starting followup-check-inactive run ===`);
+
     const { data: configs, error: configError } = await supabase
       .from("followup_config")
       .select("*")
       .eq("enabled", true);
 
-    if (configError) throw configError;
+    if (configError) {
+      console.error(`[${runId}] Error fetching configs:`, configError);
+      throw configError;
+    }
+    console.log(`[${runId}] Found ${configs?.length || 0} active follow-up configs`);
+
     if (!configs || configs.length === 0) {
-      return new Response(JSON.stringify({ created: 0 }), {
+      return new Response(JSON.stringify({ created: 0, runId }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     let created = 0;
+    let totalSkipped = 0;
+    const skipReasons: Record<string, number> = {};
+    const trackReason = (r: string) => {
+      skipReasons[r] = (skipReasons[r] || 0) + 1;
+      totalSkipped++;
+    };
 
     for (const config of configs) {
       try {
@@ -39,31 +53,45 @@ serve(async (req) => {
         const inactivityMs =
           unit === "minutes" ? value * 60 * 1000 : value * 60 * 60 * 1000;
         const cutoffTime = new Date(Date.now() - inactivityMs).toISOString();
-        const accountId = config.account_id || (await resolveAccountId(supabase, config.user_id));
 
-        // Find conversations where last message is older than inactivity_hours
-        const { data: conversations } = await supabase
+        let accountId: string;
+        try {
+          accountId = config.account_id || (await resolveAccountId(supabase, config.user_id));
+        } catch (e) {
+          console.error(`[${runId}] [user ${config.user_id}] resolveAccountId failed:`, e);
+          continue;
+        }
+
+        const { data: conversations, error: convError } = await supabase
           .from("whatsapp_conversations")
           .select("phone, messages, last_message_at, ai_active")
           .eq("user_id", config.user_id)
           .lt("last_message_at", cutoffTime);
 
+        if (convError) {
+          console.error(`[${runId}] [user ${config.user_id}] conversations query error:`, convError);
+          continue;
+        }
+
+        console.log(`[${runId}] [user ${config.user_id}] inactivity=${value}${unit} cutoff=${cutoffTime} candidates=${conversations?.length || 0}`);
+
         if (!conversations || conversations.length === 0) continue;
 
-        // Get ALL existing tracking for this user (any status) to avoid re-enrolling
-        const { data: existingTracking } = await supabase
+        const { data: existingTracking, error: trackError } = await supabase
           .from("followup_tracking")
           .select("phone, status")
           .eq("user_id", config.user_id);
 
-        // Phones with active tracking (pending/engaged) should be skipped entirely
+        if (trackError) {
+          console.error(`[${runId}] [user ${config.user_id}] tracking query error:`, trackError);
+        }
+
         const activePhonesSet = new Set(
           (existingTracking || [])
             .filter((t: any) => t.status === "pending" || t.status === "engaged")
             .map((t: any) => t.phone)
         );
 
-        // Phones that already completed a cycle (exhausted/declined) should NOT be re-enrolled
         const completedPhonesSet = new Set(
           (existingTracking || [])
             .filter((t: any) => t.status === "exhausted" || t.status === "declined")
@@ -71,28 +99,36 @@ serve(async (req) => {
         );
 
         for (const conv of conversations) {
-          // Skip if already being tracked or already completed a cycle
-          if (activePhonesSet.has(conv.phone) || completedPhonesSet.has(conv.phone)) continue;
-
-          // Skip handoffs if configured
-          if (config.exclude_handoff && !conv.ai_active) continue;
-
-          // Check if last message was from client (not from us)
-          const messages = (conv.messages as any[]) || [];
-          if (messages.length === 0) continue;
-
-          const lastMsg = messages[messages.length - 1];
-          // Skip ONLY if the last message was sent manually by a human operator
-          // (handoff in progress — operator should keep control).
-          // We DO want to follow up when:
-          //  - Last message was from the client (classic case)
-          //  - Last message was from the AI and the lead went silent (MAIN target case)
-          //  - Last message was a previous follow-up that didn't get a reply
-          if (lastMsg.from_me && lastMsg.sent_by === "human") {
+          if (activePhonesSet.has(conv.phone)) {
+            trackReason("already_active_tracking");
+            console.log(`[${runId}] [${conv.phone}] SKIP: active tracking exists`);
+            continue;
+          }
+          if (completedPhonesSet.has(conv.phone)) {
+            trackReason("cycle_completed");
+            console.log(`[${runId}] [${conv.phone}] SKIP: cycle completed`);
             continue;
           }
 
-          // Calculate scheduled time
+          if (config.exclude_handoff && !conv.ai_active) {
+            trackReason("excluded_handoff");
+            console.log(`[${runId}] [${conv.phone}] SKIP: excluded handoff (ai_active=false)`);
+            continue;
+          }
+
+          const messages = (conv.messages as any[]) || [];
+          if (messages.length === 0) {
+            trackReason("empty_messages");
+            continue;
+          }
+
+          const lastMsg = messages[messages.length - 1];
+          if (lastMsg.from_me && lastMsg.sent_by === "human") {
+            trackReason("last_message_human_operator");
+            console.log(`[${runId}] [${conv.phone}] SKIP: last message from human operator`);
+            continue;
+          }
+
           const nextScheduledAt = calculateNextSchedule(config);
 
           const { error: insertError } = await supabase
@@ -108,29 +144,32 @@ serve(async (req) => {
             });
 
           if (insertError) {
-            // Unique constraint violation means it already exists - skip
             if (insertError.code === "23505") {
-              console.log(`Tracking already exists for ${conv.phone}, skipping`);
+              trackReason("unique_violation");
+              console.log(`[${runId}] [${conv.phone}] SKIP: unique violation`);
             } else {
-              console.error(`Error creating tracking for ${conv.phone}:`, insertError);
+              trackReason("insert_error");
+              console.error(`[${runId}] [${conv.phone}] INSERT ERROR:`, insertError);
             }
           } else {
             created++;
-            console.log(`Follow-up tracking created for ${conv.phone}, scheduled at ${nextScheduledAt}`);
+            console.log(`[${runId}] [${conv.phone}] CREATED tracking, scheduled at ${nextScheduledAt}`);
           }
         }
       } catch (userError) {
-        console.error(`Error processing user ${config.user_id}:`, userError);
+        console.error(`[${runId}] Error processing user ${config.user_id}:`, userError);
       }
     }
 
-    return new Response(JSON.stringify({ created }), {
+    console.log(`[${runId}] === Done. created=${created} skipped=${totalSkipped} reasons=${JSON.stringify(skipReasons)} ===`);
+
+    return new Response(JSON.stringify({ created, skipped: totalSkipped, skipReasons, runId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("Check inactive error:", error);
+    console.error(`[${runId}] Check inactive error:`, error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error", runId }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
@@ -151,9 +190,8 @@ function calculateNextSchedule(config: any): string {
 
   const scheduledDate = new Date(now);
 
-  // Try morning window today
   if (nowMinutes < mEndMinutes) {
-    const start = Math.max(mStartMinutes, nowMinutes + 10); // at least 10min from now
+    const start = Math.max(mStartMinutes, nowMinutes + 10);
     if (start < mEndMinutes) {
       const randomMin = start + Math.floor(Math.random() * (mEndMinutes - start));
       scheduledDate.setHours(Math.floor(randomMin / 60), randomMin % 60, 0, 0);
@@ -161,7 +199,6 @@ function calculateNextSchedule(config: any): string {
     }
   }
 
-  // Try evening window today
   if (nowMinutes < eEndMinutes) {
     const start = Math.max(eStartMinutes, nowMinutes + 10);
     if (start < eEndMinutes) {
@@ -171,7 +208,6 @@ function calculateNextSchedule(config: any): string {
     }
   }
 
-  // Schedule for tomorrow morning
   scheduledDate.setDate(scheduledDate.getDate() + 1);
   const randomMin = mStartMinutes + Math.floor(Math.random() * (mEndMinutes - mStartMinutes));
   scheduledDate.setHours(Math.floor(randomMin / 60), randomMin % 60, 0, 0);
