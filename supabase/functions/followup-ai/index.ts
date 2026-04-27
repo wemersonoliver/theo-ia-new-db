@@ -315,7 +315,7 @@ serve(async (req) => {
         const messages = (conversation.messages as any[]) || [];
         const lastMessages = messages.slice(-10);
         const contextText = lastMessages
-          .map((m: any) => `${m.from_me ? "Atendente" : "Cliente"}: ${m.content}`)
+          .map((m: any) => `${m.from_me ? "Atendente" : "Cliente"}: ${m.ai_content || m.content}`)
           .join("\n");
 
         // Detect engagement pattern: did the lead EVER reply?
@@ -554,7 +554,7 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
           contextSummary = `Última conversa sobre: ${lastMessages
             .filter((m: any) => !m.from_me)
             .slice(-3)
-            .map((m: any) => m.content?.slice(0, 50))
+            .map((m: any) => (m.ai_content || m.content)?.slice(0, 50))
             .join(" | ")}`;
         }
 

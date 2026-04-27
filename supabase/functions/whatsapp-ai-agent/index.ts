@@ -558,7 +558,7 @@ Regras adicionais:
     // Build conversation messages
     const conversationMessages = recentMessages.map((msg: any) => ({
       role: msg.from_me ? "model" : "user",
-      parts: [{ text: msg.content }],
+      parts: [{ text: msg.ai_content || msg.content }],
     }));
 
     // Add current message (with media if available)
