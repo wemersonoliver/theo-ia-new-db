@@ -19,6 +19,7 @@ import { TagInput, tagClass } from "@/components/TagInput";
 import { MediaBubble } from "@/components/MediaBubble";
 import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 import { WhatsAppAvatar } from "@/components/WhatsAppAvatar";
+import { MediaAttachButton } from "@/components/MediaAttachButton";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -205,7 +206,7 @@ function CreateDealButton({ phone, contactName, className }: { phone: string; co
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Conversations() {
   const navigate = useNavigate();
-  const { conversations, isLoading, sendMessage, toggleAI, finishConversation, deleteConversation, assignConversation } = useConversations();
+  const { conversations, isLoading, sendMessage, sendMedia, toggleAI, finishConversation, deleteConversation, assignConversation } = useConversations();
   const { contacts } = useContacts();
   const [searchParams] = useSearchParams();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
@@ -430,6 +431,14 @@ export default function Conversations() {
             {/* Input */}
             <div className="border-t bg-background p-3 shrink-0">
               <div className="flex items-end gap-2">
+                <MediaAttachButton
+                  phone={selectedPhone!}
+                  disabled={sendMessage.isPending}
+                  isSending={sendMedia.isPending}
+                  onSend={async ({ file, caption, phone }) => {
+                    await sendMedia.mutateAsync({ phone, file, caption });
+                  }}
+                />
                 <Input
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
@@ -642,6 +651,14 @@ export default function Conversations() {
 
                 <div className="border-t p-4">
                   <div className="flex gap-2">
+                    <MediaAttachButton
+                      phone={selectedPhone}
+                      disabled={sendMessage.isPending}
+                      isSending={sendMedia.isPending}
+                      onSend={async ({ file, caption, phone }) => {
+                        await sendMedia.mutateAsync({ phone, file, caption });
+                      }}
+                    />
                     <Input
                       value={messageInput}
                       onChange={(e) => setMessageInput(e.target.value)}
