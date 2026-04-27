@@ -271,6 +271,7 @@ export function useConversations() {
     conversations: conversations || [],
     isLoading,
     sendMessage,
+    sendMedia,
     toggleAI,
     finishConversation,
     deleteConversation,
