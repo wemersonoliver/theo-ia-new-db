@@ -442,6 +442,7 @@ serve(async (req) => {
         let content: string;
         let messageType: "text" | "audio" | "image" | "video" | "document" = "text";
         let persistedMedia: { url: string; mime: string; filename: string } | null = null;
+        let aiContent: string | null = null;
         const evolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
         const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
         
@@ -476,16 +477,18 @@ serve(async (req) => {
 
             if (transcribeResponse.ok) {
               const transcribeData = await transcribeResponse.json();
-              content = transcribeData.text || "[Áudio não transcrito]";
-              console.log("Audio transcribed:", content.slice(0, 100));
+              const transcript = (transcribeData.text || "").trim();
+              content = "[Áudio]";
+              aiContent = transcript ? `[Áudio transcrito] ${transcript}` : null;
+              console.log("Audio transcribed:", transcript.slice(0, 100));
             } else {
               const errorText = await transcribeResponse.text();
               console.error("Transcription failed:", errorText);
-              content = "[Áudio não transcrito]";
+              content = "[Áudio]";
             }
           } catch (error) {
             console.error("Transcription error:", error);
-            content = "[Áudio não transcrito]";
+            content = "[Áudio]";
           }
         } else if (isImageMessage || isDocumentMessage || isStickerMessage) {
           // Process image/document with OCR
@@ -504,6 +507,8 @@ serve(async (req) => {
             });
           } catch (e) { console.error("Persist media error:", e); }
 
+          const labelUI = mediaType === "document" ? "Documento" : (mediaType === "sticker" ? "Figurinha" : "Imagem");
+          content = `[${labelUI}]`;
           try {
             console.log("Processing OCR for:", phone, mediaType);
             const ocrResponse = await fetch(
@@ -525,25 +530,21 @@ serve(async (req) => {
             if (ocrResponse.ok) {
               const ocrData = await ocrResponse.json();
               const ocrText = ocrData.text || "";
-              // Combine caption with OCR text
-              if (caption && ocrText) {
-                content = `[${mediaType === "document" ? "Documento" : "Imagem"}] ${caption}\n\nConteúdo extraído:\n${ocrText}`;
-              } else if (ocrText) {
-                content = `[${mediaType === "document" ? "Documento" : "Imagem"}] Conteúdo extraído:\n${ocrText}`;
-              } else if (caption) {
-                content = `[${mediaType === "document" ? "Documento" : "Imagem"}] ${caption}`;
-              } else {
-                content = `[${mediaType === "document" ? "Documento" : "Imagem"} sem texto identificável]`;
+              const parts: string[] = [];
+              if (caption) parts.push(`Legenda: ${caption}`);
+              if (ocrText) parts.push(`Conteúdo extraído:\n${ocrText}`);
+              if (parts.length) {
+                aiContent = `[${labelUI} - análise]\n${parts.join("\n\n")}`;
               }
-              console.log("OCR processed:", content.slice(0, 100));
+              console.log("OCR processed:", (aiContent || "").slice(0, 100));
             } else {
               const errorText = await ocrResponse.text();
               console.error("OCR failed:", errorText);
-              content = caption ? `[${mediaType === "document" ? "Documento" : "Imagem"}] ${caption}` : `[${mediaType === "document" ? "Documento" : "Imagem"} não processado]`;
+              if (caption) aiContent = `[${labelUI} - legenda] ${caption}`;
             }
           } catch (error) {
             console.error("OCR error:", error);
-            content = caption ? `[${mediaType === "document" ? "Documento" : "Imagem"}] ${caption}` : `[${mediaType === "document" ? "Documento" : "Imagem"} não processado]`;
+            if (caption) aiContent = `[${labelUI} - legenda] ${caption}`;
           }
         } else if (isVideoMessage) {
           messageType = "video";
@@ -557,7 +558,8 @@ serve(async (req) => {
               knownMime: msg.message?.videoMessage?.mimetype || null,
             });
           } catch (e) { console.error("Persist video error:", e); }
-          content = caption ? `[Vídeo] ${caption}` : "[Vídeo]";
+          content = "[Vídeo]";
+          if (caption) aiContent = `[Vídeo - legenda] ${caption}`;
         } else {
           content = msg.message?.conversation || 
                    msg.message?.extendedTextMessage?.text ||
