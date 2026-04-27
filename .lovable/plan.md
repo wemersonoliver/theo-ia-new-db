@@ -1,86 +1,91 @@
+# Personalização dos prompts por nicho de negócio
 
-## 🎯 Objetivo
+## Problema
 
-Tornar o agente de follow-up do **suporte** mais inteligente: que ele **detecte automaticamente em qual cenário o lead está** e gere mensagens persuasivas falando diretamente das **dores reais de quem tem WhatsApp como canal de venda** e das **soluções concretas que o Theo IA entrega**.
+Hoje todos os agentes de IA dos usuários (atendimento WhatsApp + follow-up) usam prompts **genéricos** — só sabem o `agent_name`. Não importa se o cliente é uma clínica de estética, uma loja de roupas ou um escritório de advocacia: a IA fala do mesmo jeito.
 
----
+Quero que cada agente seja **especializado no negócio do usuário**, com a frase modelo:
 
-## 🧠 O que vai mudar (apenas em `supabase/functions/system-followup-ai/index.ts`)
+> *"Você é ${agentName}, um vendedor humano experiente **no nicho ${businessNiche}** reativando um lead..."*
 
-### 1. Análise da conversa — detectar o **cenário**
+## Solução
 
-Hoje a IA classifica só "temperatura" (frio/morno/quente). Vou adicionar um novo campo obrigatório `scenario` na análise, com 3 valores:
+### 1. Banco — adicionar 2 campos novos em `whatsapp_ai_config`
 
-| Cenário | Quando se aplica |
-|---|---|
-| `curiosidade_inicial` | Lead mandou 1-3 mensagens curtas demonstrando interesse ("quero saber mais", "como funciona", "tem teste grátis?") e sumiu antes de a IA aprofundar |
-| `conversa_interrompida` | Lead já trocou várias mensagens, falou de problemas/contexto/objeções específicos, mas parou em algum ponto sem fechar |
-| `nunca_respondeu` | Lead nunca respondeu nada (ex: chegou via anúncio e não abriu) |
-
-### 2. Nova **biblioteca de ganchos específicos do Theo IA** (dores + soluções)
-
-Vou adicionar 5 novos hooks focados nas **dores reais** do público-alvo (dono de negócio que atende no WhatsApp), usados especialmente no cenário `curiosidade_inicial`:
-
-| Hook | Dor que ataca | Exemplo de mensagem |
+| Campo | Tipo | Para quê |
 |---|---|---|
-| `dor_lead_perdido` | Lead que para de responder e some pra sempre | *"Imagina seu WhatsApp recuperando sozinho aquele cliente que sumiu — exatamente como eu estou fazendo com você agora. 90% dos negócios não fazem isso e perdem faturamento todo mês."* |
-| `dor_atendimento_24_7` | Perder venda fora do horário comercial | *"Quantas vendas você acha que perde de noite ou no fim de semana porque não tem ninguém respondendo? O Theo responde em segundos, 24h."* |
-| `dor_resposta_demorada` | Cliente quente que esfria por demora | *"Cliente quente espera 2 minutos. Depois disso, ele já tá no concorrente. Quer ver o Theo respondendo no seu WhatsApp em segundos?"* |
-| `solucao_agendamento` | Tempo perdido com agenda manual | *"E se o próprio WhatsApp já agendasse a reunião com o cliente, sem você abrir a agenda? É exatamente o que o Theo faz."* |
-| `solucao_qualificacao` | Atender lead frio enquanto o quente espera | *"O Theo qualifica os leads sozinho e te chama só quando tá pronto pra fechar. Você só entra na conversa que importa."* |
+| `business_niche` | `text` | Segmento curto, ex: "Clínica de estética", "Loja de calçados", "Imobiliária" |
+| `business_description` | `text` (opcional) | 1-3 frases livres sobre o que o negócio vende/oferece (diferencial, ticket médio, perfil de cliente). Dá mais contexto sem o usuário precisar reescrever o prompt inteiro. |
 
-Os 8 hooks atuais (Cialdini/Voss) continuam disponíveis e ganham reforço.
+Migração simples (`ALTER TABLE … ADD COLUMN`), nullable, sem default — usuários antigos continuam funcionando (com fallback genérico).
 
-### 3. **Lógica de seleção do hook por cenário**
+### 2. UI — campo seletor + textarea no AI Agent
 
-A IA da etapa de análise vai recomendar o hook, mas com **regras automáticas de override**:
+Na aba de configuração do agente (`/ai-agent`), adicionar logo abaixo do "Nome do agente":
 
-- `curiosidade_inicial` → prioriza `dor_lead_perdido`, `dor_atendimento_24_7`, `dor_resposta_demorada`, `solucao_agendamento`, `solucao_qualificacao` (rotaciona pra não repetir)
-- `conversa_interrompida` → prioriza `coerencia_cialdini` (relembrar o que ele JÁ disse), `rotulo_voss` (nomear a objeção), `pergunta_calibrada`
-- `nunca_respondeu` → prioriza `dor_lead_perdido` ou `reciprocidade` (oferecer dica)
-- Dias 5-6 continuam podendo usar `escassez` com as armas de negociação
+- **Nicho do negócio** — `<Input>` simples com placeholder *"Ex: Clínica odontológica, Loja de roupas femininas, Imobiliária…"* + um botão de sugestões rápidas (chips) com os nichos mais comuns: Estética, Saúde, Educação, Imobiliária, E-commerce, Restaurante, Consultoria, Advocacia, Outros.
+- **Descrição rápida do negócio** — `<Textarea>` com 2-3 linhas, placeholder *"O que vocês vendem, ticket médio, perfil do cliente ideal…"*. Opcional.
 
-Para evitar repetição: vou registrar o último hook usado por lead (em `engagement_data` no `system_followup_tracking`, que já existe) e a IA evita repetir o mesmo hook em sequência.
+Hook `useAIConfig` já existe — só adicionar os 2 campos no save.
 
-### 4. **Prompt de geração reescrito**
+### 3. Edge Functions — injetar nos prompts
 
-O prompt vai receber explicitamente:
-- O **cenário detectado** com instruções específicas de tom
-- **Para `curiosidade_inicial`**: ordem de "ataque a dor → mostrar solução concreta do Theo → CTA pra teste grátis"
-- **Para `conversa_interrompida`**: ordem de "referenciar EXATAMENTE o último ponto que ele falou → resolver a objeção → próximo passo"
-- Lista de **funcionalidades concretas do Theo IA** que podem ser citadas: atendimento 24/7, recuperação de leads inativos, agendamento automático, qualificação de leads, transferência inteligente para humano, base de conhecimento personalizada
-- CTA padrão para curiosidade inicial: convidar pro **teste grátis de 15 dias** (já é o que existe no plano)
+**3 arquivos editados** (todos buscam `whatsapp_ai_config` e montam prompt):
 
-### 5. **Variação de mensagem por tentativa**
+#### a) `whatsapp-ai-agent/index.ts` (atendimento principal do usuário)
+Trocar:
+```ts
+`Você é ${aiConfig.agent_name} de atendimento via WhatsApp.`
+```
+Por:
+```ts
+`Você é ${aiConfig.agent_name}, atendente especializado em ${aiConfig.business_niche || "atendimento"} via WhatsApp.
+${aiConfig.business_description ? `SOBRE O NEGÓCIO: ${aiConfig.business_description}` : ""}
+Use linguagem, exemplos e objeções típicas desse segmento.`
+```
 
-Pra mensagens não ficarem repetitivas ao longo dos 12 disparos, vou passar pra IA a contagem de tentativa e os hooks já usados, instruindo a variar dor/solução a cada disparo.
+#### b) `followup-ai/index.ts` (follow-up dos usuários — Etapa B de geração)
+Trocar a primeira linha do `generationPrompt`:
+```ts
+`Você é ${agentName}, um vendedor humano experiente no nicho de ${businessNiche} reativando um lead por WhatsApp.
+${businessDescription ? `CONTEXTO DO NEGÓCIO: ${businessDescription}` : ""}
+Use técnicas dos livros …`
+```
+E na **Etapa A (análise)** passar o nicho como pista para a IA escolher melhor o gancho (ex: nicho "estética" pesa mais em `prova_social`, nicho "imobiliária" em `pergunta_calibrada`).
 
----
+Buscar os 2 campos novos no mesmo SELECT que já roda:
+```ts
+.select("agent_name, custom_prompt, business_niche, business_description")
+```
 
-## 📁 Arquivos modificados
+#### c) `system-followup-ai/index.ts` — **NÃO mexer**
+Esse é o follow-up do **suporte do Theo IA** falando com leads do Theo. O nicho ali é fixo ("SaaS de IA pra WhatsApp"), já é tratado com a estratégia do plano em `.lovable/plan.md`. Sem alteração.
 
-1. **`supabase/functions/system-followup-ai/index.ts`** — única alteração relevante
-   - Adicionar `scenario` no tool call de análise
-   - Adicionar 5 hooks novos no `HOOK_LIBRARY`
-   - Adicionar lógica de seleção/anti-repetição de hook por cenário
-   - Reescrever o `generationPrompt` com blocos condicionais por cenário e lista de funcionalidades do Theo
-   - Persistir `last_hook_used` em `engagement_data` ao enviar
+### 4. Fallback / retrocompatibilidade
 
-**Sem alterações de banco, UI ou outras edge functions.**
+Se `business_niche` for `null` (usuário antigo que ainda não preencheu):
+- Atendimento: cai no texto atual genérico
+- Follow-up: usa "vendedor experiente" sem o "no nicho de X"
+- Banner não-bloqueante na tela `/ai-agent`: *"Adicione o nicho do seu negócio para deixar a IA mais inteligente"* — sem forçar, sem quebrar nada.
 
----
+## Arquivos modificados
 
-## ✅ Resultado esperado
+1. **Migração SQL** — `ALTER TABLE whatsapp_ai_config ADD COLUMN business_niche text, ADD COLUMN business_description text`
+2. **`src/pages/AIAgent.tsx`** — adicionar os 2 campos no formulário + chips de sugestão
+3. **`src/hooks/useAIConfig.ts`** — incluir os 2 campos nos tipos/save
+4. **`supabase/functions/whatsapp-ai-agent/index.ts`** — injetar nicho no `systemPrompt`
+5. **`supabase/functions/followup-ai/index.ts`** — injetar nicho no SELECT, na análise (Etapa A) e na geração (Etapa B)
 
-- Lead que falou "quero saber mais e sumiu" → recebe mensagem batendo na dor de perder leads + mostrando que o Theo faz exatamente isso + CTA pro teste grátis
-- Lead que conversou bastante e parou → recebe mensagem retomando o ponto exato onde ele parou, sem repetir argumentos genéricos
-- Mensagens ao longo dos 6 dias variam de ângulo (dor diferente, funcionalidade diferente) sem soar robotizadas
+**Sem alterações** em UI de admin, nem em `system-followup-ai`, nem em outras edge functions.
 
----
+## Resultado esperado
 
-## ❓ Pontos pra confirmar antes de executar
+- Usuário dono de **clínica de estética** preenche nicho → IA passa a falar de "procedimentos", "agendamento de avaliação", "antes e depois", e o follow-up diz *"Você é Marina, vendedora experiente no nicho de estética…"* gerando objeções/ganchos do segmento.
+- Usuário **imobiliário** preenche → IA fala de "visita ao imóvel", "documentação", "financiamento", e o follow-up usa o tom certo.
+- Sem nenhum nicho preenchido → tudo continua funcionando como hoje (fallback).
 
-1. Posso aprovar os **5 hooks novos** acima ou você quer ajustar/adicionar algum?
-2. As **funcionalidades do Theo** que listei (24/7, recuperação, agendamento, qualificação, handoff, base de conhecimento) cobrem bem? Quer adicionar/remover alguma?
-3. CTA padrão do cenário `curiosidade_inicial` deve ser **"teste grátis 15 dias"** ou prefere outro (ex: agendar uma demo)?
-4. Os erros de build atuais (em `elevenlabs-tts`, `manage-system-whatsapp`, `whatsapp-webhook`, etc.) **não têm relação com este trabalho** — quer que eu corrija junto ou deixo pra outra rodada?
+## Pontos pra confirmar antes de executar
+
+1. **Lista de chips sugeridos** — concorda com Estética / Saúde / Educação / Imobiliária / E-commerce / Restaurante / Consultoria / Advocacia / Outros, ou quer adicionar/remover algum?
+2. Quer também aplicar o nicho no **`prompt-generator-ai`** (a IA que ajuda o usuário a escrever o prompt) pra que ela já gere prompts personalizados pro segmento? Recomendo **sim**, mas só se você quiser nesta rodada.
+3. Os campos novos devem ser **obrigatórios no onboarding** dos novos usuários ou só opcionais por enquanto?
