@@ -147,7 +147,7 @@ Retorne via tool call um JSON estruturado. Seja FACTUAL — extraia informaçõe
   };
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -155,7 +155,7 @@ Retorne via tool call um JSON estruturado. Seja FACTUAL — extraia informaçõe
         contents: [{ role: "user", parts: [{ text: analysisPrompt }] }],
         tools: [tool],
         toolConfig: { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["registrar_analise"] } },
-        generationConfig: { temperature: 0.3, maxOutputTokens: 600 },
+        generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
       }),
     },
   );
@@ -405,13 +405,13 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
             : generationPrompt + `\n\n⚠️ TENTATIVA ANTERIOR FOI REJEITADA POR SER GENÉRICA. Reescreva começando IMEDIATAMENTE com referência concreta ao item oferecido ou ao último ponto da conversa. NÃO comece com "Olá" + saudação vazia.`;
 
           const geminiResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 contents: [{ role: "user", parts: [{ text: promptToUse }] }],
-                generationConfig: { temperature: 0.7, maxOutputTokens: 200 },
+                generationConfig: { temperature: 0.7, maxOutputTokens: 400 },
               }),
             },
           );

@@ -171,7 +171,7 @@ const schedulingTools = {
 
 // Retry with exponential backoff for Gemini API rate limits
 async function fetchGeminiWithRetry(apiKey: string, payload: any, maxRetries = 3): Promise<any> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const response = await fetch(url, {
       method: "POST",
@@ -587,7 +587,7 @@ Regras adicionais:
       tools: [schedulingTools],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 2048,
       },
     };
 
