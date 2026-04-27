@@ -740,7 +740,7 @@ async function generateSummary(history: any[], reason: string): Promise<string> 
     if (!geminiApiKey) return `Motivo: ${reason}. Histórico não resumido (chave API indisponível).`;
 
     const historyText = history.slice(-20).map((m: any) => 
-      `${m.from_me ? "Agente" : "Cliente"}: ${m.content}`
+      `${m.from_me ? "Agente" : "Cliente"}: ${m.ai_content || m.content}`
     ).join("\n");
 
     const response = await fetch(
@@ -980,7 +980,7 @@ async function callGeminiWithTools(
 ): Promise<string> {
   const contents = conversationHistory.map((msg: any) => ({
     role: msg.from_me ? "model" : "user",
-    parts: [{ text: msg.content }]
+    parts: [{ text: msg.ai_content || msg.content }]
   }));
 
   // Ensure first message is from user
