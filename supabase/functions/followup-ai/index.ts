@@ -411,7 +411,7 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 contents: [{ role: "user", parts: [{ text: promptToUse }] }],
-                generationConfig: { temperature: 0.7, maxOutputTokens: 400 },
+                generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
               }),
             },
           );
