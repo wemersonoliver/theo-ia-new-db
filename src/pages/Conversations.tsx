@@ -651,6 +651,14 @@ export default function Conversations() {
 
                 <div className="border-t p-4">
                   <div className="flex gap-2">
+                    <MediaAttachButton
+                      phone={selectedPhone}
+                      disabled={sendMessage.isPending}
+                      isSending={sendMedia.isPending}
+                      onSend={async ({ file, caption, phone }) => {
+                        await sendMedia.mutateAsync({ phone, file, caption });
+                      }}
+                    />
                     <Input
                       value={messageInput}
                       onChange={(e) => setMessageInput(e.target.value)}
