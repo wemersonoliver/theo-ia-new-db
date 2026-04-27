@@ -99,6 +99,49 @@ export function useConversations() {
     },
   });
 
+  const sendMedia = useMutation({
+    mutationFn: async ({ phone, file, caption }: { phone: string; file: File; caption?: string }) => {
+      if (!user) throw new Error("Usuário não autenticado");
+
+      // Detect media type
+      const mt = (file.type || "").toLowerCase();
+      const mediaType: "image" | "video" | "audio" | "document" =
+        mt.startsWith("image/") ? "image" :
+        mt.startsWith("video/") ? "video" :
+        mt.startsWith("audio/") ? "audio" : "document";
+
+      // Upload to public storage bucket
+      const safeName = file.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${accountId || user.id}/${phone}/outgoing/${Date.now()}_${safeName}`;
+      const { error: upErr } = await supabase.storage
+        .from("whatsapp-media")
+        .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
+      if (upErr) throw upErr;
+
+      const { data: pub } = supabase.storage.from("whatsapp-media").getPublicUrl(path);
+      const mediaUrl = pub.publicUrl;
+
+      const { data, error } = await supabase.functions.invoke("send-whatsapp-media", {
+        body: {
+          phone,
+          mediaUrl,
+          mediaType,
+          filename: file.name,
+          caption: caption || "",
+          mimetype: file.type || undefined,
+        },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations", accountId] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Erro ao enviar mídia: ${error.message}`);
+    },
+  });
+
   const toggleAI = useMutation({
     mutationFn: async ({ phone, active }: { phone: string; active: boolean }) => {
       if (!user || !accountId) throw new Error("Usuário não autenticado");
