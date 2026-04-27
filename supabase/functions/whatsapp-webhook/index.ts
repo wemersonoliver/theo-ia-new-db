@@ -587,6 +587,7 @@ serve(async (req) => {
             type: messageType,
             sent_by: "human",
           };
+          if (aiContent) outgoingMessage.ai_content = aiContent;
           if (persistedMedia) {
             outgoingMessage.media_url = persistedMedia.url;
             outgoingMessage.media_mime = persistedMedia.mime;
@@ -667,6 +668,7 @@ serve(async (req) => {
           type: messageType,
           sent_by: "human",
         };
+        if (aiContent) newMessage.ai_content = aiContent;
         // Store media key so AI agent can fetch the original media for vision analysis
         if (isMediaMessage && messageKey) {
           newMessage.media_key = messageKey;
