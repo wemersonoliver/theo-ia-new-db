@@ -6,6 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useFollowupConfig } from "@/hooks/useFollowupConfig";
 import {
   Loader2,
@@ -44,6 +51,7 @@ export function FollowupTab() {
   const [formData, setFormData] = useState({
     enabled: false,
     inactivity_hours: 24,
+    inactivity_unit: "hours" as "minutes" | "hours",
     max_days: 6,
     morning_window_start: "08:00",
     morning_window_end: "12:00",
@@ -58,6 +66,7 @@ export function FollowupTab() {
       setFormData({
         enabled: config.enabled ?? false,
         inactivity_hours: config.inactivity_hours ?? 24,
+        inactivity_unit: (config as any).inactivity_unit ?? "hours",
         max_days: config.max_days ?? 6,
         morning_window_start: config.morning_window_start ?? "08:00",
         morning_window_end: config.morning_window_end ?? "12:00",
@@ -123,17 +132,37 @@ export function FollowupTab() {
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-muted-foreground" />
-                    Horas de inatividade para iniciar
+                    Tempo de inatividade para iniciar
                   </Label>
-                  <Input
-                    type="number"
-                    value={formData.inactivity_hours}
-                    onChange={(e) =>
-                      setFormData({ ...formData, inactivity_hours: parseInt(e.target.value) || 24 })
-                    }
-                    min={1}
-                    max={168}
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      value={formData.inactivity_hours}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          inactivity_hours: parseInt(e.target.value) || 1,
+                        })
+                      }
+                      min={1}
+                      max={formData.inactivity_unit === "minutes" ? 1440 : 168}
+                      className="flex-1"
+                    />
+                    <Select
+                      value={formData.inactivity_unit}
+                      onValueChange={(value: "minutes" | "hours") =>
+                        setFormData({ ...formData, inactivity_unit: value })
+                      }
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="minutes">Minutos</SelectItem>
+                        <SelectItem value="hours">Horas</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     Após esse tempo sem resposta do cliente, o follow-up inicia
                   </p>
