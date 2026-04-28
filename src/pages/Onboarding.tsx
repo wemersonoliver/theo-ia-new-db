@@ -564,11 +564,11 @@ function AppointmentsQuestionStep({ onAnswer }: { onAnswer: (yes: boolean) => vo
         </p>
       </div>
 
-      <div className="flex gap-4">
-        <Button size="lg" onClick={() => onAnswer(true)} className="gap-2 px-8">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full">
+        <Button size="lg" onClick={() => onAnswer(true)} className="gap-2 px-4 sm:px-8 w-full sm:w-auto">
           <Check className="h-5 w-5" /> Sim, trabalho com agendamentos
         </Button>
-        <Button size="lg" variant="outline" onClick={() => onAnswer(false)} className="gap-2 px-8">
+        <Button size="lg" variant="outline" onClick={() => onAnswer(false)} className="gap-2 px-4 sm:px-8 w-full sm:w-auto">
           Não, pular esta etapa
         </Button>
       </div>
@@ -997,11 +997,11 @@ function LocationQuestionStep({ onAnswer }: { onAnswer: (yes: boolean) => void }
         </p>
       </div>
 
-      <div className="flex gap-4">
-        <Button size="lg" onClick={() => onAnswer(true)} className="gap-2 px-8">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full">
+        <Button size="lg" onClick={() => onAnswer(true)} className="gap-2 px-4 sm:px-8 w-full sm:w-auto">
           <Check className="h-5 w-5" /> Sim, tenho um local
         </Button>
-        <Button size="lg" variant="outline" onClick={() => onAnswer(false)} className="gap-2 px-8">
+        <Button size="lg" variant="outline" onClick={() => onAnswer(false)} className="gap-2 px-4 sm:px-8 w-full sm:w-auto">
           Não, pular esta etapa
         </Button>
       </div>
