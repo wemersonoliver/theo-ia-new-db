@@ -778,40 +778,41 @@ async function notifyAdminContacts(supabase: any, clientPhone: string, summary: 
       return;
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
     const message = `⚠️ *Suporte - Transferência para Humano*\n\n📞 Cliente: ${clientPhone}\n📋 Motivo: ${reason}\n\n📝 *Resumo da Conversa:*\n${summary}\n\n💡 Acesse o painel admin para assumir a conversa.`;
 
-    // Get system instance name
+    // Get system instance (must be connected) — sempre envia pela instância de suporte
     const { data: sysInstance } = await supabase
       .from("system_whatsapp_instance")
-      .select("instance_name")
+      .select("instance_name, status")
       .limit(1)
       .maybeSingle();
 
-    if (!sysInstance) {
-      console.error("No system WhatsApp instance found for notifications");
+    if (!sysInstance || sysInstance.status !== "connected") {
+      console.error("System WhatsApp instance not connected — cannot send admin notification");
+      return;
+    }
+
+    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+    if (!evolutionUrl || !evolutionKey) {
+      console.error("Evolution API not configured");
       return;
     }
 
     for (const contact of contacts) {
+      let target = String(contact.phone || "").replace(/\D/g, "");
+      if (!target) continue;
+      if (target.length === 10 || target.length === 11) target = "55" + target;
       try {
-        await fetch(`${supabaseUrl}/functions/v1/send-whatsapp-message`, {
+        const resp = await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({
-            phone: contact.phone,
-            content: message,
-            system: true,
-          }),
+          headers: { "Content-Type": "application/json", apikey: evolutionKey },
+          body: JSON.stringify({ number: target, text: message }),
         });
-        console.log(`Admin notification sent to ${contact.name || contact.phone}`);
+        if (resp.ok) console.log(`Admin notification sent to ${contact.name || target}`);
+        else console.error(`Failed to notify ${target}: ${resp.status} ${await resp.text()}`);
       } catch (err) {
-        console.error(`Failed to notify ${contact.phone}:`, err);
+        console.error(`Failed to notify ${target}:`, err);
       }
     }
   } catch (error) {
