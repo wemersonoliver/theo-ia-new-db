@@ -199,6 +199,76 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceKey);
 
+    // ─── Pré-limpeza: destravar fila ──────────────────────────────────
+    // 1) Marca como `declined` todos os pendings de usuários cujo WhatsApp
+    //    NÃO está conectado. Sem isso, esses itens (ordenados por
+    //    next_scheduled_at ASC) ocupam todos os slots do MAX_ITEMS_PER_RUN
+    //    e travam a fila para os demais usuários.
+    try {
+      const { data: connectedInstances } = await supabase
+        .from("whatsapp_instances")
+        .select("user_id")
+        .eq("status", "connected");
+      const connectedUserIds = (connectedInstances || []).map((i: any) => i.user_id);
+
+      if (connectedUserIds.length > 0) {
+        const { data: cleaned, error: cleanErr } = await supabase
+          .from("followup_tracking")
+          .update({ status: "declined", updated_at: new Date().toISOString() })
+          .eq("status", "pending")
+          .lte("next_scheduled_at", new Date().toISOString())
+          .not("user_id", "in", `(${connectedUserIds.join(",")})`)
+          .select("id");
+        if (cleanErr) {
+          console.error("Pre-cleanup (disconnected users) error:", cleanErr);
+        } else if (cleaned && cleaned.length > 0) {
+          console.log(`Pre-cleanup: declined ${cleaned.length} trackings of disconnected users`);
+        }
+      }
+    } catch (e) {
+      console.error("Pre-cleanup (disconnected users) exception:", e);
+    }
+
+    // 2) Marca como `declined` pendings cuja conversa teve handoff humano
+    //    (ai_active = false). Não devemos perseguir clientes que já estão
+    //    sendo atendidos por um humano.
+    try {
+      const { data: handoffConvs } = await supabase
+        .from("whatsapp_conversations")
+        .select("user_id, phone")
+        .eq("ai_active", false);
+
+      if (handoffConvs && handoffConvs.length > 0) {
+        // Atualiza em lotes por user_id para usar IN(phone)
+        const byUser = new Map<string, string[]>();
+        for (const c of handoffConvs as any[]) {
+          const arr = byUser.get(c.user_id) || [];
+          arr.push(c.phone);
+          byUser.set(c.user_id, arr);
+        }
+        let totalHandoffCleaned = 0;
+        for (const [uid, phones] of byUser.entries()) {
+          const { data: h, error: hErr } = await supabase
+            .from("followup_tracking")
+            .update({ status: "declined", updated_at: new Date().toISOString() })
+            .eq("status", "pending")
+            .eq("user_id", uid)
+            .in("phone", phones)
+            .select("id");
+          if (hErr) {
+            console.error(`Pre-cleanup handoff error for user ${uid}:`, hErr);
+          } else if (h) {
+            totalHandoffCleaned += h.length;
+          }
+        }
+        if (totalHandoffCleaned > 0) {
+          console.log(`Pre-cleanup: declined ${totalHandoffCleaned} trackings due to human handoff`);
+        }
+      }
+    } catch (e) {
+      console.error("Pre-cleanup (handoff) exception:", e);
+    }
+
     // Fetch pending follow-ups that are due (limited to avoid timeout)
     const { data: pendingItems, error: fetchError } = await supabase
       .from("followup_tracking")
@@ -466,7 +536,29 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
           .maybeSingle();
 
         if (!instance || instance.status !== "connected") {
-          console.log(`WhatsApp not connected for user ${item.user_id}`);
+          console.log(`WhatsApp not connected for user ${item.user_id} — declining tracking ${item.id}`);
+          await supabase
+            .from("followup_tracking")
+            .update({ status: "declined", updated_at: new Date().toISOString() })
+            .eq("id", item.id);
+          continue;
+        }
+
+        // Verifica se a IA ainda está ativa nessa conversa específica.
+        // Se um humano assumiu (ai_active=false), não devemos enviar follow-up.
+        const { data: convCheck } = await supabase
+          .from("whatsapp_conversations")
+          .select("ai_active")
+          .eq("user_id", item.user_id)
+          .eq("phone", item.phone)
+          .maybeSingle();
+
+        if (convCheck && convCheck.ai_active === false) {
+          console.log(`Skipping ${item.phone}: human handoff active — declining tracking`);
+          await supabase
+            .from("followup_tracking")
+            .update({ status: "declined", updated_at: new Date().toISOString() })
+            .eq("id", item.id);
           continue;
         }
 
