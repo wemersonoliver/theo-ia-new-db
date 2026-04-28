@@ -1168,25 +1168,41 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
 
     const message = `🔔 *Transferência de Atendimento*\n\nUm cliente precisa de atendimento humano.\n\n👤 *Nome:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n⏰ *Horário:* ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
 
-    // Enviar SEMPRE pela instância de suporte (system) via send-whatsapp-message
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    // Enviar SEMPRE pela instância de suporte (system) diretamente via Evolution API
+    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+    if (!evolutionUrl || !evolutionKey) {
+      console.error("Evolution API not configured for handoff notification");
+      return;
+    }
 
+    const { data: sysInstance } = await supabase
+      .from("system_whatsapp_instance")
+      .select("instance_name, status")
+      .limit(1)
+      .maybeSingle();
+
+    if (!sysInstance || sysInstance.status !== "connected") {
+      console.error("System WhatsApp instance not connected — cannot send handoff notification");
+      return;
+    }
+
+    const instanceName = sysInstance.instance_name;
     let sent = 0;
     for (const [phoneNum] of recipients) {
+      // Normaliza para formato BR com 55 quando aplicável
+      let target = phoneNum;
+      if (target.length === 10 || target.length === 11) target = "55" + target;
       try {
-        const resp = await fetch(`${supabaseUrl}/functions/v1/send-whatsapp-message`, {
+        const resp = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({ phone: phoneNum, content: message, system: true }),
+          headers: { "Content-Type": "application/json", apikey: evolutionKey },
+          body: JSON.stringify({ number: target, text: message }),
         });
         if (resp.ok) sent++;
-        else console.error(`Handoff notify failed for ${phoneNum}: ${resp.status} ${await resp.text()}`);
+        else console.error(`Handoff notify failed for ${target}: ${resp.status} ${await resp.text()}`);
       } catch (err) {
-        console.error(`Handoff notify error for ${phoneNum}:`, err);
+        console.error(`Handoff notify error for ${target}:`, err);
       }
     }
 
