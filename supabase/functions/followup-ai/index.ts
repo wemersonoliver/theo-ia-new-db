@@ -536,7 +536,29 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
           .maybeSingle();
 
         if (!instance || instance.status !== "connected") {
-          console.log(`WhatsApp not connected for user ${item.user_id}`);
+          console.log(`WhatsApp not connected for user ${item.user_id} — declining tracking ${item.id}`);
+          await supabase
+            .from("followup_tracking")
+            .update({ status: "declined", updated_at: new Date().toISOString() })
+            .eq("id", item.id);
+          continue;
+        }
+
+        // Verifica se a IA ainda está ativa nessa conversa específica.
+        // Se um humano assumiu (ai_active=false), não devemos enviar follow-up.
+        const { data: convCheck } = await supabase
+          .from("whatsapp_conversations")
+          .select("ai_active")
+          .eq("user_id", item.user_id)
+          .eq("phone", item.phone)
+          .maybeSingle();
+
+        if (convCheck && convCheck.ai_active === false) {
+          console.log(`Skipping ${item.phone}: human handoff active — declining tracking`);
+          await supabase
+            .from("followup_tracking")
+            .update({ status: "declined", updated_at: new Date().toISOString() })
+            .eq("id", item.id);
           continue;
         }
 
