@@ -243,7 +243,7 @@ export default function Onboarding() {
         href="https://wa.me/5547991293662?text=Olá! Preciso de ajuda durante a configuração inicial."
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-20 right-4 z-40 flex items-center gap-2 rounded-full bg-accent px-3 py-3 text-accent-foreground shadow-lg transition-all hover:scale-105 hover:bg-accent/90 sm:bottom-6 sm:right-6 sm:px-4"
+        className="fixed bottom-6 right-6 z-40 hidden items-center gap-2 rounded-full bg-accent px-4 py-3 text-accent-foreground shadow-lg transition-all hover:scale-105 hover:bg-accent/90 sm:flex"
       >
         <MessageCircle className="h-5 w-5" />
         <span className="text-sm font-medium hidden sm:inline">Precisa de ajuda?</span>
