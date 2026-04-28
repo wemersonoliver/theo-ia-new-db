@@ -29,6 +29,7 @@ import LandingPage from "./pages/LandingPage";
 import Onboarding from "./pages/Onboarding";
 import Support from "./pages/Support";
 import Investors from "./pages/Investors";
+import Investment from "./pages/Investment";
 import HelpCenter from "./pages/HelpCenter";
 import HelpCategory from "./pages/HelpCategory";
 import HelpArticle from "./pages/HelpArticle";
@@ -83,6 +84,7 @@ const App = () => (
               {/* <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} /> */}{/* Oculto temporariamente */}
               <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
               <Route path="/investors" element={<Investors />} />
+              <Route path="/investment" element={<Investment />} />
               <Route path="/help-center" element={<ProtectedRoute><HelpCenter /></ProtectedRoute>} />
               <Route path="/help-center/:categorySlug" element={<ProtectedRoute><HelpCategory /></ProtectedRoute>} />
               <Route path="/help-center/:categorySlug/:articleSlug" element={<ProtectedRoute><HelpArticle /></ProtectedRoute>} />
