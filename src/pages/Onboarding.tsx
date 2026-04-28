@@ -152,7 +152,7 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col overflow-x-hidden">
       {/* Top Progress Bar */}
       <div className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b px-4 py-3">
         <div className="max-w-4xl mx-auto space-y-2">
@@ -171,7 +171,7 @@ export default function Onboarding() {
         </div>
       </div>
 
-      <div className="flex-1 flex">
+      <div className="flex-1 flex min-w-0">
         {/* Sidebar Checklist */}
         <aside className="hidden lg:flex w-72 border-r bg-muted/30 p-6 flex-col gap-1">
           <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider mb-4">
@@ -205,8 +205,8 @@ export default function Onboarding() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-          <div className={cn("mx-auto", currentStep === "test_prompt" ? "max-w-6xl" : "max-w-3xl")}>
+        <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto overflow-x-hidden">
+          <div className={cn("mx-auto w-full min-w-0", currentStep === "test_prompt" ? "max-w-6xl" : "max-w-3xl")}>
             {currentStep === "welcome" && (
               <WelcomeStep onNext={() => goToStep("appointments_question")} />
             )}
@@ -243,7 +243,7 @@ export default function Onboarding() {
         href="https://wa.me/5547991293662?text=Olá! Preciso de ajuda durante a configuração inicial."
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-green-600 hover:bg-green-700 text-white px-4 py-3 shadow-lg transition-all hover:scale-105"
+        className="fixed bottom-6 right-6 z-40 hidden items-center gap-2 rounded-full bg-accent px-4 py-3 text-accent-foreground shadow-lg transition-all hover:scale-105 hover:bg-accent/90 sm:flex"
       >
         <MessageCircle className="h-5 w-5" />
         <span className="text-sm font-medium hidden sm:inline">Precisa de ajuda?</span>
@@ -873,7 +873,7 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6 pb-24 sm:pb-0">
       <OnboardingVideo stepKey="interview" />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
@@ -911,14 +911,14 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
       )}
 
       {state === "chat" && (
-        <Card>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[400px] px-4">
-              <div className="space-y-4 py-4">
+        <Card className="w-full min-w-0 overflow-hidden">
+          <CardContent className="min-w-0 p-0">
+            <ScrollArea className="h-[400px] px-3 sm:px-4">
+              <div className="min-w-0 space-y-4 py-4">
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                     <div className={cn(
-                      "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap",
+                      "max-w-[85%] break-words rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap",
                       msg.role === "user" ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm"
                     )}>
                       {msg.content}
@@ -938,15 +938,15 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
                 <div ref={messagesEndRef} />
               </div>
             </ScrollArea>
-            <div className="border-t p-4">
-              <div className="flex gap-2">
+            <div className="border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4">
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_2.5rem_2.5rem] items-end gap-2">
                 <Textarea
                   value={userInput}
                   onChange={e => setUserInput(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                   placeholder="Digite sua resposta..."
                   disabled={isLoading}
-                  className="flex-1 min-h-[60px] resize-none"
+                  className="min-h-[60px] min-w-0 resize-none"
                   rows={2}
                 />
                 <AudioRecordButton
