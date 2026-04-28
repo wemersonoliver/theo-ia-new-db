@@ -1136,47 +1136,61 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
       notifContacts = data || null;
     }
 
-    if (!notifContacts || notifContacts.length === 0) return;
+    // Sempre incluir o telefone do dono da conta (cadastrado no profile)
+    // como destinatário da notificação de handoff.
+    const recipients = new Map<string, string>(); // phone -> name
+    for (const c of notifContacts || []) {
+      const digits = String(c.phone || "").replace(/\D/g, "");
+      if (digits) recipients.set(digits, c.name || "");
+    }
+
+    // Resolver o owner da account para pegar o telefone cadastrado
+    let ownerUserId = userId;
+    if (accId) {
+      const { data: acc } = await supabase
+        .from("accounts")
+        .select("owner_user_id")
+        .eq("id", accId)
+        .maybeSingle();
+      if (acc?.owner_user_id) ownerUserId = acc.owner_user_id;
+    }
+    const { data: ownerProfile } = await supabase
+      .from("profiles")
+      .select("phone, full_name")
+      .eq("user_id", ownerUserId)
+      .maybeSingle();
+    const ownerDigits = String(ownerProfile?.phone || "").replace(/\D/g, "");
+    if (ownerDigits) {
+      recipients.set(ownerDigits, ownerProfile?.full_name || "Dono da conta");
+    }
+
+    if (recipients.size === 0) return;
 
     const message = `🔔 *Transferência de Atendimento*\n\nUm cliente precisa de atendimento humano.\n\n👤 *Nome:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n⏰ *Horário:* ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
 
-    // Try system WhatsApp instance first, fall back to user's instance
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) return;
+    // Enviar SEMPRE pela instância de suporte (system) via send-whatsapp-message
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    let instanceName: string | null = null;
-
-    // Check system instance
-    const { data: sysInstance } = await supabase
-      .from("system_whatsapp_instance")
-      .select("instance_name, status")
-      .limit(1)
-      .maybeSingle();
-
-    if (sysInstance && sysInstance.status === "connected") {
-      instanceName = sysInstance.instance_name;
-    } else {
-      // Fallback to user's instance
-      const { data: userInstance } = await supabase
-        .from("whatsapp_instances")
-        .select("instance_name")
-        .eq("user_id", userId)
-        .maybeSingle();
-      instanceName = userInstance?.instance_name || null;
+    let sent = 0;
+    for (const [phoneNum] of recipients) {
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/send-whatsapp-message`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({ phone: phoneNum, content: message, system: true }),
+        });
+        if (resp.ok) sent++;
+        else console.error(`Handoff notify failed for ${phoneNum}: ${resp.status} ${await resp.text()}`);
+      } catch (err) {
+        console.error(`Handoff notify error for ${phoneNum}:`, err);
+      }
     }
 
-    if (!instanceName) return;
-
-    for (const contact of notifContacts) {
-      await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: evolutionKey },
-        body: JSON.stringify({ number: contact.phone, text: message }),
-      });
-    }
-
-    console.log(`Handoff notification sent to ${notifContacts.length} contacts via ${sysInstance?.status === "connected" ? "system" : "user"} instance`);
+    console.log(`Handoff notification sent to ${sent}/${recipients.size} recipients via system instance`);
   } catch (error) {
     console.error("Error sending handoff notifications:", error);
   }
