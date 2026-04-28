@@ -126,6 +126,96 @@ serve(async (req) => {
       });
     }
 
+    // If phoneNumber provided, the instance MUST be (re)created with `number`
+    // for Evolution API to return a valid pairingCode. Delete and recreate.
+    if (phoneNumber) {
+      console.log("Phone number provided, deleting and recreating instance for pairing code");
+      try {
+        await evolutionRequest({
+          evolutionUrl,
+          evolutionKey,
+          path: `/instance/delete/${instance.instance_name}`,
+          method: "DELETE",
+        });
+        await new Promise((r) => setTimeout(r, 2000));
+      } catch (e) {
+        console.log("Delete failed (continuing):", e);
+      }
+
+      const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
+      const createResp = await evolutionRequest({
+        evolutionUrl,
+        evolutionKey,
+        path: "/instance/create",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instanceName: instance.instance_name,
+          qrcode: true,
+          number: phoneNumber,
+          integration: "WHATSAPP-BAILEYS",
+          webhook: {
+            url: webhookUrl,
+            byEvents: true,
+            base64: true,
+            events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
+          },
+          settings: { syncFullHistory: true, rejectCall: false, groupsIgnore: true },
+        }),
+      });
+
+      if (!createResp.ok) {
+        console.error("Recreate failed:", createResp);
+        return jsonResponse(
+          buildEvolutionErrorPayload(createResp, "Erro ao recriar instância para gerar código de pareamento"),
+          502,
+        );
+      }
+
+      const createData = createResp.data ?? {};
+      console.log("Recreate response keys:", Object.keys(createData));
+      console.log("qrcode.pairingCode:", createData.qrcode?.pairingCode);
+      console.log("root pairingCode:", createData.pairingCode);
+
+      let qrCodeBase64 = extractBase64(
+        createData.qrcode?.base64 || createData.base64 || null,
+      );
+      let pairingCode = extractPairingCode(createData) || extractPairingCode(createData.qrcode);
+
+      // Some Evolution versions return pairingCode only on a follow-up /connect
+      if (!pairingCode) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const followUp = await evolutionRequest({
+          evolutionUrl,
+          evolutionKey,
+          path: `/instance/connect/${instance.instance_name}?number=${encodeURIComponent(phoneNumber)}`,
+        });
+        if (followUp.ok) {
+          const fd = followUp.data ?? {};
+          console.log("Follow-up connect keys:", Object.keys(fd), "pairingCode:", fd.pairingCode);
+          pairingCode = extractPairingCode(fd) || pairingCode;
+          qrCodeBase64 =
+            extractBase64(fd.base64 || fd.qrcode?.base64 || fd.qrcode || null) || qrCodeBase64;
+        }
+      }
+
+      await supabase.from("whatsapp_instances").update({
+        status: "qr_ready",
+        qr_code_base64: qrCodeBase64,
+        pairing_code: pairingCode,
+        updated_at: new Date().toISOString(),
+      }).eq("user_id", userId);
+
+      return jsonResponse({
+        success: !!pairingCode,
+        qrCode: qrCodeBase64,
+        pairingCode,
+        message: !pairingCode
+          ? "Sua Evolution API não retornou um pairing code válido. Use QR Code ou revise a configuração da Evolution API."
+          : undefined,
+      });
+    }
+
     // Get new QR code / pairing code
     const connectUrl = phoneNumber
       ? `${evolutionUrl}/instance/connect/${instance.instance_name}?number=${phoneNumber}`
