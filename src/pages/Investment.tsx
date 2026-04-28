@@ -194,8 +194,8 @@ const Investment = () => {
               },
               {
                 step: "03",
-                title: "Recorrência mensal",
-                desc: "Participação recorrente sobre os clientes adquiridos dentro do prazo contratual até 31/12/2026.",
+                title: "Recorrência vitalícia da carteira",
+                desc: "A receita recorrente continua mesmo após o fim do contrato (31/12/2026): você segue recebendo 5% de cada assinatura conquistada dentro do período, mês após mês, até que o próprio cliente cancele.",
                 icon: LineChart,
               },
             ].map((c, i) => (
