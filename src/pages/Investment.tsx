@@ -239,6 +239,27 @@ const Investment = () => {
               </div>
             </div>
           </div>
+
+          {/* Destaque: recorrência pós-contrato */}
+          <div className="mt-6 rounded-3xl border border-[hsl(45,95%,55%)]/30 bg-gradient-to-br from-[hsl(45,95%,55%)]/10 via-transparent to-[hsl(142,76%,46%)]/10 p-8 md:p-10">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-[hsl(45,95%,55%)]/15 p-3 border border-[hsl(45,95%,55%)]/30">
+                <Sparkles className="h-6 w-6 text-[hsl(45,95%,65%)]" />
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-widest text-[hsl(45,95%,70%)]">Diferencial exclusivo</div>
+                <h3 className="mt-2 text-2xl md:text-3xl font-semibold leading-tight">
+                  Sua receita não termina com o contrato
+                </h3>
+                <p className="mt-3 text-white/75 max-w-3xl leading-relaxed">
+                  Toda assinatura conquistada <span className="text-white font-semibold">dentro do período contratual (até 31/12/2026)</span> permanece gerando recorrência para você <span className="text-[hsl(142,76%,60%)] font-semibold">mesmo após o término do contrato</span>. Você continua recebendo 5% sobre cada cliente ativo, mês após mês, <span className="text-white font-semibold">até que o próprio cliente cancele a assinatura</span>.
+                </p>
+                <p className="mt-3 text-sm text-white/55 max-w-3xl">
+                  Na prática: a carteira construída durante o contrato vira um ativo de longo prazo. Quanto mais cedo você entra, maior a base de clientes recorrentes que continuará pagando depois de 2026.
+                </p>
+              </div>
+            </div>
+          </div>
         </section>
 
         {/* PROJEÇÃO */}
