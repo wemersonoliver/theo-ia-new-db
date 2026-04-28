@@ -417,7 +417,7 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
       </div>
 
       <Card>
-        <CardContent className="p-6 flex flex-col items-center justify-center space-y-4">
+        <CardContent className="p-6 flex flex-col items-stretch justify-center space-y-4">
           {isLoading ? (
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           ) : isConnected ? (
@@ -431,8 +431,8 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
           ) : instance?.status === "qr_ready" || instance?.status === "pending" ? (
             <Tabs value={connectionMode} onValueChange={(v) => setConnectionMode(v as "qr" | "code")} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-4">
-                <TabsTrigger value="qr"><QrCode className="mr-2 h-4 w-4" /> QR Code</TabsTrigger>
-                <TabsTrigger value="code"><Hash className="mr-2 h-4 w-4" /> Código</TabsTrigger>
+                <TabsTrigger value="qr" className="text-xs sm:text-sm"><QrCode className="mr-1.5 h-4 w-4 shrink-0" /> QR Code</TabsTrigger>
+                <TabsTrigger value="code" className="text-xs sm:text-sm"><Hash className="mr-1.5 h-4 w-4 shrink-0" /> Código</TabsTrigger>
               </TabsList>
 
               <TabsContent value="qr" className="space-y-4 text-center">
