@@ -873,7 +873,7 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6 pb-24 sm:pb-0">
       <OnboardingVideo stepKey="interview" />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
