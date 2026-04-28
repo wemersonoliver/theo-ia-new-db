@@ -24,8 +24,9 @@ import {
   Sparkles, Smartphone, QrCode, Loader2, RefreshCw, CheckCircle2, XCircle,
   Calendar, Bot, MapPin, FlaskConical, PartyPopper, ChevronRight, ArrowRight,
   Check, Send, Copy, Clock, Plus, Trash2, Power, Wand2, Tag, Pencil,
-  MessageCircle,
+  MessageCircle, Hash,
 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type OnboardingStep = "welcome" | "appointments_question" | "appointments_config" | "interview" | "whatsapp" | "location_question" | "location" | "test_prompt" | "completed";
