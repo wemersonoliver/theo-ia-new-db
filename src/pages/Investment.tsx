@@ -459,8 +459,9 @@ const Investment = () => {
             <ul className="mt-6 space-y-3">
               {[
                 "Contrato claro e formalizado",
-                "Prazo definido até 31/12/2026",
+                "Prazo de aquisição de carteira definido até 31/12/2026",
                 "Participação vinculada a vendas dentro do período",
+                "Recorrência mantida após o fim do contrato — receita continua até o cliente cancelar",
                 "Projeções transparentes e auditáveis",
               ].map((b) => (
                 <li key={b} className="flex items-start gap-3 text-sm text-white/80">
