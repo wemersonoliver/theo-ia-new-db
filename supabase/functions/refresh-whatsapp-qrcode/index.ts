@@ -22,7 +22,11 @@ function extractBase64(qrCode: string | null | undefined): string | null {
 }
 
 function extractPairingCode(payload: Record<string, any> | null | undefined): string | null {
-  const raw = payload?.pairingCode || payload?.qrcode?.pairingCode || payload?.code?.pairingCode || null;
+  const raw =
+    payload?.pairingCode ||
+    payload?.qrcode?.pairingCode ||
+    (typeof payload?.code === "object" ? payload?.code?.pairingCode : null) ||
+    null;
   if (typeof raw !== "string") return null;
 
   if (raw.includes("@") || raw.includes(",")) {
@@ -30,7 +34,7 @@ function extractPairingCode(payload: Record<string, any> | null | undefined): st
   }
 
   const normalized = raw.replace(/[^A-Za-z0-9]/g, "").trim().toUpperCase();
-  if (normalized.length < 6 || normalized.length > 12) {
+  if (normalized.length < 4 || normalized.length > 16) {
     return null;
   }
 
@@ -83,75 +87,6 @@ serve(async (req) => {
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
     if (!evolutionUrl || !evolutionKey) {
       return jsonResponse({ error: "Erro de configuração do servidor" }, 500);
-    }
-
-    // If phoneNumber provided for pairing code, we need to delete and recreate
-    // the instance with number for Evolution API to return a valid pairingCode
-    if (phoneNumber) {
-      console.log("Phone number provided, deleting and recreating instance for pairing code");
-      
-      // Delete existing instance
-      try {
-        await evolutionRequest({
-          evolutionUrl,
-          evolutionKey,
-          path: `/instance/delete/${instance.instance_name}`,
-          method: "DELETE",
-        });
-        await new Promise(r => setTimeout(r, 2000));
-      } catch (e) {
-        console.log("Delete failed:", e);
-      }
-
-      // Recreate with number
-      const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
-      const createResp = await evolutionRequest({
-        evolutionUrl,
-        evolutionKey,
-        path: "/instance/create",
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          instanceName: instance.instance_name,
-          qrcode: true,
-          number: phoneNumber,
-          integration: "WHATSAPP-BAILEYS",
-          webhook: {
-            url: webhookUrl, byEvents: true, base64: true,
-            events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
-          },
-          settings: { syncFullHistory: true, rejectCall: false, groupsIgnore: true },
-        }),
-      });
-
-      if (createResp.ok) {
-        const createData = createResp.data ?? {};
-        console.log("Recreate response keys:", Object.keys(createData));
-        console.log("qrcode.pairingCode:", createData.qrcode?.pairingCode);
-
-        const qrCodeRaw = createData.qrcode?.base64 || createData.base64 || null;
-        const qrCodeBase64 = extractBase64(qrCodeRaw);
-        const pairingCode = extractPairingCode(createData);
-
-        await supabase.from("whatsapp_instances").update({
-          status: "qr_ready",
-          qr_code_base64: qrCodeBase64,
-          pairing_code: pairingCode,
-          updated_at: new Date().toISOString(),
-        }).eq("user_id", userId);
-
-        return jsonResponse({
-          success: !!pairingCode,
-          qrCode: qrCodeBase64,
-          pairingCode,
-          message: !pairingCode
-            ? "Não foi possível gerar código de pareamento. Tente QR Code."
-            : undefined,
-        });
-      } else {
-        console.error("Recreate failed:", createResp);
-        return jsonResponse(buildEvolutionErrorPayload(createResp, "Erro ao recriar instância para gerar código de pareamento"), 502);
-      }
     }
 
     // Check real connection state
