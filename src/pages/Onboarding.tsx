@@ -24,8 +24,9 @@ import {
   Sparkles, Smartphone, QrCode, Loader2, RefreshCw, CheckCircle2, XCircle,
   Calendar, Bot, MapPin, FlaskConical, PartyPopper, ChevronRight, ArrowRight,
   Check, Send, Copy, Clock, Plus, Trash2, Power, Wand2, Tag, Pencil,
-  MessageCircle,
+  MessageCircle, Hash,
 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type OnboardingStep = "welcome" | "appointments_question" | "appointments_config" | "interview" | "whatsapp" | "location_question" | "location" | "test_prompt" | "completed";
@@ -301,6 +302,9 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const instanceStatusRef = useRef(instance?.status);
+  const [connectionMode, setConnectionMode] = useState<"qr" | "code">("qr");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [cachedPairingCode, setCachedPairingCode] = useState<string | null>(null);
 
   useEffect(() => { instanceStatusRef.current = instance?.status; }, [instance?.status]);
 
@@ -320,8 +324,24 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
     }
   }, [instance?.qr_code_base64]);
 
+  useEffect(() => {
+    if (instance?.pairing_code) {
+      setCachedPairingCode(instance.pairing_code);
+      setIsRefreshing(false);
+    }
+  }, [instance?.pairing_code]);
+
+  useEffect(() => {
+    if (instance?.status === "connected") {
+      setCachedQRCode(null);
+      setCachedPairingCode(null);
+      setPhoneInput("");
+    }
+  }, [instance?.status]);
+
   // If instance is qr_ready but has no QR code (stale from previous session), auto-refresh once
   useEffect(() => {
+    if (connectionMode === "code") return;
     if (instance?.status === "qr_ready" && !instance?.qr_code_base64 && !cachedQRCode && !isRefreshing && !refreshFailed) {
       setIsRefreshing(true);
       refreshQRCode.mutate(undefined, {
@@ -333,10 +353,11 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
         },
       });
     }
-  }, [instance?.status, instance?.qr_code_base64, cachedQRCode, isRefreshing, refreshFailed]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [instance?.status, instance?.qr_code_base64, cachedQRCode, isRefreshing, refreshFailed, connectionMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const hasQR = Boolean(cachedQRCode || instance?.qr_code_base64);
+    if (connectionMode === "code") { setIsRefreshing(false); return; }
     if (instance?.status !== "qr_ready" || !hasQR) { setCountdown(30); setIsRefreshing(false); return; }
     const timer = setInterval(() => {
       setCountdown(prev => {
@@ -355,7 +376,7 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [instance?.status, instance?.qr_code_base64, cachedQRCode, refreshQRCode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [instance?.status, instance?.qr_code_base64, cachedQRCode, refreshQRCode, connectionMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isConnected = instance?.status === "connected";
   const qrCodeValue = cachedQRCode || instance?.qr_code_base64 || null;
@@ -364,6 +385,23 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
       ? qrCodeValue
       : `data:image/png;base64,${qrCodeValue}`
     : null;
+
+  const formatPairingCode = (code: string) => {
+    const clean = code.replace(/[^A-Za-z0-9]/g, "");
+    if (clean.length <= 4) return clean;
+    return clean.slice(0, 4) + "-" + clean.slice(4, 8);
+  };
+
+  const handleConnectWithCode = () => {
+    if (!phoneInput) return;
+    setIsRefreshing(true);
+    setCachedPairingCode(null);
+    if (!instance || instance.status === "disconnected") {
+      createInstance.mutate(phoneInput);
+    } else {
+      refreshQRCode.mutate(phoneInput);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -374,7 +412,7 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
           Conectar WhatsApp
         </h2>
         <p className="text-muted-foreground">
-          Escaneie o QR Code com seu WhatsApp para conectar. Abra o WhatsApp → Menu (⋮) → Dispositivos Conectados → Conectar Dispositivo.
+          Conecte seu WhatsApp via QR Code ou via código de pareamento. Abra o WhatsApp → Menu (⋮) → Dispositivos Conectados.
         </p>
       </div>
 
@@ -390,41 +428,106 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
                 {instance?.profile_name} · {instance?.phone_number}
               </p>
             </div>
-          ) : instance?.status === "qr_ready" ? (
-            <div className="space-y-4 text-center">
-              {qrImageSrc ? (
-                <>
-                  <div className="relative rounded-lg border bg-white p-4 inline-block">
-                    <img
-                      src={qrImageSrc}
-                      alt="QR Code"
-                      className={cn("h-64 w-64 transition-opacity", isRefreshing && "opacity-50")}
-                    />
-                    {isRefreshing && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                      </div>
-                    )}
+          ) : instance?.status === "qr_ready" || instance?.status === "pending" ? (
+            <Tabs value={connectionMode} onValueChange={(v) => setConnectionMode(v as "qr" | "code")} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="qr"><QrCode className="mr-2 h-4 w-4" /> QR Code</TabsTrigger>
+                <TabsTrigger value="code"><Hash className="mr-2 h-4 w-4" /> Código</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="qr" className="space-y-4 text-center">
+                {qrImageSrc ? (
+                  <>
+                    <div className="relative rounded-lg border bg-white p-4 inline-block">
+                      <img
+                        src={qrImageSrc}
+                        alt="QR Code"
+                        className={cn("h-64 w-64 transition-opacity", isRefreshing && "opacity-50")}
+                      />
+                      {isRefreshing && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      QR Code expira em <span className="font-bold text-primary">{countdown}s</span>
+                    </p>
+                  </>
+                ) : (
+                  <div className="py-6">
+                    <Loader2 className="mx-auto h-10 w-10 animate-spin text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground mt-3">Gerando QR Code...</p>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    QR Code expira em <span className="font-bold text-primary">{countdown}s</span>
-                  </p>
-                </>
-              ) : (
-                <div className="py-6">
-                  <Loader2 className="mx-auto h-10 w-10 animate-spin text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground mt-3">Gerando QR Code...</p>
+                )}
+                <div className="flex gap-2 justify-center">
+                  <Button variant="outline" size="sm" onClick={() => { setIsRefreshing(true); refreshQRCode.mutate(); setCountdown(30); }} disabled={isRefreshing}>
+                    <RefreshCw className="mr-2 h-4 w-4" /> Atualizar QR
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={() => { disconnectInstance.mutate(); setCachedQRCode(null); setCachedPairingCode(null); }} disabled={disconnectInstance.isPending}>
+                    <XCircle className="mr-2 h-4 w-4" /> Cancelar
+                  </Button>
                 </div>
-              )}
-              <div className="flex gap-2 justify-center">
-                <Button variant="outline" size="sm" onClick={() => { setIsRefreshing(true); refreshQRCode.mutate(); setCountdown(30); }} disabled={isRefreshing}>
-                  <RefreshCw className="mr-2 h-4 w-4" /> Atualizar QR
-                </Button>
-                <Button variant="destructive" size="sm" onClick={() => { disconnectInstance.mutate(); setCachedQRCode(null); }} disabled={disconnectInstance.isPending}>
-                  <XCircle className="mr-2 h-4 w-4" /> Cancelar
-                </Button>
-              </div>
-            </div>
+              </TabsContent>
+
+              <TabsContent value="code" className="flex flex-col items-center">
+                <div className="w-full max-w-sm space-y-4 text-center">
+                  {!cachedPairingCode && !instance?.pairing_code ? (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        Digite seu número com código do país (ex: 5511999999999)
+                      </p>
+                      <Input
+                        placeholder="5511999999999"
+                        value={phoneInput}
+                        onChange={(e) => setPhoneInput(e.target.value.replace(/\D/g, ""))}
+                        className="text-center text-lg tracking-wider"
+                      />
+                      <Button
+                        className="w-full"
+                        onClick={handleConnectWithCode}
+                        disabled={!phoneInput || createInstance.isPending || refreshQRCode.isPending}
+                      >
+                        {(createInstance.isPending || refreshQRCode.isPending) ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Hash className="mr-2 h-4 w-4" />
+                        )}
+                        Gerar Código
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted-foreground">Digite este código no seu WhatsApp:</p>
+                      <p className="text-xs text-muted-foreground">
+                        Configurações → Aparelhos conectados → Conectar com número de telefone
+                      </p>
+                      <div className="relative rounded-lg border-2 border-primary/20 bg-muted/50 p-6">
+                        <p className={cn(
+                          "text-4xl font-mono font-bold tracking-[0.3em] text-primary transition-opacity",
+                          isRefreshing && "opacity-50"
+                        )}>
+                          {formatPairingCode(cachedPairingCode || instance?.pairing_code || "")}
+                        </p>
+                        {isRefreshing && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2 justify-center">
+                        <Button variant="outline" size="sm" onClick={() => { setIsRefreshing(true); setCachedPairingCode(null); refreshQRCode.mutate(phoneInput); }} disabled={isRefreshing}>
+                          <RefreshCw className="mr-2 h-4 w-4" /> Novo Código
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={() => { disconnectInstance.mutate(); setCachedQRCode(null); setCachedPairingCode(null); }} disabled={disconnectInstance.isPending}>
+                          <XCircle className="mr-2 h-4 w-4" /> Cancelar
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
           ) : (
             <div className="text-center space-y-4 py-4">
               <QrCode className="h-16 w-16 mx-auto opacity-30" />
