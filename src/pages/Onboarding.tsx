@@ -404,7 +404,7 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6 pb-24 sm:pb-0">
       <OnboardingVideo stepKey="whatsapp" />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
@@ -911,14 +911,14 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
       )}
 
       {state === "chat" && (
-        <Card>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[400px] px-4">
-              <div className="space-y-4 py-4">
+        <Card className="w-full min-w-0 overflow-hidden">
+          <CardContent className="min-w-0 p-0">
+            <ScrollArea className="h-[400px] px-3 sm:px-4">
+              <div className="min-w-0 space-y-4 py-4">
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                     <div className={cn(
-                      "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap",
+                      "max-w-[85%] break-words rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap",
                       msg.role === "user" ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm"
                     )}>
                       {msg.content}
@@ -938,15 +938,15 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
                 <div ref={messagesEndRef} />
               </div>
             </ScrollArea>
-            <div className="border-t p-4">
-              <div className="flex gap-2">
+            <div className="border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4">
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_2.5rem_2.5rem] items-end gap-2">
                 <Textarea
                   value={userInput}
                   onChange={e => setUserInput(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                   placeholder="Digite sua resposta..."
                   disabled={isLoading}
-                  className="flex-1 min-h-[60px] resize-none"
+                  className="min-h-[60px] min-w-0 resize-none"
                   rows={2}
                 />
                 <AudioRecordButton
