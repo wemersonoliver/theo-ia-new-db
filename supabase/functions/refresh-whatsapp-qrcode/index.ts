@@ -22,7 +22,11 @@ function extractBase64(qrCode: string | null | undefined): string | null {
 }
 
 function extractPairingCode(payload: Record<string, any> | null | undefined): string | null {
-  const raw = payload?.pairingCode || payload?.qrcode?.pairingCode || payload?.code?.pairingCode || null;
+  const raw =
+    payload?.pairingCode ||
+    payload?.qrcode?.pairingCode ||
+    (typeof payload?.code === "object" ? payload?.code?.pairingCode : null) ||
+    null;
   if (typeof raw !== "string") return null;
 
   if (raw.includes("@") || raw.includes(",")) {
@@ -30,7 +34,7 @@ function extractPairingCode(payload: Record<string, any> | null | undefined): st
   }
 
   const normalized = raw.replace(/[^A-Za-z0-9]/g, "").trim().toUpperCase();
-  if (normalized.length < 6 || normalized.length > 12) {
+  if (normalized.length < 4 || normalized.length > 16) {
     return null;
   }
 
