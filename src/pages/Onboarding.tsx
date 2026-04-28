@@ -152,7 +152,7 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col overflow-x-hidden">
       {/* Top Progress Bar */}
       <div className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b px-4 py-3">
         <div className="max-w-4xl mx-auto space-y-2">
@@ -171,7 +171,7 @@ export default function Onboarding() {
         </div>
       </div>
 
-      <div className="flex-1 flex">
+      <div className="flex-1 flex min-w-0">
         {/* Sidebar Checklist */}
         <aside className="hidden lg:flex w-72 border-r bg-muted/30 p-6 flex-col gap-1">
           <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider mb-4">
@@ -205,8 +205,8 @@ export default function Onboarding() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-          <div className={cn("mx-auto", currentStep === "test_prompt" ? "max-w-6xl" : "max-w-3xl")}>
+        <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto overflow-x-hidden">
+          <div className={cn("mx-auto w-full min-w-0", currentStep === "test_prompt" ? "max-w-6xl" : "max-w-3xl")}>
             {currentStep === "welcome" && (
               <WelcomeStep onNext={() => goToStep("appointments_question")} />
             )}
@@ -243,7 +243,7 @@ export default function Onboarding() {
         href="https://wa.me/5547991293662?text=Olá! Preciso de ajuda durante a configuração inicial."
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-green-600 hover:bg-green-700 text-white px-4 py-3 shadow-lg transition-all hover:scale-105"
+        className="fixed bottom-20 right-4 z-40 flex items-center gap-2 rounded-full bg-accent px-3 py-3 text-accent-foreground shadow-lg transition-all hover:scale-105 hover:bg-accent/90 sm:bottom-6 sm:right-6 sm:px-4"
       >
         <MessageCircle className="h-5 w-5" />
         <span className="text-sm font-medium hidden sm:inline">Precisa de ajuda?</span>
