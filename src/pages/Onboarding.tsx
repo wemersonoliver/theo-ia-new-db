@@ -404,7 +404,7 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
   };
 
   return (
-    <div className="min-w-0 space-y-6 pb-24 sm:pb-0">
+    <div className="space-y-6">
       <OnboardingVideo stepKey="whatsapp" />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
@@ -632,7 +632,7 @@ function AppointmentsConfigStep({ onNext }: { onNext: () => void }) {
   const dayLabels = (days: number[]) => days.map(d => DAYS.find(dd => dd.value === d)?.label?.slice(0, 3)).filter(Boolean).join(", ");
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6 pb-24 sm:pb-0">
       <OnboardingVideo stepKey="appointments" />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold flex items-center gap-2">
