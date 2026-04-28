@@ -295,19 +295,40 @@ serve(async (req) => {
 
     for (const item of pendingItems) {
       try {
-        // Re-check status to avoid race conditions (client might have responded between fetch and now)
-        const { data: freshItem } = await supabase
+        // ─── ATOMIC CLAIM ─────────────────────────────────────────────
+        // Garante que apenas UMA invocação concorrente processa este item.
+        // Usamos um UPDATE condicional que casa com (id, status='pending',
+        // last_sent_at IGUAL ao lido). Se outro worker já tocou a linha
+        // (status mudou OU last_sent_at mudou), nosso UPDATE não retorna
+        // nada e pulamos.
+        const claimQuery = supabase
           .from("followup_tracking")
-          .select("status")
+          .update({
+            // Marcar processing avançado: empurra next_scheduled_at para
+            // o futuro imediato evita que a mesma linha caia no próximo
+            // SELECT enquanto este loop ainda roda.
+            updated_at: new Date().toISOString(),
+            next_scheduled_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          })
           .eq("id", item.id)
-          .single();
+          .eq("status", "pending");
 
-        if (!freshItem || freshItem.status !== "pending") {
-          console.log(`Skipping ${item.phone}: status changed to ${freshItem?.status}`);
+        const claimWithLastSent = item.last_sent_at
+          ? claimQuery.eq("last_sent_at", item.last_sent_at)
+          : claimQuery.is("last_sent_at", null);
+
+        const { data: claimed, error: claimErr } = await claimWithLastSent.select("id");
+
+        if (claimErr) {
+          console.error(`Claim error for ${item.phone}:`, claimErr);
+          continue;
+        }
+        if (!claimed || claimed.length === 0) {
+          console.log(`Skipping ${item.phone}: already claimed by another worker`);
           continue;
         }
 
-        // Check 3h minimum interval
+        // Check 3h minimum interval (defensa extra)
         if (item.last_sent_at) {
           const lastSent = new Date(item.last_sent_at).getTime();
           const threeHoursMs = 3 * 60 * 60 * 1000;
