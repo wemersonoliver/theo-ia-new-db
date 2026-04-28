@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Download, FileText, Info, Mic, ImageIcon, Video } from "lucide-react";
+import { Download, FileText, Info, Mic, ImageIcon, Video, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/hooks/useConversations";
 
@@ -16,6 +16,7 @@ interface Props {
  */
 export function MediaBubble({ msg, variant = "default" }: Props) {
   const [open, setOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const labelColor = variant === "admin" ? "text-slate-500" : "text-muted-foreground";
 
   if (!msg.media_url) {
@@ -53,6 +54,41 @@ export function MediaBubble({ msg, variant = "default" }: Props) {
 
   const url = msg.media_url;
   const mime = msg.media_mime || "";
+
+  // Lazy-load placeholder: user must click to fetch the media (saves bandwidth, mimics WhatsApp)
+  if (!loaded) {
+    let Icon = FileText;
+    let label = "Documento";
+    if (msg.type === "image" || mime.startsWith("image/")) {
+      Icon = ImageIcon;
+      label = "Imagem";
+    } else if (msg.type === "audio" || mime.startsWith("audio/")) {
+      Icon = Mic;
+      label = "Áudio";
+    } else if (msg.type === "video" || mime.startsWith("video/")) {
+      Icon = Video;
+      label = "Vídeo";
+    } else if (msg.media_filename) {
+      label = msg.media_filename;
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={() => setLoaded(true)}
+        className={cn(
+          "mb-2 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors w-full max-w-[280px]",
+          variant === "admin"
+            ? "border-slate-700 hover:bg-slate-800/50 text-slate-200"
+            : "border-border/40 hover:bg-black/5"
+        )}
+      >
+        <Icon className="h-5 w-5 shrink-0" />
+        <span className="flex-1 truncate text-left">{label}</span>
+        <Download className="h-4 w-4 shrink-0 opacity-70" />
+      </button>
+    );
+  }
 
   if (msg.type === "image" || mime.startsWith("image/")) {
     return (
