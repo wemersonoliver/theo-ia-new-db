@@ -33,6 +33,7 @@ import Investment from "./pages/Investment";
 import HelpCenter from "./pages/HelpCenter";
 import HelpCategory from "./pages/HelpCategory";
 import HelpArticle from "./pages/HelpArticle";
+import Tasks from "./pages/Tasks";
 
 // Admin pages
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -50,6 +51,7 @@ import AdminVoiceCosts from "./pages/admin/AdminVoiceCosts";
 import AdminCreditsManager from "./pages/admin/AdminCreditsManager";
 import AdminSupportCalendar from "./pages/admin/AdminSupportCalendar";
 import AdminHelpCenter from "./pages/admin/AdminHelpCenter";
+import AdminTasks from "./pages/admin/AdminTasks";
 
 const queryClient = new QueryClient();
 
@@ -81,6 +83,7 @@ const App = () => (
               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
               <Route path="/subscriptions" element={<ProtectedRoute><Subscriptions /></ProtectedRoute>} />
               <Route path="/crm" element={<ProtectedRoute><CRM /></ProtectedRoute>} />
+              <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
               {/* <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} /> */}{/* Oculto temporariamente */}
               <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
               <Route path="/investors" element={<Investors />} />
@@ -101,6 +104,7 @@ const App = () => (
               <Route path="/admin/notifications" element={<AdminNotifications />} />
               <Route path="/admin/logs" element={<AdminLogs />} />
               <Route path="/admin/crm" element={<AdminCRM />} />
+              <Route path="/admin/tasks" element={<AdminTasks />} />
               <Route path="/admin/voice-costs" element={<AdminVoiceCosts />} />
               <Route path="/admin/credits" element={<AdminCreditsManager />} />
               <Route path="/admin/support-calendar" element={<AdminSupportCalendar />} />
