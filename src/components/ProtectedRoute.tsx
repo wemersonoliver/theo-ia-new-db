@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PhoneRequiredDialog } from "@/components/PhoneRequiredDialog";
+import { usePlans } from "@/hooks/usePlans";
 
 const TRIAL_DAYS = 15;
 
@@ -177,7 +178,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
 function CheckoutScreen({ isBlocked, signOut }: { isBlocked: boolean; signOut: () => Promise<void> }) {
   const { user } = useAuth();
-  const [selectedPlan, setSelectedPlan] = useState<"monthly" | "annual" | null>(null);
+  const { data: plans = [] } = usePlans();
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [verificationFailed, setVerificationFailed] = useState(false);
 
@@ -205,43 +207,13 @@ function CheckoutScreen({ isBlocked, signOut }: { isBlocked: boolean; signOut: (
     setVerifying(false);
   };
 
-  const plans = [
-    {
-      id: "monthly" as const,
-      name: "Plano Mensal",
-      price: "R$ 97",
-      period: "/mês",
-      url: "https://pay.kiwify.com.br/AdpFbz3",
-      features: [
-        "Atendimento IA 24/7",
-        "Agendamento automático",
-        "Base de conhecimento",
-        "Lembretes automáticos",
-        "Suporte prioritário",
-      ],
-    },
-    {
-      id: "annual" as const,
-      name: "Plano Anual",
-      price: "R$ 997",
-      period: "/ano",
-      originalPrice: "R$ 1.164",
-      savings: "Economize R$ 167",
-      url: "https://pay.kiwify.com.br/bpNMdQ0",
-      features: [
-        "Tudo do plano mensal",
-        "2 meses grátis",
-        "Prioridade em novidades",
-        "Suporte VIP",
-        "Preço garantido por 12 meses",
-      ],
-      recommended: true,
-    },
-  ];
+  const fmtBRL = (cents: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 }).format((cents || 0) / 100);
+  const selectedPlan = plans.find((p) => p.id === selectedPlanId);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="w-full max-w-3xl space-y-6">
+      <div className="w-full max-w-5xl space-y-6">
         <div className="text-center space-y-3">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
             {isBlocked ? (
@@ -260,38 +232,33 @@ function CheckoutScreen({ isBlocked, signOut }: { isBlocked: boolean; signOut: (
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {plans.map((plan) => (
             <Card
               key={plan.id}
               className={`relative cursor-pointer transition-all duration-200 ${
-                selectedPlan === plan.id
+                selectedPlanId === plan.id
                   ? "border-primary ring-2 ring-primary/20"
                   : "border-border hover:border-primary/50"
-              } ${plan.recommended ? "shadow-lg" : ""}`}
-              onClick={() => setSelectedPlan(plan.id)}
+              } ${plan.is_recommended ? "shadow-lg" : ""}`}
+              onClick={() => setSelectedPlanId(plan.id)}
             >
-              {plan.recommended && (
+              {plan.is_recommended && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                   <Badge className="bg-primary text-primary-foreground">
-                    <Crown className="mr-1 h-3 w-3" /> Mais Popular
+                    <Crown className="mr-1 h-3 w-3" /> Recomendado
                   </Badge>
                 </div>
               )}
               <CardHeader className="pb-3 pt-6">
-                <CardTitle className="text-lg">{plan.name}</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  {plan.name}
+                  <Badge variant="outline" className="text-[10px] uppercase">{plan.tier}</Badge>
+                </CardTitle>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-bold">{plan.price}</span>
-                  <span className="text-muted-foreground">{plan.period}</span>
+                  <span className="text-3xl font-bold">{fmtBRL(plan.price_cents)}</span>
+                  <span className="text-muted-foreground">{plan.billing_period === "monthly" ? "/mês" : "/ano"}</span>
                 </div>
-                {plan.originalPrice && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground line-through">{plan.originalPrice}</span>
-                    <Badge variant="secondary" className="text-xs">
-                      {plan.savings}
-                    </Badge>
-                  </div>
-                )}
               </CardHeader>
               <CardContent className="space-y-3">
                 <ul className="space-y-2">
@@ -313,14 +280,13 @@ function CheckoutScreen({ isBlocked, signOut }: { isBlocked: boolean; signOut: (
             className="w-full max-w-md h-12 text-base"
             disabled={!selectedPlan}
             onClick={() => {
-              const plan = plans.find((p) => p.id === selectedPlan);
-              if (plan) {
-                window.open(plan.url, "_blank");
+              if (selectedPlan?.checkout_url) {
+                window.open(selectedPlan.checkout_url, "_blank");
               }
             }}
           >
             {selectedPlan
-              ? `Assinar ${selectedPlan === "monthly" ? "Plano Mensal" : "Plano Anual"}`
+              ? `Assinar ${selectedPlan.name}`
               : "Selecione um plano"}
             <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
