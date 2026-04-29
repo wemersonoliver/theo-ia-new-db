@@ -314,6 +314,84 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_pricing_config: {
+        Row: {
+          gemini_text_input_per_1k_cents: number
+          gemini_text_output_per_1k_cents: number
+          gemini_vision_per_image_cents: number
+          groq_audio_per_minute_cents: number
+          id: string
+          suggested_margin_percent: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          gemini_text_input_per_1k_cents?: number
+          gemini_text_output_per_1k_cents?: number
+          gemini_vision_per_image_cents?: number
+          groq_audio_per_minute_cents?: number
+          id?: string
+          suggested_margin_percent?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          gemini_text_input_per_1k_cents?: number
+          gemini_text_output_per_1k_cents?: number
+          gemini_vision_per_image_cents?: number
+          groq_audio_per_minute_cents?: number
+          id?: string
+          suggested_margin_percent?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      ai_usage_log: {
+        Row: {
+          audio_seconds: number
+          cost_cents: number
+          created_at: string
+          id: string
+          image_count: number
+          kind: string
+          metadata: Json
+          reference_id: string | null
+          source: string | null
+          tokens_input: number
+          tokens_output: number
+          user_id: string
+        }
+        Insert: {
+          audio_seconds?: number
+          cost_cents?: number
+          created_at?: string
+          id?: string
+          image_count?: number
+          kind: string
+          metadata?: Json
+          reference_id?: string | null
+          source?: string | null
+          tokens_input?: number
+          tokens_output?: number
+          user_id: string
+        }
+        Update: {
+          audio_seconds?: number
+          cost_cents?: number
+          created_at?: string
+          id?: string
+          image_count?: number
+          kind?: string
+          metadata?: Json
+          reference_id?: string | null
+          source?: string | null
+          tokens_input?: number
+          tokens_output?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       ai_voice_usage: {
         Row: {
           characters_count: number
