@@ -11,6 +11,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useConversations, useConversation, Message } from "@/hooks/useConversations";
 import { useContacts } from "@/hooks/useContacts";
+import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
+import { supabase } from "@/integrations/supabase/client";
 import { useCRMPipelines } from "@/hooks/useCRMPipelines";
 import { useCRMStages } from "@/hooks/useCRMStages";
 import { useCRMDeals } from "@/hooks/useCRMDeals";
@@ -26,7 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff,
-  Tag, ExternalLink, Kanban, CheckCircle, Trash2, ArrowLeft,
+  Tag, ExternalLink, Kanban, CheckCircle, Trash2, ArrowLeft, RefreshCw,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -208,6 +210,8 @@ export default function Conversations() {
   const navigate = useNavigate();
   const { conversations, isLoading, sendMessage, sendMedia, toggleAI, finishConversation, deleteConversation, assignConversation } = useConversations();
   const { contacts } = useContacts();
+  const { instance } = useWhatsAppInstance();
+  const [syncing, setSyncing] = useState(false);
   const [searchParams] = useSearchParams();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
@@ -480,10 +484,35 @@ export default function Conversations() {
         {/* Conversation List */}
         <Card className="lg:col-span-1">
           <CardHeader className="py-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <MessageSquare className="h-4 w-4" />
-              Conversas ({conversations.length})
-            </CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <MessageSquare className="h-4 w-4" />
+                Conversas ({conversations.length})
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={syncing || !instance?.instance_name || instance?.status !== "connected"}
+                onClick={async () => {
+                  if (!instance?.instance_name) return;
+                  setSyncing(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke("sync-whatsapp-conversations", {
+                      body: { userId: instance.user_id, instanceName: instance.instance_name },
+                    });
+                    if (error) throw error;
+                    toast.success(`Sincronização concluída: ${data?.synced ?? 0} conversas`);
+                  } catch (e: any) {
+                    toast.error(`Erro ao sincronizar: ${e.message}`);
+                  } finally {
+                    setSyncing(false);
+                  }
+                }}
+                title="Sincronizar conversas do WhatsApp"
+              >
+                <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[calc(100vh-280px)]">
