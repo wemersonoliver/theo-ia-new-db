@@ -64,6 +64,9 @@ serve(async (req) => {
 
     const chats = await chatsResponse.json();
     console.log(`Found ${Array.isArray(chats) ? chats.length : 0} chats`);
+    if (Array.isArray(chats) && chats.length > 0) {
+      console.log(`[debug chat sample] keys=${Object.keys(chats[0]).join(",")} sample=${JSON.stringify(chats[0]).slice(0,500)}`);
+    }
 
     if (!Array.isArray(chats) || chats.length === 0) {
       return new Response(JSON.stringify({ success: true, synced: 0 }), {
