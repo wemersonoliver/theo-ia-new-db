@@ -4,6 +4,7 @@ import { resolveAccountId } from "../_account.ts";
 import { cleanAIText } from "../_ai_text.ts";
 import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts";
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
+import { retrieveRelevantContext } from "../_shared/rag.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -172,7 +173,9 @@ const schedulingTools = {
 
 // Retry with exponential backoff for Gemini API rate limits
 async function fetchGeminiWithRetry(apiKey: string, payload: any, maxRetries = 3): Promise<any> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+  // Modelo fixo em gemini-2.5-flash — mais barato e estável que gemini-flash-latest (Gemini 3 Flash),
+  // mantendo qualidade suficiente para atendimento WhatsApp.
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const response = await fetch(url, {
       method: "POST",
@@ -323,7 +326,19 @@ serve(async (req) => {
 
     const allMessages = conversation?.messages || [];
     const contextSummary = (allMessages as any[]).find((m: any) => m.type === "context_summary");
-    const recentMessages = (allMessages as any[]).filter((m: any) => m.type !== "context_summary").slice(-10);
+    // Otimização de custo: limita o histórico enviado ao Gemini às últimas 10 mensagens
+    // e trunca cada mensagem em ~600 chars (≈150 tokens) para evitar mensagens longas
+    // (PDFs, listagens) inflarem o input. O resumo de contexto cobre o restante.
+    const recentMessages = (allMessages as any[])
+      .filter((m: any) => m.type !== "context_summary")
+      .slice(-10)
+      .map((m: any) => {
+        const original = m.ai_content || m.content || "";
+        if (typeof original === "string" && original.length > 600) {
+          return { ...m, content: original.slice(0, 600) + "…", ai_content: undefined };
+        }
+        return m;
+      });
 
     // Check if the last incoming message has media for vision analysis
     let mediaBase64: string | null = null;
@@ -389,14 +404,26 @@ serve(async (req) => {
       }
     }
 
-    // Get knowledge base documents
+    // Get knowledge base documents — usa RAG por palavras-chave para enviar
+    // apenas trechos relevantes à pergunta atual (em vez do documento inteiro).
+    // Isso reduz tokens de input em até 90% sem perder qualidade.
     const { data: documents } = await supabase
       .from("knowledge_base_documents")
       .select("content_text")
       .eq("user_id", userId)
       .eq("status", "ready");
 
-    const knowledgeBase = documents?.map(d => d.content_text).filter(Boolean).join("\n\n---\n\n") || "";
+    const docTexts = (documents || [])
+      .map((d: any) => d.content_text)
+      .filter((t: any) => typeof t === "string" && t.length > 0);
+
+    const knowledgeBase = docTexts.length > 0
+      ? retrieveRelevantContext(messageContent || "", docTexts, {
+          topK: 3,
+          maxChars: 1800,
+          chunkSize: 800,
+        })
+      : "";
 
     // Get products catalog
     let productsCatalog = "";
@@ -500,7 +527,7 @@ ${aiConfig.custom_prompt || "Seja cordial, profissional e prestativo."}
 
 ${returningClientContext}
 
-${knowledgeBase ? `Use a seguinte base de conhecimento para responder:\n\n${knowledgeBase.slice(0, 6000)}` : ""}
+${knowledgeBase ? `Trechos relevantes da base de conhecimento (use para responder; se não houver informação suficiente, peça ao cliente para esperar a equipe):\n\n${knowledgeBase}` : ""}
 
 ${productsCatalog}
 

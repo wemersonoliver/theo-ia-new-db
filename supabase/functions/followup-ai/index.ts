@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cleanAIText } from "../_ai_text.ts";
+import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -103,6 +104,7 @@ async function analyzeConversation(
   currentDay: number,
   maxDays: number,
   businessNiche: string | null,
+  usageCtx?: { supabase: any; userId: string; phone: string },
 ): Promise<ConversationAnalysis | null> {
   const sanitized = sanitizeContactName(rawContactName);
 
@@ -147,7 +149,7 @@ Retorne via tool call um JSON estruturado. Seja FACTUAL — extraia informaçõe
   };
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -166,6 +168,21 @@ Retorne via tool call um JSON estruturado. Seja FACTUAL — extraia informaçõe
   }
 
   const data = await response.json();
+  // Log de custo de IA (texto Gemini)
+  if (usageCtx) {
+    try {
+      const t = extractGeminiTokens(data);
+      if (t.input || t.output) {
+        await logTextUsage(usageCtx.supabase, {
+          userId: usageCtx.userId,
+          source: "followup-ai-analysis",
+          tokensInput: t.input,
+          tokensOutput: t.output,
+          referenceId: usageCtx.phone,
+        });
+      }
+    } catch (_) { /* noop */ }
+  }
   const parts = data.candidates?.[0]?.content?.parts || [];
   const fnCall = parts.find((p: any) => p.functionCall)?.functionCall;
   if (!fnCall?.args) {
@@ -431,6 +448,7 @@ serve(async (req) => {
           currentDay,
           maxDays,
           businessNiche,
+          { supabase, userId: item.user_id, phone: item.phone },
         );
 
         if (!analysis) {
@@ -496,7 +514,7 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
             : generationPrompt + `\n\n⚠️ TENTATIVA ANTERIOR FOI REJEITADA POR SER GENÉRICA. Reescreva começando IMEDIATAMENTE com referência concreta ao item oferecido ou ao último ponto da conversa. NÃO comece com "Olá" + saudação vazia.`;
 
           const geminiResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -515,6 +533,19 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
           }
 
           const geminiData = await geminiResponse.json();
+          // Log de custo de IA (texto Gemini)
+          try {
+            const t = extractGeminiTokens(geminiData);
+            if (t.input || t.output) {
+              await logTextUsage(supabase, {
+                userId: item.user_id,
+                source: "followup-ai-generation",
+                tokensInput: t.input,
+                tokensOutput: t.output,
+                referenceId: item.phone,
+              });
+            }
+          } catch (_) { /* noop */ }
           const candidate = cleanAIText(geminiData.candidates?.[0]?.content?.parts
             ?.filter((p: any) => p.text && !p.thought)
             ?.map((p: any) => p.text)
