@@ -1,78 +1,114 @@
-## Objetivo
+# Aba "Tarefas" — Visão Usuário + Admin
 
-Adicionar na tela `/conversations` (desktop e mobile) um botão de anexar arquivos ao lado do input de mensagem, igual ao WhatsApp Web — permitindo enviar **imagens, vídeos, documentos e áudios** para o lead, além do texto que já existe.
+Aproveitar a tabela existente `crm_deal_tasks` (já tem `completed`, `due_date`, `assigned_to`, `account_id`, `completed_at`, `completed_by`) para criar uma central de tarefas robusta — sem migrations de schema novas.
 
-## Como vai funcionar (visão do usuário)
+## 1. Menu lateral
 
-Ao lado do campo de digitar mensagem aparece um ícone de clipe (📎). Ao clicar:
+**`src/components/Sidebar.tsx`** — adicionar item antes de "Configurações":
+- `{ to: "/tasks", icon: ListChecks, label: "Tarefas", perm: "crm" }` (usa permissão `crm` já existente, herdada por owner/manager/seller).
 
-- Menu com 3 opções: **Foto/Vídeo**, **Documento**, **Áudio**.
-- Após selecionar o arquivo, abre um pré-visualizador (preview da imagem/vídeo, ícone do documento ou player de áudio) com:
-  - Campo de **legenda** opcional (para imagem/vídeo/documento).
-  - Botões **Cancelar** e **Enviar**.
-- Ao confirmar: arquivo é enviado ao WhatsApp do lead, aparece imediatamente no chat (com o mesmo `MediaBubble` já usado para mídias recebidas) e fica salvo na conversa.
+**`src/components/admin/AdminSidebar.tsx`** — adicionar:
+- `{ to: "/admin/tasks", icon: ListChecks, label: "Tarefas (Global)" }` após "CRM".
 
-Limites: **16 MB por arquivo** (limite prático da Evolution API). Tipos aceitos:
-- Imagem: jpg, png, webp, gif
-- Vídeo: mp4, 3gp, mov
-- Áudio: ogg, mp3, m4a, wav (enviado como nota de voz quando ogg/opus)
-- Documento: pdf, doc/docx, xls/xlsx, txt, csv, zip
+**`src/App.tsx`** — registrar rotas:
+- `/tasks` → `<ProtectedRoute><Tasks /></ProtectedRoute>`
+- `/admin/tasks` → `<AdminTasks />`
 
-## Mudanças técnicas
+## 2. Página do Usuário — `src/pages/Tasks.tsx`
 
-### 1. Storage
-Reusar o bucket público existente `whatsapp-media`. Pasta: `{accountId|userId}/{phone}/outgoing/{timestamp}_{nome}.{ext}`.
+Layout dentro de `DashboardLayout` com:
 
-### 2. Nova edge function `send-whatsapp-media`
-Arquivo: `supabase/functions/send-whatsapp-media/index.ts` (com `verify_jwt = false` + validação manual via `auth.getUser`, mesmo padrão do `send-whatsapp-message`).
+**Cabeçalho de KPIs (4 cards):**
+- Total de tarefas, Concluídas, Pendentes, Atrasadas (vencidas e não concluídas), Para hoje.
 
-Recebe `{ phone, mediaUrl, mediaType: "image"|"video"|"audio"|"document", filename?, caption?, mimetype?, system? }` e:
+**Filtros (barra superior):**
+- Status: Todas / Pendentes / Concluídas / Atrasadas / Hoje / Próximos 7 dias
+- Responsável (membros da conta, via `useTeamMembers`)
+- Negócio (busca por título do deal)
+- Período (data de vencimento — preset 7d/30d/90d/all)
+- Busca por texto (título)
 
-1. Resolve `account_id` + instância conectada (mesma lógica do `send-whatsapp-message`).
-2. Chama Evolution API:
-   - `POST /message/sendMedia/{instance}` com `{ number, mediatype, mimetype, caption, media: <url>, fileName }` para imagem/vídeo/documento.
-   - `POST /message/sendWhatsAppAudio/{instance}` com `{ number, audio: <url> }` para áudio (envia como voice note).
-   - Faz fallback do 9º dígito (mesmo helper `getBrazilianPhoneVariant` já usado).
-3. Acrescenta a mensagem em `whatsapp_conversations.messages` (ou `system_whatsapp_conversations`) com:
-   ```
-   { id, timestamp, from_me: true, type: "image"|"video"|"audio"|"document",
-     content: caption || "", media_url, media_mime, media_filename,
-     sent_by: "human", attendant_name, attendant_user_id }
-   ```
-4. Marca sessão de IA como `handed_off` (igual o `send-whatsapp-message`).
+**Tabs internas:**
+- `Lista` — tabela com colunas: ✅ checkbox, Título, Negócio (link clicável → CRM), Responsável (avatar), Vencimento (com badge "Atrasada"/"Hoje"), Concluída em, Ações (editar/excluir). Ordenação por vencimento crescente, agrupada por dia.
+- `Kanban` — 3 colunas (Pendentes, Em atraso, Concluídas) com drag para marcar concluído.
+- `Calendário` — reuso de `AppointmentCalendar` adaptado mostrando tarefas por dia.
+- `Desempenho` — gráficos:
+  - Barras: tarefas concluídas por membro (últimos 30 dias).
+  - Linha: tarefas concluídas por dia (últimos 30 dias).
+  - Pizza: distribuição por status.
+  - Tabela: "Top performers" com taxa de conclusão (% concluídas / total) e tempo médio de conclusão por membro.
 
-### 3. Hook `useConversations` / `useSystemConversations`
-Adicionar mutation `sendMedia` que:
-1. Faz `supabase.storage.from("whatsapp-media").upload(...)` do `File` selecionado.
-2. Pega a `publicUrl`.
-3. Chama `supabase.functions.invoke("send-whatsapp-media", { body: { phone, mediaUrl, mediaType, filename, caption, mimetype, system? } })`.
-4. Invalida queries de conversa.
+**Ações:**
+- Botão "Nova tarefa" abre dialog (precisa selecionar um Deal — usa `useCRMDeals`). Reusa lógica existente de `useCRMDealTasks`.
+- Toggle inline (checkbox) → otimista, com `toggleTask`.
+- Editar/Excluir via dropdown.
 
-### 4. Novo componente `MediaAttachButton`
-Arquivo: `src/components/MediaAttachButton.tsx`.
+**Hook novo:** `src/hooks/useAllTasks.ts` — busca todas as tarefas da conta (filtra por `account_id` via RLS), com joins em deals (título) e profiles (nome do responsável). Suporta filtros e retorna agregados.
 
-- Botão com ícone `Paperclip` + `DropdownMenu` (Foto/Vídeo, Documento, Áudio).
-- `<input type="file" hidden>` com `accept` filtrado por tipo escolhido.
-- Ao escolher arquivo, abre `Dialog` de preview com:
-  - Preview da mídia (img/video/audio/ícone).
-  - `Textarea` de legenda (oculto p/ áudio).
-  - Validação de tamanho (≤16 MB) e tipo.
-  - Botão **Enviar** chama `sendMedia.mutateAsync(...)` e fecha.
+## 3. Página Admin — `src/pages/admin/AdminTasks.tsx`
 
-Aceita props `{ phone, system?, disabled? }` para reuso em conversas do usuário e do sistema (admin support).
+Acessa via Service-role-bypass usando RLS de super_admin (já habilitado em `crm_deal_tasks`? Não — precisa adicionar policy ou usar edge function). 
 
-### 5. Integração na UI
-Em `src/pages/Conversations.tsx` (desktop **e** mobile), inserir `<MediaAttachButton phone={selectedPhone} />` à esquerda do `Input` em ambos os blocos (linhas ~432 mobile e ~644 desktop). Mesma adição em `src/pages/admin/AdminConversations.tsx` e `src/components/admin/AdminSystemFollowupTab.tsx` se também tiverem input de envio (verificar e replicar passando `system: true`).
+**Verificação:** `crm_deal_tasks` hoje só tem policy "Team members" + "own". Vou adicionar policy: "Super admins manage all deal tasks" via migration mínima.
 
-### 6. Renderização
-`MediaBubble` já trata `image/audio/video/document` quando há `media_url` — não precisa mexer.
+Layout `AdminLayout`:
 
-## Pontos abertos
+**KPIs globais:** Total de tarefas no sistema, Concluídas (período), Em atraso, Usuários com tarefas ativas, Taxa média de conclusão.
 
-- **Áudio gravado pelo navegador** (ícone de microfone): hoje `AudioRecordButton` só transcreve. Mantemos o comportamento atual; o novo botão de anexos cobre upload de áudio existente. Posso unificar depois se você quiser.
-- Sem compressão de mídia client-side (Evolution aceita até ~16 MB; arquivos maiores são bloqueados com mensagem amigável).
+**Filtros:**
+- Período (7d/30d/90d/custom)
+- Conta/Empresa (lista de `accounts`)
+- Usuário (lista de profiles)
+- Status
 
-## Arquivos afetados
+**Seções:**
+1. **Gráficos globais:**
+   - Barras horizontais: Top 10 usuários por tarefas concluídas.
+   - Linha: Tarefas criadas vs concluídas por dia.
+   - Pizza: % por status global.
+   - Heatmap (opcional, via grid simples): atividade por dia da semana × hora.
 
-- **Novos**: `supabase/functions/send-whatsapp-media/index.ts`, `src/components/MediaAttachButton.tsx`
-- **Editados**: `src/hooks/useConversations.ts`, `src/hooks/useSystemConversations.ts`, `src/pages/Conversations.tsx`, possivelmente `src/components/admin/AdminSystemFollowupTab.tsx` / `src/pages/admin/AdminConversations.tsx`, `supabase/config.toml` (registrar nova função com `verify_jwt = false`)
+2. **Tabela de Desempenho por Usuário** (linha por user):
+   - Avatar/Nome, Conta, Total criadas, Concluídas, Em atraso, Taxa de conclusão (%), Tempo médio de conclusão (h), Última atividade.
+   - Ordenação por qualquer coluna; clique expande para ver tarefas do usuário.
+
+3. **Lista expansível por Usuário:**
+   - Accordion: cada usuário → lista de tarefas (mesma tabela do user view, somente leitura para admin).
+
+**Hook novo:** `src/hooks/useAdminTasks.ts` — usa cliente Supabase (com policy super_admin) para buscar tarefas globais com joins em `profiles`, `accounts`, `crm_deals`.
+
+## 4. Componentes novos
+
+- `src/components/tasks/TaskFilters.tsx`
+- `src/components/tasks/TaskTable.tsx` (compartilhado user/admin via prop `readOnly`)
+- `src/components/tasks/TaskKPICards.tsx`
+- `src/components/tasks/TaskDialog.tsx` (criar/editar)
+- `src/components/tasks/TaskCharts.tsx` (recharts: BarChart, LineChart, PieChart)
+- `src/components/tasks/TaskCalendarView.tsx`
+- `src/components/admin/AdminTaskPerformanceTable.tsx`
+
+## 5. Migration mínima
+
+```sql
+-- Permitir super_admins verem/gerenciarem todas as tarefas
+CREATE POLICY "Super admins manage all deal tasks"
+ON public.crm_deal_tasks
+FOR ALL TO authenticated
+USING (has_role(auth.uid(), 'super_admin'::app_role))
+WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+```
+
+## 6. Detalhes técnicos
+
+- Usar `recharts` (já no projeto via `@/components/ui/chart`).
+- Atualizações otimistas com TanStack Query (padrão já usado).
+- Mobile: tabela vira cards empilhados (`md:hidden` / `hidden md:table`).
+- Tema: amber/slate no admin, primary normal no usuário (consistente com padrões).
+- Badges de status: vermelho (atrasada), azul (hoje), cinza (futura), verde (concluída).
+- Realtime opcional (v2): subscription em `crm_deal_tasks` filtrado por `account_id`.
+
+## Arquivos a criar/editar
+
+**Editar:** `src/components/Sidebar.tsx`, `src/components/admin/AdminSidebar.tsx`, `src/App.tsx`
+**Criar:** `src/pages/Tasks.tsx`, `src/pages/admin/AdminTasks.tsx`, `src/hooks/useAllTasks.ts`, `src/hooks/useAdminTasks.ts`, e os 7 componentes acima.
+**Migration:** policy super_admin em `crm_deal_tasks`.
