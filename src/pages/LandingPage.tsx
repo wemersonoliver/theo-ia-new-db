@@ -25,6 +25,17 @@ import {
   Shield,
   ArrowRight,
   Star,
+  Smartphone,
+  Brain,
+  TrendingUp,
+  Timer,
+  Target,
+  Mic,
+  Image as ImageIcon,
+  Kanban,
+  ListChecks,
+  Repeat,
+  HeartHandshake,
 } from "lucide-react";
 
 const features = [
@@ -38,16 +49,42 @@ const features = [
   { icon: Star, title: "Configuração via Chat", desc: "Um consultor de IA conversa com você, entende seu negócio e cria o prompt perfeito de atendimento — sem esforço." },
   { icon: Zap, title: "Ajustes com IA", desc: "Teste seu agente em tempo real e receba sugestões inteligentes para melhorar o atendimento automaticamente." },
   { icon: BarChart3, title: "Dashboard Completo", desc: "Acompanhe métricas, relatórios e o desempenho do seu atendimento." },
+  { icon: Kanban, title: "CRM Kanban Integrado", desc: "Visualize e arraste seus leads pelo funil de vendas — do primeiro contato ao fechamento." },
+  { icon: ListChecks, title: "Gestão de Tarefas", desc: "Crie e acompanhe tarefas vinculadas a clientes e negócios direto no painel." },
+  { icon: Repeat, title: "Follow-up Automático", desc: "Cadência inteligente de 6 dias que reativa leads frios sem você lembrar." },
+  { icon: Mic, title: "Resposta a Áudios", desc: "A IA escuta áudios do cliente, transcreve e responde no formato que ele preferir." },
+  { icon: ImageIcon, title: "Análise de Imagens", desc: "Manda foto, documento ou comprovante? A IA lê, entende e responde com contexto." },
+  { icon: HeartHandshake, title: "Persuasão com Ciência", desc: "Argumentos baseados em Cialdini, Chris Voss e os maiores nomes da negociação." },
 ];
 
-const cltVsTheo = [
-  { label: "Custo mensal", clt: "R$ 3.000+ (salário + encargos)", theo: "R$ 97/mês" },
-  { label: "Disponibilidade", clt: "8h por dia, 5 dias/semana", theo: "24h por dia, 7 dias/semana" },
-  { label: "Férias", clt: "30 dias pagos por ano", theo: "Nunca tira férias" },
-  { label: "13° Salário", clt: "Sim, obrigatório", theo: "Não se aplica" },
-  { label: "Faltas e atestados", clt: "Fica doente, falta", theo: "Nunca fica doente" },
-  { label: "Conversas simultâneas", clt: "1 por vez", theo: "Ilimitadas" },
-  { label: "Tempo de resposta", clt: "Minutos a horas", theo: "Segundos" },
+const aiAdvantages = [
+  {
+    icon: Brain,
+    title: "Vendedor treinado nos maiores livros de persuasão",
+    desc: "Sua IA aplica gatilhos de Cialdini (Armas da Persuasão), técnicas de negociação de Chris Voss (Como Negociar Qualquer Coisa) e o método SPIN Selling em cada conversa — sem você precisar treinar ninguém.",
+  },
+  {
+    icon: Timer,
+    title: "Resposta em menos de 5 segundos, 24h por dia",
+    desc: "Enquanto seus concorrentes demoram horas, sua IA responde no instante em que o cliente envia a mensagem — capturando a intenção de compra no momento mais quente.",
+  },
+  {
+    icon: Target,
+    title: "Atendimento consistente e sem dia ruim",
+    desc: "Sem cansaço, sem mau humor, sem esquecer de fazer follow-up. Cada cliente recebe a melhor versão do seu atendimento, sempre.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Escala infinita sem contratar ninguém",
+    desc: "Atenda 1, 100 ou 10.000 clientes ao mesmo tempo com a mesma qualidade. Cresça sem dor de cabeça com folha de pagamento.",
+  },
+];
+
+const responseStats = [
+  { value: "78%", label: "dos clientes compram da empresa que responde primeiro", source: "Harvard Business Review" },
+  { value: "5min", label: "é o tempo máximo para um lead esfriar drasticamente", source: "MIT Lead Response Study" },
+  { value: "10x", label: "mais chances de converter respondendo em até 1 minuto", source: "InsideSales.com" },
+  { value: "67%", label: "dos clientes desistem da compra por demora no atendimento", source: "Forrester Research" },
 ];
 
 const faqItems = [
@@ -72,6 +109,10 @@ const included = [
   "Dashboard com métricas",
   "Configuração do agente via chat com IA",
   "Ajustes inteligentes com simulador + IA",
+  "CRM Kanban com funil de vendas",
+  "Gestão de tarefas e follow-up automático",
+  "Transcrição de áudios e leitura de imagens",
+  "Aplicativo 100% mobile — gerencie pelo celular",
   "Suporte por WhatsApp",
   "Atualizações gratuitas",
 ];
@@ -150,37 +191,125 @@ export default function LandingPage() {
         </div>
       </section>
 
-       {/* Problema vs Solução */}
-       <section className="px-4 py-20">
-         <div className="mx-auto max-w-5xl">
-           <h2 className="mb-4 text-center text-3xl font-bold md:text-4xl">
-             Por que continuar pagando <span className="text-[hsl(0,84%,60%)]">caro</span> por atendimento?
-           </h2>
-           <p className="mx-auto mb-12 max-w-2xl text-center text-white">
-             Um funcionário CLT custa mais de R$ 3.000/mês com encargos. E ainda tira férias, fica doente e trabalha só 8 horas. Compare:
-           </p>
-          <div className="overflow-hidden rounded-xl border border-[hsl(217,33%,17%)]">
-            <div className="grid grid-cols-3 bg-[hsl(222,47%,8%)]">
-              <div className="p-4 font-semibold text-white" />
-              <div className="flex items-center justify-center gap-2 border-l border-[hsl(217,33%,17%)] p-4 font-bold text-[hsl(0,84%,60%)]">
-                <X className="h-5 w-5" /> CLT
-              </div>
-              <div className="flex items-center justify-center gap-2 border-l border-[hsl(217,33%,17%)] p-4 font-bold text-[hsl(142,76%,36%)]">
-                <Check className="h-5 w-5" /> Theo IA
-              </div>
-            </div>
-            {cltVsTheo.map((row, i) => (
-              <div key={i} className="grid grid-cols-3 border-t border-[hsl(217,33%,17%)]">
-                <div className="p-4 text-sm font-medium text-white">{row.label}</div>
-                <div className="border-l border-[hsl(217,33%,17%)] p-4 text-sm text-white">{row.clt}</div>
-                <div className="border-l border-[hsl(217,33%,17%)] p-4 text-sm text-[hsl(142,76%,36%)]">{row.theo}</div>
-              </div>
+      {/* Estatísticas de Tempo de Resposta */}
+      <section className="px-4 py-20">
+        <div className="mx-auto max-w-5xl">
+          <Badge className="mx-auto mb-4 flex w-fit items-center border-[hsl(0,84%,60%)]/30 bg-[hsl(0,84%,60%)]/10 text-[hsl(0,84%,60%)]">
+            <Clock className="mr-1 h-3 w-3" /> O custo invisível da demora
+          </Badge>
+          <h2 className="mb-4 text-center text-3xl font-bold md:text-4xl">
+            Cada minuto de espera é um cliente <span className="text-[hsl(0,84%,60%)]">perdido</span>
+          </h2>
+          <p className="mx-auto mb-12 max-w-2xl text-center text-white">
+            Estudos mostram que velocidade de resposta é o fator número 1 na decisão de compra moderna. E os números são assustadores:
+          </p>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {responseStats.map((stat, i) => (
+              <Card key={i} className="border-[hsl(0,84%,60%)]/20 bg-[hsl(222,47%,8%)] text-white">
+                <CardContent className="p-6 text-center">
+                  <p className="mb-2 text-4xl font-extrabold text-[hsl(0,84%,60%)]">{stat.value}</p>
+                  <p className="mb-3 text-sm leading-snug text-white">{stat.label}</p>
+                  <p className="text-xs italic text-slate-400">{stat.source}</p>
+                </CardContent>
+              </Card>
             ))}
           </div>
           <div className="mt-8 rounded-xl border border-[hsl(142,76%,36%)]/30 bg-[hsl(142,76%,36%)]/5 p-6 text-center">
-            <p className="text-lg font-semibold">
-              💰 Economia de até <span className="text-2xl text-[hsl(142,76%,36%)]">R$ 34.836/ano</span> substituindo um atendente CLT pelo Theo IA
+            <p className="text-lg font-semibold text-white">
+              ⚡ Com Theo IA, sua resposta sai em <span className="text-2xl text-[hsl(142,76%,36%)]">menos de 5 segundos</span> — 24h por dia, 7 dias por semana.
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Vantagens da IA na Persuasão */}
+      <section className="px-4 py-20">
+        <div className="mx-auto max-w-5xl">
+          <Badge className="mx-auto mb-4 flex w-fit items-center border-[hsl(217,91%,60%)]/30 bg-[hsl(217,91%,60%)]/10 text-[hsl(217,91%,60%)]">
+            <Brain className="mr-1 h-3 w-3" /> Inteligência que vende
+          </Badge>
+          <h2 className="mb-4 text-center text-3xl font-bold md:text-4xl">
+            Um assistente que <span className="text-[hsl(217,91%,60%)]">domina a arte da venda</span>
+          </h2>
+          <p className="mx-auto mb-12 max-w-2xl text-center text-white">
+            Theo IA não é um chatbot genérico. É um vendedor digital treinado nas técnicas dos melhores livros de persuasão e negociação do mundo.
+          </p>
+          <div className="grid gap-6 md:grid-cols-2">
+            {aiAdvantages.map((adv, i) => (
+              <Card key={i} className="border-[hsl(217,33%,17%)] bg-[hsl(222,47%,8%)] text-white transition-all hover:border-[hsl(217,91%,60%)]/50">
+                <CardContent className="p-8">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-[hsl(217,91%,60%)]/20 to-[hsl(142,76%,36%)]/20">
+                    <adv.icon className="h-7 w-7 text-[hsl(217,91%,60%)]" />
+                  </div>
+                  <h3 className="mb-3 text-xl font-bold text-white">{adv.title}</h3>
+                  <p className="text-sm leading-relaxed text-white">{adv.desc}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 100% Mobile */}
+      <section className="px-4 py-20">
+        <div className="mx-auto max-w-5xl">
+          <div className="grid items-center gap-12 md:grid-cols-2">
+            <div>
+              <Badge className="mb-4 flex w-fit items-center border-[hsl(142,76%,36%)]/30 bg-[hsl(142,76%,36%)]/10 text-[hsl(142,76%,36%)]">
+                <Smartphone className="mr-1 h-3 w-3" /> Novidade
+              </Badge>
+              <h2 className="mb-4 text-3xl font-bold md:text-4xl">
+                Gerencie tudo direto do <span className="text-[hsl(142,76%,36%)]">seu celular</span>
+              </h2>
+              <p className="mb-6 text-lg text-white">
+                Esqueça a necessidade de computador. O Theo IA é 100% mobile — você configura sua IA, acompanha conversas, fecha vendas no CRM e responde clientes de qualquer lugar.
+              </p>
+              <ul className="space-y-3">
+                {[
+                  "Configure seu agente de IA pelo celular",
+                  "Acompanhe leads e conversas em tempo real",
+                  "Mova negociações no Kanban com o dedo",
+                  "Receba notificações de cada novo lead",
+                  "Atenda manualmente quando quiser assumir",
+                ].map((item, i) => (
+                  <li key={i} className="flex items-start gap-3 text-white">
+                    <Check className="mt-0.5 h-5 w-5 shrink-0 text-[hsl(142,76%,36%)]" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="relative">
+              <div className="absolute -inset-4 rounded-3xl bg-gradient-to-br from-[hsl(217,91%,60%)]/20 to-[hsl(142,76%,36%)]/20 blur-2xl" />
+              <div className="relative mx-auto aspect-[9/16] max-w-xs rounded-[2.5rem] border-8 border-[hsl(217,33%,17%)] bg-[hsl(222,47%,8%)] p-4 shadow-2xl">
+                <div className="flex h-full flex-col gap-3 overflow-hidden rounded-2xl bg-gradient-to-b from-[hsl(217,91%,60%)]/10 to-[hsl(222,47%,5%)] p-4">
+                  <div className="flex items-center gap-2 border-b border-[hsl(217,33%,17%)] pb-3">
+                    <div className="h-9 w-9 rounded-full bg-[hsl(217,91%,60%)]" />
+                    <div className="flex-1">
+                      <div className="text-xs font-bold text-white">Theo IA</div>
+                      <div className="text-[10px] text-[hsl(142,76%,36%)]">● online agora</div>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 text-[10px]">
+                    <div className="max-w-[80%] rounded-2xl rounded-tl-sm bg-[hsl(217,33%,17%)] p-2 text-white">
+                      Olá! Vi seu interesse no produto X 👋
+                    </div>
+                    <div className="ml-auto max-w-[80%] rounded-2xl rounded-tr-sm bg-[hsl(142,76%,36%)] p-2 text-white">
+                      Quanto custa?
+                    </div>
+                    <div className="max-w-[80%] rounded-2xl rounded-tl-sm bg-[hsl(217,33%,17%)] p-2 text-white">
+                      Posso te explicar! Quer agendar 15 min hoje?
+                    </div>
+                    <div className="ml-auto max-w-[80%] rounded-2xl rounded-tr-sm bg-[hsl(142,76%,36%)] p-2 text-white">
+                      Pode ser às 15h ✅
+                    </div>
+                  </div>
+                  <div className="mt-auto rounded-xl border border-[hsl(142,76%,36%)]/30 bg-[hsl(142,76%,36%)]/10 p-2 text-center text-[10px] font-semibold text-[hsl(142,76%,36%)]">
+                    ✨ Agendamento criado
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
