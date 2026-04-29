@@ -6,48 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { usePlans } from "@/hooks/usePlans";
 
 const TRIAL_DAYS = 15;
 
-const plans = [
-  {
-    id: "monthly" as const,
-    name: "Plano Mensal",
-    price: "R$ 97",
-    period: "/mês",
-    url: "https://pay.kiwify.com.br/AdpFbz3",
-    features: [
-      "Atendimento IA 24/7",
-      "Agendamento automático",
-      "Base de conhecimento",
-      "Lembretes automáticos",
-      "Suporte prioritário",
-    ],
-  },
-  {
-    id: "annual" as const,
-    name: "Plano Anual",
-    price: "R$ 997",
-    period: "/ano",
-    originalPrice: "R$ 1.164",
-    savings: "Economize R$ 167",
-    url: "https://pay.kiwify.com.br/bpNMdQ0",
-    features: [
-      "Tudo do plano mensal",
-      "2 meses grátis",
-      "Prioridade em novidades",
-      "Suporte VIP",
-      "Preço garantido por 12 meses",
-    ],
-    recommended: true,
-  },
-];
+const fmtBRL = (cents: number) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 }).format((cents || 0) / 100);
 
 export function TrialBanner() {
   const { user } = useAuth();
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
   const [show, setShow] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const { data: plans = [] } = usePlans();
 
   useEffect(() => {
     const check = async () => {
@@ -144,34 +115,31 @@ export function TrialBanner() {
               Continue automatizando seu atendimento com o Theo IA
             </p>
           </DialogHeader>
-          <div className="grid gap-4 sm:grid-cols-2 mt-2">
+          <div className="grid gap-4 sm:grid-cols-2 mt-2 max-h-[70vh] overflow-y-auto pr-1">
             {plans.map((plan) => (
               <Card
                 key={plan.id}
                 className={`relative cursor-pointer transition-all duration-200 hover:border-primary/50 ${
-                  plan.recommended ? "border-primary ring-2 ring-primary/20 shadow-lg" : "border-border"
+                  plan.is_recommended ? "border-primary ring-2 ring-primary/20 shadow-lg" : "border-border"
                 }`}
-                onClick={() => window.open(plan.url, "_blank")}
+                onClick={() => plan.checkout_url && window.open(plan.checkout_url, "_blank")}
               >
-                {plan.recommended && (
+                {plan.is_recommended && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <Badge className="bg-primary text-primary-foreground">
-                      <Crown className="mr-1 h-3 w-3" /> Mais Popular
+                      <Crown className="mr-1 h-3 w-3" /> Recomendado
                     </Badge>
                   </div>
                 )}
                 <CardHeader className="pb-3 pt-6">
-                  <CardTitle className="text-lg">{plan.name}</CardTitle>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    {plan.name}
+                    <Badge variant="outline" className="text-[10px] uppercase">{plan.tier}</Badge>
+                  </CardTitle>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-bold">{plan.price}</span>
-                    <span className="text-muted-foreground">{plan.period}</span>
+                    <span className="text-3xl font-bold">{fmtBRL(plan.price_cents)}</span>
+                    <span className="text-muted-foreground">{plan.billing_period === "monthly" ? "/mês" : "/ano"}</span>
                   </div>
-                  {plan.originalPrice && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground line-through">{plan.originalPrice}</span>
-                      <Badge variant="secondary" className="text-xs">{plan.savings}</Badge>
-                    </div>
-                  )}
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <ul className="space-y-2">
@@ -184,11 +152,11 @@ export function TrialBanner() {
                   </ul>
                   <Button
                     className={`w-full mt-2 ${
-                      plan.recommended
+                      plan.is_recommended
                         ? "bg-green-600 hover:bg-green-700 text-white"
                         : ""
                     }`}
-                    variant={plan.recommended ? "default" : "outline"}
+                    variant={plan.is_recommended ? "default" : "outline"}
                   >
                     Assinar {plan.name} <ArrowRight className="ml-1 h-4 w-4" />
                   </Button>
