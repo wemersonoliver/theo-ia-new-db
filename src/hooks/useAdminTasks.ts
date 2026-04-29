@@ -141,12 +141,15 @@ export function aggregateByUser(tasks: AdminTask[]): UserPerformance[] {
     }
   }
 
-  return Array.from(map.values()).map((u) => ({
-    ...u,
-    completionRate: u.total ? Math.round((u.completed / u.total) * 100) : 0,
-    avgCompletionHours:
-      u._completionTimes.length > 0
-        ? Math.round((u._completionTimes.reduce((a, b) => a + b, 0) / u._completionTimes.length) * 10) / 10
-        : null,
-  }));
+  return Array.from(map.values()).map((u) => {
+    const { _completionTimes, _lastTs, ...rest } = u;
+    return {
+      ...rest,
+      completionRate: u.total ? Math.round((u.completed / u.total) * 100) : 0,
+      avgCompletionHours:
+        _completionTimes.length > 0
+          ? Math.round((_completionTimes.reduce((a, b) => a + b, 0) / _completionTimes.length) * 10) / 10
+          : null,
+    } as UserPerformance;
+  });
 }
