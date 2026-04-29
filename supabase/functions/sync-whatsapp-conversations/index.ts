@@ -26,10 +26,13 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { userId, instanceName, limit: bodyLimit, offset: bodyOffset } = await req.json();
+    const { userId, instanceName, limit: bodyLimit, offset: bodyOffset, daysBack } = await req.json();
     const BATCH_LIMIT = typeof bodyLimit === "number" && bodyLimit > 0 ? Math.min(bodyLimit, 100) : 40;
     const OFFSET = typeof bodyOffset === "number" && bodyOffset >= 0 ? bodyOffset : 0;
     const CONCURRENCY = 5;
+    const DAYS_BACK = typeof daysBack === "number" && daysBack > 0 ? daysBack : 5;
+    const cutoffMs = Date.now() - DAYS_BACK * 24 * 60 * 60 * 1000;
+    const cutoffSec = Math.floor(cutoffMs / 1000);
 
     if (!userId || !instanceName) {
       return new Response(JSON.stringify({ error: "Missing userId or instanceName" }), {
@@ -61,6 +64,7 @@ serve(async (req) => {
 
     const chats = await chatsResponse.json();
     console.log(`Found ${Array.isArray(chats) ? chats.length : 0} chats`);
+    // (debug removido)
 
     if (!Array.isArray(chats) || chats.length === 0) {
       return new Response(JSON.stringify({ success: true, synced: 0 }), {
@@ -71,13 +75,31 @@ serve(async (req) => {
     // Filtra individuais e ordena por updatedAt/lastMessage desc
     const individualChats = (chats as any[])
       .filter((c) => {
-        const jid = c.id || c.remoteJid || c.jid;
+        const jid = c.remoteJid || c.jid || c.id;
         return jid && !jid.includes("@g.us") && !jid.includes("@broadcast");
       })
+      .filter((c) => {
+        const raw = c.updatedAt || c.lastMessageTimestamp || c.conversationTimestamp;
+        if (!raw) return true;
+        let tMs: number;
+        if (typeof raw === "string") {
+          tMs = new Date(raw).getTime();
+        } else {
+          const n = Number(raw);
+          tMs = n > 1e12 ? n : n * 1000;
+        }
+        if (!tMs || isNaN(tMs)) return true;
+        return tMs >= cutoffMs;
+      })
       .sort((a, b) => {
-        const ta = Number(a.updatedAt || a.lastMessageTimestamp || a.conversationTimestamp || 0);
-        const tb = Number(b.updatedAt || b.lastMessageTimestamp || b.conversationTimestamp || 0);
-        return tb - ta;
+        const parse = (c: any) => {
+          const raw = c.updatedAt || c.lastMessageTimestamp || c.conversationTimestamp;
+          if (!raw) return 0;
+          if (typeof raw === "string") return new Date(raw).getTime();
+          const n = Number(raw);
+          return n > 1e12 ? n : n * 1000;
+        };
+        return parse(b) - parse(a);
       });
 
     const totalChats = individualChats.length;
@@ -86,26 +108,26 @@ serve(async (req) => {
 
     // Pré-checa quais já existem para pular
     const phones = slice.map((c) => {
-      const jid = c.id || c.remoteJid || c.jid;
+      const jid = c.remoteJid || c.jid || c.id;
       return (jid as string).replace("@s.whatsapp.net", "").replace("@lid", "");
     }).filter((p) => p && p.length >= 8);
 
     const { data: existingRows } = await supabase
       .from("whatsapp_conversations")
-      .select("phone, total_messages")
+      .select("phone, messages, ai_active, contact_name")
       .eq("user_id", userId)
       .in("phone", phones);
 
-    const existingSet = new Set((existingRows || []).filter((r: any) => (r.total_messages ?? 0) > 0).map((r: any) => r.phone));
+    const existingMap = new Map<string, any>((existingRows || []).map((r: any) => [r.phone, r]));
 
     let syncedCount = 0;
     let skippedCount = 0;
 
     async function processChat(chat: any) {
-      const remoteJid = chat.id || chat.remoteJid || chat.jid;
+      const remoteJid = chat.remoteJid || chat.jid || chat.id;
       const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "");
       if (!phone || phone.length < 8) return;
-      if (existingSet.has(phone)) { skippedCount++; return; }
+      const existing = existingMap.get(phone);
 
       try {
         // Fetch messages for this chat
@@ -131,7 +153,7 @@ serve(async (req) => {
         }
 
         const messagesData = await messagesResponse.json();
-        
+
         // Handle different response formats from Evolution API
         let rawMessages: any[];
         if (Array.isArray(messagesData)) {
@@ -152,6 +174,11 @@ serve(async (req) => {
         // Transform messages to our format
         const formattedMessages = rawMessages
           .filter((msg: any) => msg && msg.key && msg.message)
+          .filter((msg: any) => {
+            const ts = Number(msg.messageTimestamp || 0);
+            if (!ts) return false;
+            return ts >= cutoffSec;
+          })
           .map((msg: any) => {
             const isFromMe = msg.key?.fromMe === true;
             let content: string;
@@ -201,18 +228,38 @@ serve(async (req) => {
         if (formattedMessages.length === 0) return;
 
         const contactName = chat.name || chat.pushName || chat.contact?.pushName || null;
-        const lastMessageAt = formattedMessages[formattedMessages.length - 1].timestamp;
+
+        // Mescla com mensagens existentes (deduplica por id)
+        let mergedMessages = formattedMessages;
+        if (existing && Array.isArray(existing.messages) && existing.messages.length > 0) {
+          const seenIds = new Set<string>();
+          const all = [...(existing.messages as any[]), ...formattedMessages];
+          mergedMessages = all
+            .filter((m: any) => {
+              const id = m.id || `${m.timestamp}-${m.from_me}`;
+              if (seenIds.has(id)) return false;
+              seenIds.add(id);
+              return true;
+            })
+            .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+          // Se não houver mensagens novas, pula
+          const newCount = mergedMessages.length - (existing.messages as any[]).length;
+          if (newCount <= 0) { skippedCount++; return; }
+        }
+
+        const lastMessageAt = mergedMessages[mergedMessages.length - 1].timestamp;
 
         const { error: upsertError } = await supabase
           .from("whatsapp_conversations")
           .upsert({
             user_id: userId,
             phone,
-            contact_name: contactName,
-            messages: formattedMessages,
+            contact_name: existing?.contact_name || contactName,
+            messages: mergedMessages,
             last_message_at: lastMessageAt,
-            total_messages: formattedMessages.length,
-            ai_active: false, // Don't auto-activate AI for synced conversations
+            total_messages: mergedMessages.length,
+            ai_active: existing?.ai_active ?? false,
           }, { onConflict: "user_id,phone" });
 
         if (upsertError) {
@@ -235,7 +282,7 @@ serve(async (req) => {
 
     // Sync contatos do batch atual (paralelo, fire-and-forget seguro)
     await Promise.all(slice.map(async (chat) => {
-      const remoteJid = chat.id || chat.remoteJid || chat.jid;
+      const remoteJid = chat.remoteJid || chat.jid || chat.id;
       const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "");
       if (!phone || phone.length < 8) return;
       const contactName = chat.name || chat.pushName || chat.contact?.pushName || null;
