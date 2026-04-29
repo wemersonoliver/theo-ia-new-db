@@ -52,6 +52,7 @@ import AdminCreditsManager from "./pages/admin/AdminCreditsManager";
 import AdminSupportCalendar from "./pages/admin/AdminSupportCalendar";
 import AdminHelpCenter from "./pages/admin/AdminHelpCenter";
 import AdminTasks from "./pages/admin/AdminTasks";
+import AdminPlans from "./pages/admin/AdminPlans";
 
 const queryClient = new QueryClient();
 
@@ -109,6 +110,7 @@ const App = () => (
               <Route path="/admin/credits" element={<AdminCreditsManager />} />
               <Route path="/admin/support-calendar" element={<AdminSupportCalendar />} />
               <Route path="/admin/help-center" element={<AdminHelpCenter />} />
+              <Route path="/admin/plans" element={<AdminPlans />} />
               <Route path="/admin" element={<AdminLogin />} />
 
               <Route path="*" element={<NotFound />} />
