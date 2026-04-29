@@ -890,6 +890,14 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
         </p>
       </div>
 
+      {state !== "completed" && (
+        <div className="flex justify-end">
+          <Button variant="ghost" size="sm" onClick={onNext} className="text-muted-foreground">
+            Pular este passo
+          </Button>
+        </div>
+      )}
+
       {state === "idle" && (
         <Card>
           <CardContent className="p-6 space-y-4">
