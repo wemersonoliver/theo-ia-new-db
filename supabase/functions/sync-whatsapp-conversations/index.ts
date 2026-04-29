@@ -26,7 +26,10 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { userId, instanceName } = await req.json();
+    const { userId, instanceName, limit: bodyLimit, offset: bodyOffset } = await req.json();
+    const BATCH_LIMIT = typeof bodyLimit === "number" && bodyLimit > 0 ? Math.min(bodyLimit, 100) : 40;
+    const OFFSET = typeof bodyOffset === "number" && bodyOffset >= 0 ? bodyOffset : 0;
+    const CONCURRENCY = 5;
 
     if (!userId || !instanceName) {
       return new Response(JSON.stringify({ error: "Missing userId or instanceName" }), {
@@ -65,15 +68,44 @@ serve(async (req) => {
       });
     }
 
+    // Filtra individuais e ordena por updatedAt/lastMessage desc
+    const individualChats = (chats as any[])
+      .filter((c) => {
+        const jid = c.id || c.remoteJid || c.jid;
+        return jid && !jid.includes("@g.us") && !jid.includes("@broadcast");
+      })
+      .sort((a, b) => {
+        const ta = Number(a.updatedAt || a.lastMessageTimestamp || a.conversationTimestamp || 0);
+        const tb = Number(b.updatedAt || b.lastMessageTimestamp || b.conversationTimestamp || 0);
+        return tb - ta;
+      });
+
+    const totalChats = individualChats.length;
+    const slice = individualChats.slice(OFFSET, OFFSET + BATCH_LIMIT);
+    console.log(`Processing ${slice.length} chats (offset=${OFFSET}, total=${totalChats})`);
+
+    // Pré-checa quais já existem para pular
+    const phones = slice.map((c) => {
+      const jid = c.id || c.remoteJid || c.jid;
+      return (jid as string).replace("@s.whatsapp.net", "").replace("@lid", "");
+    }).filter((p) => p && p.length >= 8);
+
+    const { data: existingRows } = await supabase
+      .from("whatsapp_conversations")
+      .select("phone, total_messages")
+      .eq("user_id", userId)
+      .in("phone", phones);
+
+    const existingSet = new Set((existingRows || []).filter((r: any) => (r.total_messages ?? 0) > 0).map((r: any) => r.phone));
+
     let syncedCount = 0;
+    let skippedCount = 0;
 
-    // 2. For each individual chat (skip groups), fetch messages and save
-    for (const chat of chats) {
+    async function processChat(chat: any) {
       const remoteJid = chat.id || chat.remoteJid || chat.jid;
-      if (!remoteJid || remoteJid.includes("@g.us") || remoteJid.includes("@broadcast")) continue;
-
       const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "");
-      if (!phone || phone.length < 8) continue;
+      if (!phone || phone.length < 8) return;
+      if (existingSet.has(phone)) { skippedCount++; return; }
 
       try {
         // Fetch messages for this chat
@@ -95,7 +127,7 @@ serve(async (req) => {
 
         if (!messagesResponse.ok) {
           console.error(`Failed to fetch messages for ${phone}:`, await messagesResponse.text());
-          continue;
+          return;
         }
 
         const messagesData = await messagesResponse.json();
@@ -115,7 +147,7 @@ serve(async (req) => {
           rawMessages = [];
         }
 
-        if (rawMessages.length === 0) continue;
+        if (rawMessages.length === 0) return;
 
         // Transform messages to our format
         const formattedMessages = rawMessages
@@ -166,23 +198,10 @@ serve(async (req) => {
           })
           .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-        if (formattedMessages.length === 0) continue;
+        if (formattedMessages.length === 0) return;
 
         const contactName = chat.name || chat.pushName || chat.contact?.pushName || null;
         const lastMessageAt = formattedMessages[formattedMessages.length - 1].timestamp;
-
-        // Upsert conversation (don't overwrite if already exists with messages)
-        const { data: existing } = await supabase
-          .from("whatsapp_conversations")
-          .select("id, messages")
-          .eq("user_id", userId)
-          .eq("phone", phone)
-          .maybeSingle();
-
-        if (existing && existing.messages && (existing.messages as any[]).length > 0) {
-          // Already has messages, skip (conversation already synced)
-          continue;
-        }
 
         const { error: upsertError } = await supabase
           .from("whatsapp_conversations")
@@ -198,40 +217,46 @@ serve(async (req) => {
 
         if (upsertError) {
           console.error(`Error upserting conversation for ${phone}:`, upsertError);
-          continue;
+          return;
         }
 
         syncedCount++;
         console.log(`Synced ${phone}: ${formattedMessages.length} messages`);
       } catch (chatError) {
         console.error(`Error processing chat ${phone}:`, chatError);
-        continue;
       }
     }
 
-    // Also sync contacts
-    for (const chat of chats) {
-      const remoteJid = chat.id || chat.remoteJid || chat.jid;
-      if (!remoteJid || remoteJid.includes("@g.us") || remoteJid.includes("@broadcast")) continue;
-
-      const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "");
-      if (!phone || phone.length < 8) continue;
-
-      const contactName = chat.name || chat.pushName || chat.contact?.pushName || null;
-
-      await supabase
-        .from("contacts")
-        .upsert({
-          user_id: userId,
-          phone,
-          name: contactName,
-        }, { onConflict: "user_id,phone", ignoreDuplicates: true })
-        .then(() => {});
+    // Processa em lotes paralelos
+    for (let i = 0; i < slice.length; i += CONCURRENCY) {
+      const batch = slice.slice(i, i + CONCURRENCY);
+      await Promise.all(batch.map(processChat));
     }
 
-    console.log(`Sync complete: ${syncedCount} conversations synced`);
+    // Sync contatos do batch atual (paralelo, fire-and-forget seguro)
+    await Promise.all(slice.map(async (chat) => {
+      const remoteJid = chat.id || chat.remoteJid || chat.jid;
+      const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "");
+      if (!phone || phone.length < 8) return;
+      const contactName = chat.name || chat.pushName || chat.contact?.pushName || null;
+      await supabase
+        .from("contacts")
+        .upsert({ user_id: userId, phone, name: contactName }, { onConflict: "user_id,phone", ignoreDuplicates: true });
+    }));
 
-    return new Response(JSON.stringify({ success: true, synced: syncedCount }), {
+    const nextOffset = OFFSET + slice.length;
+    const hasMore = nextOffset < totalChats;
+    console.log(`Sync batch complete: ${syncedCount} synced, ${skippedCount} skipped. hasMore=${hasMore}`);
+
+    return new Response(JSON.stringify({
+      success: true,
+      synced: syncedCount,
+      skipped: skippedCount,
+      processed: slice.length,
+      total: totalChats,
+      nextOffset,
+      hasMore,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
