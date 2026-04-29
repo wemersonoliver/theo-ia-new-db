@@ -11,6 +11,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useConversations, useConversation, Message } from "@/hooks/useConversations";
 import { useContacts } from "@/hooks/useContacts";
+import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
+import { supabase } from "@/integrations/supabase/client";
 import { useCRMPipelines } from "@/hooks/useCRMPipelines";
 import { useCRMStages } from "@/hooks/useCRMStages";
 import { useCRMDeals } from "@/hooks/useCRMDeals";
@@ -26,7 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff,
-  Tag, ExternalLink, Kanban, CheckCircle, Trash2, ArrowLeft,
+  Tag, ExternalLink, Kanban, CheckCircle, Trash2, ArrowLeft, RefreshCw,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
