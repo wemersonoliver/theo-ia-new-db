@@ -102,11 +102,11 @@ serve(async (req) => {
 
     const { data: existingRows } = await supabase
       .from("whatsapp_conversations")
-      .select("phone, total_messages")
+      .select("phone, messages, ai_active, contact_name")
       .eq("user_id", userId)
       .in("phone", phones);
 
-    const existingSet = new Set((existingRows || []).filter((r: any) => (r.total_messages ?? 0) > 0).map((r: any) => r.phone));
+    const existingMap = new Map<string, any>((existingRows || []).map((r: any) => [r.phone, r]));
 
     let syncedCount = 0;
     let skippedCount = 0;
@@ -115,7 +115,7 @@ serve(async (req) => {
       const remoteJid = chat.id || chat.remoteJid || chat.jid;
       const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "");
       if (!phone || phone.length < 8) return;
-      if (existingSet.has(phone)) { skippedCount++; return; }
+      const existing = existingMap.get(phone);
 
       try {
         // Fetch messages for this chat
@@ -216,18 +216,38 @@ serve(async (req) => {
         if (formattedMessages.length === 0) return;
 
         const contactName = chat.name || chat.pushName || chat.contact?.pushName || null;
-        const lastMessageAt = formattedMessages[formattedMessages.length - 1].timestamp;
+
+        // Mescla com mensagens existentes (deduplica por id)
+        let mergedMessages = formattedMessages;
+        if (existing && Array.isArray(existing.messages) && existing.messages.length > 0) {
+          const seenIds = new Set<string>();
+          const all = [...(existing.messages as any[]), ...formattedMessages];
+          mergedMessages = all
+            .filter((m: any) => {
+              const id = m.id || `${m.timestamp}-${m.from_me}`;
+              if (seenIds.has(id)) return false;
+              seenIds.add(id);
+              return true;
+            })
+            .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+          // Se não houver mensagens novas, pula
+          const newCount = mergedMessages.length - (existing.messages as any[]).length;
+          if (newCount <= 0) { skippedCount++; return; }
+        }
+
+        const lastMessageAt = mergedMessages[mergedMessages.length - 1].timestamp;
 
         const { error: upsertError } = await supabase
           .from("whatsapp_conversations")
           .upsert({
             user_id: userId,
             phone,
-            contact_name: contactName,
-            messages: formattedMessages,
+            contact_name: existing?.contact_name || contactName,
+            messages: mergedMessages,
             last_message_at: lastMessageAt,
-            total_messages: formattedMessages.length,
-            ai_active: false, // Don't auto-activate AI for synced conversations
+            total_messages: mergedMessages.length,
+            ai_active: existing?.ai_active ?? false,
           }, { onConflict: "user_id,phone" });
 
         if (upsertError) {
