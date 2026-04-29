@@ -26,10 +26,13 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { userId, instanceName, limit: bodyLimit, offset: bodyOffset } = await req.json();
+    const { userId, instanceName, limit: bodyLimit, offset: bodyOffset, daysBack } = await req.json();
     const BATCH_LIMIT = typeof bodyLimit === "number" && bodyLimit > 0 ? Math.min(bodyLimit, 100) : 40;
     const OFFSET = typeof bodyOffset === "number" && bodyOffset >= 0 ? bodyOffset : 0;
     const CONCURRENCY = 5;
+    const DAYS_BACK = typeof daysBack === "number" && daysBack > 0 ? daysBack : 5;
+    const cutoffMs = Date.now() - DAYS_BACK * 24 * 60 * 60 * 1000;
+    const cutoffSec = Math.floor(cutoffMs / 1000);
 
     if (!userId || !instanceName) {
       return new Response(JSON.stringify({ error: "Missing userId or instanceName" }), {
@@ -73,6 +76,13 @@ serve(async (req) => {
       .filter((c) => {
         const jid = c.id || c.remoteJid || c.jid;
         return jid && !jid.includes("@g.us") && !jid.includes("@broadcast");
+      })
+      .filter((c) => {
+        const t = Number(c.updatedAt || c.lastMessageTimestamp || c.conversationTimestamp || 0);
+        // Aceita timestamp em segundos ou ms
+        if (!t) return true; // sem timestamp, mantém para checagem via mensagens
+        const tMs = t > 1e12 ? t : t * 1000;
+        return tMs >= cutoffMs;
       })
       .sort((a, b) => {
         const ta = Number(a.updatedAt || a.lastMessageTimestamp || a.conversationTimestamp || 0);
@@ -152,6 +162,11 @@ serve(async (req) => {
         // Transform messages to our format
         const formattedMessages = rawMessages
           .filter((msg: any) => msg && msg.key && msg.message)
+          .filter((msg: any) => {
+            const ts = Number(msg.messageTimestamp || 0);
+            if (!ts) return false;
+            return ts >= cutoffSec;
+          })
           .map((msg: any) => {
             const isFromMe = msg.key?.fromMe === true;
             let content: string;
