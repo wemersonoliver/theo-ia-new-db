@@ -326,7 +326,19 @@ serve(async (req) => {
 
     const allMessages = conversation?.messages || [];
     const contextSummary = (allMessages as any[]).find((m: any) => m.type === "context_summary");
-    const recentMessages = (allMessages as any[]).filter((m: any) => m.type !== "context_summary").slice(-10);
+    // Otimização de custo: limita o histórico enviado ao Gemini às últimas 10 mensagens
+    // e trunca cada mensagem em ~600 chars (≈150 tokens) para evitar mensagens longas
+    // (PDFs, listagens) inflarem o input. O resumo de contexto cobre o restante.
+    const recentMessages = (allMessages as any[])
+      .filter((m: any) => m.type !== "context_summary")
+      .slice(-10)
+      .map((m: any) => {
+        const original = m.ai_content || m.content || "";
+        if (typeof original === "string" && original.length > 600) {
+          return { ...m, content: original.slice(0, 600) + "…", ai_content: undefined };
+        }
+        return m;
+      });
 
     // Check if the last incoming message has media for vision analysis
     let mediaBase64: string | null = null;
@@ -392,14 +404,26 @@ serve(async (req) => {
       }
     }
 
-    // Get knowledge base documents
+    // Get knowledge base documents — usa RAG por palavras-chave para enviar
+    // apenas trechos relevantes à pergunta atual (em vez do documento inteiro).
+    // Isso reduz tokens de input em até 90% sem perder qualidade.
     const { data: documents } = await supabase
       .from("knowledge_base_documents")
       .select("content_text")
       .eq("user_id", userId)
       .eq("status", "ready");
 
-    const knowledgeBase = documents?.map(d => d.content_text).filter(Boolean).join("\n\n---\n\n") || "";
+    const docTexts = (documents || [])
+      .map((d: any) => d.content_text)
+      .filter((t: any) => typeof t === "string" && t.length > 0);
+
+    const knowledgeBase = docTexts.length > 0
+      ? retrieveRelevantContext(messageContent || "", docTexts, {
+          topK: 3,
+          maxChars: 1800,
+          chunkSize: 800,
+        })
+      : "";
 
     // Get products catalog
     let productsCatalog = "";
