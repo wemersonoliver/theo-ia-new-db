@@ -74,7 +74,7 @@ serve(async (req) => {
     // Filtra individuais e ordena por updatedAt/lastMessage desc
     const individualChats = (chats as any[])
       .filter((c) => {
-        const jid = c.id || c.remoteJid || c.jid;
+        const jid = c.remoteJid || c.jid || c.id;
         return jid && !jid.includes("@g.us") && !jid.includes("@broadcast");
       })
       .filter((c) => {
@@ -96,7 +96,7 @@ serve(async (req) => {
 
     // Pré-checa quais já existem para pular
     const phones = slice.map((c) => {
-      const jid = c.id || c.remoteJid || c.jid;
+      const jid = c.remoteJid || c.jid || c.id;
       return (jid as string).replace("@s.whatsapp.net", "").replace("@lid", "");
     }).filter((p) => p && p.length >= 8);
 
@@ -112,7 +112,7 @@ serve(async (req) => {
     let skippedCount = 0;
 
     async function processChat(chat: any) {
-      const remoteJid = chat.id || chat.remoteJid || chat.jid;
+      const remoteJid = chat.remoteJid || chat.jid || chat.id;
       const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "");
       if (!phone || phone.length < 8) return;
       const existing = existingMap.get(phone);
@@ -271,7 +271,7 @@ serve(async (req) => {
 
     // Sync contatos do batch atual (paralelo, fire-and-forget seguro)
     await Promise.all(slice.map(async (chat) => {
-      const remoteJid = chat.id || chat.remoteJid || chat.jid;
+      const remoteJid = chat.remoteJid || chat.jid || chat.id;
       const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "");
       if (!phone || phone.length < 8) return;
       const contactName = chat.name || chat.pushName || chat.contact?.pushName || null;
