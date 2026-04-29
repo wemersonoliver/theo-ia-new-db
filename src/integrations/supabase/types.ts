@@ -1209,6 +1209,63 @@ export type Database = {
         }
         Relationships: []
       }
+      plans: {
+        Row: {
+          billing_period: string
+          checkout_url: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          features: Json
+          id: string
+          is_active: boolean
+          is_recommended: boolean
+          limits: Json
+          name: string
+          position: number
+          price_cents: number
+          slug: string
+          tier: string
+          updated_at: string
+        }
+        Insert: {
+          billing_period: string
+          checkout_url?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          features?: Json
+          id?: string
+          is_active?: boolean
+          is_recommended?: boolean
+          limits?: Json
+          name: string
+          position?: number
+          price_cents?: number
+          slug: string
+          tier: string
+          updated_at?: string
+        }
+        Update: {
+          billing_period?: string
+          checkout_url?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          features?: Json
+          id?: string
+          is_active?: boolean
+          is_recommended?: boolean
+          limits?: Json
+          name?: string
+          position?: number
+          price_cents?: number
+          slug?: string
+          tier?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       platform_settings: {
         Row: {
           account_id: string | null
@@ -1340,6 +1397,7 @@ export type Database = {
           id: string
           kiwify_order_id: string | null
           kiwify_product_id: string | null
+          plan_id: string | null
           plan_type: string | null
           product_name: string | null
           raw_data: Json | null
@@ -1362,6 +1420,7 @@ export type Database = {
           id?: string
           kiwify_order_id?: string | null
           kiwify_product_id?: string | null
+          plan_id?: string | null
           plan_type?: string | null
           product_name?: string | null
           raw_data?: Json | null
@@ -1384,6 +1443,7 @@ export type Database = {
           id?: string
           kiwify_order_id?: string | null
           kiwify_product_id?: string | null
+          plan_id?: string | null
           plan_type?: string | null
           product_name?: string | null
           raw_data?: Json | null
@@ -1393,7 +1453,15 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       support_appointment_types: {
         Row: {
