@@ -533,6 +533,19 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
           }
 
           const geminiData = await geminiResponse.json();
+          // Log de custo de IA (texto Gemini)
+          try {
+            const t = extractGeminiTokens(geminiData);
+            if (t.input || t.output) {
+              await logTextUsage(supabase, {
+                userId: item.user_id,
+                source: "followup-ai-generation",
+                tokensInput: t.input,
+                tokensOutput: t.output,
+                referenceId: item.phone,
+              });
+            }
+          } catch (_) { /* noop */ }
           const candidate = cleanAIText(geminiData.candidates?.[0]?.content?.parts
             ?.filter((p: any) => p.text && !p.thought)
             ?.map((p: any) => p.text)
