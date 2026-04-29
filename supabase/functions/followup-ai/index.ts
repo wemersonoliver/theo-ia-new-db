@@ -448,6 +448,7 @@ serve(async (req) => {
           currentDay,
           maxDays,
           businessNiche,
+          { supabase, userId: item.user_id, phone: item.phone },
         );
 
         if (!analysis) {
