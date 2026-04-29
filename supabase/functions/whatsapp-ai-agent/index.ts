@@ -527,7 +527,7 @@ ${aiConfig.custom_prompt || "Seja cordial, profissional e prestativo."}
 
 ${returningClientContext}
 
-${knowledgeBase ? `Use a seguinte base de conhecimento para responder:\n\n${knowledgeBase.slice(0, 6000)}` : ""}
+${knowledgeBase ? `Trechos relevantes da base de conhecimento (use para responder; se não houver informação suficiente, peça ao cliente para esperar a equipe):\n\n${knowledgeBase}` : ""}
 
 ${productsCatalog}
 
