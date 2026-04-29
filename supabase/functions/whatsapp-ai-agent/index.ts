@@ -4,6 +4,7 @@ import { resolveAccountId } from "../_account.ts";
 import { cleanAIText } from "../_ai_text.ts";
 import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts";
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
+import { retrieveRelevantContext } from "../_shared/rag.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -172,7 +173,9 @@ const schedulingTools = {
 
 // Retry with exponential backoff for Gemini API rate limits
 async function fetchGeminiWithRetry(apiKey: string, payload: any, maxRetries = 3): Promise<any> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+  // Modelo fixo em gemini-2.5-flash — mais barato e estável que gemini-flash-latest (Gemini 3 Flash),
+  // mantendo qualidade suficiente para atendimento WhatsApp.
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const response = await fetch(url, {
       method: "POST",
