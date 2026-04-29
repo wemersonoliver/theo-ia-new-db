@@ -389,6 +389,123 @@ const Investment = () => {
           </div>
         </section>
 
+        {/* VIABILIDADE — % necessário, viralização, mobile */}
+        <section id="viabilidade" className="mx-auto max-w-7xl px-6 md:px-10 py-24 border-t border-white/5">
+          <SectionHeader
+            kicker="Por que a meta é absolutamente realista"
+            title="Precisamos de uma fração mínima do mercado para bater a meta"
+            subtitle="Quando você olha o tamanho real do público disponível, fica claro que 1.000 assinantes é uma meta conservadora — e o cenário de upside é desproporcional."
+          />
+
+          {/* Bloco principal: % necessário */}
+          <div className="mt-12 rounded-3xl border border-[hsl(142,76%,46%)]/30 bg-gradient-to-br from-[hsl(142,76%,46%)]/12 via-transparent to-[hsl(217,91%,60%)]/10 p-8 md:p-12">
+            <div className="grid lg:grid-cols-[1.1fr_1fr] gap-10 items-center">
+              <div>
+                <div className="inline-flex items-center gap-2 text-xs uppercase tracking-widest text-[hsl(142,76%,65%)]">
+                  <Target className="h-4 w-4" /> Penetração necessária
+                </div>
+                <h3 className="mt-3 text-3xl md:text-4xl font-semibold leading-tight">
+                  Apenas{" "}
+                  <span className="bg-gradient-to-r from-[hsl(142,76%,55%)] to-[hsl(217,91%,65%)] bg-clip-text text-transparent">
+                    0,005%
+                  </span>{" "}
+                  dos pequenos negócios do Brasil já fecham nossa meta
+                </h3>
+                <p className="mt-4 text-white/75 leading-relaxed">
+                  São <span className="text-white font-semibold">mais de 20 milhões</span> de pequenos negócios, autônomos, clínicas, restaurantes,
+                  academias e prestadores no Brasil. Para chegar nos{" "}
+                  <span className="text-white font-semibold">1.000 assinantes ativos</span> que sustentam a meta de R$ 84.000/mês, precisamos de
+                  uma fatia praticamente invisível desse mercado.
+                </p>
+                <p className="mt-3 text-sm text-white/60">
+                  Em outras palavras: a cada <span className="text-white">20 mil</span> pequenos negócios no país, basta{" "}
+                  <span className="text-[hsl(142,76%,60%)] font-semibold">1 único</span> virar assinante. O risco operacional de
+                  não atingir essa penetração é extremamente baixo.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { value: "20M+", label: "Público total disponível", accent: "hsl(217,91%,65%)" },
+                  { value: "1.000", label: "Assinantes para a meta", accent: "hsl(142,76%,60%)" },
+                  { value: "0,005%", label: "Penetração necessária", accent: "hsl(45,95%,65%)" },
+                  { value: "R$ 84k", label: "Receita líquida / mês", accent: "hsl(280,80%,70%)" },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+                    <div className="text-3xl font-semibold tracking-tight" style={{ color: s.accent }}>
+                      {s.value}
+                    </div>
+                    <div className="mt-2 text-xs uppercase tracking-wider text-white/55">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Viralização */}
+          <div className="mt-8 grid lg:grid-cols-2 gap-6">
+            <div className="rounded-3xl border border-[hsl(280,80%,65%)]/30 bg-gradient-to-br from-[hsl(280,80%,65%)]/12 via-transparent to-transparent p-8 md:p-10">
+              <div className="flex items-start gap-4">
+                <div className="rounded-xl bg-[hsl(280,80%,65%)]/15 p-3 border border-[hsl(280,80%,65%)]/30">
+                  <Share2 className="h-6 w-6 text-[hsl(280,80%,75%)]" />
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-widest text-[hsl(280,80%,75%)]">Era da viralização</div>
+                  <h3 className="mt-2 text-2xl font-semibold leading-tight">
+                    Um único conteúdo viral pode multiplicar a base do dia para a noite
+                  </h3>
+                  <p className="mt-3 text-white/75 leading-relaxed">
+                    Vivemos a era em que um Reels, TikTok ou tweet bem posicionado leva milhares de pessoas a um produto
+                    em poucas horas. Com tráfego pago combinado a conteúdo orgânico, o teto de crescimento é
+                    <span className="text-white font-semibold"> não-linear</span>: a meta de 1.000 usuários pode ser
+                    ultrapassada em uma única semana com o conteúdo certo.
+                  </p>
+                  <p className="mt-3 text-sm text-white/60">
+                    Como sua cota acompanha a recorrência de cada novo assinante até dezembro de 2026,
+                    qualquer pico viral dentro do contrato vira <span className="text-white">renda recorrente direta</span> para você.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Mobile-first */}
+            <div className="rounded-3xl border border-[hsl(217,91%,60%)]/30 bg-gradient-to-br from-[hsl(217,91%,60%)]/12 via-transparent to-transparent p-8 md:p-10">
+              <div className="flex items-start gap-4">
+                <div className="rounded-xl bg-[hsl(217,91%,60%)]/15 p-3 border border-[hsl(217,91%,60%)]/30">
+                  <Smartphone className="h-6 w-6 text-[hsl(217,91%,75%)]" />
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-widest text-[hsl(217,91%,75%)]">100% mobile · sem barreiras</div>
+                  <h3 className="mt-2 text-2xl font-semibold leading-tight">
+                    Um dos pouquíssimos sistemas onde o cliente não precisa de computador
+                  </h3>
+                  <p className="mt-3 text-white/75 leading-relaxed">
+                    O Theo IA é operado <span className="text-white font-semibold">inteiramente pelo celular</span>: cadastro,
+                    conexão do WhatsApp, configuração da IA, CRM, agendamentos, follow-up, base de conhecimento — tudo
+                    direto do smartphone.
+                  </p>
+                  <p className="mt-3 text-sm text-white/60">
+                    Isso quebra a maior barreira de entrada do mercado de pequenos negócios brasileiros: a maioria
+                    <span className="text-white"> não tem computador</span>, mas vive 100% no celular.
+                    Resultado: o público elegível salta drasticamente em comparação a concorrentes que exigem desktop.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Conclusão persuasiva */}
+          <div className="mt-8 rounded-2xl border border-[hsl(142,76%,46%)]/30 bg-[hsl(142,76%,46%)]/8 p-6 flex items-start gap-4">
+            <TrendingUpIcon className="h-5 w-5 text-[hsl(142,76%,60%)] mt-0.5" />
+            <div className="text-sm text-white/80 leading-relaxed">
+              <span className="text-white font-semibold">Resumo:</span> precisamos de uma fração praticamente invisível do mercado para bater a meta,
+              vivemos a era em que um único conteúdo pode explodir a base, e nosso produto atinge um público que
+              concorrentes nem conseguem alcançar — porque funciona 100% pelo celular.
+              <span className="text-[hsl(142,76%,60%)] font-semibold"> O downside é controlado, o upside é desproporcional.</span>
+            </div>
+          </div>
+        </section>
+
         {/* DIFERENCIAL */}
         <section id="diferencial" className="mx-auto max-w-7xl px-6 md:px-10 py-24 border-t border-white/5">
           <SectionHeader
