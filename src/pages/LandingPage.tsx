@@ -19,7 +19,6 @@ import {
   Users,
   BarChart3,
   Clock,
-  X,
   Check,
   Zap,
   Shield,
