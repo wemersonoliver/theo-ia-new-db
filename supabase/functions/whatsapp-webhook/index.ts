@@ -470,7 +470,9 @@ serve(async (req) => {
                 },
                 body: JSON.stringify({ 
                   messageKey, 
-                  instanceName 
+                  instanceName,
+                  userId,
+                  phone,
                 }),
               }
             );
@@ -522,7 +524,9 @@ serve(async (req) => {
                 body: JSON.stringify({ 
                   messageKey, 
                   instanceName,
-                  mediaType
+                  mediaType,
+                  userId,
+                  phone,
                 }),
               }
             );
