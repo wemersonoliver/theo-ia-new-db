@@ -79,16 +79,27 @@ serve(async (req) => {
         return jid && !jid.includes("@g.us") && !jid.includes("@broadcast");
       })
       .filter((c) => {
-        const t = Number(c.updatedAt || c.lastMessageTimestamp || c.conversationTimestamp || 0);
-        // Aceita timestamp em segundos ou ms
-        if (!t) return true; // sem timestamp, mantém para checagem via mensagens
-        const tMs = t > 1e12 ? t : t * 1000;
+        const raw = c.updatedAt || c.lastMessageTimestamp || c.conversationTimestamp;
+        if (!raw) return true;
+        let tMs: number;
+        if (typeof raw === "string") {
+          tMs = new Date(raw).getTime();
+        } else {
+          const n = Number(raw);
+          tMs = n > 1e12 ? n : n * 1000;
+        }
+        if (!tMs || isNaN(tMs)) return true;
         return tMs >= cutoffMs;
       })
       .sort((a, b) => {
-        const ta = Number(a.updatedAt || a.lastMessageTimestamp || a.conversationTimestamp || 0);
-        const tb = Number(b.updatedAt || b.lastMessageTimestamp || b.conversationTimestamp || 0);
-        return tb - ta;
+        const parse = (c: any) => {
+          const raw = c.updatedAt || c.lastMessageTimestamp || c.conversationTimestamp;
+          if (!raw) return 0;
+          if (typeof raw === "string") return new Date(raw).getTime();
+          const n = Number(raw);
+          return n > 1e12 ? n : n * 1000;
+        };
+        return parse(b) - parse(a);
       });
 
     const totalChats = individualChats.length;
