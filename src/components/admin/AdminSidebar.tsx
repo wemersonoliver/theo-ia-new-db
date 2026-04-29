@@ -34,6 +34,7 @@ const adminNavItems = [
   { to: "/admin/system-whatsapp", icon: Smartphone, label: "WhatsApp Sistema" },
   { to: "/admin/conversations", icon: MessageSquare, label: "Conversas" },
   { to: "/admin/ai-config", icon: Bot, label: "IA Suporte" },
+  { to: "/admin/ai-costs", icon: DollarSign, label: "Custos de IA" },
   { to: "/admin/voice-costs", icon: DollarSign, label: "Custos de Voz IA" },
   { to: "/admin/credits", icon: Users, label: "Créditos Usuários" },
   { to: "/admin/plans", icon: Package, label: "Planos" },

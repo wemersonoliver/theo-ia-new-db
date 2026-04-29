@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logAudioUsage } from "../_shared/ai-usage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messageKey, instanceName } = await req.json();
+    const { messageKey, instanceName, userId, phone } = await req.json();
     
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
@@ -91,6 +93,7 @@ serve(async (req) => {
     );
     formData.append("model", "whisper-large-v3-turbo");
     formData.append("language", "pt");
+    formData.append("response_format", "verbose_json");
 
     const transcribeResponse = await fetch(
       "https://api.groq.com/openai/v1/audio/transcriptions",
@@ -115,9 +118,28 @@ serve(async (req) => {
     const transcription = await transcribeResponse.json();
     console.log("Transcription successful:", transcription.text?.slice(0, 100));
 
+    // Registra custo de áudio (Groq Whisper) por usuário
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      const seconds = Number(transcription.duration) || 0;
+      if (userId && supabaseUrl && serviceKey && seconds > 0) {
+        const sb = createClient(supabaseUrl, serviceKey);
+        await logAudioUsage(sb, {
+          userId,
+          source: "transcribe-audio",
+          seconds,
+          referenceId: phone || instanceName,
+        });
+      }
+    } catch (e) {
+      console.error("logAudioUsage failed:", e);
+    }
+
     return new Response(JSON.stringify({ 
       success: true, 
-      text: transcription.text 
+      text: transcription.text,
+      duration: transcription.duration,
     }), { 
       headers: { ...corsHeaders, "Content-Type": "application/json" } 
     });

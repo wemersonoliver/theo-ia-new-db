@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logImageUsage, logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messageKey, instanceName, mediaType } = await req.json();
+    const { messageKey, instanceName, mediaType, userId, phone } = await req.json();
     
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
@@ -128,6 +130,33 @@ Responda de forma concisa e direta, sem formatação especial.`,
 
     const geminiData = await geminiResponse.json();
     const extractedText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    // Registra custo: 1 imagem analisada + tokens de saída
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (userId && supabaseUrl && serviceKey) {
+        const sb = createClient(supabaseUrl, serviceKey);
+        await logImageUsage(sb, {
+          userId,
+          source: "process-image-ocr",
+          images: 1,
+          referenceId: phone || instanceName,
+        });
+        const t = extractGeminiTokens(geminiData);
+        if (t.input || t.output) {
+          await logTextUsage(sb, {
+            userId,
+            source: "process-image-ocr",
+            tokensInput: t.input,
+            tokensOutput: t.output,
+            referenceId: phone || instanceName,
+          });
+        }
+      }
+    } catch (e) {
+      console.error("logImageUsage failed:", e);
+    }
 
     if (!extractedText) {
       console.log("No text extracted from image");

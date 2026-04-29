@@ -53,6 +53,7 @@ import AdminSupportCalendar from "./pages/admin/AdminSupportCalendar";
 import AdminHelpCenter from "./pages/admin/AdminHelpCenter";
 import AdminTasks from "./pages/admin/AdminTasks";
 import AdminPlans from "./pages/admin/AdminPlans";
+import AdminAICosts from "./pages/admin/AdminAICosts";
 
 const queryClient = new QueryClient();
 
@@ -111,6 +112,7 @@ const App = () => (
               <Route path="/admin/support-calendar" element={<AdminSupportCalendar />} />
               <Route path="/admin/help-center" element={<AdminHelpCenter />} />
               <Route path="/admin/plans" element={<AdminPlans />} />
+              <Route path="/admin/ai-costs" element={<AdminAICosts />} />
               <Route path="/admin" element={<AdminLogin />} />
 
               <Route path="*" element={<NotFound />} />

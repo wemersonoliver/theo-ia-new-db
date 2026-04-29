@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveAccountId } from "../_account.ts";
 import { cleanAIText } from "../_ai_text.ts";
 import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts";
+import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -600,6 +601,19 @@ Regras adicionais:
       const aiResponse = await fetchGeminiWithRetry(geminiApiKey, geminiPayload);
 
       const aiData = await aiResponse.json();
+      // Registra custo de IA por usuário (texto Gemini)
+      try {
+        const t = extractGeminiTokens(aiData);
+        if (t.input || t.output) {
+          await logTextUsage(supabase, {
+            userId,
+            source: "whatsapp-ai-agent",
+            tokensInput: t.input,
+            tokensOutput: t.output,
+            referenceId: phone,
+          });
+        }
+      } catch (_) { /* noop */ }
       const candidate = aiData.candidates?.[0];
       const content = candidate?.content;
 
