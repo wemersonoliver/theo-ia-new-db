@@ -20,6 +20,9 @@ import {
   MessageCircle,
   KanbanSquare,
   Clock,
+  Smartphone,
+  TrendingUp as TrendingUpIcon,
+  Share2,
 } from "lucide-react";
 
 const NAV_SECTIONS = [
@@ -27,6 +30,7 @@ const NAV_SECTIONS = [
   { id: "como-funciona", label: "Como funciona" },
   { id: "projecao", label: "Projeção" },
   { id: "mercado", label: "Mercado" },
+  { id: "viabilidade", label: "Viabilidade" },
   { id: "diferencial", label: "Diferencial" },
   { id: "meta", label: "Meta" },
   { id: "garantir", label: "Garantir cota" },
