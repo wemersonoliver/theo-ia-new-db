@@ -104,6 +104,7 @@ async function analyzeConversation(
   currentDay: number,
   maxDays: number,
   businessNiche: string | null,
+  usageCtx?: { supabase: any; userId: string; phone: string },
 ): Promise<ConversationAnalysis | null> {
   const sanitized = sanitizeContactName(rawContactName);
 
@@ -167,6 +168,21 @@ Retorne via tool call um JSON estruturado. Seja FACTUAL — extraia informaçõe
   }
 
   const data = await response.json();
+  // Log de custo de IA (texto Gemini)
+  if (usageCtx) {
+    try {
+      const t = extractGeminiTokens(data);
+      if (t.input || t.output) {
+        await logTextUsage(usageCtx.supabase, {
+          userId: usageCtx.userId,
+          source: "followup-ai-analysis",
+          tokensInput: t.input,
+          tokensOutput: t.output,
+          referenceId: usageCtx.phone,
+        });
+      }
+    } catch (_) { /* noop */ }
+  }
   const parts = data.candidates?.[0]?.content?.parts || [];
   const fnCall = parts.find((p: any) => p.functionCall)?.functionCall;
   if (!fnCall?.args) {
