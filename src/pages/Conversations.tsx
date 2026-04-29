@@ -496,12 +496,31 @@ export default function Conversations() {
                 onClick={async () => {
                   if (!instance?.instance_name) return;
                   setSyncing(true);
+                  let totalSynced = 0;
+                  let totalSkipped = 0;
                   try {
-                    const { data, error } = await supabase.functions.invoke("sync-whatsapp-conversations", {
-                      body: { userId: instance.user_id, instanceName: instance.instance_name },
-                    });
-                    if (error) throw error;
-                    toast.success(`Sincronização concluída: ${data?.synced ?? 0} conversas`);
+                    let offset = 0;
+                    let hasMore = true;
+                    let iterations = 0;
+                    const MAX_ITERATIONS = 30;
+                    toast.info("Sincronizando conversas... isso pode levar alguns minutos");
+                    while (hasMore && iterations < MAX_ITERATIONS) {
+                      iterations++;
+                      const { data, error } = await supabase.functions.invoke("sync-whatsapp-conversations", {
+                        body: {
+                          userId: instance.user_id,
+                          instanceName: instance.instance_name,
+                          limit: 30,
+                          offset,
+                        },
+                      });
+                      if (error) throw error;
+                      totalSynced += data?.synced ?? 0;
+                      totalSkipped += data?.skipped ?? 0;
+                      hasMore = !!data?.hasMore;
+                      offset = data?.nextOffset ?? offset + 30;
+                    }
+                    toast.success(`Sincronização concluída: ${totalSynced} novas, ${totalSkipped} já existentes`);
                   } catch (e: any) {
                     toast.error(`Erro ao sincronizar: ${e.message}`);
                   } finally {
