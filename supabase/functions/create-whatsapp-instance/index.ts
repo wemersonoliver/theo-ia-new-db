@@ -181,7 +181,7 @@ serve(async (req) => {
           instanceName, qrcode: true, integration: "WHATSAPP-BAILEYS",
           ...(phoneNumber ? { number: phoneNumber } : {}),
           webhook: {
-            url: webhookUrl, byEvents: true, base64: true,
+            url: webhookUrl, byEvents: false, base64: true,
             events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
           },
           settings: { syncFullHistory: true, rejectCall: false, groupsIgnore: true },
