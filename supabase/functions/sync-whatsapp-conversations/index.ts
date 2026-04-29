@@ -141,7 +141,8 @@ serve(async (req) => {
         }
 
         const messagesData = await messagesResponse.json();
-        
+        console.log(`[debug ${phone}] findMessages keys=${Object.keys(messagesData || {}).join(",")} sample=${JSON.stringify(messagesData).slice(0,400)}`);
+
         // Handle different response formats from Evolution API
         let rawMessages: any[];
         if (Array.isArray(messagesData)) {
