@@ -45,9 +45,7 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    const body = await req.json().catch(() => ({}));
-    const allowOneTimeRepair131 = body?.internalRepair === "repair-2026-04-30-user-131" && Number(body?.userCode) === 131;
-    if (!allowOneTimeRepair131 && !authHeader?.startsWith("Bearer ")) {
+    if (!authHeader?.startsWith("Bearer ")) {
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
@@ -61,13 +59,12 @@ serve(async (req) => {
       return jsonResponse({ error: "Evolution API não configurada" }, 500);
     }
 
-    const supabase = allowOneTimeRepair131
-      ? createClient(supabaseUrl, serviceKey)
-      : await requireSuperAdmin(authHeader!, supabaseUrl, anonKey, serviceKey);
+    const supabase = await requireSuperAdmin(authHeader, supabaseUrl, anonKey, serviceKey);
     if (!supabase) {
       return jsonResponse({ error: "Forbidden" }, 403);
     }
 
+    const body = await req.json().catch(() => ({}));
     const userCode = Number(body?.userCode);
     const requestedUserId = typeof body?.userId === "string" ? body.userId : null;
 
