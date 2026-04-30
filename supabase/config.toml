@@ -58,3 +58,15 @@ verify_jwt = false
 verify_jwt = false
 [functions.repair-whatsapp-webhook]
 verify_jwt = false
+
+[functions.followup-generate-sequence]
+verify_jwt = false
+
+[functions.followup-dispatch]
+verify_jwt = false
+
+[functions.system-followup-generate-sequence]
+verify_jwt = false
+
+[functions.system-followup-dispatch]
+verify_jwt = false

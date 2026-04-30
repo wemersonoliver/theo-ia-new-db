@@ -293,12 +293,18 @@ serve(async (req) => {
             // Mark follow-up tracking as engaged when lead replies
             if (!isFromMe) {
               supabase
-                .from("system_followup_tracking")
-                .update({ status: "engaged", updated_at: new Date().toISOString() })
-                .eq("phone", phone)
-                .eq("status", "pending")
+                .rpc("system_cancel_followup_sequence", { p_phone: phone, p_reason: "engaged" })
                 .then(({ error }) => {
-                  if (error) console.error("Error marking system follow-up engaged:", error);
+                  if (error) console.error("Error cancelling system follow-up sequence:", error);
+                });
+            }
+
+            // Human took over (outgoing human msg) → cancel sequence + AI off
+            if (isFromMe) {
+              supabase
+                .rpc("system_cancel_followup_sequence", { p_phone: phone, p_reason: "handoff" })
+                .then(({ error }) => {
+                  if (error) console.error("Error cancelling system follow-up sequence (handoff):", error);
                 });
             }
           } else {
@@ -620,6 +626,17 @@ serve(async (req) => {
               console.error("Error moving CRM deal to human stage:", e);
             }
 
+            // Humano assumiu → cancela toda a sequência de follow-up
+            try {
+              await supabase.rpc("cancel_followup_sequence", {
+                p_user_id: userId,
+                p_phone: phone,
+                p_reason: "handoff",
+              });
+            } catch (e) {
+              console.error("Error cancelling followup sequence (handoff):", e);
+            }
+
             console.log("Outgoing message saved, AI disabled:", phone);
           }
           continue; // Don't trigger AI for outgoing messages
@@ -635,31 +652,13 @@ serve(async (req) => {
 
         // Check if there's an active follow-up and mark as engaged
         if (!isFromMe) {
-          const { data: activeFollowup } = await supabase
-            .from("followup_tracking")
-            .select("id, current_step")
-            .eq("user_id", userId)
-            .eq("phone", phone)
-            .eq("status", "pending")
-            .maybeSingle();
-
-          if (activeFollowup) {
-            const isMorningStep = activeFollowup.current_step % 2 === 1;
-            await supabase
-              .from("followup_tracking")
-              .update({
-                status: "engaged",
-                engagement_data: {
-                  engaged_at_step: activeFollowup.current_step,
-                  engaged_at_turn: isMorningStep ? "morning" : "afternoon",
-                  engaged_at: new Date().toISOString(),
-                },
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", activeFollowup.id);
-
-            console.log("Follow-up engaged by client response:", phone, "at step", activeFollowup.current_step);
-          }
+          // Cliente respondeu → cancela sequência inteira (engaged)
+          const { error: cancelErr } = await supabase.rpc("cancel_followup_sequence", {
+            p_user_id: userId,
+            p_phone: phone,
+            p_reason: "engaged",
+          });
+          if (cancelErr) console.error("Error cancelling followup sequence:", cancelErr);
         }
 
         // Handle incoming messages
