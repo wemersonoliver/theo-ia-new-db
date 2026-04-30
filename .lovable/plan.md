@@ -1,114 +1,157 @@
-# Aba "Tarefas" — Visão Usuário + Admin
 
-Aproveitar a tabela existente `crm_deal_tasks` (já tem `completed`, `due_date`, `assigned_to`, `account_id`, `completed_at`, `completed_by`) para criar uma central de tarefas robusta — sem migrations de schema novas.
+# Plano: Follow-up pré-gerado em lote (1 chamada de IA por lead)
 
-## 1. Menu lateral
+## Análise da sua ideia
 
-**`src/components/Sidebar.tsx`** — adicionar item antes de "Configurações":
-- `{ to: "/tasks", icon: ListChecks, label: "Tarefas", perm: "crm" }` (usa permissão `crm` já existente, herdada por owner/manager/seller).
+Sua proposta resolve a raiz do custo. Hoje cada lead inativo gera até **24 chamadas Gemini** (análise + geração × 12 etapas). Sua proposta reduz para **1 chamada por lead**, gerando as 12 mensagens já encadeadas com horários definidos.
 
-**`src/components/admin/AdminSidebar.tsx`** — adicionar:
-- `{ to: "/admin/tasks", icon: ListChecks, label: "Tarefas (Global)" }` após "CRM".
+### Ganhos esperados
+- ~95% de redução do custo de IA no follow-up.
+- Latência zero no envio (worker só lê e dispara).
+- Eliminação de timeouts atuais em `system-followup-ai` e `followup-ai`.
 
-**`src/App.tsx`** — registrar rotas:
-- `/tasks` → `<ProtectedRoute><Tasks /></ProtectedRoute>`
-- `/admin/tasks` → `<AdminTasks />`
+### Gargalos identificados e soluções
 
-## 2. Página do Usuário — `src/pages/Tasks.tsx`
+1. **Sequência precisa ser narrativamente encadeada** (msg 2 referencia msg 1, msg 6 sobe a tensão, msg 12 é despedida).
+   - **Solução**: prompt único que pede um arco narrativo de 12 etapas, com função-tool retornando array ordenado. Cada item declara `step`, `hook`, `references_previous` (resumo do que a anterior disse), `content`. A IA é instruída a NÃO repetir gancho consecutivo e respeitar a curva: dias 1-2 leveza, 3-4 dor/solução, 5 escassez real, 6 pergunta de saída.
 
-Layout dentro de `DashboardLayout` com:
+2. **Mensagens "envelhecem"** — cenário do cliente pode mudar.
+   - **Solução**: placeholders dinâmicos resolvidos no envio (`{{nome}}`, `{{dia_relativo}}`). Sem regeneração — se houver evento, a sequência é cancelada inteira.
 
-**Cabeçalho de KPIs (4 cards):**
-- Total de tarefas, Concluídas, Pendentes, Atrasadas (vencidas e não concluídas), Para hoje.
+3. **Dois cenários de cancelamento** (sua exigência):
+   - **Cenário A — Cliente responde**: IA continua o atendimento normalmente. Follow-up é totalmente cancelado.
+   - **Cenário B — Humano envia mensagem** (atendente assume): IA é desativada (`ai_active=false`) E follow-up é cancelado.
+   - **Solução**: hook único no `whatsapp-webhook` que detecta:
+     - mensagem entrante (`from_me=false`) → cancela sequência, mantém `ai_active=true`.
+     - mensagem saída humana (`from_me=true AND sent_by='human'`) → cancela sequência E garante `ai_active=false`.
+   - Função SQL `cancel_followup_sequence(p_user_id, p_phone, p_reason)` faz tudo atomicamente: `UPDATE tracking SET status='engaged'/'handoff'` + `DELETE followup_messages WHERE sent_at IS NULL`.
 
-**Filtros (barra superior):**
-- Status: Todas / Pendentes / Concluídas / Atrasadas / Hoje / Próximos 7 dias
-- Responsável (membros da conta, via `useTeamMembers`)
-- Negócio (busca por título do deal)
-- Período (data de vencimento — preset 7d/30d/90d/all)
-- Busca por texto (título)
+4. **Janela de horário muda depois do agendamento**.
+   - **Solução**: dispatcher valida `isWithinWindow` antes de enviar; se fora, empurra para próximo slot válido (não regenera texto).
 
-**Tabs internas:**
-- `Lista` — tabela com colunas: ✅ checkbox, Título, Negócio (link clicável → CRM), Responsável (avatar), Vencimento (com badge "Atrasada"/"Hoje"), Concluída em, Ações (editar/excluir). Ordenação por vencimento crescente, agrupada por dia.
-- `Kanban` — 3 colunas (Pendentes, Em atraso, Concluídas) com drag para marcar concluído.
-- `Calendário` — reuso de `AppointmentCalendar` adaptado mostrando tarefas por dia.
-- `Desempenho` — gráficos:
-  - Barras: tarefas concluídas por membro (últimos 30 dias).
-  - Linha: tarefas concluídas por dia (últimos 30 dias).
-  - Pizza: distribuição por status.
-  - Tabela: "Top performers" com taxa de conclusão (% concluídas / total) e tempo médio de conclusão por membro.
+5. **IA falha em retornar 12 itens válidos**.
+   - **Solução**: function calling com schema estrito `minItems: 12, maxItems: 12`. Em falha, marca tracking `generation_failed` e admin é notificado via tabela de logs.
 
-**Ações:**
-- Botão "Nova tarefa" abre dialog (precisa selecionar um Deal — usa `useCRMDeals`). Reusa lógica existente de `useCRMDealTasks`.
-- Toggle inline (checkbox) → otimista, com `toggleTask`.
-- Editar/Excluir via dropdown.
+6. **Custo da chamada única**: ~3-4k output tokens (12 mensagens curtas + metadados). Ainda é ~85% mais barato que 24 chamadas atuais.
 
-**Hook novo:** `src/hooks/useAllTasks.ts` — busca todas as tarefas da conta (filtra por `account_id` via RLS), com joins em deals (título) e profiles (nome do responsável). Suporta filtros e retorna agregados.
+## Arquitetura
 
-## 3. Página Admin — `src/pages/admin/AdminTasks.tsx`
+```text
+[followup-check-inactive] (cron)
+        │
+        ▼
+   tracking criado (status='pending')
+        │
+        ▼
+[NOVA: followup-generate-sequence] (cron 5 min)
+        │
+        ├─ 1 chamada Gemini → 12 mensagens encadeadas via function calling
+        ├─ Calcula 12 scheduled_at em janelas BRT (manhã+tarde × 6 dias)
+        ├─ INSERT em followup_messages (12 linhas)
+        └─ tracking → status='scheduled', sequence_generated_at=now()
+        │
+        ▼
+[NOVA: followup-dispatch] (cron 5 min, SEM IA)
+        │
+        ├─ SELECT followup_messages WHERE sent_at IS NULL AND scheduled_at <= now()
+        ├─ Valida janela BRT + tracking ainda 'scheduled'
+        ├─ Resolve placeholders
+        ├─ Envia via Evolution API
+        └─ UPDATE sent_at = now()
 
-Acessa via Service-role-bypass usando RLS de super_admin (já habilitado em `crm_deal_tasks`? Não — precisa adicionar policy ou usar edge function). 
-
-**Verificação:** `crm_deal_tasks` hoje só tem policy "Team members" + "own". Vou adicionar policy: "Super admins manage all deal tasks" via migration mínima.
-
-Layout `AdminLayout`:
-
-**KPIs globais:** Total de tarefas no sistema, Concluídas (período), Em atraso, Usuários com tarefas ativas, Taxa média de conclusão.
-
-**Filtros:**
-- Período (7d/30d/90d/custom)
-- Conta/Empresa (lista de `accounts`)
-- Usuário (lista de profiles)
-- Status
-
-**Seções:**
-1. **Gráficos globais:**
-   - Barras horizontais: Top 10 usuários por tarefas concluídas.
-   - Linha: Tarefas criadas vs concluídas por dia.
-   - Pizza: % por status global.
-   - Heatmap (opcional, via grid simples): atividade por dia da semana × hora.
-
-2. **Tabela de Desempenho por Usuário** (linha por user):
-   - Avatar/Nome, Conta, Total criadas, Concluídas, Em atraso, Taxa de conclusão (%), Tempo médio de conclusão (h), Última atividade.
-   - Ordenação por qualquer coluna; clique expande para ver tarefas do usuário.
-
-3. **Lista expansível por Usuário:**
-   - Accordion: cada usuário → lista de tarefas (mesma tabela do user view, somente leitura para admin).
-
-**Hook novo:** `src/hooks/useAdminTasks.ts` — usa cliente Supabase (com policy super_admin) para buscar tarefas globais com joins em `profiles`, `accounts`, `crm_deals`.
-
-## 4. Componentes novos
-
-- `src/components/tasks/TaskFilters.tsx`
-- `src/components/tasks/TaskTable.tsx` (compartilhado user/admin via prop `readOnly`)
-- `src/components/tasks/TaskKPICards.tsx`
-- `src/components/tasks/TaskDialog.tsx` (criar/editar)
-- `src/components/tasks/TaskCharts.tsx` (recharts: BarChart, LineChart, PieChart)
-- `src/components/tasks/TaskCalendarView.tsx`
-- `src/components/admin/AdminTaskPerformanceTable.tsx`
-
-## 5. Migration mínima
-
-```sql
--- Permitir super_admins verem/gerenciarem todas as tarefas
-CREATE POLICY "Super admins manage all deal tasks"
-ON public.crm_deal_tasks
-FOR ALL TO authenticated
-USING (has_role(auth.uid(), 'super_admin'::app_role))
-WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+[whatsapp-webhook] (já existe — adicionar hook)
+        │
+        ├─ Mensagem do cliente (from_me=false)
+        │      └─ cancel_followup_sequence(reason='engaged')
+        │
+        └─ Mensagem humana (from_me=true, sent_by='human')
+               └─ ai_active=false + cancel_followup_sequence(reason='handoff')
 ```
 
-## 6. Detalhes técnicos
+## Mudanças de banco
 
-- Usar `recharts` (já no projeto via `@/components/ui/chart`).
-- Atualizações otimistas com TanStack Query (padrão já usado).
-- Mobile: tabela vira cards empilhados (`md:hidden` / `hidden md:table`).
-- Tema: amber/slate no admin, primary normal no usuário (consistente com padrões).
-- Badges de status: vermelho (atrasada), azul (hoje), cinza (futura), verde (concluída).
-- Realtime opcional (v2): subscription em `crm_deal_tasks` filtrado por `account_id`.
+### Nova tabela `followup_messages`
 
-## Arquivos a criar/editar
+```text
+id                uuid PK
+tracking_id       uuid FK → followup_tracking(id) ON DELETE CASCADE
+user_id           uuid
+account_id        uuid
+phone             text
+step              int          -- 1..12
+hook_used         text
+content           text
+scheduled_at      timestamptz
+sent_at           timestamptz  -- null = pendente
+status            text         -- 'scheduled'|'sent'|'cancelled'|'failed'
+created_at        timestamptz default now()
+```
 
-**Editar:** `src/components/Sidebar.tsx`, `src/components/admin/AdminSidebar.tsx`, `src/App.tsx`
-**Criar:** `src/pages/Tasks.tsx`, `src/pages/admin/AdminTasks.tsx`, `src/hooks/useAllTasks.ts`, `src/hooks/useAdminTasks.ts`, e os 7 componentes acima.
-**Migration:** policy super_admin em `crm_deal_tasks`.
+Índices: `(scheduled_at) WHERE sent_at IS NULL`, `(tracking_id)`.
+
+RLS: idêntico ao `followup_tracking` (owner via `user_id` + super_admin).
+
+### Tabela espelho `system_followup_messages` (mesma estrutura, sem `user_id`/`account_id`).
+
+### Ajustes em `followup_tracking` e `system_followup_tracking`
+
+- Coluna `sequence_generated_at timestamptz`.
+- Coluna `cancellation_reason text` (`engaged` | `handoff` | `exhausted` | `disabled`).
+- Status novo permitido: `scheduled`, `handoff`.
+
+### Função SQL
+
+```text
+cancel_followup_sequence(p_user_id, p_phone, p_reason text)
+  → UPDATE followup_tracking SET status=p_reason, cancellation_reason=p_reason
+  → DELETE followup_messages WHERE tracking_id=... AND sent_at IS NULL
+```
+
+Versão `system_cancel_followup_sequence(p_phone, p_reason)` para o módulo suporte.
+
+## Edge functions
+
+1. **NOVA `followup-generate-sequence`** (e `system-followup-generate-sequence`)
+   - Pega trackings `status='pending' AND sequence_generated_at IS NULL`.
+   - 1 chamada Gemini com prompt narrativo (arco completo dos 12 passos).
+   - Function calling retorna array com 12 itens.
+   - Calcula 12 horários (loop sobre `calculateNextSchedule`).
+   - Insere `followup_messages` em batch.
+   - Loga uso em `ai_usage_log` com `source='followup-sequence-gen'`.
+
+2. **NOVA `followup-dispatch`** (e `system-followup-dispatch`)
+   - SEM Gemini.
+   - Valida janela + intervalo + tracking ativo.
+   - Envia via Evolution e marca `sent_at`.
+
+3. **Modificar `whatsapp-webhook`**
+   - Em mensagem entrante: chama `cancel_followup_sequence(user, phone, 'engaged')`.
+   - Em mensagem humana saindo: garante `ai_active=false` + `cancel_followup_sequence(user, phone, 'handoff')`.
+
+4. **Modificar `support-ai-agent` / webhook do system WhatsApp** com hooks equivalentes para o `system_*`.
+
+5. **Deprecar `followup-ai` e `system-followup-ai`** (manter no repo 1 semana para rollback, removidos do cron).
+
+## Cron (atualizar via insert SQL — não migration)
+
+- `followup-generate-sequence`: a cada 5 min.
+- `followup-dispatch`: a cada 5 min.
+- `system-followup-generate-sequence`: a cada 5 min.
+- `system-followup-dispatch`: a cada 5 min.
+- Pausar schedules de `followup-ai` e `system-followup-ai`.
+- Manter `followup-check-inactive` e `system-followup-check-inactive`.
+
+## Plano de rollout
+
+1. Migration: `followup_messages`, `system_followup_messages`, colunas e função SQL.
+2. Implementar `followup-generate-sequence` + `followup-dispatch` (e os system).
+3. Adicionar hooks de cancelamento no webhook.
+4. Atualizar cron jobs.
+5. Monitorar `ai_usage_log` por 48h, comparar custo vs. semana anterior.
+
+## Métricas de sucesso
+
+- Custo Gemini do follow-up: queda ≥ 90%.
+- Mensagens enviadas após resposta do cliente: 0.
+- Mensagens enviadas após handoff humano: 0.
+- Mensagens fora da janela BRT: 0.
