@@ -293,12 +293,18 @@ serve(async (req) => {
             // Mark follow-up tracking as engaged when lead replies
             if (!isFromMe) {
               supabase
-                .from("system_followup_tracking")
-                .update({ status: "engaged", updated_at: new Date().toISOString() })
-                .eq("phone", phone)
-                .eq("status", "pending")
+                .rpc("system_cancel_followup_sequence", { p_phone: phone, p_reason: "engaged" })
                 .then(({ error }) => {
-                  if (error) console.error("Error marking system follow-up engaged:", error);
+                  if (error) console.error("Error cancelling system follow-up sequence:", error);
+                });
+            }
+
+            // Human took over (outgoing human msg) → cancel sequence + AI off
+            if (isFromMe) {
+              supabase
+                .rpc("system_cancel_followup_sequence", { p_phone: phone, p_reason: "handoff" })
+                .then(({ error }) => {
+                  if (error) console.error("Error cancelling system follow-up sequence (handoff):", error);
                 });
             }
           } else {
