@@ -108,8 +108,11 @@ serve(async (req) => {
   }
 });
 
+/**
+ * Agendamento inicial respeitando estritamente as janelas em fuso de São Paulo.
+ * Nunca retorna horário fora das janelas configuradas.
+ */
 function calculateNextSchedule(config: any): string {
-  const now = new Date();
   const [mStartH, mStartM] = (config.morning_window_start || "08:00").split(":").map(Number);
   const [mEndH, mEndM] = (config.morning_window_end || "12:00").split(":").map(Number);
   const [eStartH, eStartM] = (config.evening_window_start || "13:00").split(":").map(Number);
@@ -119,29 +122,38 @@ function calculateNextSchedule(config: any): string {
   const mEnd = mEndH * 60 + mEndM;
   const eStart = eStartH * 60 + eStartM;
   const eEnd = eEndH * 60 + eEndM;
-  const nowMin = now.getHours() * 60 + now.getMinutes();
 
-  const date = new Date(now);
+  const nowBrt = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  const tzOffsetMs = nowBrt.getTime() - Date.now();
+  const nowMin = nowBrt.getHours() * 60 + nowBrt.getMinutes();
 
-  if (nowMin < mEnd) {
-    const start = Math.max(mStart, nowMin + 10);
-    if (start < mEnd) {
-      const r = start + Math.floor(Math.random() * (mEnd - start));
-      date.setHours(Math.floor(r / 60), r % 60, 0, 0);
-      return date.toISOString();
-    }
+  const target = new Date(nowBrt);
+  let startMin: number;
+  let endMin: number;
+
+  if (nowMin < mStart) {
+    // antes da manhã → agenda manhã de hoje
+    startMin = mStart; endMin = mEnd;
+  } else if (nowMin < mEnd - 5) {
+    // dentro da janela da manhã → agenda no restante da manhã (mín 5min de buffer)
+    startMin = Math.max(mStart, nowMin + 5); endMin = mEnd;
+  } else if (nowMin < eStart) {
+    // entre janelas → agenda tarde de hoje
+    startMin = eStart; endMin = eEnd;
+  } else if (nowMin < eEnd - 5) {
+    // dentro da janela da tarde → agenda no restante da tarde
+    startMin = Math.max(eStart, nowMin + 5); endMin = eEnd;
+  } else {
+    // após a tarde → agenda manhã de amanhã
+    target.setDate(target.getDate() + 1);
+    startMin = mStart; endMin = mEnd;
   }
-  if (nowMin < eEnd) {
-    const start = Math.max(eStart, nowMin + 10);
-    if (start < eEnd) {
-      const r = start + Math.floor(Math.random() * (eEnd - start));
-      date.setHours(Math.floor(r / 60), r % 60, 0, 0);
-      return date.toISOString();
-    }
-  }
 
-  date.setDate(date.getDate() + 1);
-  const r = mStart + Math.floor(Math.random() * Math.max(mEnd - mStart, 1));
-  date.setHours(Math.floor(r / 60), r % 60, 0, 0);
-  return date.toISOString();
+  const range = Math.max(endMin - startMin, 1);
+  const r = startMin + Math.floor(Math.random() * range);
+  target.setHours(Math.floor(r / 60), r % 60, 0, 0);
+
+  // Converte BRT pseudo-local para UTC real
+  const utc = new Date(target.getTime() - tzOffsetMs);
+  return utc.toISOString();
 }
