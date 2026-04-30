@@ -1022,9 +1022,63 @@ export type Database = {
         }
         Relationships: []
       }
+      followup_messages: {
+        Row: {
+          account_id: string | null
+          content: string
+          created_at: string
+          hook_used: string | null
+          id: string
+          phone: string
+          scheduled_at: string
+          sent_at: string | null
+          status: string
+          step: number
+          tracking_id: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          content: string
+          created_at?: string
+          hook_used?: string | null
+          id?: string
+          phone: string
+          scheduled_at: string
+          sent_at?: string | null
+          status?: string
+          step: number
+          tracking_id: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          content?: string
+          created_at?: string
+          hook_used?: string | null
+          id?: string
+          phone?: string
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+          step?: number
+          tracking_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "followup_messages_tracking_id_fkey"
+            columns: ["tracking_id"]
+            isOneToOne: false
+            referencedRelation: "followup_tracking"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       followup_tracking: {
         Row: {
           account_id: string | null
+          cancellation_reason: string | null
           context_summary: string | null
           created_at: string | null
           current_step: number
@@ -1033,12 +1087,14 @@ export type Database = {
           last_sent_at: string | null
           next_scheduled_at: string | null
           phone: string
+          sequence_generated_at: string | null
           status: string
           updated_at: string | null
           user_id: string
         }
         Insert: {
           account_id?: string | null
+          cancellation_reason?: string | null
           context_summary?: string | null
           created_at?: string | null
           current_step?: number
@@ -1047,12 +1103,14 @@ export type Database = {
           last_sent_at?: string | null
           next_scheduled_at?: string | null
           phone: string
+          sequence_generated_at?: string | null
           status?: string
           updated_at?: string | null
           user_id: string
         }
         Update: {
           account_id?: string | null
+          cancellation_reason?: string | null
           context_summary?: string | null
           created_at?: string | null
           current_step?: number
@@ -1061,6 +1119,7 @@ export type Database = {
           last_sent_at?: string | null
           next_scheduled_at?: string | null
           phone?: string
+          sequence_generated_at?: string | null
           status?: string
           updated_at?: string | null
           user_id?: string
@@ -1824,8 +1883,56 @@ export type Database = {
         }
         Relationships: []
       }
+      system_followup_messages: {
+        Row: {
+          content: string
+          created_at: string
+          hook_used: string | null
+          id: string
+          phone: string
+          scheduled_at: string
+          sent_at: string | null
+          status: string
+          step: number
+          tracking_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          hook_used?: string | null
+          id?: string
+          phone: string
+          scheduled_at: string
+          sent_at?: string | null
+          status?: string
+          step: number
+          tracking_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          hook_used?: string | null
+          id?: string
+          phone?: string
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+          step?: number
+          tracking_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_followup_messages_tracking_id_fkey"
+            columns: ["tracking_id"]
+            isOneToOne: false
+            referencedRelation: "system_followup_tracking"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_followup_tracking: {
         Row: {
+          cancellation_reason: string | null
           context_summary: string | null
           created_at: string
           current_step: number
@@ -1834,10 +1941,12 @@ export type Database = {
           last_sent_at: string | null
           next_scheduled_at: string | null
           phone: string
+          sequence_generated_at: string | null
           status: string
           updated_at: string
         }
         Insert: {
+          cancellation_reason?: string | null
           context_summary?: string | null
           created_at?: string
           current_step?: number
@@ -1846,10 +1955,12 @@ export type Database = {
           last_sent_at?: string | null
           next_scheduled_at?: string | null
           phone: string
+          sequence_generated_at?: string | null
           status?: string
           updated_at?: string
         }
         Update: {
+          cancellation_reason?: string | null
           context_summary?: string | null
           created_at?: string
           current_step?: number
@@ -1858,6 +1969,7 @@ export type Database = {
           last_sent_at?: string | null
           next_scheduled_at?: string | null
           phone?: string
+          sequence_generated_at?: string | null
           status?: string
           updated_at?: string
         }
@@ -2361,6 +2473,10 @@ export type Database = {
         Args: { _user_id: string }
         Returns: undefined
       }
+      cancel_followup_sequence: {
+        Args: { p_phone: string; p_reason: string; p_user_id: string }
+        Returns: number
+      }
       current_account_id: { Args: never; Returns: string }
       get_account_role: {
         Args: { _account_id: string }
@@ -2382,6 +2498,10 @@ export type Database = {
       must_filter_by_assignment: {
         Args: { _account_id: string }
         Returns: boolean
+      }
+      system_cancel_followup_sequence: {
+        Args: { p_phone: string; p_reason: string }
+        Returns: number
       }
     }
     Enums: {
