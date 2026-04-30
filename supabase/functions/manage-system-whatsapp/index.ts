@@ -104,7 +104,7 @@ serve(async (req) => {
         enabled: true,
         url: webhookUrl,
         events: WEBHOOK_EVENTS,
-        webhookByEvents: true,
+        webhookByEvents: false,
         webhookBase64: true,
       };
 
@@ -143,7 +143,7 @@ serve(async (req) => {
             webhook: {
               enabled: true,
               url: webhookUrl,
-              byEvents: true,
+              byEvents: false,
               base64: true,
               events: WEBHOOK_EVENTS,
             },
