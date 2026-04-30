@@ -650,28 +650,49 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
   }
 });
 
-function calculateNextSchedule(config: any, nextStep: number, currentIsMorning: boolean): string {
-  const isNextMorning = nextStep % 2 === 1;
-  const windowStart = isNextMorning ? config.morning_window_start : config.evening_window_start;
-  const windowEnd = isNextMorning ? config.morning_window_end : config.evening_window_end;
+/**
+ * Agenda o próximo envio respeitando estritamente as janelas configuradas e o fuso de São Paulo.
+ * Regra: 2 envios por dia (manhã + tarde). Nunca agenda fora das janelas.
+ * Se acabou de enviar de manhã → próximo é hoje à tarde.
+ * Se acabou de enviar de tarde → próximo é amanhã de manhã.
+ */
+function calculateNextSchedule(config: any, _nextStep: number, currentIsMorning: boolean): string {
+  const [mStartH, mStartM] = (config.morning_window_start || "08:00").split(":").map(Number);
+  const [mEndH, mEndM] = (config.morning_window_end || "12:00").split(":").map(Number);
+  const [eStartH, eStartM] = (config.evening_window_start || "13:00").split(":").map(Number);
+  const [eEndH, eEndM] = (config.evening_window_end || "19:00").split(":").map(Number);
 
-  const nextDate = new Date();
-  if (!currentIsMorning) {
-    nextDate.setDate(nextDate.getDate() + 1);
+  // "agora" no fuso de São Paulo
+  const nowBrt = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  const tzOffsetMs = nowBrt.getTime() - Date.now(); // diferença BRT vs UTC do runtime
+
+  // Próxima janela: se acabou de enviar de manhã → tarde de hoje; senão → manhã de amanhã
+  let target = new Date(nowBrt);
+  let startH: number, startM: number, endH: number, endM: number;
+
+  if (currentIsMorning) {
+    // próximo: tarde do mesmo dia
+    startH = eStartH; startM = eStartM; endH = eEndH; endM = eEndM;
+    // se já passou da janela da tarde, vai pra manhã de amanhã
+    const nowMin = nowBrt.getHours() * 60 + nowBrt.getMinutes();
+    if (nowMin >= eEndH * 60 + eEndM) {
+      target.setDate(target.getDate() + 1);
+      startH = mStartH; startM = mStartM; endH = mEndH; endM = mEndM;
+    }
+  } else {
+    // próximo: manhã do dia seguinte
+    target.setDate(target.getDate() + 1);
+    startH = mStartH; startM = mStartM; endH = mEndH; endM = mEndM;
   }
 
-  const [startH, startM] = (windowStart || "08:00").split(":").map(Number);
-  const [endH, endM] = (windowEnd || "19:00").split(":").map(Number);
   const startMinutes = startH * 60 + startM;
   const endMinutes = endH * 60 + endM;
   const range = Math.max(endMinutes - startMinutes, 1);
   const randomMinutes = startMinutes + Math.floor(Math.random() * range);
 
-  nextDate.setHours(Math.floor(randomMinutes / 60), randomMinutes % 60, 0, 0);
+  target.setHours(Math.floor(randomMinutes / 60), randomMinutes % 60, 0, 0);
 
-  if (nextDate.getTime() < Date.now()) {
-    nextDate.setDate(nextDate.getDate() + 1);
-  }
-
-  return nextDate.toISOString();
+  // Converte de "BRT pseudo-local" para UTC real subtraindo o offset
+  const utc = new Date(target.getTime() - tzOffsetMs);
+  return utc.toISOString();
 }
