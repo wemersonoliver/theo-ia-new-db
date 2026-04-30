@@ -56,3 +56,5 @@ verify_jwt = false
 
 [functions.system-followup-ai]
 verify_jwt = false
+[functions.repair-whatsapp-webhook]
+verify_jwt = false
