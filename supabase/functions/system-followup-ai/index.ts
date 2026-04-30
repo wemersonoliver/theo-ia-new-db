@@ -9,6 +9,26 @@ const corsHeaders = {
 
 const MAX_ITEMS_PER_RUN = 5;
 
+// Verifica se o horário (em São Paulo) está dentro de alguma das janelas configuradas
+function isWithinWindow(config: any): { inside: boolean; window: "morning" | "evening" | null } {
+  const nowBrt = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  const nowMin = nowBrt.getHours() * 60 + nowBrt.getMinutes();
+
+  const [mStartH, mStartM] = (config.morning_window_start || "08:00").split(":").map(Number);
+  const [mEndH, mEndM] = (config.morning_window_end || "12:00").split(":").map(Number);
+  const [eStartH, eStartM] = (config.evening_window_start || "13:00").split(":").map(Number);
+  const [eEndH, eEndM] = (config.evening_window_end || "19:00").split(":").map(Number);
+
+  const mStart = mStartH * 60 + mStartM;
+  const mEnd = mEndH * 60 + mEndM;
+  const eStart = eStartH * 60 + eStartM;
+  const eEnd = eEndH * 60 + eEndM;
+
+  if (nowMin >= mStart && nowMin <= mEnd) return { inside: true, window: "morning" };
+  if (nowMin >= eStart && nowMin <= eEnd) return { inside: true, window: "evening" };
+  return { inside: false, window: null };
+}
+
 function sanitizeContactName(rawName: string | null | undefined): string | null {
   if (!rawName) return null;
   const name = rawName.trim();
