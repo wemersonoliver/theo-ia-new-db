@@ -626,6 +626,17 @@ serve(async (req) => {
               console.error("Error moving CRM deal to human stage:", e);
             }
 
+            // Humano assumiu → cancela toda a sequência de follow-up
+            try {
+              await supabase.rpc("cancel_followup_sequence", {
+                p_user_id: userId,
+                p_phone: phone,
+                p_reason: "handoff",
+              });
+            } catch (e) {
+              console.error("Error cancelling followup sequence (handoff):", e);
+            }
+
             console.log("Outgoing message saved, AI disabled:", phone);
           }
           continue; // Don't trigger AI for outgoing messages
