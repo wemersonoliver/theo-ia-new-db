@@ -259,6 +259,15 @@ serve(async (req) => {
       });
     }
 
+    // 🔒 GUARDA DE JANELA: se o momento atual (BRT) está fora das janelas configuradas, NÃO envia nada.
+    const windowCheck = isWithinWindow(config);
+    if (!windowCheck.inside) {
+      console.log(`[support-followup] fora da janela horária — skip`);
+      return new Response(JSON.stringify({ processed: 0, reason: "outside_window" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Carrega instância de WhatsApp do sistema
     const { data: instance } = await supabase
       .from("system_whatsapp_instance")
@@ -310,10 +319,10 @@ serve(async (req) => {
 
         if (!freshItem || freshItem.status !== "pending") continue;
 
-        // 3h interval
+        // Intervalo mínimo de 4h entre envios para o mesmo lead (garante manhã + tarde sem sobrepor)
         if (item.last_sent_at) {
           const lastSent = new Date(item.last_sent_at).getTime();
-          if (Date.now() - lastSent < 3 * 60 * 60 * 1000) continue;
+          if (Date.now() - lastSent < 4 * 60 * 60 * 1000) continue;
         }
 
         const { data: conversation } = await supabase
