@@ -641,31 +641,13 @@ serve(async (req) => {
 
         // Check if there's an active follow-up and mark as engaged
         if (!isFromMe) {
-          const { data: activeFollowup } = await supabase
-            .from("followup_tracking")
-            .select("id, current_step")
-            .eq("user_id", userId)
-            .eq("phone", phone)
-            .eq("status", "pending")
-            .maybeSingle();
-
-          if (activeFollowup) {
-            const isMorningStep = activeFollowup.current_step % 2 === 1;
-            await supabase
-              .from("followup_tracking")
-              .update({
-                status: "engaged",
-                engagement_data: {
-                  engaged_at_step: activeFollowup.current_step,
-                  engaged_at_turn: isMorningStep ? "morning" : "afternoon",
-                  engaged_at: new Date().toISOString(),
-                },
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", activeFollowup.id);
-
-            console.log("Follow-up engaged by client response:", phone, "at step", activeFollowup.current_step);
-          }
+          // Cliente respondeu → cancela sequência inteira (engaged)
+          const { error: cancelErr } = await supabase.rpc("cancel_followup_sequence", {
+            p_user_id: userId,
+            p_phone: phone,
+            p_reason: "engaged",
+          });
+          if (cancelErr) console.error("Error cancelling followup sequence:", cancelErr);
         }
 
         // Handle incoming messages
