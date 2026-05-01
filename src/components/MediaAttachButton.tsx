@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Paperclip, Image as ImageIcon, FileText, Mic, Loader2, X, Send } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const MAX_BYTES = 16 * 1024 * 1024; // 16 MB
 
@@ -19,6 +20,8 @@ const ACCEPT_BY_KIND: Record<Kind, string> = {
   document: ".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv,application/zip",
   audio: "audio/*",
 };
+
+const ACCEPT_ALL = `${ACCEPT_BY_KIND.media},${ACCEPT_BY_KIND.document},${ACCEPT_BY_KIND.audio}`;
 
 type Kind = "media" | "document" | "audio";
 
@@ -53,6 +56,9 @@ interface Props {
 }
 
 export function MediaAttachButton({ phone, disabled, onSend, isSending }: Props) {
+  const isMobile = useIsMobile();
+  const mobileInputId = useId();
+  const mobileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -103,34 +109,61 @@ export function MediaAttachButton({ phone, disabled, onSend, isSending }: Props)
   }
 
   const mediaType = file ? detectMediaType(file) : null;
+  const isDisabled = disabled || isSending;
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            disabled={disabled || isSending}
-            className="shrink-0"
+      {isMobile ? (
+        <>
+          <label
+            htmlFor={isDisabled ? undefined : mobileInputId}
+            aria-disabled={isDisabled}
             aria-label="Anexar arquivo"
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "icon" }),
+              "shrink-0 cursor-pointer active:bg-accent",
+              isDisabled && "pointer-events-none cursor-not-allowed opacity-50"
+            )}
           >
             {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Paperclip className="h-5 w-5" />}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" side="top">
-          <DropdownMenuItem onSelect={() => pick("media")} className="gap-2">
-            <ImageIcon className="h-4 w-4" /> Foto ou vídeo
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => pick("document")} className="gap-2">
-            <FileText className="h-4 w-4" /> Documento
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => pick("audio")} className="gap-2">
-            <Mic className="h-4 w-4" /> Áudio
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </label>
+          <input
+            id={mobileInputId}
+            ref={mobileInputRef}
+            type="file"
+            accept={ACCEPT_ALL}
+            className="sr-only"
+            disabled={isDisabled}
+            onChange={handleFileChosen}
+          />
+        </>
+      ) : (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={isDisabled}
+              className="shrink-0"
+              aria-label="Anexar arquivo"
+            >
+              {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Paperclip className="h-5 w-5" />}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="top">
+            <DropdownMenuItem onSelect={() => pick("media")} className="gap-2">
+              <ImageIcon className="h-4 w-4" /> Foto ou vídeo
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => pick("document")} className="gap-2">
+              <FileText className="h-4 w-4" /> Documento
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => pick("audio")} className="gap-2">
+              <Mic className="h-4 w-4" /> Áudio
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
       <input
         ref={mediaInputRef}
