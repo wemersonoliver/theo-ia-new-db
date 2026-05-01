@@ -53,16 +53,22 @@ interface Props {
 }
 
 export function MediaAttachButton({ phone, disabled, onSend, isSending }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [pendingKind, setPendingKind] = useState<Kind | null>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
 
   function pick(kind: Kind) {
-    setPendingKind(kind);
-    // Defer click until accept is set
-    requestAnimationFrame(() => inputRef.current?.click());
+    // Trigger the native file picker SYNCHRONOUSLY so iOS/Safari preserves
+    // the user gesture context. Using a separate input per kind avoids the
+    // need to mutate `accept` in a deferred frame.
+    const ref =
+      kind === "media" ? mediaInputRef
+      : kind === "document" ? documentInputRef
+      : audioInputRef;
+    ref.current?.click();
   }
 
   function handleFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
@@ -84,7 +90,6 @@ export function MediaAttachButton({ phone, disabled, onSend, isSending }: Props)
     setFile(null);
     setPreviewUrl(null);
     setCaption("");
-    setPendingKind(null);
   }
 
   async function handleSend() {
@@ -98,7 +103,6 @@ export function MediaAttachButton({ phone, disabled, onSend, isSending }: Props)
   }
 
   const mediaType = file ? detectMediaType(file) : null;
-  const accept = pendingKind ? ACCEPT_BY_KIND[pendingKind] : "*/*";
 
   return (
     <>
@@ -116,22 +120,36 @@ export function MediaAttachButton({ phone, disabled, onSend, isSending }: Props)
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top">
-          <DropdownMenuItem onClick={() => pick("media")} className="gap-2">
+          <DropdownMenuItem onSelect={() => pick("media")} className="gap-2">
             <ImageIcon className="h-4 w-4" /> Foto ou vídeo
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => pick("document")} className="gap-2">
+          <DropdownMenuItem onSelect={() => pick("document")} className="gap-2">
             <FileText className="h-4 w-4" /> Documento
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => pick("audio")} className="gap-2">
+          <DropdownMenuItem onSelect={() => pick("audio")} className="gap-2">
             <Mic className="h-4 w-4" /> Áudio
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
       <input
-        ref={inputRef}
+        ref={mediaInputRef}
         type="file"
-        accept={accept}
+        accept={ACCEPT_BY_KIND.media}
+        className="hidden"
+        onChange={handleFileChosen}
+      />
+      <input
+        ref={documentInputRef}
+        type="file"
+        accept={ACCEPT_BY_KIND.document}
+        className="hidden"
+        onChange={handleFileChosen}
+      />
+      <input
+        ref={audioInputRef}
+        type="file"
+        accept={ACCEPT_BY_KIND.audio}
         className="hidden"
         onChange={handleFileChosen}
       />
