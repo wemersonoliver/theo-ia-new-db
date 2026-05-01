@@ -326,13 +326,7 @@ export default function Conversations() {
           open={!!selectedPhone}
           onOpenChange={(open) => {
             if (!open) {
-              setSelectedPhone(null);
-              // Radix sometimes leaves `pointer-events: none` on <body> when
-              // a nested Dialog/DropdownMenu is unmounted together with the
-              // Sheet. Clear it on the next tick so the page stays usable.
-              setTimeout(() => {
-                document.body.style.pointerEvents = "";
-              }, 0);
+              closeMobileChat();
             }
           }}
         >
@@ -342,7 +336,7 @@ export default function Conversations() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setSelectedPhone(null)}
+                onClick={closeMobileChat}
                 className="shrink-0"
               >
                 <ArrowLeft className="h-5 w-5" />
