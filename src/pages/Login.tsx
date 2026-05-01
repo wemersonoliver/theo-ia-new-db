@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { getRecaptchaToken, isRecaptchaEnabled } from "@/lib/recaptcha";
+import { getRecaptchaToken, isRecaptchaEnabled, useRecaptchaBadge } from "@/lib/recaptcha";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -18,6 +18,7 @@ export default function Login() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const { signIn, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+  useRecaptchaBadge();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
