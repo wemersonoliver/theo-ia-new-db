@@ -5,9 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
-import { Smartphone, QrCode, Loader2, RefreshCw, Power, CheckCircle2, XCircle, Hash } from "lucide-react";
+import { Smartphone, QrCode, Loader2, RefreshCw, Power, CheckCircle2, XCircle, Hash, Copy, Check } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export default function WhatsApp() {
   const { instance, isLoading, createInstance, disconnectInstance, refreshQRCode } = useWhatsAppInstance();
@@ -18,6 +19,20 @@ export default function WhatsApp() {
   const [connectionMode, setConnectionMode] = useState<"qr" | "code">("qr");
   const [phoneInput, setPhoneInput] = useState("");
   const [cachedPairingCode, setCachedPairingCode] = useState<string | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
+
+  const handleCopyCode = async () => {
+    const code = cachedPairingCode || instance?.pairing_code || "";
+    const clean = code.replace(/-/g, "");
+    try {
+      await navigator.clipboard.writeText(clean);
+      setCodeCopied(true);
+      toast.success("Código copiado!");
+      setTimeout(() => setCodeCopied(false), 2000);
+    } catch {
+      toast.error("Não foi possível copiar o código");
+    }
+  };
 
   useEffect(() => {
     instanceStatusRef.current = instance?.status;
@@ -364,6 +379,10 @@ export default function WhatsApp() {
                         </p>
 
                         <div className="flex gap-2 justify-center">
+                          <Button variant="default" size="sm" onClick={handleCopyCode}>
+                            {codeCopied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                            {codeCopied ? "Copiado" : "Copiar Código"}
+                          </Button>
                           <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={isRefreshing}>
                             {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                             Novo Código
