@@ -248,6 +248,23 @@ export default function Conversations() {
     return conversationPicture || contactPictureByPhone.get(phone) || null;
   };
 
+  // Cierre seguro do chat mobile: limpa estados residuais do Radix
+  // (pointer-events e aria-hidden) que podem deixar a tela "branca"/travada.
+  const closeMobileChat = () => {
+    setSelectedPhone(null);
+    setMessageInput("");
+    // Aguarda o ciclo de unmount antes de limpar estilos residuais
+    setTimeout(() => {
+      try {
+        document.body.style.pointerEvents = "";
+        document.body.style.removeProperty("pointer-events");
+        document.body.removeAttribute("data-scroll-locked");
+        document.body.style.removeProperty("overflow");
+        document.documentElement.style.removeProperty("overflow");
+      } catch {}
+    }, 50);
+  };
+
   function openContactPage(phone: string) {
     navigate(`/contacts?open=${encodeURIComponent(phone)}`);
   }
