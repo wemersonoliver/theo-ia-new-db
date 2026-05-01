@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logAudioUsage } from "../_shared/ai-usage.ts";
+import { reportApiFailure, reportApiSuccess } from "../_health.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -95,25 +96,33 @@ serve(async (req) => {
     formData.append("language", "pt");
     formData.append("response_format", "verbose_json");
 
-    const transcribeResponse = await fetch(
-      "https://api.groq.com/openai/v1/audio/transcriptions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${groqApiKey}`,
-        },
-        body: formData,
-      }
-    );
+    let transcribeResponse: Response;
+    try {
+      transcribeResponse = await fetch(
+        "https://api.groq.com/openai/v1/audio/transcriptions",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${groqApiKey}` },
+          body: formData,
+        }
+      );
+    } catch (e) {
+      reportApiFailure("groq", e instanceof Error ? e.message : "fetch failed").catch(() => {});
+      throw e;
+    }
 
     if (!transcribeResponse.ok) {
       const errorText = await transcribeResponse.text();
       console.error("Groq transcription error:", transcribeResponse.status, errorText);
+      if (transcribeResponse.status >= 500 || transcribeResponse.status === 401 || transcribeResponse.status === 403) {
+        reportApiFailure("groq", `HTTP ${transcribeResponse.status}: ${errorText.slice(0, 200)}`).catch(() => {});
+      }
       return new Response(JSON.stringify({ error: "Transcription failed", details: errorText }), { 
         status: 500, 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
       });
     }
+    reportApiSuccess("groq").catch(() => {});
 
     const transcription = await transcribeResponse.json();
     console.log("Transcription successful:", transcription.text?.slice(0, 100));

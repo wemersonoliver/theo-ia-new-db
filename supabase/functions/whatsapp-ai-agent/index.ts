@@ -5,6 +5,7 @@ import { cleanAIText } from "../_ai_text.ts";
 import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts";
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
+import { reportApiFailure, reportApiSuccess } from "../_health.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -177,11 +178,17 @@ async function fetchGeminiWithRetry(apiKey: string, payload: any, maxRetries = 3
   // mantendo qualidade suficiente para atendimento WhatsApp.
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (e) {
+      reportApiFailure("gemini", e instanceof Error ? e.message : "fetch failed").catch(() => {});
+      throw e;
+    }
     if (response.status === 429) {
       const retryAfter = response.headers.get("Retry-After");
       const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : Math.pow(2, attempt) * 2000 + Math.random() * 1000;
@@ -192,10 +199,15 @@ async function fetchGeminiWithRetry(apiKey: string, payload: any, maxRetries = 3
     if (!response.ok) {
       const errText = await response.text();
       console.error("Gemini error:", errText);
+      if (response.status >= 500 || response.status === 401 || response.status === 403) {
+        reportApiFailure("gemini", `HTTP ${response.status}: ${errText.slice(0, 200)}`).catch(() => {});
+      }
       throw new Error(`Gemini API error: ${response.status}`);
     }
+    reportApiSuccess("gemini").catch(() => {});
     return response;
   }
+  reportApiFailure("gemini", "Rate limit exceeded after retries").catch(() => {});
   throw new Error("Gemini API rate limit exceeded after retries");
 }
 
