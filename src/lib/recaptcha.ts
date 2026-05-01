@@ -1,5 +1,21 @@
 export const RECAPTCHA_SITE_KEY = "6Ld9TcYsAAAAAMEDUiTck3OS4RKCJYCBs-fR69Kf";
 
+import { useEffect } from "react";
+
+/**
+ * Toggles visibility of the reCAPTCHA v3 badge while a component is mounted.
+ * Use on login / register / forgot-password pages so the badge shows there
+ * (with Google attribution) but stays hidden on the rest of the app.
+ */
+export function useRecaptchaBadge() {
+  useEffect(() => {
+    document.body.classList.add("show-recaptcha");
+    return () => {
+      document.body.classList.remove("show-recaptcha");
+    };
+  }, []);
+}
+
 /**
  * Returns true only when running on the production domain (theoia.com.br).
  * In Lovable preview, lovable.app subdomains and localhost it returns false,
