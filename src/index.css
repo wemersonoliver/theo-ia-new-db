@@ -4,6 +4,20 @@
 
 /* Definition of the design system - Professional/Corporate theme */
 
+/* Hide reCAPTCHA badge by default; show only on auth pages (body.show-recaptcha).
+   We comply with Google's terms by displaying the attribution text inline
+   on those pages. */
+.grecaptcha-badge {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+body.show-recaptcha .grecaptcha-badge {
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
 @layer base {
   :root {
     --background: 210 20% 98%;
