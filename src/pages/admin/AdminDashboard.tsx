@@ -47,6 +47,7 @@ import {
 } from "recharts";
 import { useAdminDashboardMetrics } from "@/hooks/useAdminDashboardMetrics";
 import { presetRange, formatDuration } from "@/lib/dashboard-metrics";
+import { ApiHealthStatus } from "@/components/admin/ApiHealthStatus";
 
 type Period = "today" | "7d" | "30d" | "month";
 
@@ -142,6 +143,9 @@ export default function AdminDashboard() {
 
   return (
     <AdminLayout title="Dashboard" description="Visão geral da plataforma">
+      {/* Status das APIs externas (monitoramento crítico) */}
+      <ApiHealthStatus />
+
       {/* Filtros */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
