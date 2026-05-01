@@ -322,7 +322,20 @@ export default function Conversations() {
         </div>
 
         {/* Mobile Chat Fullscreen Overlay */}
-        <Sheet open={!!selectedPhone} onOpenChange={(open) => !open && setSelectedPhone(null)}>
+        <Sheet
+          open={!!selectedPhone}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedPhone(null);
+              // Radix sometimes leaves `pointer-events: none` on <body> when
+              // a nested Dialog/DropdownMenu is unmounted together with the
+              // Sheet. Clear it on the next tick so the page stays usable.
+              setTimeout(() => {
+                document.body.style.pointerEvents = "";
+              }, 0);
+            }
+          }}
+        >
           <SheetContent side="right" hideClose className="z-[70] flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden border-l-0 p-0 sm:max-w-none">
             {/* Header */}
             <div className="flex items-center gap-2 border-b bg-background px-3 py-2 shrink-0">
