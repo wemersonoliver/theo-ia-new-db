@@ -1838,6 +1838,48 @@ export type Database = {
         }
         Relationships: []
       }
+      system_api_health: {
+        Row: {
+          api_name: string
+          consecutive_failures: number
+          created_at: string
+          id: string
+          last_alert_sent_at: string | null
+          last_error_at: string | null
+          last_error_message: string | null
+          last_ok_at: string | null
+          recovery_alert_sent: boolean
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          api_name: string
+          consecutive_failures?: number
+          created_at?: string
+          id?: string
+          last_alert_sent_at?: string | null
+          last_error_at?: string | null
+          last_error_message?: string | null
+          last_ok_at?: string | null
+          recovery_alert_sent?: boolean
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          api_name?: string
+          consecutive_failures?: number
+          created_at?: string
+          id?: string
+          last_alert_sent_at?: string | null
+          last_error_at?: string | null
+          last_error_message?: string | null
+          last_ok_at?: string | null
+          recovery_alert_sent?: boolean
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       system_followup_config: {
         Row: {
           bargaining_tools: string | null
