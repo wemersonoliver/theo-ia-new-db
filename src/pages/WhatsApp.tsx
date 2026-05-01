@@ -363,7 +363,7 @@ export default function WhatsApp() {
                         </p>
                         <div className="relative rounded-lg border-2 border-primary/20 bg-muted/50 p-6">
                           <p className={cn(
-                            "text-4xl font-mono font-bold tracking-[0.3em] text-primary transition-opacity duration-300",
+                            "text-2xl sm:text-4xl font-mono font-bold tracking-[0.2em] sm:tracking-[0.3em] text-primary transition-opacity duration-300 break-all",
                             isRefreshing && "opacity-50"
                           )}>
                             {formatPairingCode(cachedPairingCode || instance?.pairing_code || "")}
@@ -378,16 +378,16 @@ export default function WhatsApp() {
                           O código não é atualizado automaticamente. Se falhar, clique em <span className="font-medium text-foreground">Novo Código</span>.
                         </p>
 
-                        <div className="flex gap-2 justify-center">
-                          <Button variant="default" size="sm" onClick={handleCopyCode}>
+                        <div className="flex flex-col sm:flex-row gap-2 justify-center pb-20 sm:pb-0">
+                          <Button variant="default" size="sm" onClick={handleCopyCode} className="w-full sm:w-auto">
                             {codeCopied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
                             {codeCopied ? "Copiado" : "Copiar Código"}
                           </Button>
-                          <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={isRefreshing}>
+                          <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={isRefreshing} className="w-full sm:w-auto">
                             {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                             Novo Código
                           </Button>
-                          <Button variant="destructive" size="sm" onClick={handleCancelConnection} disabled={disconnectInstance.isPending}>
+                          <Button variant="destructive" size="sm" onClick={handleCancelConnection} disabled={disconnectInstance.isPending} className="w-full sm:w-auto">
                             {disconnectInstance.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
                             Cancelar
                           </Button>
