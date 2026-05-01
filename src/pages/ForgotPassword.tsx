@@ -7,12 +7,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, MessageSquare, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { getRecaptchaToken, isRecaptchaEnabled } from "@/lib/recaptcha";
+import { getRecaptchaToken, isRecaptchaEnabled, useRecaptchaBadge } from "@/lib/recaptcha";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  useRecaptchaBadge();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
