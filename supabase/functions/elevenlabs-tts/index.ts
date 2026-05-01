@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { reportApiFailure, reportApiSuccess } from "../_health.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -71,33 +72,43 @@ serve(async (req) => {
 
     console.log(`TTS request: ${charactersCount} chars, voice=${resolvedVoiceId}, phone=${phone}, source=${resolvedSource}`);
 
-    const ttsResponse = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${resolvedVoiceId}?output_format=mp3_44100_128`,
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": elevenlabsKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          text,
-          model_id: "eleven_multilingual_v2",
-          voice_settings: {
-            stability: voiceSettings?.stability ?? 0.5,
-            similarity_boost: voiceSettings?.similarity_boost ?? 0.75,
-            style: voiceSettings?.style ?? 0.3,
-            use_speaker_boost: true,
-            speed: voiceSettings?.speed ?? 1.0,
+    let ttsResponse: Response;
+    try {
+      ttsResponse = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${resolvedVoiceId}?output_format=mp3_44100_128`,
+        {
+          method: "POST",
+          headers: {
+            "xi-api-key": elevenlabsKey,
+            "Content-Type": "application/json",
           },
-        }),
-      }
-    );
+          body: JSON.stringify({
+            text,
+            model_id: "eleven_multilingual_v2",
+            voice_settings: {
+              stability: voiceSettings?.stability ?? 0.5,
+              similarity_boost: voiceSettings?.similarity_boost ?? 0.75,
+              style: voiceSettings?.style ?? 0.3,
+              use_speaker_boost: true,
+              speed: voiceSettings?.speed ?? 1.0,
+            },
+          }),
+        }
+      );
+    } catch (e) {
+      reportApiFailure("elevenlabs", e instanceof Error ? e.message : "fetch failed").catch(() => {});
+      throw e;
+    }
 
     if (!ttsResponse.ok) {
       const errText = await ttsResponse.text();
       console.error("ElevenLabs API error:", ttsResponse.status, errText);
+      if (ttsResponse.status >= 500 || ttsResponse.status === 401 || ttsResponse.status === 403) {
+        reportApiFailure("elevenlabs", `HTTP ${ttsResponse.status}: ${errText.slice(0, 200)}`).catch(() => {});
+      }
       throw new Error(`ElevenLabs API error: ${ttsResponse.status} - ${errText.slice(0, 200)}`);
     }
+    reportApiSuccess("elevenlabs").catch(() => {});
 
     const audioBuffer = await ttsResponse.arrayBuffer();
     const audioBase64 = base64Encode(audioBuffer);
