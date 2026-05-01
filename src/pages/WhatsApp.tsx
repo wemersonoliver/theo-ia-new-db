@@ -313,12 +313,12 @@ export default function WhatsApp() {
                     )}
 
                     {(qrImageSrc || instance?.status === "qr_ready" || instance?.status === "pending") && (
-                    <div className="flex gap-2 justify-center">
-                      <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={isRefreshing}>
+                    <div className="flex flex-col sm:flex-row gap-2 justify-center pb-20 sm:pb-0 w-full">
+                      <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={isRefreshing} className="w-full sm:w-auto">
                         {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                         Atualizar QR
                       </Button>
-                      <Button variant="destructive" size="sm" onClick={handleCancelConnection} disabled={disconnectInstance.isPending}>
+                      <Button variant="destructive" size="sm" onClick={handleCancelConnection} disabled={disconnectInstance.isPending} className="w-full sm:w-auto">
                         {disconnectInstance.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
                         Cancelar
                       </Button>
