@@ -259,7 +259,7 @@ export default function WhatsApp() {
                   Seu WhatsApp está pronto para receber mensagens
                 </p>
               </div>
-            ) : instance?.status === "qr_ready" || instance?.status === "pending" ? (
+            ) : (
               <Tabs value={connectionMode} onValueChange={(v) => setConnectionMode(v as "qr" | "code")}>
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="qr">
@@ -292,13 +292,36 @@ export default function WhatsApp() {
                           QR Code expira em <span className="font-bold text-primary">{countdown}s</span>
                         </p>
                       </>
-                    ) : (
+                    ) : (instance?.status === "qr_ready" || instance?.status === "pending" || createInstance.isPending || refreshQRCode.isPending) ? (
                       <div className="space-y-3 py-6">
                         <Loader2 className="mx-auto h-10 w-10 animate-spin text-muted-foreground" />
                         <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
                       </div>
+                    ) : (
+                      <div className="space-y-4 py-6">
+                        <QrCode className="mx-auto h-16 w-16 text-muted-foreground/40" />
+                        <p className="text-sm text-muted-foreground">
+                          Clique em "Gerar QR Code" para iniciar a conexão
+                        </p>
+                        <Button
+                          className="w-full"
+                          onClick={() => {
+                            setIsRefreshing(true);
+                            createInstance.mutate();
+                          }}
+                          disabled={createInstance.isPending}
+                        >
+                          {createInstance.isPending ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <QrCode className="mr-2 h-4 w-4" />
+                          )}
+                          Gerar QR Code
+                        </Button>
+                      </div>
                     )}
 
+                    {(qrImageSrc || instance?.status === "qr_ready" || instance?.status === "pending") && (
                     <div className="flex gap-2 justify-center">
                       <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={isRefreshing}>
                         {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
@@ -309,6 +332,7 @@ export default function WhatsApp() {
                         Cancelar
                       </Button>
                     </div>
+                    )}
                   </div>
                 </TabsContent>
 
@@ -378,13 +402,6 @@ export default function WhatsApp() {
                   </div>
                 </TabsContent>
               </Tabs>
-            ) : (
-              <div className="py-8 text-center text-muted-foreground">
-                <QrCode className="mx-auto h-16 w-16 opacity-30" />
-                <p className="mt-4">
-                  Clique em "Conectar WhatsApp" para começar
-                </p>
-              </div>
             )}
           </CardContent>
         </Card>
