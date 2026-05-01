@@ -248,6 +248,23 @@ export default function Conversations() {
     return conversationPicture || contactPictureByPhone.get(phone) || null;
   };
 
+  // Cierre seguro do chat mobile: limpa estados residuais do Radix
+  // (pointer-events e aria-hidden) que podem deixar a tela "branca"/travada.
+  const closeMobileChat = () => {
+    setSelectedPhone(null);
+    setMessageInput("");
+    // Aguarda o ciclo de unmount antes de limpar estilos residuais
+    setTimeout(() => {
+      try {
+        document.body.style.pointerEvents = "";
+        document.body.style.removeProperty("pointer-events");
+        document.body.removeAttribute("data-scroll-locked");
+        document.body.style.removeProperty("overflow");
+        document.documentElement.style.removeProperty("overflow");
+      } catch {}
+    }, 50);
+  };
+
   function openContactPage(phone: string) {
     navigate(`/contacts?open=${encodeURIComponent(phone)}`);
   }
@@ -326,13 +343,7 @@ export default function Conversations() {
           open={!!selectedPhone}
           onOpenChange={(open) => {
             if (!open) {
-              setSelectedPhone(null);
-              // Radix sometimes leaves `pointer-events: none` on <body> when
-              // a nested Dialog/DropdownMenu is unmounted together with the
-              // Sheet. Clear it on the next tick so the page stays usable.
-              setTimeout(() => {
-                document.body.style.pointerEvents = "";
-              }, 0);
+              closeMobileChat();
             }
           }}
         >
@@ -342,7 +353,7 @@ export default function Conversations() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setSelectedPhone(null)}
+                onClick={closeMobileChat}
                 className="shrink-0"
               >
                 <ArrowLeft className="h-5 w-5" />
