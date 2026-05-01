@@ -207,34 +207,10 @@ export default function WhatsApp() {
               </div>
             )}
 
-            {instance?.status === "disconnected" && (
-              <Button 
-                className="w-full"
-                onClick={() => createInstance.mutate()}
-                disabled={createInstance.isPending}
-              >
-                {createInstance.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                )}
-                Reconectar
-              </Button>
-            )}
-
-            {!instance && (
-              <Button 
-                className="w-full"
-                onClick={() => createInstance.mutate()}
-                disabled={createInstance.isPending}
-              >
-                {createInstance.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Smartphone className="mr-2 h-4 w-4" />
-                )}
-                Conectar WhatsApp
-              </Button>
+            {instance?.status !== "connected" && (
+              <p className="text-sm text-muted-foreground">
+                Use o painel ao lado para conectar via QR Code ou Código de pareamento.
+              </p>
             )}
           </CardContent>
         </Card>
