@@ -1,3 +1,5 @@
+import { reportApiFailure, reportApiSuccess } from "./_health.ts";
+
 const EVOLUTION_AUTH_MODES = ["apikey", "bearer", "both"] as const;
 
 export type EvolutionAuthMode = (typeof EVOLUTION_AUTH_MODES)[number];
@@ -99,19 +101,28 @@ export async function evolutionRequest({
 
       const { data, text } = await parseResponse(response);
       if (response.ok) {
+        reportApiSuccess("evolution_api").catch(() => {});
         return { ok: true, status: response.status, url, authMode, data, text };
       }
 
       lastFailure = { ok: false, status: response.status, url, authMode, data, text };
       if (![401, 403].includes(response.status)) {
+        // Erros 5xx e timeouts indicam API fora; 4xx (exceto 401/403) podem ser problemas de payload
+        if (response.status >= 500 || response.status === 0) {
+          reportApiFailure("evolution_api", `HTTP ${response.status}: ${(text || "").slice(0, 200)}`).catch(() => {});
+        }
         return lastFailure;
       }
     } catch (error) {
       const text = error instanceof Error ? error.message : "Unknown Evolution API error";
+      reportApiFailure("evolution_api", text).catch(() => {});
       return { ok: false, status: 0, url, authMode, data: null, text };
     }
   }
 
+  if (lastFailure && (lastFailure.status >= 500 || lastFailure.status === 0 || lastFailure.status === 401 || lastFailure.status === 403)) {
+    reportApiFailure("evolution_api", `HTTP ${lastFailure.status}: ${(lastFailure.text || "").slice(0, 200)}`).catch(() => {});
+  }
   return lastFailure ?? { ok: false, status: 0, url, authMode: "apikey", data: null, text: "Unknown Evolution API error" };
 }
 
