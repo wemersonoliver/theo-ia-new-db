@@ -60,26 +60,26 @@ export function FinalizeDialog({ open, onOpenChange, conversationId, contactName
           .maybeSingle();
         if (!conv?.account_id || !conv?.phone) return;
 
-        const { data: contact } = await supabase
+        // Busca TODOS os contatos com esse telefone (pode haver duplicatas)
+        const { data: contactList } = await supabase
           .from("contacts")
           .select("id")
           .eq("account_id", conv.account_id)
-          .eq("phone", conv.phone)
-          .order("updated_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (!contact?.id) return;
+          .eq("phone", conv.phone);
+        const contactIds = (contactList ?? []).map((c) => c.id);
+        if (contactIds.length === 0) return;
 
-        const { data: deal } = await supabase
+        // Busca o deal ativo mais recente entre TODOS os contatos vinculados
+        const { data: deals } = await supabase
           .from("crm_deals")
-          .select("id, stage_id")
+          .select("id, stage_id, updated_at")
           .eq("account_id", conv.account_id)
-          .eq("contact_id", contact.id)
+          .in("contact_id", contactIds)
           .is("won_at", null)
           .is("lost_at", null)
           .order("updated_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .limit(1);
+        const deal = deals?.[0];
         if (!deal?.stage_id) return;
 
         const { data: currentStage } = await supabase
