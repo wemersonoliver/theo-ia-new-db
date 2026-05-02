@@ -338,7 +338,7 @@ serve(async (req) => {
     // Get conversation history for context
     const { data: conversation } = await supabase
       .from("whatsapp_conversations")
-      .select("messages")
+      .select("messages, instance_id")
       .eq("user_id", userId)
       .eq("phone", phone)
       .maybeSingle();
