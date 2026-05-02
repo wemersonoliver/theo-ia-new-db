@@ -558,6 +558,13 @@ export default function Conversations() {
             )}
           </SheetContent>
         </Sheet>
+        <FinalizeDialog
+          open={finalizeOpen}
+          onOpenChange={setFinalizeOpen}
+          conversationId={selectedConversation?.id ?? null}
+          contactName={selectedConversation?.contact_name}
+          onFinalized={() => setSelectedPhone(null)}
+        />
       </DashboardLayout>
     );
   }
