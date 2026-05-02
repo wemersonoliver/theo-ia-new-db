@@ -91,6 +91,7 @@ export function useDashboardMetrics(
       }));
 
       // Pipeline filter: keep only conversations linked to a deal in the chosen pipeline
+      let pipelinePhones: Set<string> | null = null;
       if (pipelineId !== "all") {
         const { data: stagesOfPipeline } = await supabase
           .from("crm_stages")
@@ -99,6 +100,7 @@ export function useDashboardMetrics(
         const stageIds = (stagesOfPipeline || []).map((s: any) => s.id);
         if (stageIds.length === 0) {
           conversations = [];
+          pipelinePhones = new Set();
         } else {
           let dealsForConvQuery = supabase
             .from("crm_deals")
@@ -112,6 +114,7 @@ export function useDashboardMetrics(
           );
           if (contactIds.length === 0) {
             conversations = [];
+            pipelinePhones = new Set();
           } else {
             const { data: pipelineContacts } = await supabase
               .from("contacts")
@@ -120,6 +123,7 @@ export function useDashboardMetrics(
               .in("id", contactIds);
             const phones = new Set((pipelineContacts || []).map((c: any) => c.phone));
             conversations = conversations.filter((c) => phones.has(c.phone));
+            pipelinePhones = phones;
           }
         }
       }
@@ -185,6 +189,37 @@ export function useDashboardMetrics(
       const salesPrev = validDeals.filter((d: any) => inPrev(d.won_at));
       const salesValueCur = salesCur.reduce((s: number, d: any) => s + (d.value_cents || 0), 0);
 
+      // Outcomes (finalized conversations)
+      let outcomeQuery = supabase
+        .from("whatsapp_conversations")
+        .select("phone, outcome, closed_at, closed_by")
+        .eq("account_id", accountId)
+        .not("outcome", "is", null)
+        .gte("closed_at", fetchStart)
+        .lte("closed_at", fetchEnd);
+      if (sellerId !== "all") outcomeQuery = outcomeQuery.eq("closed_by", sellerId);
+      const { data: outcomesRaw } = await outcomeQuery;
+      let outcomes = (outcomesRaw || []) as Array<{
+        phone: string; outcome: "won" | "lost" | "abandoned"; closed_at: string; closed_by: string | null;
+      }>;
+      if (pipelinePhones) {
+        outcomes = outcomes.filter((o) => pipelinePhones!.has(o.phone));
+      }
+      const inOutcome = (filterFn: (o: typeof outcomes[number]) => boolean) =>
+        outcomes.filter((o) => filterFn(o) && inRange(o.closed_at));
+      const inPrevOutcome = (filterFn: (o: typeof outcomes[number]) => boolean) =>
+        outcomes.filter((o) => filterFn(o) && inPrev(o.closed_at));
+      const wonCur = inOutcome((o) => o.outcome === "won").length;
+      const lostCur = inOutcome((o) => o.outcome === "lost").length;
+      const abandonedCur = inOutcome((o) => o.outcome === "abandoned").length;
+      const wonPrev = inPrevOutcome((o) => o.outcome === "won").length;
+      const lostPrev = inPrevOutcome((o) => o.outcome === "lost").length;
+      const abandonedPrev = inPrevOutcome((o) => o.outcome === "abandoned").length;
+      const finalizedCur = wonCur + lostCur + abandonedCur;
+      const finalizedPrev = wonPrev + lostPrev + abandonedPrev;
+      const convRateCur = finalizedCur > 0 ? Math.round((wonCur / finalizedCur) * 100) : 0;
+      const convRatePrev = finalizedPrev > 0 ? Math.round((wonPrev / finalizedPrev) * 100) : 0;
+
       // Per seller breakdown
       const sellerMap: Record<
         string,
@@ -200,6 +235,9 @@ export function useDashboardMetrics(
             appointments: 0,
             sales: 0,
             salesValueCents: 0,
+            won: 0,
+            lost: 0,
+            abandoned: 0,
           };
         }
         return sellerMap[k];
@@ -218,6 +256,13 @@ export function useDashboardMetrics(
         row.sales++;
         row.salesValueCents += (d as any).value_cents || 0;
       }
+      for (const o of outcomes) {
+        if (!inRange(o.closed_at)) continue;
+        const row = ensure(o.closed_by);
+        if (o.outcome === "won") row.won++;
+        else if (o.outcome === "lost") row.lost++;
+        else if (o.outcome === "abandoned") row.abandoned++;
+      }
 
       const result: DashboardMetrics = {
         current: {
@@ -230,6 +275,11 @@ export function useDashboardMetrics(
           avgServiceTimeSec: convMetricsCur.avgServiceTimeSec,
           perAttendant: convMetricsCur.perAttendant,
           perAttendantWait: convMetricsCur.perAttendantWait,
+          won: wonCur,
+          lost: lostCur,
+          abandoned: abandonedCur,
+          finalizedTotal: finalizedCur,
+          conversionRate: convRateCur,
         },
         variation: {
           leads: pctVariation(convMetricsCur.leads, convMetricsPrev.leads),
@@ -244,6 +294,10 @@ export function useDashboardMetrics(
             convMetricsCur.avgServiceTimeSec,
             convMetricsPrev.avgServiceTimeSec
           ),
+          won: pctVariation(wonCur, wonPrev),
+          lost: pctVariation(lostCur, lostPrev),
+          abandoned: pctVariation(abandonedCur, abandonedPrev),
+          conversionRate: pctVariation(convRateCur, convRatePrev),
         },
         perSeller: Object.values(sellerMap),
         loading: false,
