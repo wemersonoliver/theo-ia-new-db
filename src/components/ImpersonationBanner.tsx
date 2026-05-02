@@ -50,7 +50,7 @@ export function ImpersonationBanner() {
   const label = target.full_name ? `${target.full_name} (${target.email})` : target.email;
 
   return (
-    <div className="fixed top-0 inset-x-0 z-[100] bg-amber-500 text-slate-900 shadow-md">
+    <div className="sticky top-0 inset-x-0 z-[200] bg-amber-500 text-slate-900 shadow-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2 text-sm">
         <div className="flex items-center gap-2 min-w-0">
           <ShieldAlert className="h-4 w-4 shrink-0" />
