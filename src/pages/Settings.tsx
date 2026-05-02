@@ -179,16 +179,16 @@ export default function Settings() {
                 <button
                   key={m.to}
                   onClick={() => navigate(m.to)}
-                  className="flex items-center gap-4 rounded-lg border bg-card p-4 text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                  className="flex w-full items-center gap-3 rounded-lg border bg-card p-3 sm:p-4 text-left transition-colors hover:bg-accent hover:text-accent-foreground overflow-hidden"
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                     <m.icon className="h-5 w-5" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium">{m.title}</p>
-                    <p className="text-sm text-muted-foreground truncate">{m.desc}</p>
+                    <p className="font-medium text-sm sm:text-base truncate">{m.title}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{m.desc}</p>
                   </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </button>
               ))}
             </CardContent>
