@@ -620,6 +620,20 @@ export default function Conversations() {
                 <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
               </Button>
             </div>
+            <div className="mt-2 inline-flex rounded-md border bg-muted/40 p-0.5 text-xs">
+              {(["open","closed","all"] as const).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setStatusFilter(k)}
+                  className={cn(
+                    "px-2.5 py-1 rounded-sm transition-colors",
+                    statusFilter === k ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {k === "open" ? "Em atendimento" : k === "closed" ? "Finalizadas" : "Todas"}
+                </button>
+              ))}
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[calc(100vh-280px)]">
