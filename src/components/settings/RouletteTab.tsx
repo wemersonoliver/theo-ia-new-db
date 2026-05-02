@@ -7,14 +7,16 @@ import { Loader2, Shuffle, Users, AlertCircle, Clock, Wifi } from "lucide-react"
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useRouletteConfig } from "@/hooks/useRouletteConfig";
 import { useAccount } from "@/hooks/useAccount";
+import { useQueryClient } from "@tanstack/react-query";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useMemo, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 
 export function RouletteTab() {
-  const { isOwner } = useAccount();
-  const { members, isLoading: loadingMembers, refetch } = useTeamMembers();
+  const { isOwner, membership } = useAccount();
+  const { members, isLoading: loadingMembers } = useTeamMembers();
   const { config, isLoading: loadingCfg, upsert } = useRouletteConfig();
+  const qc = useQueryClient();
 
   const activeMembers = useMemo(
     () => (members || []).filter((m) => m.status === "active"),
@@ -39,9 +41,12 @@ export function RouletteTab() {
   // Auto-refresh status online a cada 30s
   useEffect(() => {
     if (!isMultiUser) return;
-    const id = window.setInterval(() => refetch?.(), 30_000);
+    const id = window.setInterval(
+      () => qc.invalidateQueries({ queryKey: ["team-members", membership?.account_id] }),
+      30_000,
+    );
     return () => window.clearInterval(id);
-  }, [isMultiUser, refetch]);
+  }, [isMultiUser, qc, membership?.account_id]);
 
   const onlineThresholdMs = (config?.online_threshold_seconds ?? 120) * 1000;
   const isOnline = (lastSeen: string | null) =>
