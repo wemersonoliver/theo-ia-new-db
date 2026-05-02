@@ -582,7 +582,7 @@ serve(async (req) => {
         // Get or create conversation
         const { data: conversation } = await supabase
           .from("whatsapp_conversations")
-          .select("id, messages, ai_active, outcome, assigned_to")
+          .select("id, messages, ai_active, outcome, assigned_to, instance_id")
           .eq("user_id", userId)
           .eq("phone", phone)
           .maybeSingle();
@@ -710,6 +710,10 @@ serve(async (req) => {
             total_messages: updatedMessages.length,
             updated_at: new Date().toISOString(),
           };
+          // Garante o vínculo com a instância correta (departamento) quando ausente
+          if (!conversation.instance_id) {
+            conversationUpdate.instance_id = instanceData.id;
+          }
           if (wasFinalized) {
             conversationUpdate.outcome = null;
             conversationUpdate.outcome_reason = null;
@@ -777,13 +781,15 @@ serve(async (req) => {
           }
         } else {
           // New conversation - check if should activate AI
-          const shouldActivateAI = checkKeywordActivation();
+          const instanceAIEnabled = instanceData.ai_enabled !== false;
+          const shouldActivateAI = instanceAIEnabled && checkKeywordActivation();
 
           await supabase
             .from("whatsapp_conversations")
             .insert({
               user_id: userId,
               account_id: accountId,
+              instance_id: instanceData.id,
               phone,
               contact_name: contactName,
               messages: [newMessage],
