@@ -53,7 +53,7 @@ serve(async (req) => {
     // Find the instance owner (user instance or system instance)
     const { data: instanceData } = await supabase
       .from("whatsapp_instances")
-      .select("user_id, id, status, instance_name")
+      .select("user_id, id, status, instance_name, ai_enabled, followup_enabled")
       .eq("instance_name", instanceName)
       .maybeSingle();
 
@@ -582,7 +582,7 @@ serve(async (req) => {
         // Get or create conversation
         const { data: conversation } = await supabase
           .from("whatsapp_conversations")
-          .select("id, messages, ai_active, outcome, assigned_to")
+          .select("id, messages, ai_active, outcome, assigned_to, instance_id")
           .eq("user_id", userId)
           .eq("phone", phone)
           .maybeSingle();
@@ -710,6 +710,10 @@ serve(async (req) => {
             total_messages: updatedMessages.length,
             updated_at: new Date().toISOString(),
           };
+          // Garante o vínculo com a instância correta (departamento) quando ausente
+          if (!conversation.instance_id) {
+            conversationUpdate.instance_id = instanceData.id;
+          }
           if (wasFinalized) {
             conversationUpdate.outcome = null;
             conversationUpdate.outcome_reason = null;
@@ -756,8 +760,10 @@ serve(async (req) => {
           if (wasFinalized) {
             // Conversa reaberta: dispara IA imediatamente para seguir o fluxo (handoff → roleta)
             const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
-            await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
-          } else if (!conversation.ai_active && aiConfig?.keyword_activation_enabled) {
+            if (instanceData.ai_enabled !== false) {
+              await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
+            }
+          } else if (!conversation.ai_active && aiConfig?.keyword_activation_enabled && instanceData.ai_enabled !== false) {
             const hasKeyword = checkKeywordActivation();
             if (hasKeyword) {
               // Reactivate AI for this conversation
@@ -770,20 +776,22 @@ serve(async (req) => {
               const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
               await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
             }
-          } else if (conversation.ai_active) {
+          } else if (conversation.ai_active && instanceData.ai_enabled !== false) {
             // AI already active, trigger response with delay
             const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
             await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
           }
         } else {
           // New conversation - check if should activate AI
-          const shouldActivateAI = checkKeywordActivation();
+          const instanceAIEnabled = instanceData.ai_enabled !== false;
+          const shouldActivateAI = instanceAIEnabled && checkKeywordActivation();
 
           await supabase
             .from("whatsapp_conversations")
             .insert({
               user_id: userId,
               account_id: accountId,
+              instance_id: instanceData.id,
               phone,
               contact_name: contactName,
               messages: [newMessage],

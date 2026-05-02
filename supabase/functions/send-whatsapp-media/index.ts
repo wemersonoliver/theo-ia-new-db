@@ -100,15 +100,36 @@ serve(async (req) => {
       }
       instanceName = sysInstance.instance_name;
     } else {
-      let instanceQuery = supabaseAdmin
-        .from("whatsapp_instances")
-        .select("instance_name, status, user_id");
-      if (accountId) {
-        instanceQuery = instanceQuery.eq("account_id", accountId);
-      } else {
-        instanceQuery = instanceQuery.eq("user_id", userId);
+      const normalizedPhoneEarly = normalizeBrazilianPhone(phone);
+      let convInstanceId: string | null = null;
+      {
+        let q = supabaseAdmin
+          .from("whatsapp_conversations")
+          .select("instance_id")
+          .eq("phone", normalizedPhoneEarly);
+        q = accountId ? q.eq("account_id", accountId) : q.eq("user_id", userId);
+        const { data: conv } = await q.maybeSingle();
+        convInstanceId = (conv as any)?.instance_id || null;
       }
-      const { data: instance } = await instanceQuery.maybeSingle();
+
+      let instance: { instance_name: string; status: string } | null = null;
+      if (convInstanceId) {
+        const { data } = await supabaseAdmin
+          .from("whatsapp_instances")
+          .select("instance_name, status")
+          .eq("id", convInstanceId)
+          .maybeSingle();
+        instance = data as any;
+      }
+      if (!instance) {
+        let q = supabaseAdmin
+          .from("whatsapp_instances")
+          .select("instance_name, status, user_id, is_primary")
+          .order("is_primary", { ascending: false });
+        q = accountId ? q.eq("account_id", accountId) : q.eq("user_id", userId);
+        const { data } = await q.limit(1).maybeSingle();
+        instance = data as any;
+      }
       if (!instance || instance.status !== "connected") {
         return jsonResponse({ error: "WhatsApp não está conectado" }, 400);
       }
