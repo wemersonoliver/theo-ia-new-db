@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useConversations, useConversation, Message } from "@/hooks/useConversations";
+import { usePendingAssignments } from "@/hooks/usePendingAssignments";
+import { AcceptAssignmentCard } from "@/components/AcceptAssignmentCard";
 import { useContacts } from "@/hooks/useContacts";
 import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
 import { supabase } from "@/integrations/supabase/client";
@@ -208,7 +210,8 @@ function CreateDealButton({ phone, contactName, className }: { phone: string; co
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Conversations() {
   const navigate = useNavigate();
-  const { conversations, isLoading, sendMessage, sendMedia, toggleAI, finishConversation, deleteConversation, assignConversation } = useConversations();
+  const { conversations: rawConversations, isLoading, sendMessage, sendMedia, toggleAI, finishConversation, deleteConversation, assignConversation } = useConversations();
+  const { acceptanceEnabled, myPending, allPending, accept, isPrivilegedViewer } = usePendingAssignments();
   const { contacts } = useContacts();
   const { instance } = useWhatsAppInstance();
   const [syncing, setSyncing] = useState(false);
@@ -221,6 +224,26 @@ export default function Conversations() {
     () => new Map(contacts.map((contact) => [contact.phone, contact.profile_picture_url])),
     [contacts],
   );
+
+  // Filtra conversas: se há aceite obrigatório e o telefone está pendente para OUTRO atendente,
+  // o usuário comum não enxerga. Owner/manager seguem vendo tudo.
+  const myPendingPhones = useMemo(() => new Set(myPending.map((p) => p.phone)), [myPending]);
+  const otherPendingPhones = useMemo(() => {
+    if (!acceptanceEnabled || isPrivilegedViewer) return new Set<string>();
+    const mine = myPendingPhones;
+    return new Set(allPending.filter((p) => !mine.has(p.phone)).map((p) => p.phone));
+  }, [acceptanceEnabled, isPrivilegedViewer, allPending, myPendingPhones]);
+
+  const conversations = useMemo(
+    () => rawConversations.filter((c) => !otherPendingPhones.has(c.phone)),
+    [rawConversations, otherPendingPhones],
+  );
+
+  const selectedPending = useMemo(
+    () => (selectedPhone ? myPending.find((p) => p.phone === selectedPhone) ?? null : null),
+    [selectedPhone, myPending],
+  );
+  const showAcceptCard = !!selectedPending && acceptanceEnabled;
 
   // Seleciona automaticamente o contato se vier da página de Contatos
   useEffect(() => {
