@@ -218,6 +218,12 @@ export default function Conversations() {
   const { acceptanceEnabled, myPending, allPending, accept, isPrivilegedViewer } = usePendingAssignments();
   const { contacts } = useContacts();
   const { instance } = useWhatsAppInstance();
+  const { membership } = useAccount();
+  const { reopen } = useFinalizeConversation();
+  const canReopen =
+    membership?.role === "owner" || membership?.role === "manager";
+  const [finalizeOpen, setFinalizeOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"open" | "closed" | "all">("open");
   const [syncing, setSyncing] = useState(false);
   const [searchParams] = useSearchParams();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
@@ -239,8 +245,15 @@ export default function Conversations() {
   }, [acceptanceEnabled, isPrivilegedViewer, allPending, myPendingPhones]);
 
   const conversations = useMemo(
-    () => rawConversations.filter((c) => !otherPendingPhones.has(c.phone)),
-    [rawConversations, otherPendingPhones],
+    () =>
+      rawConversations
+        .filter((c) => !otherPendingPhones.has(c.phone))
+        .filter((c) => {
+          if (statusFilter === "all") return true;
+          if (statusFilter === "closed") return !!c.outcome;
+          return !c.outcome;
+        }),
+    [rawConversations, otherPendingPhones, statusFilter],
   );
 
   const selectedPending = useMemo(
