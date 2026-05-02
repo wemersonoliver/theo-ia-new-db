@@ -6,20 +6,14 @@ import {
   LayoutDashboard,
   MessageSquare,
   Smartphone,
-  Bot,
-  FileText,
   Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
   Calendar,
-  CalendarCog,
   ShieldCheck,
   Users,
-  CreditCard,
-  HelpCircle,
   Kanban,
-  Package,
   Ticket,
   BookOpen,
   ListChecks,
@@ -28,32 +22,19 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import theoLogo from "@/assets/logo_theo_ia.png";
 import { useAccount } from "@/hooks/useAccount";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", perm: null as string | null },
   { to: "/whatsapp", icon: Smartphone, label: "WhatsApp", perm: "whatsapp_instance" },
-  { to: "/ai-agent", icon: Bot, label: "Agente IA", perm: "ai_config" },
-  { to: "/knowledge-base", icon: FileText, label: "Base de Conhecimento", perm: "knowledge_base" },
   { to: "/crm", icon: Kanban, label: "CRM", perm: "crm" },
-  { to: "/tasks", icon: ListChecks, label: "Tarefas", perm: "crm" },
   { to: "/conversations", icon: MessageSquare, label: "Conversas", perm: "conversations" },
   { to: "/contacts", icon: Users, label: "Contatos", perm: "contacts" },
+  { to: "/tasks", icon: ListChecks, label: "Tarefas", perm: "crm" },
   { to: "/appointments", icon: Calendar, label: "Agendamentos", perm: "appointments" },
-  { to: "/appointment-settings", icon: CalendarCog, label: "Config. Horários", perm: "appointment_settings" },
   { to: "/settings", icon: Settings, label: "Configurações", perm: "settings" },
-  { to: "/subscriptions", icon: CreditCard, label: "Assinaturas", perm: "billing" },
-  { to: "/support", icon: Ticket, label: "Suporte", perm: "support" },
   { to: "/help-center", icon: BookOpen, label: "Central de Ajuda", perm: null },
+  { to: "/support", icon: Ticket, label: "Suporte", perm: "support" },
 ];
-
-const SUPPORT_PHONE = "5547991293662";
-const SUPPORT_MESSAGE = encodeURIComponent("Olá! Preciso de suporte para o Theo IA");
 
 interface SidebarProps {
   mobile?: boolean;
@@ -65,7 +46,6 @@ export function Sidebar({ mobile, onNavigate }: SidebarProps) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
   const { membership, can } = useAccount();
 
   useEffect(() => {
@@ -147,20 +127,6 @@ export function Sidebar({ mobile, onNavigate }: SidebarProps) {
           })}
         </nav>
 
-        {/* Help Button */}
-        <div className="border-t border-sidebar-border p-2">
-          <button
-            onClick={() => { setHelpOpen(true); onNavigate?.(); }}
-            className={cn(
-              "flex w-full items-center gap-3 rounded-lg px-3 py-2 transition-colors",
-              "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            )}
-          >
-            <HelpCircle className="h-5 w-5 shrink-0" />
-            {showFull && <span>Ajuda</span>}
-          </button>
-        </div>
-
         {/* User Section */}
         <div className="border-t border-sidebar-border p-4">
           {showFull && user && (
@@ -182,45 +148,6 @@ export function Sidebar({ mobile, onNavigate }: SidebarProps) {
           </Button>
         </div>
       </aside>
-
-      {/* Help Dialog */}
-      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
-        <DialogContent className="sm:max-w-[640px] gap-6">
-          <DialogHeader>
-            <DialogTitle className="text-lg">Central de Ajuda</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-6">
-            {/* Tutorial Video */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-muted-foreground">📹 Tutorial do Sistema</h3>
-              <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted border">
-                <iframe
-                  src="https://www.youtube.com/embed/-MZHYGb0afQ"
-                  title="Tutorial Theo IA"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="absolute inset-0 w-full h-full"
-                />
-              </div>
-            </div>
-
-            {/* Support Button */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-muted-foreground">💬 Precisa de ajuda?</h3>
-              <a
-                href={`https://wa.me/${SUPPORT_PHONE}?text=${SUPPORT_MESSAGE}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[hsl(142,70%,45%)] px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-[hsl(142,70%,40%)]"
-              >
-                <MessageSquare className="h-5 w-5" />
-                Falar com o Suporte via WhatsApp
-              </a>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
