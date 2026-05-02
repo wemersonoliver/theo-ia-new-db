@@ -1,92 +1,100 @@
+## Múltiplas instâncias de WhatsApp por negócio (até 3 no plano Pro)
 
-## Objetivo
-
-Mudar a centralização do sistema de "usuário" para "negócio" (account):
-1. Capturar **Nome do Negócio** no cadastro e permitir editá-lo no Perfil.
-2. Substituir o "ID de Usuário" (`profiles.user_code`) por um **ID do Negócio** (`accounts.business_code`) — único por conta, não por usuário. Assim, todos os membros (owner + equipe) de uma mesma empresa compartilham o mesmo ID exibido.
-
-Hoje a tabela `accounts` já existe e cada owner tem 1 account. Vamos só adicionar `business_code` e `name` editável.
+Permitir que cada negócio (account) conecte até 3 números de WhatsApp como "departamentos". Plano **Basic = 1 instância**, **Plano Pro = 3 instâncias**. Cada instância pode ter IA, follow-up e configurações próprias, e a IA pode transferir o atendimento entre departamentos com mensagem automática de transição.
 
 ---
 
-## 1. Banco de dados (migração)
+### 1. Banco de dados (migration)
 
-Tabela `public.accounts`:
-- Adicionar coluna `business_code integer UNIQUE` com sequência iniciando em **1000** (para não colidir visualmente com os `user_code` antigos que começam em 100).
-- Backfill: gerar `business_code` para todas as accounts existentes.
-- Tornar `NOT NULL` após backfill.
+**`whatsapp_instances`** — passa a suportar múltiplas linhas por account:
+- Adicionar `display_name text` (ex.: "Vendas", "Suporte"), `department_slug text` (sanitizado para uso no nome técnico) e `is_primary boolean default false`.
+- Adicionar `transfer_message text` e `ai_enabled boolean default true`, `followup_enabled boolean default true` (configs por departamento).
+- **Remover** unique `(user_id)` e criar unique `(account_id, instance_name)` e unique `(account_id, department_slug)`.
+- Backfill: marcar a instância existente de cada account como `is_primary = true`, `display_name='Principal'`, `department_slug='principal'`. **Não renomear `instance_name` legado** para preservar conexões ativas.
 
-Atualizar trigger `handle_new_user_account` para usar o `business_name` enviado em `raw_user_meta_data` (campo novo `business_name`), com fallback para `full_name`/"Minha Empresa".
+**Função helper `account_plan_tier(_account_id)`** retornando `'basic' | 'pro' | 'trial'` (lê `subscriptions` ativa + `plans.tier`). Default `trial` quando não há assinatura.
 
-Não vamos remover `profiles.user_code` (ainda usado por edge functions tipo `create-whatsapp-instance` para nomear instâncias Evolution e por `repair-whatsapp-webhook`). Mantemos como identificador interno técnico; apenas a UI deixa de exibi-lo.
+**Trigger `enforce_instance_limit`** (BEFORE INSERT em `whatsapp_instances`): bloqueia criação acima de 1 (basic/trial) ou 3 (pro) por `account_id`. Mensagem amigável.
 
-## 2. Cadastro (`src/pages/Register.tsx` + `src/lib/auth.tsx`)
+**`whatsapp_ai_config`, `followup_config`, `whatsapp_conversations`, `whatsapp_ai_sessions`, `whatsapp_pending_responses`**: adicionar coluna `instance_id uuid` (nullable, com backfill apontando à instância primária da account). Permite IA/follow-up independentes por departamento.
 
-- Novo campo **"Nome do negócio"** (obrigatório), posicionado logo após "Nome completo".
-- `signUp(...)` passa a aceitar `businessName` e envia em `options.data.business_name`.
-- Após o `signUp`, atualizar `accounts.name` para o `businessName` informado (a trigger cria a account com fallback; fazemos `update` explícito pelo `owner_user_id = user.id` para garantir).
+### 2. Padrão de nomenclatura das instâncias (Evolution API)
 
-## 3. Perfil (`src/pages/Settings.tsx` — aba Perfil)
+Formato técnico do `instance_name` para **novas** instâncias:
 
-- Substituir o bloco "Seu ID de Usuário" (#user_code) por **"ID do Negócio"** (#business_code) buscado de `accounts` via `useAccount()`.
-- Adicionar campo editável **"Nome do negócio"** (apenas owner pode editar — usar `isOwner` do `useAccount`). Salva em `accounts.name`.
-- Texto auxiliar: "Use este ID ao entrar em contato com o suporte".
-
-## 4. Hook `useAccount.ts`
-
-- Incluir `business_code` no select de `accounts` e expor em `AccountMembership`.
-
-## 5. Painel Admin (`src/pages/AdminUsers.tsx` + `supabase/functions/admin-users`)
-
-- Adicionar coluna **"ID Negócio"** (#business_code) ao lado ou substituindo o "#user_code" exibido hoje.
-- Edge function `admin-users` retorna `business_code` e `business_name` (join com `accounts` pelo `owner_user_id`).
-- Filtro de busca passa a aceitar busca pelo `business_code` também.
-
-## 6. Onboarding / Suporte (referências ao ID)
-
-- Em `mem://features/help-support-system` e fluxos onde a IA de suporte pede "código do usuário", trocar prompt para "código do negócio". (Atualizar `support-ai-agent` e `system-followup-*` se referenciarem `user_code` em mensagens — verificar antes de editar.)
-
-## 7. Compatibilidade
-
-- `create-whatsapp-instance` continua usando `user_code` para nomear instância Evolution (`user_<code>`). **Não muda** — é identificador técnico interno do owner, e renomear instâncias quebraria conexões existentes.
-- Em uma fase futura (não neste plano) podemos avaliar renomear instâncias para `biz_<business_code>`.
-
----
-
-## Detalhes técnicos
-
-### SQL da migração
-```sql
-CREATE SEQUENCE IF NOT EXISTS accounts_business_code_seq START WITH 1000;
-ALTER TABLE public.accounts
-  ADD COLUMN business_code integer UNIQUE DEFAULT nextval('accounts_business_code_seq');
-UPDATE public.accounts SET business_code = nextval('accounts_business_code_seq')
-  WHERE business_code IS NULL;
-ALTER TABLE public.accounts ALTER COLUMN business_code SET NOT NULL;
+```
+biz<business_code>_<department_slug>
+ex.: biz1042_vendas, biz1042_suporte, biz1042_financeiro
 ```
 
-Trigger atualizada (substitui a existente `handle_new_user_account`) para ler `NEW.raw_user_meta_data->>'business_name'` antes de cair em `full_name`.
+- `business_code` vem de `accounts.business_code`.
+- `department_slug` é gerado a partir do `display_name` informado pelo usuário: lowercase, sem acentos, somente `[a-z0-9]`, truncado em 20 chars (ex.: "Pós-Venda" → `posvenda`). Garante unicidade dentro do account com sufixo numérico se colidir.
+- Instâncias **legadas** (`user_<code>` ou UUID) **permanecem com o nome atual** — apenas recebem `display_name='Principal'` e `department_slug='principal'`. Isso evita reconectar números já em produção.
+- Se o owner desconectar e recriar a primária no futuro, a nova receberá o padrão `biz<code>_principal`.
 
-### Validação no Register
-- `businessName.trim().length >= 2` obrigatório, senão toast e bloqueia submit.
+### 3. Edge Functions
 
-### RLS de `accounts`
-- Já permite owner atualizar (verificar policies existentes; se faltar UPDATE, adicionar policy `owner_user_id = auth.uid()`).
+- **`create-whatsapp-instance`**: aceitar `{ departmentName, instanceId? }`. Resolver `account_id` + `business_code`, validar limite por plano, gerar `department_slug` e `instance_name = biz<code>_<slot>`. Inserir nova linha em vez de upsert por `user_id`. Validar duplicata de slug no account.
+- **`disconnect-whatsapp-instance` / `refresh-whatsapp-qrcode`**: aceitar `instanceId` no body, operar sobre essa linha específica.
+- **`whatsapp-webhook`**: já recebe `instance` da Evolution; usar para localizar a row exata em `whatsapp_instances` e gravar `instance_id` na conversa.
+- **`send-whatsapp-message` / `send-whatsapp-media` / `followup-dispatch` / `send-appointment-reminders` / `send-welcome-sequence`**: derivar `instance_id` da conversa/contato para escolher a Evolution instance correta no envio.
+- **`whatsapp-ai-agent`**: nova function-tool `transfer_to_department(department_slug, reason)` — atualiza conversa para o novo `instance_id`, dispara `transfer_message` da instância de destino, e ativa/desativa IA conforme `ai_enabled` do destino.
+
+### 4. Frontend
+
+- **`useWhatsAppInstances`** (lista por account) e wrapper `useWhatsAppInstance()` mantido para componentes legados (retorna a primária).
+- **Hook `useAccountPlan()`**: retorna `tier` e `maxInstances` (`pro=3`, demais=1).
+- **Página `/whatsapp` refatorada**:
+  - Mostra até 3 cards de "departamento" (Slot 1, 2, 3).
+  - Slot 1: sempre ativo (instância principal).
+  - Slots 2 e 3 — **plano Pro**: botão "Adicionar departamento" abre modal pedindo nome; cria instância e mostra QR/pairing.
+  - Slots 2 e 3 — **plano Basic/trial**: cards com `opacity-50`, ícone de cadeado, badge "Disponível no plano Pro" e CTA "Fazer upgrade" → `/subscriptions`.
+  - Cada card conectado: nome editável do departamento, número, status, toggles (IA, follow-up), campo "Mensagem de transferência", ações (desconectar, atualizar QR).
+- **Conversas**: badge mostrando o departamento da conversa; (filtro por departamento fica para iteração futura).
+- **`TrialBanner` / `WhatsAppDisconnectedBanner`**: continuam baseados na instância primária.
+
+### 5. Gating por plano
+
+- Cliente: UI controla visibilidade/estado dos slots extras.
+- Servidor: trigger no banco + validação na edge function impedem criação acima do limite (retorna 402 com mensagem clara).
 
 ---
 
-## Arquivos afetados
+### Detalhes técnicos
 
-- **Nova migração SQL** (coluna + sequence + trigger atualizada + policy update se faltar)
-- `src/pages/Register.tsx` — novo campo
-- `src/lib/auth.tsx` — assinatura `signUp` + update da account
-- `src/pages/Settings.tsx` — exibição do ID do negócio + edição do nome
-- `src/hooks/useAccount.ts` — incluir `business_code`
-- `src/pages/AdminUsers.tsx` — coluna ID Negócio + busca
-- `supabase/functions/admin-users/index.ts` — retornar campos do negócio
+```text
+account #1042 (Empresa X)
+ ├─ biz1042_principal   ← legado preservado OU novo padrão (Basic e Pro)
+ ├─ biz1042_vendas      ← Pro apenas
+ └─ biz1042_suporte     ← Pro apenas
+       cada uma com:
+       ├─ display_name + department_slug
+       ├─ ai_enabled, followup_enabled
+       └─ transfer_message
+```
 
-## Fora do escopo
+```sql
+-- Trigger de limite
+CREATE OR REPLACE FUNCTION enforce_wa_instance_limit() RETURNS trigger AS $$
+DECLARE max_n int; current_n int;
+BEGIN
+  SELECT CASE WHEN account_plan_tier(NEW.account_id)='pro' THEN 3 ELSE 1 END INTO max_n;
+  SELECT count(*) INTO current_n FROM whatsapp_instances WHERE account_id = NEW.account_id;
+  IF current_n >= max_n THEN
+    RAISE EXCEPTION 'Limite de % instâncias atingido para este plano', max_n;
+  END IF;
+  RETURN NEW;
+END $$ LANGUAGE plpgsql;
+```
 
-- Renomear instâncias Evolution já existentes.
-- Migrar `profiles.user_code` (mantido como identificador técnico interno).
-- Mudanças em landing/marketing.
+Função-tool da IA:
+```
+transfer_to_department(department_slug, reason)
+  → UPDATE whatsapp_conversations SET instance_id = X, ai_active = dest.ai_enabled
+  → send-whatsapp-message via instance X com dest.transfer_message
+```
+
+### Fora do escopo desta entrega
+- Filtro/seletor de departamento na página de Conversas (próxima iteração).
+- Renomear instâncias legadas para o padrão novo.
+- Multi-instância simultânea em reminders/welcome (usarão `instance_id` salvo na conversa, sem nova UI de seleção manual).
