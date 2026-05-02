@@ -55,7 +55,9 @@ export default function WhatsApp() {
 
   useEffect(() => {
     if (instance?.pairing_code) {
-      setCachedPairingCode(instance.pairing_code);
+      // Só atualiza o código exibido se ainda não há um cacheado (primeira geração)
+      // ou se o usuário disparou um refresh manual (cachedPairingCode foi limpo).
+      setCachedPairingCode((prev) => prev ?? instance.pairing_code);
       setIsRefreshing(false);
     }
   }, [instance?.pairing_code]);
