@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { PhoneRequiredDialog } from "@/components/PhoneRequiredDialog";
 import { usePlans } from "@/hooks/usePlans";
 import { PresenceHeartbeat } from "@/hooks/usePresenceHeartbeat";
+import { BrowserNotificationsProvider } from "@/hooks/useBrowserNotifications";
 
 const TRIAL_DAYS = 15;
 
@@ -166,6 +167,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   return (
     <>
       <PresenceHeartbeat />
+      <BrowserNotificationsProvider />
       {needsPhone && user && (
         <PhoneRequiredDialog
           open={needsPhone}
