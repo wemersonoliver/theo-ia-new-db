@@ -52,11 +52,13 @@ serve(async (req) => {
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
-    // Parse optional phoneNumber from body
+    // Parse optional phoneNumber and instanceId from body
     let phoneNumber: string | null = null;
+    let bodyInstanceId: string | null = null;
     try {
       const body = await req.json();
       phoneNumber = body?.phoneNumber || null;
+      bodyInstanceId = body?.instanceId || null;
     } catch { /* no body */ }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -73,11 +75,27 @@ serve(async (req) => {
 
     const userId = claimsData.user.id;
 
-    const { data: instance } = await supabase
-      .from("whatsapp_instances")
-      .select("instance_name, status")
-      .eq("user_id", userId)
-      .maybeSingle();
+    let instance: any = null;
+    if (bodyInstanceId) {
+      const { data: ownedAccount } = await supabase
+        .from("accounts").select("id").eq("owner_user_id", userId).maybeSingle();
+      const { data } = await supabase
+        .from("whatsapp_instances")
+        .select("id, instance_name, status, account_id")
+        .eq("id", bodyInstanceId)
+        .maybeSingle();
+      if (!data || (ownedAccount?.id && data.account_id !== ownedAccount.id)) {
+        return jsonResponse({ error: "Instância não encontrada" }, 404);
+      }
+      instance = data;
+    } else {
+      const { data } = await supabase
+        .from("whatsapp_instances")
+        .select("id, instance_name, status")
+        .eq("user_id", userId)
+        .maybeSingle();
+      instance = data;
+    }
 
     if (!instance) {
       return jsonResponse({ error: "Nenhuma instância encontrada" }, 404);
@@ -113,7 +131,7 @@ serve(async (req) => {
       await supabase.from("whatsapp_instances").update({
         status: "connected", qr_code_base64: null, pairing_code: null,
         updated_at: new Date().toISOString(),
-      }).eq("user_id", userId);
+      }).eq("id", instance.id);
 
       return jsonResponse({
         success: true, connected: true, message: "WhatsApp já está conectado"
@@ -204,7 +222,7 @@ serve(async (req) => {
         qr_code_base64: qrCodeBase64,
         pairing_code: pairingCode,
         updated_at: new Date().toISOString(),
-      }).eq("user_id", userId);
+      }).eq("id", instance.id);
 
       return jsonResponse({
         success: !!pairingCode,
@@ -252,7 +270,7 @@ serve(async (req) => {
     await supabase.from("whatsapp_instances").update({
       status: "qr_ready", qr_code_base64: qrCodeBase64, pairing_code: pairingCode,
       updated_at: new Date().toISOString(),
-    }).eq("user_id", userId);
+    }).eq("id", instance.id);
 
     return jsonResponse({ 
       success: !phoneNumber || !!pairingCode,
