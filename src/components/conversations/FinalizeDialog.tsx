@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trophy, XCircle, MinusCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFinalizeConversation, type ConversationOutcome } from "@/hooks/useFinalizeConversation";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Props {
   open: boolean;
@@ -29,13 +31,98 @@ export function FinalizeDialog({ open, onOpenChange, conversationId, contactName
   const [valueStr, setValueStr] = useState(
     defaultValueCents ? (defaultValueCents / 100).toFixed(2).replace(".", ",") : ""
   );
+  const [stages, setStages] = useState<{ id: string; name: string; color: string; position: number }[]>([]);
+  const [stageId, setStageId] = useState<string | null>(null);
+  const [pipelineName, setPipelineName] = useState<string | null>(null);
+  const [loadingStages, setLoadingStages] = useState(false);
   const { finalize } = useFinalizeConversation();
 
   function reset() {
     setOutcome(null);
     setReason("");
     setValueStr("");
+    setStageId(null);
+    setStages([]);
+    setPipelineName(null);
   }
+
+  // Carrega stages do pipeline do deal vinculado à conversa
+  useEffect(() => {
+    if (!open || !conversationId) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingStages(true);
+      try {
+        const { data: conv } = await supabase
+          .from("whatsapp_conversations")
+          .select("account_id, phone")
+          .eq("id", conversationId)
+          .maybeSingle();
+        if (!conv?.account_id || !conv?.phone) return;
+
+        const { data: contact } = await supabase
+          .from("contacts")
+          .select("id")
+          .eq("account_id", conv.account_id)
+          .eq("phone", conv.phone)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!contact?.id) return;
+
+        const { data: deal } = await supabase
+          .from("crm_deals")
+          .select("id, stage_id")
+          .eq("account_id", conv.account_id)
+          .eq("contact_id", contact.id)
+          .is("won_at", null)
+          .is("lost_at", null)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!deal?.stage_id) return;
+
+        const { data: currentStage } = await supabase
+          .from("crm_stages")
+          .select("pipeline_id")
+          .eq("id", deal.stage_id)
+          .maybeSingle();
+        if (!currentStage?.pipeline_id) return;
+
+        const [{ data: pipelineRow }, { data: stageRows }] = await Promise.all([
+          supabase.from("crm_pipelines").select("name").eq("id", currentStage.pipeline_id).maybeSingle(),
+          supabase
+            .from("crm_stages")
+            .select("id, name, color, position")
+            .eq("pipeline_id", currentStage.pipeline_id)
+            .order("position", { ascending: true }),
+        ]);
+
+        if (cancelled) return;
+        setPipelineName(pipelineRow?.name ?? null);
+        setStages(stageRows ?? []);
+      } finally {
+        if (!cancelled) setLoadingStages(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, conversationId]);
+
+  // Sugere coluna padrão conforme outcome (Ganho/Perdido)
+  useEffect(() => {
+    if (!outcome || stages.length === 0) return;
+    if (outcome === "abandoned") {
+      setStageId(null);
+      return;
+    }
+    const target = outcome === "won" ? "ganho" : "perdido";
+    const match =
+      stages.find((s) => s.name.toLowerCase() === target) ??
+      stages.find((s) => s.name.toLowerCase().includes(target));
+    setStageId(match?.id ?? null);
+  }, [outcome, stages]);
 
   async function submit() {
     if (!conversationId || !outcome) return;
@@ -51,6 +138,7 @@ export function FinalizeDialog({ open, onOpenChange, conversationId, contactName
       outcome,
       reason: reason.trim() || null,
       valueCents: Number.isFinite(valueCents) ? valueCents : null,
+      stageId: outcome === "abandoned" ? null : stageId,
     });
     reset();
     onOpenChange(false);
@@ -153,6 +241,40 @@ export function FinalizeDialog({ open, onOpenChange, conversationId, contactName
               onChange={(e) => setReason(e.target.value)}
               placeholder="Ex.: cliente parou de responder após 3 dias"
             />
+          </div>
+        )}
+
+        {(outcome === "won" || outcome === "lost") && (
+          <div className="space-y-2">
+            <Label htmlFor="stage">
+              Mover negócio para a coluna{pipelineName ? ` do funil "${pipelineName}"` : ""}
+            </Label>
+            {stages.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {loadingStages
+                  ? "Carregando colunas do CRM..."
+                  : "Nenhum negócio vinculado encontrado — a classificação será aplicada apenas à conversa."}
+              </p>
+            ) : (
+              <Select value={stageId ?? undefined} onValueChange={(v) => setStageId(v)}>
+                <SelectTrigger id="stage">
+                  <SelectValue placeholder="Selecione a coluna" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stages.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      <span className="inline-flex items-center gap-2">
+                        <span
+                          className="inline-block h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: s.color }}
+                        />
+                        {s.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         )}
 

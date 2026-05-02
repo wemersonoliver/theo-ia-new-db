@@ -2635,15 +2635,26 @@ export type Database = {
         Returns: number
       }
       current_account_id: { Args: never; Returns: string }
-      finalize_conversation: {
-        Args: {
-          _conversation_id: string
-          _outcome: string
-          _reason?: string
-          _value_cents?: number
-        }
-        Returns: string
-      }
+      finalize_conversation:
+        | {
+            Args: {
+              _conversation_id: string
+              _outcome: string
+              _reason?: string
+              _value_cents?: number
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              _conversation_id: string
+              _outcome: string
+              _reason?: string
+              _stage_id?: string
+              _value_cents?: number
+            }
+            Returns: string
+          }
       get_account_role: {
         Args: { _account_id: string }
         Returns: Database["public"]["Enums"]["account_role"]
