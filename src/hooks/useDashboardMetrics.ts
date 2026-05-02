@@ -20,6 +20,7 @@ export interface DashboardMetrics {
     avgFirstResponseSec: number;
     avgServiceTimeSec: number;
     perAttendant: Record<string, { tma: number; count: number }>;
+    perAttendantWait: Record<string, { wait: number; count: number }>;
   };
   variation: {
     leads: number | null;
@@ -69,13 +70,47 @@ export function useDashboardMetrics(
         .eq("account_id", accountId);
       if (sellerId !== "all") convQuery = convQuery.eq("assigned_to", sellerId);
       const { data: convsRaw } = await convQuery;
-      const conversations: ConversationLite[] = (convsRaw || []).map((c: any) => ({
+      let conversations: ConversationLite[] = (convsRaw || []).map((c: any) => ({
         phone: c.phone,
         assigned_to: c.assigned_to,
         last_message_at: c.last_message_at,
         created_at: c.created_at,
         messages: ((c.messages as Message[]) || []),
       }));
+
+      // Pipeline filter: keep only conversations linked to a deal in the chosen pipeline
+      if (pipelineId !== "all") {
+        const { data: stagesOfPipeline } = await supabase
+          .from("crm_stages")
+          .select("id")
+          .eq("pipeline_id", pipelineId);
+        const stageIds = (stagesOfPipeline || []).map((s: any) => s.id);
+        if (stageIds.length === 0) {
+          conversations = [];
+        } else {
+          let dealsForConvQuery = supabase
+            .from("crm_deals")
+            .select("contact_id")
+            .eq("account_id", accountId)
+            .in("stage_id", stageIds)
+            .not("contact_id", "is", null);
+          const { data: pipelineDeals } = await dealsForConvQuery;
+          const contactIds = Array.from(
+            new Set((pipelineDeals || []).map((d: any) => d.contact_id).filter(Boolean))
+          );
+          if (contactIds.length === 0) {
+            conversations = [];
+          } else {
+            const { data: pipelineContacts } = await supabase
+              .from("contacts")
+              .select("phone")
+              .eq("account_id", accountId)
+              .in("id", contactIds);
+            const phones = new Set((pipelineContacts || []).map((c: any) => c.phone));
+            conversations = conversations.filter((c) => phones.has(c.phone));
+          }
+        }
+      }
 
       // Appointments
       let apptQuery = supabase
@@ -182,6 +217,7 @@ export function useDashboardMetrics(
           avgFirstResponseSec: convMetricsCur.avgFirstResponseSec,
           avgServiceTimeSec: convMetricsCur.avgServiceTimeSec,
           perAttendant: convMetricsCur.perAttendant,
+          perAttendantWait: convMetricsCur.perAttendantWait,
         },
         variation: {
           leads: pctVariation(convMetricsCur.leads, convMetricsPrev.leads),
