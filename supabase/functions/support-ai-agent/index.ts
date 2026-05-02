@@ -14,6 +14,7 @@ const SYSTEM_PROMPT = `Você é o Theo, Agente de Suporte e Consultor Comercial 
 
 - **NUNCA envie mensagens longas.** Cada mensagem deve ter no máximo 2-3 linhas.
 - Divida sua resposta em blocos curtos e envie como mensagens separadas (use quebras de linha duplas para separar os blocos).
+- Links devem ficar sempre isolados por espaços ou em uma linha própria. Nunca cole letras, palavras ou pontuação diretamente depois de uma URL.
 - Isso simula uma conversa natural de WhatsApp, como uma pessoa real digitando.
 - Exemplo de como responder:
 
@@ -822,8 +823,14 @@ async function notifyAdminContacts(supabase: any, clientPhone: string, summary: 
 
 const MAX_SUPPORT_MESSAGE_CHARS = 220;
 
+function normalizeUrlSpacing(text: string): string {
+  return text
+    .replace(/(https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+|www\.[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)(?=[A-Za-zÀ-ÿ])/giu, "$1 ")
+    .replace(/([A-Za-zÀ-ÿ])(?=https?:\/\/|www\.)/giu, "$1 ");
+}
+
 function splitByWordLength(text: string, maxChars = MAX_SUPPORT_MESSAGE_CHARS): string[] {
-  const words = text.trim().split(/\s+/).filter(Boolean);
+  const words = normalizeUrlSpacing(text).trim().split(/\s+/).filter(Boolean);
   const chunks: string[] = [];
   let current = "";
 
@@ -857,7 +864,7 @@ function splitByWordLength(text: string, maxChars = MAX_SUPPORT_MESSAGE_CHARS): 
 }
 
 function splitLongSupportBlock(block: string, maxChars = MAX_SUPPORT_MESSAGE_CHARS): string[] {
-  const normalized = block.replace(/\s+/g, " ").trim();
+  const normalized = normalizeUrlSpacing(block).replace(/\s+/g, " ").trim();
   if (!normalized) return [];
   if (normalized.length <= maxChars) return [normalized];
 
@@ -908,7 +915,7 @@ function splitLongSupportBlock(block: string, maxChars = MAX_SUPPORT_MESSAGE_CHA
 }
 
 function splitSupportResponseIntoBlocks(text: string, forAudio = false): string[] {
-  const normalized = text.replace(/\r\n/g, "\n").trim();
+  const normalized = normalizeUrlSpacing(text).replace(/\r\n/g, "\n").trim();
   if (!normalized) return [];
 
   // For audio: merge everything into larger blocks (~40s of speech ≈ 600 chars)
