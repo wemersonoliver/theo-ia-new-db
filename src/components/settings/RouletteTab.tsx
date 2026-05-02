@@ -2,7 +2,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Shuffle, Users, AlertCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, Shuffle, Users, AlertCircle, Clock, Wifi } from "lucide-react";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useRouletteConfig } from "@/hooks/useRouletteConfig";
 import { useAccount } from "@/hooks/useAccount";
@@ -12,7 +13,7 @@ import { Button } from "@/components/ui/button";
 
 export function RouletteTab() {
   const { isOwner } = useAccount();
-  const { members, isLoading: loadingMembers } = useTeamMembers();
+  const { members, isLoading: loadingMembers, refetch } = useTeamMembers();
   const { config, isLoading: loadingCfg, upsert } = useRouletteConfig();
 
   const activeMembers = useMemo(
@@ -22,6 +23,7 @@ export function RouletteTab() {
   const isMultiUser = activeMembers.length >= 2;
 
   const [selected, setSelected] = useState<string[]>([]);
+  const [timeoutMin, setTimeoutMin] = useState<number>(5);
 
   useEffect(() => {
     if (config?.participant_user_ids && config.participant_user_ids.length > 0) {
@@ -29,7 +31,21 @@ export function RouletteTab() {
     } else {
       setSelected(activeMembers.map((m) => m.user_id));
     }
+    if (config?.accept_timeout_minutes) {
+      setTimeoutMin(config.accept_timeout_minutes);
+    }
   }, [config, activeMembers]);
+
+  // Auto-refresh status online a cada 30s
+  useEffect(() => {
+    if (!isMultiUser) return;
+    const id = window.setInterval(() => refetch?.(), 30_000);
+    return () => window.clearInterval(id);
+  }, [isMultiUser, refetch]);
+
+  const onlineThresholdMs = (config?.online_threshold_seconds ?? 120) * 1000;
+  const isOnline = (lastSeen: string | null) =>
+    !!lastSeen && Date.now() - new Date(lastSeen).getTime() < onlineThresholdMs;
 
   if (loadingMembers || loadingCfg) {
     return (
@@ -67,6 +83,8 @@ export function RouletteTab() {
   }
 
   const enabled = !!config?.enabled;
+  const requireOnline = !!config?.require_online;
+  const onlineCount = activeMembers.filter((m) => isOnline(m.last_seen_at)).length;
 
   const toggleParticipant = (userId: string, checked: boolean) => {
     setSelected((prev) =>
@@ -100,10 +118,66 @@ export function RouletteTab() {
           />
         </div>
 
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div className="space-y-1">
+            <Label className="text-base flex items-center gap-2">
+              <Wifi className="h-4 w-4" />
+              Exigir usuário online
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Quando ativo, somente atendentes online no sistema participam do rodízio.
+            </p>
+          </div>
+          <Switch
+            checked={requireOnline}
+            disabled={!isOwner || upsert.isPending}
+            onCheckedChange={(v) => upsert.mutate({ require_online: v })}
+          />
+        </div>
+
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="space-y-1">
+            <Label className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Tempo para iniciar o atendimento
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Se o atendente sorteado não enviar a primeira mensagem dentro deste prazo, perde a vez e o sistema repassa para o próximo da fila.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={1}
+              max={60}
+              value={timeoutMin}
+              disabled={!isOwner}
+              onChange={(e) => setTimeoutMin(Math.max(1, Math.min(60, Number(e.target.value) || 5)))}
+              className="w-24"
+            />
+            <span className="text-sm text-muted-foreground">minutos</span>
+            {isOwner && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => upsert.mutate({ accept_timeout_minutes: timeoutMin })}
+                disabled={upsert.isPending || timeoutMin === config?.accept_timeout_minutes}
+              >
+                Salvar
+              </Button>
+            )}
+          </div>
+        </div>
+
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
             <Label className="text-base">Participantes da roleta</Label>
+            {requireOnline && (
+              <span className="ml-auto text-xs text-muted-foreground">
+                {onlineCount} de {activeMembers.length} online
+              </span>
+            )}
           </div>
           <p className="text-sm text-muted-foreground">
             Selecione quais membros devem receber atendimentos. Se nenhum estiver marcado ao salvar, todos participam.
@@ -111,6 +185,7 @@ export function RouletteTab() {
           <div className="grid gap-2 sm:grid-cols-2">
             {activeMembers.map((m) => {
               const checked = selected.includes(m.user_id);
+              const online = isOnline(m.last_seen_at);
               return (
                 <label
                   key={m.user_id}
@@ -122,7 +197,15 @@ export function RouletteTab() {
                     onCheckedChange={(v) => toggleParticipant(m.user_id, !!v)}
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{m.full_name || m.email}</p>
+                    <p className="text-sm font-medium truncate flex items-center gap-2">
+                      <span
+                        className={`inline-block h-2 w-2 rounded-full shrink-0 ${
+                          online ? "bg-emerald-500" : "bg-muted-foreground/40"
+                        }`}
+                        title={online ? "Online agora" : m.last_seen_at ? `Visto em ${new Date(m.last_seen_at).toLocaleString("pt-BR")}` : "Nunca visto"}
+                      />
+                      <span className="truncate">{m.full_name || m.email}</span>
+                    </p>
                     <p className="text-xs text-muted-foreground truncate">{m.email}</p>
                   </div>
                 </label>
