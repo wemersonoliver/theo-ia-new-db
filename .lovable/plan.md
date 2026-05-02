@@ -1,157 +1,105 @@
 
-# Plano: Follow-up pré-gerado em lote (1 chamada de IA por lead)
+# Roleta: presença online + timeout de aceite
 
-## Análise da sua ideia
+Adiciona dois controles à Roleta de Atendimento:
 
-Sua proposta resolve a raiz do custo. Hoje cada lead inativo gera até **24 chamadas Gemini** (análise + geração × 12 etapas). Sua proposta reduz para **1 chamada por lead**, gerando as 12 mensagens já encadeadas com horários definidos.
+1. **Filtro por usuários online** — só inclui no rodízio quem estiver online no sistema.
+2. **Timeout de aceite** — se o atendente sorteado não iniciar o atendimento em X minutos (padrão 5), perde a vez e o sistema reatribui automaticamente para o próximo da fila.
 
-### Ganhos esperados
-- ~95% de redução do custo de IA no follow-up.
-- Latência zero no envio (worker só lê e dispara).
-- Eliminação de timeouts atuais em `system-followup-ai` e `followup-ai`.
+---
 
-### Gargalos identificados e soluções
+## 1. Detecção de presença (online/offline)
 
-1. **Sequência precisa ser narrativamente encadeada** (msg 2 referencia msg 1, msg 6 sobe a tensão, msg 12 é despedida).
-   - **Solução**: prompt único que pede um arco narrativo de 12 etapas, com função-tool retornando array ordenado. Cada item declara `step`, `hook`, `references_previous` (resumo do que a anterior disse), `content`. A IA é instruída a NÃO repetir gancho consecutivo e respeitar a curva: dias 1-2 leveza, 3-4 dor/solução, 5 escassez real, 6 pergunta de saída.
+Hoje já existe `account_members.last_seen_at`, mas não é atualizado em tempo real. Vamos:
 
-2. **Mensagens "envelhecem"** — cenário do cliente pode mudar.
-   - **Solução**: placeholders dinâmicos resolvidos no envio (`{{nome}}`, `{{dia_relativo}}`). Sem regeneração — se houver evento, a sequência é cancelada inteira.
+- Criar hook global `usePresenceHeartbeat` montado no layout autenticado:
+  - A cada 60s faz `UPDATE account_members SET last_seen_at = now()` para o membership do usuário logado.
+  - Também executa um update final em `beforeunload` / `visibilitychange` (hidden).
+- Definir **online** = `last_seen_at` nos últimos **2 minutos**.
+- Indicador visual (bolinha verde/cinza) na lista de participantes da Roleta, com auto-refresh a cada 30s.
 
-3. **Dois cenários de cancelamento** (sua exigência):
-   - **Cenário A — Cliente responde**: IA continua o atendimento normalmente. Follow-up é totalmente cancelado.
-   - **Cenário B — Humano envia mensagem** (atendente assume): IA é desativada (`ai_active=false`) E follow-up é cancelado.
-   - **Solução**: hook único no `whatsapp-webhook` que detecta:
-     - mensagem entrante (`from_me=false`) → cancela sequência, mantém `ai_active=true`.
-     - mensagem saída humana (`from_me=true AND sent_by='human'`) → cancela sequência E garante `ai_active=false`.
-   - Função SQL `cancel_followup_sequence(p_user_id, p_phone, p_reason)` faz tudo atomicamente: `UPDATE tracking SET status='engaged'/'handoff'` + `DELETE followup_messages WHERE sent_at IS NULL`.
+## 2. Mudanças no banco (`roulette_config`)
 
-4. **Janela de horário muda depois do agendamento**.
-   - **Solução**: dispatcher valida `isWithinWindow` antes de enviar; se fora, empurra para próximo slot válido (não regenera texto).
+Adicionar colunas:
+- `require_online boolean default false` — se ligado, ignora offline no sorteio.
+- `accept_timeout_minutes int default 5` — janela para aceitar o atendimento.
+- `online_threshold_seconds int default 120` — define o que é "online".
 
-5. **IA falha em retornar 12 itens válidos**.
-   - **Solução**: function calling com schema estrito `minItems: 12, maxItems: 12`. Em falha, marca tracking `generation_failed` e admin é notificado via tabela de logs.
+Nova tabela **`roulette_assignments`** (controle do timeout):
+- `id`, `account_id`, `user_id`, `phone`, `owner_user_id`, `contact_name`
+- `assigned_at timestamptz`, `expires_at timestamptz`
+- `status text` — `pending` | `accepted` | `expired` | `reassigned`
+- `accepted_at`, `attempts int default 1`, `skipped_user_ids uuid[]`
+- RLS: membros da conta leem; service role escreve.
 
-6. **Custo da chamada única**: ~3-4k output tokens (12 mensagens curtas + metadados). Ainda é ~85% mais barato que 24 chamadas atuais.
+## 3. Função SQL `roulette_pick_next` (atualizada)
 
-## Arquitetura
+Aceita parâmetros extras:
+- `_exclude_user_ids uuid[]` — para pular quem já recusou nesse handoff.
+- `_only_online boolean` — quando true, filtra `last_seen_at > now() - online_threshold`.
 
-```text
-[followup-check-inactive] (cron)
-        │
-        ▼
-   tracking criado (status='pending')
-        │
-        ▼
-[NOVA: followup-generate-sequence] (cron 5 min)
-        │
-        ├─ 1 chamada Gemini → 12 mensagens encadeadas via function calling
-        ├─ Calcula 12 scheduled_at em janelas BRT (manhã+tarde × 6 dias)
-        ├─ INSERT em followup_messages (12 linhas)
-        └─ tracking → status='scheduled', sequence_generated_at=now()
-        │
-        ▼
-[NOVA: followup-dispatch] (cron 5 min, SEM IA)
-        │
-        ├─ SELECT followup_messages WHERE sent_at IS NULL AND scheduled_at <= now()
-        ├─ Valida janela BRT + tracking ainda 'scheduled'
-        ├─ Resolve placeholders
-        ├─ Envia via Evolution API
-        └─ UPDATE sent_at = now()
+Lógica:
+1. Carrega `roulette_config` (enabled, participants, require_online, threshold).
+2. Monta candidatos: participantes ativos da conta menos `_exclude_user_ids`.
+3. Se `require_online` e `_only_online`, filtra por `last_seen_at` recente.
+4. Se lista vazia → retorna NULL (handoff fica sem assignment, owner é notificado).
+5. Round-robin baseado em `last_assigned_user_id`; atualiza `last_assigned_user_id`/`last_assigned_at`.
 
-[whatsapp-webhook] (já existe — adicionar hook)
-        │
-        ├─ Mensagem do cliente (from_me=false)
-        │      └─ cancel_followup_sequence(reason='engaged')
-        │
-        └─ Mensagem humana (from_me=true, sent_by='human')
-               └─ ai_active=false + cancel_followup_sequence(reason='handoff')
-```
+## 4. Integração no handoff (`whatsapp-ai-agent`)
 
-## Mudanças de banco
+`applyRouletteOnHandoff`:
+- Chama `roulette_pick_next` com `only_online = require_online`.
+- Cria registro em `roulette_assignments` com `expires_at = now() + accept_timeout_minutes`.
+- Notifica o atendente via WhatsApp do sistema com texto: "Você tem **X minutos** para iniciar este atendimento, senão será passado ao próximo."
+- Atualiza `whatsapp_conversations.assigned_to`, `contacts.assigned_to`, `crm_deals.assigned_to` como já faz hoje.
 
-### Nova tabela `followup_messages`
+## 5. Detecção de "iniciou o atendimento"
 
-```text
-id                uuid PK
-tracking_id       uuid FK → followup_tracking(id) ON DELETE CASCADE
-user_id           uuid
-account_id        uuid
-phone             text
-step              int          -- 1..12
-hook_used         text
-content           text
-scheduled_at      timestamptz
-sent_at           timestamptz  -- null = pendente
-status            text         -- 'scheduled'|'sent'|'cancelled'|'failed'
-created_at        timestamptz default now()
-```
+Considera **aceito** quando:
+- O atendente envia uma mensagem para esse `phone` (mensagem outbound criada por `user_id == assigned_to`), OU
+- O atendente abre/marca a conversa como atribuída a si manualmente.
 
-Índices: `(scheduled_at) WHERE sent_at IS NULL`, `(tracking_id)`.
+No webhook outbound / no envio manual, hook chamará uma função `accept_roulette_assignment(_phone, _user_id)` que marca o assignment ativo como `accepted`.
 
-RLS: idêntico ao `followup_tracking` (owner via `user_id` + super_admin).
+## 6. Cron de expiração (timeout)
 
-### Tabela espelho `system_followup_messages` (mesma estrutura, sem `user_id`/`account_id`).
+Nova edge function **`roulette-expire-assignments`** (verify_jwt = false):
+- Busca `roulette_assignments` com `status='pending'` e `expires_at < now()`.
+- Para cada uma:
+  1. Marca como `expired`.
+  2. Chama `roulette_pick_next` excluindo todos os `skipped_user_ids` + o atual.
+  3. Se vier novo usuário: cria novo assignment (`attempts+1`), reatribui conversa/contato/deal, notifica novo atendente e avisa o anterior que perdeu a vez.
+  4. Se não houver candidato: notifica o owner da conta que o handoff está sem atendente disponível.
 
-### Ajustes em `followup_tracking` e `system_followup_tracking`
+Agendamento via `pg_cron` a cada 1 minuto (insert tool com URL/anon key reais do projeto).
 
-- Coluna `sequence_generated_at timestamptz`.
-- Coluna `cancellation_reason text` (`engaged` | `handoff` | `exhausted` | `disabled`).
-- Status novo permitido: `scheduled`, `handoff`.
+## 7. UI — `RouletteTab`
 
-### Função SQL
+Adicionar acima da lista de participantes:
+- **Switch** "Exigir usuário online" (vinculado a `require_online`).
+- **Input numérico** "Tempo para aceitar (minutos)" — 1 a 60, default 5 (vinculado a `accept_timeout_minutes`).
+- Texto explicativo curto sobre cada regra.
 
-```text
-cancel_followup_sequence(p_user_id, p_phone, p_reason text)
-  → UPDATE followup_tracking SET status=p_reason, cancellation_reason=p_reason
-  → DELETE followup_messages WHERE tracking_id=... AND sent_at IS NULL
-```
+Na lista de participantes:
+- Bolinha verde (online) / cinza (offline) ao lado do nome, com tooltip "Visto há X min".
+- Quando `require_online` está ligado, mostrar contagem "X de Y online" no topo.
 
-Versão `system_cancel_followup_sequence(p_phone, p_reason)` para o módulo suporte.
+Hook `useRouletteConfig` atualizado para suportar os novos campos. Hook `useTeamMembers` já traz `last_seen_at`.
 
-## Edge functions
+## 8. Detalhes técnicos
 
-1. **NOVA `followup-generate-sequence`** (e `system-followup-generate-sequence`)
-   - Pega trackings `status='pending' AND sequence_generated_at IS NULL`.
-   - 1 chamada Gemini com prompt narrativo (arco completo dos 12 passos).
-   - Function calling retorna array com 12 itens.
-   - Calcula 12 horários (loop sobre `calculateNextSchedule`).
-   - Insere `followup_messages` em batch.
-   - Loga uso em `ai_usage_log` com `source='followup-sequence-gen'`.
+- `usePresenceHeartbeat` desligado para super_admin navegando `/admin` (não polui presença das contas reais).
+- Realtime opcional na lista de participantes (subscribe em `account_members`) para refletir mudanças sem refresh manual; fallback é o auto-refresh de 30s.
+- Reatribuições em sequência respeitam `skipped_user_ids` para evitar loop infinito no mesmo handoff.
+- Mensagem WhatsApp ao atendente expirado: "⏰ Você não iniciou o atendimento de {cliente} em {X} min. A vez foi passada ao próximo."
 
-2. **NOVA `followup-dispatch`** (e `system-followup-dispatch`)
-   - SEM Gemini.
-   - Valida janela + intervalo + tracking ativo.
-   - Envia via Evolution e marca `sent_at`.
+## Arquivos previstos
 
-3. **Modificar `whatsapp-webhook`**
-   - Em mensagem entrante: chama `cancel_followup_sequence(user, phone, 'engaged')`.
-   - Em mensagem humana saindo: garante `ai_active=false` + `cancel_followup_sequence(user, phone, 'handoff')`.
-
-4. **Modificar `support-ai-agent` / webhook do system WhatsApp** com hooks equivalentes para o `system_*`.
-
-5. **Deprecar `followup-ai` e `system-followup-ai`** (manter no repo 1 semana para rollback, removidos do cron).
-
-## Cron (atualizar via insert SQL — não migration)
-
-- `followup-generate-sequence`: a cada 5 min.
-- `followup-dispatch`: a cada 5 min.
-- `system-followup-generate-sequence`: a cada 5 min.
-- `system-followup-dispatch`: a cada 5 min.
-- Pausar schedules de `followup-ai` e `system-followup-ai`.
-- Manter `followup-check-inactive` e `system-followup-check-inactive`.
-
-## Plano de rollout
-
-1. Migration: `followup_messages`, `system_followup_messages`, colunas e função SQL.
-2. Implementar `followup-generate-sequence` + `followup-dispatch` (e os system).
-3. Adicionar hooks de cancelamento no webhook.
-4. Atualizar cron jobs.
-5. Monitorar `ai_usage_log` por 48h, comparar custo vs. semana anterior.
-
-## Métricas de sucesso
-
-- Custo Gemini do follow-up: queda ≥ 90%.
-- Mensagens enviadas após resposta do cliente: 0.
-- Mensagens enviadas após handoff humano: 0.
-- Mensagens fora da janela BRT: 0.
+- Migration: novas colunas em `roulette_config`, tabela `roulette_assignments` + RLS, função `roulette_pick_next` (replace) e `accept_roulette_assignment`.
+- Insert SQL (cron): agendamento `pg_cron` para `roulette-expire-assignments`.
+- Edge function nova: `supabase/functions/roulette-expire-assignments/index.ts`.
+- `supabase/functions/whatsapp-ai-agent/index.ts` — cria assignment + notificação com timeout.
+- `supabase/functions/send-whatsapp-message/index.ts` (ou ponto único de envio outbound do usuário) — chamar `accept_roulette_assignment` quando user_id outbound bate com assignment pendente.
+- `src/hooks/usePresenceHeartbeat.ts` (novo) montado em layout autenticado.
+- `src/hooks/useRouletteConfig.ts` — novos campos.
+- `src/components/settings/RouletteTab.tsx` — switch online + input timeout + indicador online por membro.
