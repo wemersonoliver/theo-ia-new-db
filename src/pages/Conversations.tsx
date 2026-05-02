@@ -342,7 +342,9 @@ export default function Conversations() {
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0 max-w-[35%]">
-                        {conv.ai_active ? (
+                        {myPendingPhones.has(conv.phone) ? (
+                          <Badge className="text-xs bg-amber-500 text-white hover:bg-amber-500">Aceitar</Badge>
+                        ) : conv.ai_active ? (
                           <Badge variant="outline" className="text-xs">IA</Badge>
                         ) : (
                           <Badge variant="secondary" className="text-xs">Humano</Badge>
@@ -622,7 +624,9 @@ export default function Conversations() {
                               <span className="font-medium truncate text-sm">
                                 {conv.contact_name || conv.phone}
                               </span>
-                              {conv.ai_active ? (
+                              {myPendingPhones.has(conv.phone) ? (
+                                <Badge className="text-xs shrink-0 bg-amber-500 text-white hover:bg-amber-500">Aceitar</Badge>
+                              ) : conv.ai_active ? (
                                 <Badge variant="outline" className="text-xs shrink-0">IA</Badge>
                               ) : (
                                 <Badge variant="secondary" className="text-xs shrink-0">Humano</Badge>
