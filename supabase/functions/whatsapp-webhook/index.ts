@@ -53,7 +53,7 @@ serve(async (req) => {
     // Find the instance owner (user instance or system instance)
     const { data: instanceData } = await supabase
       .from("whatsapp_instances")
-      .select("user_id, id, status, instance_name")
+      .select("user_id, id, status, instance_name, ai_enabled, followup_enabled")
       .eq("instance_name", instanceName)
       .maybeSingle();
 
