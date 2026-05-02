@@ -2478,11 +2478,16 @@ export type Database = {
           account_id: string | null
           ai_active: boolean | null
           assigned_to: string | null
+          closed_at: string | null
+          closed_by: string | null
           contact_name: string | null
           created_at: string | null
           id: string
           last_message_at: string | null
           messages: Json | null
+          outcome: string | null
+          outcome_reason: string | null
+          outcome_value_cents: number | null
           phone: string
           profile_picture_updated_at: string | null
           profile_picture_url: string | null
@@ -2494,11 +2499,16 @@ export type Database = {
           account_id?: string | null
           ai_active?: boolean | null
           assigned_to?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
           contact_name?: string | null
           created_at?: string | null
           id?: string
           last_message_at?: string | null
           messages?: Json | null
+          outcome?: string | null
+          outcome_reason?: string | null
+          outcome_value_cents?: number | null
           phone: string
           profile_picture_updated_at?: string | null
           profile_picture_url?: string | null
@@ -2510,11 +2520,16 @@ export type Database = {
           account_id?: string | null
           ai_active?: boolean | null
           assigned_to?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
           contact_name?: string | null
           created_at?: string | null
           id?: string
           last_message_at?: string | null
           messages?: Json | null
+          outcome?: string | null
+          outcome_reason?: string | null
+          outcome_value_cents?: number | null
           phone?: string
           profile_picture_updated_at?: string | null
           profile_picture_url?: string | null
@@ -2620,6 +2635,15 @@ export type Database = {
         Returns: number
       }
       current_account_id: { Args: never; Returns: string }
+      finalize_conversation: {
+        Args: {
+          _conversation_id: string
+          _outcome: string
+          _reason?: string
+          _value_cents?: number
+        }
+        Returns: string
+      }
       get_account_role: {
         Args: { _account_id: string }
         Returns: Database["public"]["Enums"]["account_role"]
@@ -2640,6 +2664,10 @@ export type Database = {
       must_filter_by_assignment: {
         Args: { _account_id: string }
         Returns: boolean
+      }
+      reopen_conversation: {
+        Args: { _conversation_id: string }
+        Returns: string
       }
       roulette_pick_next:
         | { Args: { _account_id: string }; Returns: string }
