@@ -42,6 +42,8 @@ interface AdminUser {
   full_name: string;
   phone: string;
   user_code: number | null;
+  business_code: number | null;
+  business_name: string | null;
   is_blocked: boolean;
   feature_keyword_triggers: boolean;
   created_at: string;
@@ -267,6 +269,8 @@ export default function AdminUsers() {
       (u.email || "").toLowerCase().includes(term) ||
       (u.phone || "").toLowerCase().includes(term) ||
       (u.user_code?.toString() || "").includes(term) ||
+      (u.business_code?.toString() || "").includes(term) ||
+      (u.business_name || "").toLowerCase().includes(term) ||
       u.id.toLowerCase().includes(term)
     );
   });
@@ -323,7 +327,8 @@ export default function AdminUsers() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-slate-700/50 hover:bg-transparent">
-                      <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">ID</TableHead>
+                      <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">ID Negócio</TableHead>
+                      <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Negócio</TableHead>
                       <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Nome</TableHead>
                       <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Email</TableHead>
                       <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Telefone</TableHead>
@@ -337,7 +342,8 @@ export default function AdminUsers() {
                   <TableBody>
                   {filteredUsers.map((u) => (
                       <TableRow key={u.id} className="border-slate-700/50 hover:bg-slate-800/50">
-                        <TableCell className="font-mono text-xs text-amber-400/80 py-3">#{u.user_code || "—"}</TableCell>
+                        <TableCell className="font-mono text-xs text-amber-400/80 py-3">#{u.business_code || "—"}</TableCell>
+                        <TableCell className="text-slate-200 py-3">{u.business_name || "—"}</TableCell>
                         <TableCell className="font-medium text-slate-100 py-3">{u.full_name || "—"}</TableCell>
                         <TableCell className="text-slate-300 py-3">{u.email}</TableCell>
                         <TableCell className="text-slate-300 py-3 font-mono text-xs">{u.phone || "—"}</TableCell>
