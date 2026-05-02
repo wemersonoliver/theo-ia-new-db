@@ -13,12 +13,14 @@ export function useFinalizeConversation() {
       outcome: ConversationOutcome;
       reason?: string | null;
       valueCents?: number | null;
+      stageId?: string | null;
     }) => {
       const { data, error } = await supabase.rpc("finalize_conversation", {
         _conversation_id: params.conversationId,
         _outcome: params.outcome,
         _reason: params.reason ?? null,
         _value_cents: params.valueCents ?? null,
+        _stage_id: params.stageId ?? null,
       });
       if (error) throw error;
       return data;
