@@ -168,6 +168,24 @@ const schedulingTools = {
         properties: {},
         required: []
       }
+    },
+    {
+      name: "transfer_to_department",
+      description: "Transfere o atendimento para outro departamento (outro número de WhatsApp do mesmo negócio). Use quando o cliente pedir algo fora do escopo deste número (ex.: vendas, suporte, financeiro) e existir um departamento mais adequado disponível. O sistema enviará automaticamente uma mensagem de transição pelo departamento de destino.",
+      parameters: {
+        type: "object",
+        properties: {
+          department_slug: {
+            type: "string",
+            description: "Slug do departamento de destino (ex.: 'vendas', 'suporte', 'financeiro'). Use exatamente o slug listado em DEPARTAMENTOS DISPONÍVEIS."
+          },
+          reason: {
+            type: "string",
+            description: "Motivo curto da transferência (ex.: 'Cliente quer falar com vendas')."
+          }
+        },
+        required: ["department_slug"]
+      }
     }
   ]
 };
@@ -338,7 +356,7 @@ serve(async (req) => {
     // Get conversation history for context
     const { data: conversation } = await supabase
       .from("whatsapp_conversations")
-      .select("messages")
+      .select("messages, instance_id")
       .eq("user_id", userId)
       .eq("phone", phone)
       .maybeSingle();
@@ -529,6 +547,29 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
 `;
     }
 
+    // Departamentos disponíveis no account (multi-instância)
+    let departmentsBlock = "";
+    try {
+      if (accountId) {
+        const { data: depts } = await supabase
+          .from("whatsapp_instances")
+          .select("id, display_name, department_slug, status, ai_enabled")
+          .eq("account_id", accountId);
+        const list = (depts || []).filter((d: any) => d.department_slug && d.status === "connected");
+        const currentSlug = list.find((d: any) => d.id === (conversation as any)?.instance_id)?.department_slug;
+        const others = list.filter((d: any) => d.department_slug !== currentSlug);
+        if (others.length > 0) {
+          departmentsBlock = `\nDEPARTAMENTOS DISPONÍVEIS PARA TRANSFERÊNCIA:\n` +
+            others.map((d: any) =>
+              `- ${d.display_name || d.department_slug} (slug: ${d.department_slug})${d.ai_enabled === false ? " — atendido por humano" : " — atendido por IA"}`
+            ).join("\n") +
+            `\n\nUse a ferramenta transfer_to_department APENAS quando o cliente claramente precisa de outro setor. Departamento atual: ${currentSlug || "principal"}.\n`;
+        }
+      }
+    } catch (e) {
+      console.error("Error loading departments:", e);
+    }
+
     // Build system prompt with scheduling capabilities
     const nicheLine = aiConfig.business_niche
       ? `Você é ${aiConfig.agent_name || "um assistente virtual"}, atendente especializado(a) no nicho de ${aiConfig.business_niche} via WhatsApp.
@@ -545,6 +586,8 @@ ${businessDescriptionBlock}
 ${aiConfig.custom_prompt || "Seja cordial, profissional e prestativo."}
 
 ${returningClientContext}
+
+${departmentsBlock}
 
 ${knowledgeBase ? `Trechos relevantes da base de conhecimento (use para responder; se não houver informação suficiente, peça ao cliente para esperar a equipe):\n\n${knowledgeBase}` : ""}
 
@@ -693,6 +736,31 @@ Regras adicionais:
               }
             }]
           });
+          functionCallsProcessed++;
+          continue;
+        }
+
+        // Handle transfer_to_department
+        if (fc.name === "transfer_to_department") {
+          const transferResult = await executeTransferToDepartment(
+            supabase,
+            userId,
+            accountId,
+            phone,
+            String(fc.args?.department_slug || ""),
+            String(fc.args?.reason || ""),
+          );
+          geminiPayload.contents.push(content);
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{ functionResponse: { name: fc.name, response: transferResult } }],
+          });
+          // Encerra o loop: o departamento de destino assumiu o atendimento
+          if ((transferResult as any)?.success) {
+            aiReply = "";
+            functionCallsProcessed = maxFunctionCalls;
+            break;
+          }
           functionCallsProcessed++;
           continue;
         }
@@ -1021,6 +1089,123 @@ function extractDigitsFromRemoteJid(remoteJid: string | null | undefined): strin
     .replace(/@s\.whatsapp\.net$/i, "")
     .replace(/@lid$/i, "")
     .replace(/\D/g, "");
+}
+
+async function executeTransferToDepartment(
+  supabase: any,
+  userId: string,
+  accountId: string | null,
+  phone: string,
+  departmentSlug: string,
+  reason: string,
+) {
+  try {
+    const slug = (departmentSlug || "").trim().toLowerCase();
+    if (!slug || !accountId) {
+      return { success: false, error: "Departamento inválido" };
+    }
+
+    const { data: dest } = await supabase
+      .from("whatsapp_instances")
+      .select("id, instance_name, display_name, status, ai_enabled, transfer_message, phone_number")
+      .eq("account_id", accountId)
+      .eq("department_slug", slug)
+      .maybeSingle();
+
+    if (!dest) {
+      return { success: false, error: `Departamento "${slug}" não encontrado` };
+    }
+    if (dest.status !== "connected") {
+      return { success: false, error: `Departamento "${dest.display_name || slug}" não está conectado` };
+    }
+
+    // Atualiza a conversa para apontar à nova instância e ajusta IA
+    const aiActive = dest.ai_enabled !== false;
+    await supabase
+      .from("whatsapp_conversations")
+      .update({
+        instance_id: dest.id,
+        ai_active: aiActive,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId)
+      .eq("phone", phone);
+
+    // Reseta sessão IA para o novo departamento começar limpo
+    await supabase
+      .from("whatsapp_ai_sessions")
+      .delete()
+      .eq("user_id", userId)
+      .eq("phone", phone);
+
+    // Mensagem padrão se a instância destino não tiver definida
+    const message =
+      (dest.transfer_message && String(dest.transfer_message).trim()) ||
+      `Olá! A partir de agora seu atendimento continuará por aqui (${dest.display_name || slug}). Em breve responderemos.`;
+
+    // Envia pelo Evolution usando a instância de destino
+    try {
+      const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+      const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+      if (evolutionUrl && evolutionKey) {
+        const candidates = [phone];
+        const variant = getBrazilianPhoneVariant(phone);
+        if (variant && variant !== phone) candidates.push(variant);
+        for (const number of candidates) {
+          const r = await fetch(`${evolutionUrl}/message/sendText/${dest.instance_name}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", apikey: evolutionKey },
+            body: JSON.stringify({ number, text: message }),
+          });
+          if (r.ok) break;
+        }
+      }
+    } catch (e) {
+      console.error("Transfer message send error:", e);
+    }
+
+    // Persiste a mensagem no histórico da conversa
+    try {
+      const { data: conv } = await supabase
+        .from("whatsapp_conversations")
+        .select("id, messages, total_messages")
+        .eq("user_id", userId)
+        .eq("phone", phone)
+        .maybeSingle();
+      if (conv) {
+        const newMsg = {
+          id: crypto.randomUUID(),
+          timestamp: new Date().toISOString(),
+          from_me: true,
+          content: message,
+          type: "text",
+          sent_by: "ai",
+        };
+        const updated = [...((conv as any).messages || []), newMsg];
+        await supabase
+          .from("whatsapp_conversations")
+          .update({
+            messages: updated,
+            total_messages: updated.length,
+            last_message_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", (conv as any).id);
+      }
+    } catch (e) {
+      console.error("Persist transfer message error:", e);
+    }
+
+    return {
+      success: true,
+      department: dest.display_name || slug,
+      ai_enabled: aiActive,
+      reason: reason || null,
+    };
+  } catch (error) {
+    console.error("executeTransferToDepartment error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Erro" };
+  }
 }
 
 async function resolvePreferredChatNumber(instanceName: string, normalizedPhone: string, evolutionUrl: string, evolutionKey: string) {
