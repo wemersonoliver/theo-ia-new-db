@@ -13,6 +13,7 @@ import { TrialBanner } from "@/components/TrialBanner";
 import { DashboardFilters, type PeriodPreset } from "@/components/dashboard/DashboardFilters";
 import { KPICards } from "@/components/dashboard/KPICards";
 import { AvgServiceTimeCard } from "@/components/dashboard/AvgServiceTimeCard";
+import { AvgWaitTimeCard } from "@/components/dashboard/AvgWaitTimeCard";
 import { ConversionFunnel } from "@/components/dashboard/ConversionFunnel";
 import { GoalsVsActualChart } from "@/components/dashboard/GoalsVsActualChart";
 import { SellerPerformanceTable } from "@/components/dashboard/SellerPerformanceTable";
@@ -81,6 +82,10 @@ export default function Dashboard() {
         <ConversionFunnel metrics={metrics} />
         <GoalsVsActualChart metrics={metrics} />
         <AvgServiceTimeCard metrics={metrics} />
+      </div>
+
+      <div className="mt-4">
+        <AvgWaitTimeCard metrics={metrics} />
       </div>
 
       <div className="mt-4">

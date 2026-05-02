@@ -19,6 +19,7 @@ export interface ConversationMetrics {
   avgFirstResponseSec: number;
   avgServiceTimeSec: number;
   perAttendant: Record<string, { tma: number; count: number }>;
+  perAttendantWait: Record<string, { wait: number; count: number }>;
 }
 
 const SESSION_GAP_MS = 24 * 60 * 60 * 1000;
@@ -88,6 +89,7 @@ export function aggregateConversationMetrics(
   let stSum = 0;
   let stCount = 0;
   const perAttendant: Record<string, { tma: number; count: number }> = {};
+  const perAttendantWait: Record<string, { wait: number; count: number }> = {};
 
   for (const conv of conversations) {
     const msgs = (conv.messages || [])
@@ -109,6 +111,11 @@ export function aggregateConversationMetrics(
     if (t.firstResponseSec !== null) {
       frSum += t.firstResponseSec;
       frCount++;
+      const wKey = conv.assigned_to || "__unassigned__";
+      const wCur = perAttendantWait[wKey] || { wait: 0, count: 0 };
+      wCur.wait = (wCur.wait * wCur.count + t.firstResponseSec) / (wCur.count + 1);
+      wCur.count++;
+      perAttendantWait[wKey] = wCur;
     }
     if (t.serviceTimeSec !== null && t.serviceTimeSec > 0) {
       stSum += t.serviceTimeSec;
@@ -127,6 +134,7 @@ export function aggregateConversationMetrics(
     avgFirstResponseSec: frCount > 0 ? Math.round(frSum / frCount) : 0,
     avgServiceTimeSec: stCount > 0 ? Math.round(stSum / stCount) : 0,
     perAttendant,
+    perAttendantWait,
   };
 }
 
