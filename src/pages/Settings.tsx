@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
-import { Key, User, Loader2, Sun, Moon, Bell, PlayCircle, Hash } from "lucide-react";
+import { Key, User, Loader2, Sun, Moon, Hash, CalendarCog, CreditCard, FileText, Bot, ChevronRight } from "lucide-react";
 import { NotificationsTab } from "@/components/settings/NotificationsTab";
 import { TutorialTab } from "@/components/settings/TutorialTab";
 import { TeamTab } from "@/components/team/TeamTab";
@@ -15,11 +15,13 @@ import { useAccount } from "@/hooks/useAccount";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useTheme } from "next-themes";
+import { useNavigate } from "react-router-dom";
 
 export default function Settings() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const { isOwner } = useAccount();
+  const navigate = useNavigate();
   
   const [fullName, setFullName] = useState("");
   const [userCode, setUserCode] = useState<number | null>(null);
@@ -97,6 +99,7 @@ export default function Settings() {
       <Tabs defaultValue="profile" className="space-y-6">
         <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
           <TabsTrigger value="profile" className="min-w-fit">Perfil</TabsTrigger>
+          <TabsTrigger value="modules" className="min-w-fit">Módulos</TabsTrigger>
           {isOwner && <TabsTrigger value="team" className="min-w-fit">Equipe</TabsTrigger>}
           <TabsTrigger value="notifications" className="min-w-fit">Notificações</TabsTrigger>
           <TabsTrigger value="appearance" className="min-w-fit">Aparência</TabsTrigger>
@@ -154,6 +157,40 @@ export default function Settings() {
                 {updatingProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Salvar Perfil
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="modules">
+          <Card>
+            <CardHeader>
+              <CardTitle>Configurações de Módulos</CardTitle>
+              <CardDescription>
+                Acesse as configurações específicas de cada módulo do sistema
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              {[
+                { to: "/appointment-settings", icon: CalendarCog, title: "Configuração de Horários", desc: "Tipos de agendamento e disponibilidade" },
+                { to: "/subscriptions", icon: CreditCard, title: "Assinaturas", desc: "Gerenciar plano e pagamentos" },
+                { to: "/knowledge-base", icon: FileText, title: "Base de Conhecimento", desc: "Documentos usados pela IA" },
+                { to: "/ai-agent", icon: Bot, title: "Agente de IA", desc: "Personalidade, prompts e voz" },
+              ].map((m) => (
+                <button
+                  key={m.to}
+                  onClick={() => navigate(m.to)}
+                  className="flex items-center gap-4 rounded-lg border bg-card p-4 text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <m.icon className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium">{m.title}</p>
+                    <p className="text-sm text-muted-foreground truncate">{m.desc}</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </button>
+              ))}
             </CardContent>
           </Card>
         </TabsContent>
