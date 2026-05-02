@@ -53,7 +53,7 @@ export default function WhatsApp() {
   const slots: Array<{ instance: typeof instances[number] | null; index: number }> = [];
   for (let i = 0; i < 3; i++) slots.push({ instance: instances[i] ?? null, index: i });
 
-  const isPro = tier === "pro";
+  const isPro = tier === "pro" || tier === "tester";
   const canAdd = instances.length < maxInstances;
 
   return (
