@@ -1520,6 +1520,39 @@ export type Database = {
         }
         Relationships: []
       }
+      roulette_config: {
+        Row: {
+          account_id: string
+          created_at: string
+          enabled: boolean
+          id: string
+          last_assigned_at: string | null
+          last_assigned_user_id: string | null
+          participant_user_ids: string[]
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_assigned_at?: string | null
+          last_assigned_user_id?: string | null
+          participant_user_ids?: string[]
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_assigned_at?: string | null
+          last_assigned_user_id?: string | null
+          participant_user_ids?: string[]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       subscriptions: {
         Row: {
           account_id: string | null
@@ -2541,6 +2574,7 @@ export type Database = {
         Args: { _account_id: string }
         Returns: boolean
       }
+      roulette_pick_next: { Args: { _account_id: string }; Returns: string }
       system_cancel_followup_sequence: {
         Args: { p_phone: string; p_reason: string }
         Returns: number
