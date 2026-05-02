@@ -10,6 +10,9 @@ export interface RouletteConfig {
   participant_user_ids: string[];
   last_assigned_user_id: string | null;
   last_assigned_at: string | null;
+  require_online: boolean;
+  accept_timeout_minutes: number;
+  online_threshold_seconds: number;
 }
 
 export function useRouletteConfig() {
@@ -38,6 +41,11 @@ export function useRouletteConfig() {
         account_id: accountId,
         enabled: patch.enabled ?? config?.enabled ?? false,
         participant_user_ids: patch.participant_user_ids ?? config?.participant_user_ids ?? [],
+        require_online: patch.require_online ?? config?.require_online ?? false,
+        accept_timeout_minutes:
+          patch.accept_timeout_minutes ?? config?.accept_timeout_minutes ?? 5,
+        online_threshold_seconds:
+          patch.online_threshold_seconds ?? config?.online_threshold_seconds ?? 120,
       };
       const { error } = await (supabase as any)
         .from("roulette_config")
