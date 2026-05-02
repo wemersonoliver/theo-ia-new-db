@@ -69,6 +69,7 @@ export type Database = {
       }
       accounts: {
         Row: {
+          business_code: number
           created_at: string
           id: string
           name: string
@@ -76,6 +77,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          business_code?: number
           created_at?: string
           id?: string
           name?: string
@@ -83,6 +85,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          business_code?: number
           created_at?: string
           id?: string
           name?: string
