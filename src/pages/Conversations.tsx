@@ -31,6 +31,7 @@ import {
 import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff,
   Tag, ExternalLink, Kanban, CheckCircle, Trash2, ArrowLeft, RefreshCw,
+  Trophy, XCircle, MinusCircle, RotateCcw,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -38,6 +39,9 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMemo } from "react";
 import { toast } from "sonner";
+import { FinalizeDialog } from "@/components/conversations/FinalizeDialog";
+import { useFinalizeConversation } from "@/hooks/useFinalizeConversation";
+import { useAccountRole } from "@/hooks/useAccount";
 
 // ── Chat messages ─────────────────────────────────────────────────────────────
 function ChatMessages({ messages, className }: { messages: Message[]; className?: string }) {
