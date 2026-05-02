@@ -31,6 +31,11 @@ export interface Conversation {
   profile_picture_updated_at: string | null;
   created_at: string;
   updated_at: string;
+  outcome: "won" | "lost" | "abandoned" | null;
+  outcome_reason: string | null;
+  outcome_value_cents: number | null;
+  closed_at: string | null;
+  closed_by: string | null;
 }
 
 export function useConversations() {

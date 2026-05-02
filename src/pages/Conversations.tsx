@@ -31,6 +31,7 @@ import {
 import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff,
   Tag, ExternalLink, Kanban, CheckCircle, Trash2, ArrowLeft, RefreshCw,
+  Trophy, XCircle, MinusCircle, RotateCcw,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -38,6 +39,9 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMemo } from "react";
 import { toast } from "sonner";
+import { FinalizeDialog } from "@/components/conversations/FinalizeDialog";
+import { useFinalizeConversation } from "@/hooks/useFinalizeConversation";
+import { useAccount } from "@/hooks/useAccount";
 
 // ── Chat messages ─────────────────────────────────────────────────────────────
 function ChatMessages({ messages, className }: { messages: Message[]; className?: string }) {
@@ -214,6 +218,12 @@ export default function Conversations() {
   const { acceptanceEnabled, myPending, allPending, accept, isPrivilegedViewer } = usePendingAssignments();
   const { contacts } = useContacts();
   const { instance } = useWhatsAppInstance();
+  const { membership } = useAccount();
+  const { reopen } = useFinalizeConversation();
+  const canReopen =
+    membership?.role === "owner" || membership?.role === "manager";
+  const [finalizeOpen, setFinalizeOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"open" | "closed" | "all">("open");
   const [syncing, setSyncing] = useState(false);
   const [searchParams] = useSearchParams();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
@@ -235,8 +245,15 @@ export default function Conversations() {
   }, [acceptanceEnabled, isPrivilegedViewer, allPending, myPendingPhones]);
 
   const conversations = useMemo(
-    () => rawConversations.filter((c) => !otherPendingPhones.has(c.phone)),
-    [rawConversations, otherPendingPhones],
+    () =>
+      rawConversations
+        .filter((c) => !otherPendingPhones.has(c.phone))
+        .filter((c) => {
+          if (statusFilter === "all") return true;
+          if (statusFilter === "closed") return !!c.outcome;
+          return !c.outcome;
+        }),
+    [rawConversations, otherPendingPhones, statusFilter],
   );
 
   const selectedPending = useMemo(
@@ -430,29 +447,29 @@ export default function Conversations() {
                   onChange={(userId) => assignConversation.mutate({ phone: selectedPhone, userId })}
                 />
               </div>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full gap-1.5 justify-center">
-                    <CheckCircle className="h-4 w-4" />
-                    <span>Finalizar</span>
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Finalizar conversa?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      As mensagens serão limpas, mas um resumo será salvo.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => {
-                      finishConversation.mutate({ phone: selectedPhone! });
-                      setSelectedPhone(null);
-                    }}>Finalizar</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              {selectedConversation?.outcome ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-1.5 justify-center"
+                  disabled={!canReopen || reopen.isPending}
+                  onClick={() => reopen.mutate(selectedConversation!.id)}
+                  title={canReopen ? "Reabrir atendimento" : "Apenas gestores podem reabrir"}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  <span>Reabrir</span>
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-1.5 justify-center"
+                  onClick={() => setFinalizeOpen(true)}
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Finalizar</span>
+                </Button>
+              )}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" size="sm" className="w-full gap-1.5 justify-center text-destructive hover:text-destructive">
@@ -465,14 +482,26 @@ export default function Conversations() {
                     <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
                     <AlertDialogDescription>
                       A conversa será removida permanentemente.
+                      {!selectedConversation?.outcome && (
+                        <span className="block mt-2 text-amber-600 font-medium">
+                          Classifique o atendimento antes de excluir.
+                        </span>
+                      )}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => {
-                      deleteConversation.mutate({ phone: selectedPhone! });
-                      setSelectedPhone(null);
-                    }}>Excluir</AlertDialogAction>
+                    <AlertDialogAction
+                      disabled={!selectedConversation?.outcome}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      onClick={() => {
+                        if (!selectedConversation?.outcome) return;
+                        deleteConversation.mutate({ phone: selectedPhone! });
+                        setSelectedPhone(null);
+                      }}
+                    >
+                      Excluir
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -529,6 +558,13 @@ export default function Conversations() {
             )}
           </SheetContent>
         </Sheet>
+        <FinalizeDialog
+          open={finalizeOpen}
+          onOpenChange={setFinalizeOpen}
+          conversationId={selectedConversation?.id ?? null}
+          contactName={selectedConversation?.contact_name}
+          onFinalized={() => setSelectedPhone(null)}
+        />
       </DashboardLayout>
     );
   }
@@ -591,6 +627,20 @@ export default function Conversations() {
                 <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
               </Button>
             </div>
+            <div className="mt-2 inline-flex rounded-md border bg-muted/40 p-0.5 text-xs">
+              {(["open","closed","all"] as const).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setStatusFilter(k)}
+                  className={cn(
+                    "px-2.5 py-1 rounded-sm transition-colors",
+                    statusFilter === k ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {k === "open" ? "Em atendimento" : k === "closed" ? "Finalizadas" : "Todas"}
+                </button>
+              ))}
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[calc(100vh-280px)]">
@@ -626,6 +676,12 @@ export default function Conversations() {
                               </span>
                               {myPendingPhones.has(conv.phone) ? (
                                 <Badge className="text-xs shrink-0 bg-amber-500 text-white hover:bg-amber-500">Aceitar</Badge>
+                              ) : conv.outcome === "won" ? (
+                                <Badge className="text-xs shrink-0 bg-emerald-500 text-white hover:bg-emerald-500">Ganho</Badge>
+                              ) : conv.outcome === "lost" ? (
+                                <Badge className="text-xs shrink-0 bg-rose-500 text-white hover:bg-rose-500">Perdido</Badge>
+                              ) : conv.outcome === "abandoned" ? (
+                                <Badge variant="secondary" className="text-xs shrink-0">Desistência</Badge>
                               ) : conv.ai_active ? (
                                 <Badge variant="outline" className="text-xs shrink-0">IA</Badge>
                               ) : (
@@ -688,29 +744,29 @@ export default function Conversations() {
                       value={selectedConversation?.assigned_to ?? null}
                       onChange={(userId) => assignConversation.mutate({ phone: selectedPhone, userId })}
                     />
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-1.5">
-                          <CheckCircle className="h-4 w-4" />
-                          <span className="hidden xl:inline">Finalizar</span>
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Finalizar conversa?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            As mensagens serão limpas, mas um resumo será salvo. Quando o lead entrar em contato novamente, a IA o reconhecerá pelo nome.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => {
-                            finishConversation.mutate({ phone: selectedPhone });
-                            setSelectedPhone(null);
-                          }}>Finalizar</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    {selectedConversation?.outcome ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={!canReopen || reopen.isPending}
+                        onClick={() => reopen.mutate(selectedConversation!.id)}
+                        title={canReopen ? "Reabrir atendimento" : "Apenas gestores podem reabrir"}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        <span className="hidden xl:inline">Reabrir</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => setFinalizeOpen(true)}
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        <span className="hidden xl:inline">Finalizar</span>
+                      </Button>
+                    )}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive">
@@ -723,14 +779,26 @@ export default function Conversations() {
                           <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
                           <AlertDialogDescription>
                             A conversa será removida permanentemente. O lead será tratado como novo contato no próximo atendimento.
+                            {!selectedConversation?.outcome && (
+                              <span className="block mt-2 text-amber-600 font-medium">
+                                Classifique o atendimento antes de excluir.
+                              </span>
+                            )}
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => {
-                            deleteConversation.mutate({ phone: selectedPhone });
-                            setSelectedPhone(null);
-                          }}>Excluir</AlertDialogAction>
+                          <AlertDialogAction
+                            disabled={!selectedConversation?.outcome}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => {
+                              if (!selectedConversation?.outcome) return;
+                              deleteConversation.mutate({ phone: selectedPhone });
+                              setSelectedPhone(null);
+                            }}
+                          >
+                            Excluir
+                          </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
@@ -814,6 +882,13 @@ export default function Conversations() {
           )}
         </Card>
       </div>
+      <FinalizeDialog
+        open={finalizeOpen}
+        onOpenChange={setFinalizeOpen}
+        conversationId={selectedConversation?.id ?? null}
+        contactName={selectedConversation?.contact_name}
+        onFinalized={() => setSelectedPhone(null)}
+      />
     </DashboardLayout>
   );
 }
