@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSystemConversations, useSystemConversation } from "@/hooks/useSystemConversations";
 import type { Message } from "@/hooks/useConversations";
 import { MediaBubble } from "@/components/MediaBubble";
 import {
-  MessageSquare, Send, Loader2, User, Bot, Power, PowerOff, Trash2, ArrowLeft,
+  MessageSquare, Send, Loader2, User, Bot, Power, PowerOff, Trash2, ArrowLeft, CheckCircle2, RotateCcw,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -60,11 +61,12 @@ function ChatMessages({ messages }: { messages: Message[] }) {
 
 export default function AdminConversations() {
   const [searchParams] = useSearchParams();
-  const { conversations, isLoading, toggleAI, sendMessage, deleteConversation } = useSystemConversations();
+  const { conversations, isLoading, toggleAI, sendMessage, deleteConversation, finalizeConversation } = useSystemConversations();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const { messages } = useSystemConversation(selectedPhone || "");
   const isMobile = useIsMobile();
+  const [tab, setTab] = useState<"human" | "ai" | "finalized">("ai");
 
   // Auto-select phone from query param and pre-fill message
   useEffect(() => {
@@ -80,6 +82,28 @@ export default function AdminConversations() {
 
   const selectedConv = conversations.find((c) => c.phone === selectedPhone);
 
+  const humanList = conversations.filter((c) => !c.finalized_at && !c.ai_active);
+  const aiList = conversations.filter((c) => !c.finalized_at && c.ai_active);
+  const finalizedList = conversations.filter((c) => !!c.finalized_at);
+  const filteredConversations =
+    tab === "human" ? humanList : tab === "ai" ? aiList : finalizedList;
+
+  const TabsBar = (
+    <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="w-full">
+      <TabsList className="bg-slate-800 border border-slate-700 w-full grid grid-cols-3 h-auto">
+        <TabsTrigger value="ai" className="data-[state=active]:bg-amber-500/10 data-[state=active]:text-amber-400 text-xs">
+          IA ({aiList.length})
+        </TabsTrigger>
+        <TabsTrigger value="human" className="data-[state=active]:bg-blue-500/10 data-[state=active]:text-blue-400 text-xs">
+          Humano ({humanList.length})
+        </TabsTrigger>
+        <TabsTrigger value="finalized" className="data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-400 text-xs">
+          Finalizadas ({finalizedList.length})
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+
   const handleSend = async () => {
     if (!selectedPhone || !messageInput.trim()) return;
     await sendMessage.mutateAsync({ phone: selectedPhone, content: messageInput });
@@ -91,9 +115,10 @@ export default function AdminConversations() {
     return (
       <AdminLayout title="Conversas do Sistema" description="Conversas via WhatsApp do sistema">
         <div className="space-y-2">
+          {TabsBar}
           {isLoading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-slate-500" /></div>
-          ) : conversations.length === 0 ? (
+          ) : filteredConversations.length === 0 ? (
             <Card className="bg-slate-900/50 border-slate-800">
               <CardContent className="flex flex-col items-center py-12 text-slate-500">
                 <MessageSquare className="h-12 w-12 opacity-30" />
@@ -101,7 +126,7 @@ export default function AdminConversations() {
               </CardContent>
             </Card>
           ) : (
-            conversations.map((conv) => {
+            filteredConversations.map((conv) => {
               const last = conv.messages?.[conv.messages.length - 1];
               return (
                 <Card
@@ -116,7 +141,9 @@ export default function AdminConversations() {
                         {last && <p className="mt-0.5 text-xs text-slate-500 truncate">{last.from_me ? "Você: " : ""}{last.content}</p>}
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        {conv.ai_active ? (
+                        {conv.finalized_at ? (
+                          <Badge className="bg-emerald-500/10 text-emerald-400 text-xs border-emerald-500/20">Finalizada</Badge>
+                        ) : conv.ai_active ? (
                           <Badge className="bg-amber-500/10 text-amber-400 text-xs border-amber-500/20">IA</Badge>
                         ) : (
                           <Badge className="bg-slate-700 text-slate-400 text-xs">Humano</Badge>
@@ -158,6 +185,25 @@ export default function AdminConversations() {
                 className="shrink-0 border-slate-700 text-slate-300 hover:bg-slate-800"
               >
                 {selectedConv?.ai_active ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  finalizeConversation.mutate({
+                    phone: selectedPhone,
+                    finalize: !selectedConv?.finalized_at,
+                  })
+                }
+                disabled={finalizeConversation.isPending}
+                className={cn(
+                  "shrink-0",
+                  selectedConv?.finalized_at
+                    ? "border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                    : "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                )}
+              >
+                {selectedConv?.finalized_at ? <RotateCcw className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
               </Button>
               <Button
                 variant="outline"
@@ -207,23 +253,24 @@ export default function AdminConversations() {
       <div className="grid gap-4 h-[calc(100vh-160px)] lg:grid-cols-3">
         {/* List */}
         <Card className="lg:col-span-1 bg-slate-900/50 border-slate-800">
-          <CardHeader className="py-3">
+          <CardHeader className="py-3 space-y-3">
             <CardTitle className="flex items-center gap-2 text-sm text-white">
-              <MessageSquare className="h-4 w-4" /> Conversas ({conversations.length})
+              <MessageSquare className="h-4 w-4" /> Conversas ({filteredConversations.length})
             </CardTitle>
+            {TabsBar}
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[calc(100vh-260px)]">
               {isLoading ? (
                 <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-slate-500" /></div>
-              ) : conversations.length === 0 ? (
+              ) : filteredConversations.length === 0 ? (
                 <div className="p-6 text-center text-slate-500">
                   <MessageSquare className="mx-auto h-10 w-10 opacity-30" />
                   <p className="mt-3 text-sm">Nenhuma conversa</p>
                 </div>
               ) : (
                 <div className="divide-y divide-slate-800">
-                  {conversations.map((conv) => {
+                  {filteredConversations.map((conv) => {
                     const last = conv.messages?.[conv.messages.length - 1];
                     return (
                       <button
@@ -236,7 +283,9 @@ export default function AdminConversations() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-medium truncate text-sm text-slate-200">{conv.contact_name || conv.phone}</span>
-                          {conv.ai_active ? (
+                          {conv.finalized_at ? (
+                            <Badge className="bg-emerald-500/10 text-emerald-400 text-xs border-emerald-500/20">Finalizada</Badge>
+                          ) : conv.ai_active ? (
                             <Badge className="bg-amber-500/10 text-amber-400 text-xs border-amber-500/20">IA</Badge>
                           ) : (
                             <Badge className="bg-slate-700 text-slate-400 text-xs">Humano</Badge>
@@ -277,6 +326,27 @@ export default function AdminConversations() {
                      >
                        {selectedConv?.ai_active ? <><PowerOff className="h-4 w-4" /> Assumir</> : <><Power className="h-4 w-4" /> Reativar IA</>}
                      </Button>
+                     {selectedConv?.finalized_at ? (
+                       <Button
+                         variant="outline"
+                         size="sm"
+                         onClick={() => finalizeConversation.mutate({ phone: selectedPhone, finalize: false })}
+                         disabled={finalizeConversation.isPending}
+                         className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10 gap-2"
+                       >
+                         <RotateCcw className="h-4 w-4" /> Reabrir
+                       </Button>
+                     ) : (
+                       <Button
+                         variant="outline"
+                         size="sm"
+                         onClick={() => finalizeConversation.mutate({ phone: selectedPhone, finalize: true })}
+                         disabled={finalizeConversation.isPending}
+                         className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 gap-2"
+                       >
+                         <CheckCircle2 className="h-4 w-4" /> Finalizar
+                       </Button>
+                     )}
                      <Button
                        variant="outline"
                        size="sm"

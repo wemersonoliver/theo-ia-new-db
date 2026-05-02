@@ -14,6 +14,8 @@ export interface SystemConversation {
   ai_active: boolean;
   created_at: string;
   updated_at: string;
+  finalized_at: string | null;
+  finalized_by: string | null;
 }
 
 export function useSystemConversations() {
@@ -76,6 +78,27 @@ export function useSystemConversations() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const finalizeConversation = useMutation({
+    mutationFn: async ({ phone, finalize }: { phone: string; finalize: boolean }) => {
+      const { data: userRes } = await supabase.auth.getUser();
+      const { error } = await (supabase as any)
+        .from("system_whatsapp_conversations")
+        .update({
+          finalized_at: finalize ? new Date().toISOString() : null,
+          finalized_by: finalize ? userRes.user?.id ?? null : null,
+          ai_active: finalize ? false : true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("phone", phone);
+      if (error) throw error;
+    },
+    onSuccess: (_, { finalize }) => {
+      queryClient.invalidateQueries({ queryKey: ["system-conversations"] });
+      toast.success(finalize ? "Atendimento finalizado!" : "Atendimento reaberto!");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const sendMessage = useMutation({
     mutationFn: async ({ phone, content }: { phone: string; content: string }) => {
       const { data, error } = await supabase.functions.invoke("send-whatsapp-message", {
@@ -91,7 +114,7 @@ export function useSystemConversations() {
     onError: (e: Error) => toast.error(`Erro ao enviar: ${e.message}`),
   });
 
-  return { conversations: conversations || [], isLoading, toggleAI, sendMessage, deleteConversation };
+  return { conversations: conversations || [], isLoading, toggleAI, sendMessage, deleteConversation, finalizeConversation };
 }
 
 export function useSystemConversation(phone: string) {

@@ -2184,6 +2184,8 @@ export type Database = {
           ai_active: boolean | null
           contact_name: string | null
           created_at: string | null
+          finalized_at: string | null
+          finalized_by: string | null
           id: string
           last_message_at: string | null
           messages: Json | null
@@ -2195,6 +2197,8 @@ export type Database = {
           ai_active?: boolean | null
           contact_name?: string | null
           created_at?: string | null
+          finalized_at?: string | null
+          finalized_by?: string | null
           id?: string
           last_message_at?: string | null
           messages?: Json | null
@@ -2206,6 +2210,8 @@ export type Database = {
           ai_active?: boolean | null
           contact_name?: string | null
           created_at?: string | null
+          finalized_at?: string | null
+          finalized_by?: string | null
           id?: string
           last_message_at?: string | null
           messages?: Json | null
