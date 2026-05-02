@@ -168,6 +168,24 @@ const schedulingTools = {
         properties: {},
         required: []
       }
+    },
+    {
+      name: "transfer_to_department",
+      description: "Transfere o atendimento para outro departamento (outro número de WhatsApp do mesmo negócio). Use quando o cliente pedir algo fora do escopo deste número (ex.: vendas, suporte, financeiro) e existir um departamento mais adequado disponível. O sistema enviará automaticamente uma mensagem de transição pelo departamento de destino.",
+      parameters: {
+        type: "object",
+        properties: {
+          department_slug: {
+            type: "string",
+            description: "Slug do departamento de destino (ex.: 'vendas', 'suporte', 'financeiro'). Use exatamente o slug listado em DEPARTAMENTOS DISPONÍVEIS."
+          },
+          reason: {
+            type: "string",
+            description: "Motivo curto da transferência (ex.: 'Cliente quer falar com vendas')."
+          }
+        },
+        required: ["department_slug"]
+      }
     }
   ]
 };
