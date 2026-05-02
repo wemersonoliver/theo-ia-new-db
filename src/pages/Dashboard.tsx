@@ -17,6 +17,7 @@ import { AvgWaitTimeCard } from "@/components/dashboard/AvgWaitTimeCard";
 import { ConversionFunnel } from "@/components/dashboard/ConversionFunnel";
 import { GoalsVsActualChart } from "@/components/dashboard/GoalsVsActualChart";
 import { SellerPerformanceTable } from "@/components/dashboard/SellerPerformanceTable";
+import { OnlineUsersCard } from "@/components/dashboard/OnlineUsersCard";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import { presetRange } from "@/lib/dashboard-metrics";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +87,10 @@ export default function Dashboard() {
 
       <div className="mt-4">
         <AvgWaitTimeCard metrics={metrics} />
+      </div>
+
+      <div className="mt-4">
+        <OnlineUsersCard />
       </div>
 
       <div className="mt-4">
