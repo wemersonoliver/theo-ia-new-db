@@ -189,6 +189,25 @@ export default function AdminConversations() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() =>
+                  finalizeConversation.mutate({
+                    phone: selectedPhone,
+                    finalize: !selectedConv?.finalized_at,
+                  })
+                }
+                disabled={finalizeConversation.isPending}
+                className={cn(
+                  "shrink-0",
+                  selectedConv?.finalized_at
+                    ? "border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                    : "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                )}
+              >
+                {selectedConv?.finalized_at ? <RotateCcw className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => {
                   if (confirm("Excluir esta conversa?")) {
                     deleteConversation.mutate(selectedPhone);
