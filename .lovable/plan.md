@@ -1,106 +1,72 @@
+## Regra: Finalizar atendimento exige classificação (Ganho / Perdido / Desistência)
 
-# Aceite obrigatório de atendimento (vinculado à Roleta)
+Todo atendimento (conversa) só pode ser encerrado depois que o atendente o classificar como **Ganho**, **Perdido** ou **Desistência**. A classificação atualiza automaticamente o negócio (deal) vinculado, alimenta as métricas individuais do atendente e as métricas gerais do sistema, com filtro por funil no dashboard.
 
-## Regra de ativação
+### O que o usuário verá
 
-O fluxo de aceite **só existe** quando:
-1. A conta tem **mais de 1 membro ativo** em `account_members`, **E**
-2. A **Roleta está ativa** (`roulette_config.enabled = true`), **E**
-3. A nova flag `roulette_config.require_acceptance = true`.
+- Novo botão **"Finalizar atendimento"** no topo do chat (ao lado do nome do contato), visível para o atendente responsável (e owner/manager).
+- Ao clicar, abre um diálogo "Como foi este atendimento?" com 3 opções grandes e coloridas:
+  - **Ganho** (verde) — pede valor da venda (opcional, pré-preenchido com valor do deal) e observação.
+  - **Perdido** (vermelho) — pede motivo (campo de texto curto, obrigatório).
+  - **Desistência** (cinza) — pede observação (opcional).
+- Sem classificação, o chat permanece aberto. Se o atendente tentar fechar/arquivar a conversa, o sistema bloqueia com aviso "Classifique o atendimento antes de finalizá-lo".
+- Após classificar:
+  - A conversa é marcada como finalizada e some da lista ativa (filtro padrão "Em atendimento"); aparece em um novo filtro "Finalizadas" com badge da classificação.
+  - O deal correspondente é movido automaticamente para a etapa Ganho/Perdido do funil dele e recebe `won_at`/`lost_at` + motivo.
+  - Toast de confirmação e som curto.
+- No **Dashboard** novos cartões e quebras:
+  - KPIs novos: **Ganhos**, **Perdidos**, **Desistências**, **Taxa de conversão (Ganho / Total finalizados)**.
+  - Tabela "Desempenho por atendente" ganha colunas **Ganhos / Perdidos / Desist. / Conv.%**.
+  - Os filtros existentes (período, atendente, funil) já se aplicam aos novos números.
 
-Se qualquer condição falhar → comportamento atual permanece intacto: o admin/owner recebe a notificação padrão por WhatsApp (`notify-handoff` etc.) e a conversa fica visível como hoje.
-
----
-
-## 1. Schema
+### Banco de dados
 
 Migration:
-```sql
-ALTER TABLE public.roulette_config
-  ADD COLUMN require_acceptance boolean NOT NULL DEFAULT false;
-```
 
-## 2. UI da Roleta (`RouletteTab.tsx`)
+- `whatsapp_conversations`:
+  - `outcome text` — valores: `won` | `lost` | `abandoned` | `null` (em aberto).
+  - `outcome_reason text` — motivo/observação.
+  - `outcome_value_cents integer` — valor (apenas para Ganho).
+  - `closed_at timestamptz` — quando foi finalizada.
+  - `closed_by uuid` — atendente que finalizou.
+- Índice em `(account_id, closed_at)` e `(account_id, outcome)`.
+- Para cada `crm_pipelines` sem etapa "Ganho"/"Perdido", a migration insere as etapas faltantes ao final (cor verde/vermelho). Atendimento humano segue como etapa intermediária.
 
-Novo switch logo abaixo de "Exigir online":
-- **"Exigir aceite do atendimento"**
-- Texto: "Quando a roleta atribuir um lead, o atendente precisa clicar em 'Aceitar' antes de ver a conversa. Só então o lead vira responsabilidade dele."
-- Desabilitado (com tooltip) quando a Roleta está desligada ou só há 1 membro.
+### Backend (lógica de finalização)
 
-## 3. Integração com a Roleta (sem mudanças no `whatsapp-ai-agent`)
+Nova edge function `finalize-conversation` (ou RPC `finalize_conversation`) — preferimos RPC SECURITY DEFINER para atomicidade:
 
-A roleta já cria registros em `roulette_assignments` com status `pending` quando atribui. Vamos reutilizar isso como fonte de verdade do "aceite pendente":
+1. Valida que o caller é o `assigned_to` da conversa OU owner/manager.
+2. Valida `outcome ∈ {won, lost, abandoned}` e exige `outcome_reason` quando `lost`.
+3. Atualiza `whatsapp_conversations` com `outcome`, `outcome_reason`, `outcome_value_cents`, `closed_at = now()`, `closed_by = auth.uid()`, `ai_active = false`.
+4. Localiza o `crm_deals` ativo do contato no funil ativo do atendente:
+   - `won` → move para etapa "Ganho", seta `won_at = now()`, atualiza `value_cents` se enviado.
+   - `lost` → move para "Perdido", seta `lost_at = now()`, `lost_reason = motivo`.
+   - `abandoned` → move para "Perdido" com `lost_reason = 'Desistência: ' || motivo` (mantemos só 2 colunas no Kanban; métrica separa).
+5. Cancela follow-up (`cancel_followup_sequence(_user_id, _phone, 'handoff')`).
+6. Insere `crm_activities` com tipo `outcome` registrando a ação.
 
-- `roulette_assignments.status = 'pending'` → conversa **bloqueada** para todos exceto o `user_id` sorteado.
-- Atendente sorteado clica "Aceitar" → chama RPC `accept_roulette_assignment(phone, user_id)` (já existe) e a conversa libera.
-- Timeout/expiração já cuida do reroteamento.
+### Frontend
 
-**Sem aceite obrigatório** (`require_acceptance = false`): a conversa já fica visível ao sorteado normalmente, como hoje. Nada muda.
+- `src/components/conversations/FinalizeDialog.tsx` (novo) — diálogo com 3 cards de classificação + campos condicionais.
+- `src/pages/Conversations.tsx` — botão "Finalizar atendimento" no header do chat; bloqueia ação de "Arquivar" se `outcome` ainda for null; adiciona aba/filtro "Finalizadas" na lista lateral com badge colorido.
+- `src/hooks/useConversations.ts` — incluir novos campos no select e tipos.
+- `src/hooks/useFinalizeConversation.ts` (novo) — mutation que chama a RPC, faz invalidate de `conversations`, `crm-deals` e `dashboard-metrics`.
+- `src/lib/dashboard-metrics.ts` + `src/hooks/useDashboardMetrics.ts`:
+  - Adicionar contagem de `won/lost/abandoned` no período usando `closed_at` + `outcome`.
+  - Por atendente: agregação por `closed_by`.
+  - Aplicar filtro de funil: cruzar `phone` da conversa com contatos cujos deals pertencem a stages do funil escolhido (mesma lógica já usada para tempo de espera).
+- `src/components/dashboard/KPICards.tsx` — novos 3 cards (Ganhos / Perdidos / Desistências) e card de Taxa de conversão.
+- `src/components/dashboard/SellerPerformanceTable.tsx` — colunas Ganhos, Perdidos, Desistências, Conv.%.
 
-## 4. Frontend — Conversations
+### Permissões / RLS
 
-`useConversations` passa a trazer também o assignment pendente do usuário atual:
+- A RPC roda como `SECURITY DEFINER` validando `auth.uid()`.
+- Policies existentes já cobrem leitura/escrita de `whatsapp_conversations`/`crm_deals` por membros da conta.
+- Owner/manager pode reabrir um atendimento (limpar `outcome`) — botão "Reabrir" só aparece para esses papéis.
 
-```text
-pendingAssignments = roulette_assignments
-  where account_id = X
-    and user_id = auth.uid()
-    and status = 'pending'
-    and expires_at > now()
-```
+### Detalhes técnicos relevantes
 
-Para cada conversa:
-- Se `require_acceptance && roleta ativa && multi-user` E existe assignment `pending` para o usuário atual neste `phone` → renderiza **card de aceite** no lugar do chat:
-  - Nome do contato + telefone + última mensagem (preview de 1 linha)
-  - Tempo restante (countdown a partir de `expires_at`)
-  - Botão **"Aceitar atendimento"** (primary)
-  - Texto: "Ao aceitar, este lead vira sua responsabilidade e passa a contar nas suas métricas."
-- Se a conversa foi atribuída a **outro** atendente e está pending → simplesmente não aparece na lista do usuário (filtro client-side por assignment).
-- Owner/manager veem tudo normalmente (override pelo papel — sem bloqueio).
-
-## 5. Ação "Aceitar"
-
-Nova mutation `acceptAssignment(phone)` em `useConversations`:
-1. RPC `accept_roulette_assignment(phone, auth.uid())` → marca assignment como `accepted`.
-2. `update whatsapp_conversations set assigned_to = auth.uid() where account_id and phone and assigned_to is null`.
-3. Reflete em `contacts.assigned_to` e `crm_deals` ativos.
-4. Se a RPC retornou `null` (já expirou/foi reatribuído) → toast "Esse atendimento expirou ou foi transferido" e remove o card.
-
-## 6. Notificações no navegador
-
-Novo hook `useBrowserNotifications` (montado no `ProtectedRoute`):
-- Pede `Notification.requestPermission()` na primeira visita autenticada (flag em `localStorage`).
-- Subscribe Realtime em `roulette_assignments` filtrado por `account_id` do usuário.
-- Quando `INSERT` com `user_id == auth.uid()` e `status == 'pending'`:
-  - `new Notification("Novo atendimento aguardando aceite", { body: "{contato} foi atribuído a você. Aceite em até X min.", tag: "assign-{phone}" })`
-  - Som curto.
-  - Click → foca a janela e navega para `/conversations?phone={phone}`.
-- Fallback (permissão negada): toast persistente do sonner + badge no Sidebar.
-- **Não dispara** quando o aceite obrigatório está desligado — nesse modo a notificação fica por conta do canal padrão WhatsApp.
-
-## 7. Indicador na Sidebar/Header
-
-Pequeno badge "Atendimentos aguardando aceite" no item "Conversas" do menu, contando assignments `pending` para o usuário atual. Click leva à primeira conversa pendente.
-
-## 8. Métricas (sem migration)
-
-Já funciona: `useDashboardMetrics` agrupa por `assigned_to`. Como aceitar seta `assigned_to = user_id` na conversa, no contato e no deal, todos os KPIs (leads, atendimentos, agendamentos, vendas) e o `SellerPerformanceTable` passam automaticamente a contar para o atendente que aceitou. O período conta a partir do `accepted_at`.
-
-## 9. Fluxo "sem multi-usuário ou sem roleta"
-
-Caminho preservado integralmente:
-- `whatsapp-ai-agent` faz handoff → chama `notify-handoff` → admin recebe no WhatsApp como hoje.
-- Conversa fica visível ao admin sem nenhum bloqueio.
-- Nenhum card de aceite, nenhuma notificação no navegador.
-- A flag `require_acceptance` é ignorada quando a Roleta está desligada.
-
-## Arquivos previstos
-
-- Migration: nova coluna `require_acceptance`.
-- `src/hooks/useRouletteConfig.ts` — incluir o novo campo.
-- `src/components/settings/RouletteTab.tsx` — novo switch (desabilitado quando roleta off ou 1 membro).
-- `src/hooks/useConversations.ts` — buscar `roulette_assignments` pending do usuário; expor `pendingPhones` e mutation `acceptAssignment`.
-- `src/pages/Conversations.tsx` — card de aceite + ocultar chat quando pendente + badge "Pendente" na lista.
-- `src/hooks/useBrowserNotifications.ts` (novo) — permissão + realtime de `roulette_assignments`.
-- `src/components/BrowserNotificationsProvider.tsx` (novo) — wrapper montado em `ProtectedRoute`.
-- `src/components/AppSidebar.tsx` — badge de pendentes.
+- O Kanban e o `useDashboardMetrics` já usam `won_at`/`lost_at` do `crm_deals`, então as métricas atuais de Vendas continuam funcionando — os novos KPIs derivam de `whatsapp_conversations.outcome` para refletir "atendimento finalizado", que é independente de venda fechada via Kanban.
+- "Desistência" não tem campo nativo no `crm_deals`; usamos `lost_at` + `lost_reason` prefixado para manter o funil consistente, mas o relatório no dashboard mostra a coluna separada baseada no `outcome` da conversa.
+- Notificações desktop (hook `useBrowserNotifications` já existente) emitem aviso quando outro membro finaliza um atendimento que estava atribuído a você (caso de override por owner).
