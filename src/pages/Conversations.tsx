@@ -717,29 +717,29 @@ export default function Conversations() {
                       value={selectedConversation?.assigned_to ?? null}
                       onChange={(userId) => assignConversation.mutate({ phone: selectedPhone, userId })}
                     />
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-1.5">
-                          <CheckCircle className="h-4 w-4" />
-                          <span className="hidden xl:inline">Finalizar</span>
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Finalizar conversa?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            As mensagens serão limpas, mas um resumo será salvo. Quando o lead entrar em contato novamente, a IA o reconhecerá pelo nome.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => {
-                            finishConversation.mutate({ phone: selectedPhone });
-                            setSelectedPhone(null);
-                          }}>Finalizar</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    {selectedConversation?.outcome ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={!canReopen || reopen.isPending}
+                        onClick={() => reopen.mutate(selectedConversation!.id)}
+                        title={canReopen ? "Reabrir atendimento" : "Apenas gestores podem reabrir"}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        <span className="hidden xl:inline">Reabrir</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => setFinalizeOpen(true)}
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        <span className="hidden xl:inline">Finalizar</span>
+                      </Button>
+                    )}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive">
@@ -752,14 +752,26 @@ export default function Conversations() {
                           <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
                           <AlertDialogDescription>
                             A conversa será removida permanentemente. O lead será tratado como novo contato no próximo atendimento.
+                            {!selectedConversation?.outcome && (
+                              <span className="block mt-2 text-amber-600 font-medium">
+                                Classifique o atendimento antes de excluir.
+                              </span>
+                            )}
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => {
-                            deleteConversation.mutate({ phone: selectedPhone });
-                            setSelectedPhone(null);
-                          }}>Excluir</AlertDialogAction>
+                          <AlertDialogAction
+                            disabled={!selectedConversation?.outcome}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => {
+                              if (!selectedConversation?.outcome) return;
+                              deleteConversation.mutate({ phone: selectedPhone });
+                              setSelectedPhone(null);
+                            }}
+                          >
+                            Excluir
+                          </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
