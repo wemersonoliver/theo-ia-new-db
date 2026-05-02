@@ -7,6 +7,39 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Insere ou atualiza a linha da instância. Retorna a row final.
+async function persistInstance(client: any, existingRow: any | null, fields: Record<string, any>) {
+  const payload = { ...fields, updated_at: new Date().toISOString() };
+  if (existingRow?.id) {
+    const { data, error } = await client
+      .from("whatsapp_instances")
+      .update(payload)
+      .eq("id", existingRow.id)
+      .select("*")
+      .maybeSingle();
+    if (error) {
+      console.error("persistInstance update error:", error);
+      return existingRow;
+    }
+    return data;
+  }
+  // Para nova linha, garantimos is_primary se for "principal"
+  const insertPayload = {
+    ...payload,
+    is_primary: payload.department_slug === "principal",
+  };
+  const { data, error } = await client
+    .from("whatsapp_instances")
+    .insert(insertPayload)
+    .select("*")
+    .maybeSingle();
+  if (error) {
+    console.error("persistInstance insert error:", error);
+    throw new Error(error.message || "Erro ao salvar instância");
+  }
+  return data;
+}
+
 const jsonResponse = (body: Record<string, unknown>, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
