@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useConversations, useConversation, Message } from "@/hooks/useConversations";
+import { usePendingAssignments } from "@/hooks/usePendingAssignments";
+import { AcceptAssignmentCard } from "@/components/AcceptAssignmentCard";
 import { useContacts } from "@/hooks/useContacts";
 import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
 import { supabase } from "@/integrations/supabase/client";
@@ -208,7 +210,8 @@ function CreateDealButton({ phone, contactName, className }: { phone: string; co
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Conversations() {
   const navigate = useNavigate();
-  const { conversations, isLoading, sendMessage, sendMedia, toggleAI, finishConversation, deleteConversation, assignConversation } = useConversations();
+  const { conversations: rawConversations, isLoading, sendMessage, sendMedia, toggleAI, finishConversation, deleteConversation, assignConversation } = useConversations();
+  const { acceptanceEnabled, myPending, allPending, accept, isPrivilegedViewer } = usePendingAssignments();
   const { contacts } = useContacts();
   const { instance } = useWhatsAppInstance();
   const [syncing, setSyncing] = useState(false);
@@ -221,6 +224,26 @@ export default function Conversations() {
     () => new Map(contacts.map((contact) => [contact.phone, contact.profile_picture_url])),
     [contacts],
   );
+
+  // Filtra conversas: se há aceite obrigatório e o telefone está pendente para OUTRO atendente,
+  // o usuário comum não enxerga. Owner/manager seguem vendo tudo.
+  const myPendingPhones = useMemo(() => new Set(myPending.map((p) => p.phone)), [myPending]);
+  const otherPendingPhones = useMemo(() => {
+    if (!acceptanceEnabled || isPrivilegedViewer) return new Set<string>();
+    const mine = myPendingPhones;
+    return new Set(allPending.filter((p) => !mine.has(p.phone)).map((p) => p.phone));
+  }, [acceptanceEnabled, isPrivilegedViewer, allPending, myPendingPhones]);
+
+  const conversations = useMemo(
+    () => rawConversations.filter((c) => !otherPendingPhones.has(c.phone)),
+    [rawConversations, otherPendingPhones],
+  );
+
+  const selectedPending = useMemo(
+    () => (selectedPhone ? myPending.find((p) => p.phone === selectedPhone) ?? null : null),
+    [selectedPhone, myPending],
+  );
+  const showAcceptCard = !!selectedPending && acceptanceEnabled;
 
   // Seleciona automaticamente o contato se vier da página de Contatos
   useEffect(() => {
@@ -319,7 +342,9 @@ export default function Conversations() {
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0 max-w-[35%]">
-                        {conv.ai_active ? (
+                        {myPendingPhones.has(conv.phone) ? (
+                          <Badge className="text-xs bg-amber-500 text-white hover:bg-amber-500">Aceitar</Badge>
+                        ) : conv.ai_active ? (
                           <Badge variant="outline" className="text-xs">IA</Badge>
                         ) : (
                           <Badge variant="secondary" className="text-xs">Humano</Badge>
@@ -454,9 +479,18 @@ export default function Conversations() {
             </div>
 
             {/* Messages */}
-            <ChatMessages messages={messages} className="flex-1 min-h-0" />
+            {showAcceptCard ? (
+              <AcceptAssignmentCard
+                pending={selectedPending!}
+                isPending={accept.isPending}
+                onAccept={() => accept.mutate({ phone: selectedPending!.phone })}
+              />
+            ) : (
+              <ChatMessages messages={messages} className="flex-1 min-h-0" />
+            )}
 
             {/* Input */}
+            {!showAcceptCard && (
             <div className="border-t bg-background p-3 shrink-0">
               <div className="flex items-end gap-2">
                 <MediaAttachButton
@@ -492,6 +526,7 @@ export default function Conversations() {
                 {selectedConversation?.ai_active ? "🤖 IA ativa" : "👤 Atendimento manual"}
               </p>
             </div>
+            )}
           </SheetContent>
         </Sheet>
       </DashboardLayout>
@@ -589,7 +624,9 @@ export default function Conversations() {
                               <span className="font-medium truncate text-sm">
                                 {conv.contact_name || conv.phone}
                               </span>
-                              {conv.ai_active ? (
+                              {myPendingPhones.has(conv.phone) ? (
+                                <Badge className="text-xs shrink-0 bg-amber-500 text-white hover:bg-amber-500">Aceitar</Badge>
+                              ) : conv.ai_active ? (
                                 <Badge variant="outline" className="text-xs shrink-0">IA</Badge>
                               ) : (
                                 <Badge variant="secondary" className="text-xs shrink-0">Humano</Badge>
@@ -719,9 +756,17 @@ export default function Conversations() {
                 </div>
               </CardHeader>
               <CardContent className="flex h-[calc(100vh-340px)] flex-col p-0">
-                <ChatMessages messages={messages} className="flex-1" />
+                {showAcceptCard ? (
+                  <AcceptAssignmentCard
+                    pending={selectedPending!}
+                    isPending={accept.isPending}
+                    onAccept={() => accept.mutate({ phone: selectedPending!.phone })}
+                  />
+                ) : (
+                  <>
+                    <ChatMessages messages={messages} className="flex-1" />
 
-                <div className="border-t p-4">
+                    <div className="border-t p-4">
                   <div className="flex gap-2">
                     <MediaAttachButton
                       phone={selectedPhone}
@@ -754,7 +799,9 @@ export default function Conversations() {
                       ? "IA ativa - respondendo automaticamente"
                       : "IA desativada - ao enviar mensagem, você assume o atendimento"}
                   </p>
-                </div>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </>
           ) : (

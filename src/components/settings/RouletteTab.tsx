@@ -3,7 +3,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Loader2, Shuffle, Users, AlertCircle, Clock, Wifi } from "lucide-react";
+import { Loader2, Shuffle, Users, AlertCircle, Clock, Wifi, Hand } from "lucide-react";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useRouletteConfig } from "@/hooks/useRouletteConfig";
 import { useAccount } from "@/hooks/useAccount";
@@ -89,6 +89,7 @@ export function RouletteTab() {
 
   const enabled = !!config?.enabled;
   const requireOnline = !!config?.require_online;
+  const requireAcceptance = !!config?.require_acceptance;
   const onlineCount = activeMembers.filter((m) => isOnline(m.last_seen_at)).length;
 
   const toggleParticipant = (userId: string, checked: boolean) => {
@@ -137,6 +138,24 @@ export function RouletteTab() {
             checked={requireOnline}
             disabled={!isOwner || upsert.isPending}
             onCheckedChange={(v) => upsert.mutate({ require_online: v })}
+          />
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div className="space-y-1">
+            <Label className="text-base flex items-center gap-2">
+              <Hand className="h-4 w-4" />
+              Exigir aceite do atendimento
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Quando a roleta atribuir um lead, o atendente precisa clicar em <strong>Aceitar</strong> antes de ver a conversa.
+              A partir desse momento o lead vira responsabilidade dele e passa a contar nas suas métricas.
+            </p>
+          </div>
+          <Switch
+            checked={requireAcceptance}
+            disabled={!isOwner || upsert.isPending || !enabled}
+            onCheckedChange={(v) => upsert.mutate({ require_acceptance: v })}
           />
         </div>
 

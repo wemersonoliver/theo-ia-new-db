@@ -1582,6 +1582,7 @@ export type Database = {
           last_assigned_user_id: string | null
           online_threshold_seconds: number
           participant_user_ids: string[]
+          require_acceptance: boolean
           require_online: boolean
           updated_at: string
         }
@@ -1595,6 +1596,7 @@ export type Database = {
           last_assigned_user_id?: string | null
           online_threshold_seconds?: number
           participant_user_ids?: string[]
+          require_acceptance?: boolean
           require_online?: boolean
           updated_at?: string
         }
@@ -1608,6 +1610,7 @@ export type Database = {
           last_assigned_user_id?: string | null
           online_threshold_seconds?: number
           participant_user_ids?: string[]
+          require_acceptance?: boolean
           require_online?: boolean
           updated_at?: string
         }

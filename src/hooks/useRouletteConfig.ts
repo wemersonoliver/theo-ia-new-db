@@ -13,6 +13,7 @@ export interface RouletteConfig {
   require_online: boolean;
   accept_timeout_minutes: number;
   online_threshold_seconds: number;
+  require_acceptance: boolean;
 }
 
 export function useRouletteConfig() {
@@ -46,6 +47,7 @@ export function useRouletteConfig() {
           patch.accept_timeout_minutes ?? config?.accept_timeout_minutes ?? 5,
         online_threshold_seconds:
           patch.online_threshold_seconds ?? config?.online_threshold_seconds ?? 120,
+        require_acceptance: patch.require_acceptance ?? config?.require_acceptance ?? false,
       };
       const { error } = await (supabase as any)
         .from("roulette_config")
