@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, Users, MessageSquare, Calendar, DollarSign } from "lucide-react";
+import { TrendingUp, TrendingDown, Users, MessageSquare, Calendar, DollarSign, Trophy, XCircle, MinusCircle, Percent } from "lucide-react";
 import type { DashboardMetrics } from "@/hooks/useDashboardMetrics";
 
 interface Props {
@@ -54,6 +54,36 @@ export function KPICards({ metrics }: Props) {
       Icon: DollarSign,
       tone: "bg-emerald-500/10 text-emerald-600",
     },
+    {
+      label: "Ganhos",
+      value: metrics?.current.won ?? 0,
+      variation: metrics?.variation.won ?? null,
+      Icon: Trophy,
+      tone: "bg-emerald-500/10 text-emerald-600",
+    },
+    {
+      label: "Perdidos",
+      value: metrics?.current.lost ?? 0,
+      variation: metrics?.variation.lost ?? null,
+      Icon: XCircle,
+      tone: "bg-rose-500/10 text-rose-600",
+    },
+    {
+      label: "Desistências",
+      value: metrics?.current.abandoned ?? 0,
+      variation: metrics?.variation.abandoned ?? null,
+      Icon: MinusCircle,
+      tone: "bg-slate-500/10 text-slate-600",
+    },
+    {
+      label: "Taxa de conversão",
+      value: metrics?.current.conversionRate ?? 0,
+      sub: `${metrics?.current.won ?? 0} / ${metrics?.current.finalizedTotal ?? 0} finalizados`,
+      variation: metrics?.variation.conversionRate ?? null,
+      Icon: Percent,
+      tone: "bg-indigo-500/10 text-indigo-600",
+      isPercent: true,
+    },
   ];
 
   return (
@@ -68,7 +98,9 @@ export function KPICards({ metrics }: Props) {
               <VarBadge value={it.variation} />
             </div>
             <p className="mt-2 sm:mt-3 text-xs sm:text-sm text-muted-foreground truncate">{it.label}</p>
-            <p className="text-xl sm:text-2xl font-bold truncate">{it.value.toLocaleString("pt-BR")}</p>
+            <p className="text-xl sm:text-2xl font-bold truncate">
+              {it.value.toLocaleString("pt-BR")}{(it as any).isPercent ? "%" : ""}
+            </p>
             {it.sub && <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 truncate">{it.sub}</p>}
           </CardContent>
         </Card>
