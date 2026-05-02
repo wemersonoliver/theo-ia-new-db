@@ -241,6 +241,16 @@ serve(async (req) => {
           handed_off_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }, { onConflict: "user_id,phone" });
+
+      // Aceita atribuição da Roleta (se houver) — atendente iniciou o atendimento
+      try {
+        await supabaseAdmin.rpc("accept_roulette_assignment", {
+          _phone: normalizedPhone,
+          _user_id: userId,
+        });
+      } catch (e) {
+        console.error("accept_roulette_assignment error:", e);
+      }
     }
 
     return jsonResponse({ success: true });
