@@ -59,17 +59,23 @@ serve(async (req) => {
       const { data: profiles } = await supabaseAdmin.from("profiles").select("*");
       const { data: roles } = await supabaseAdmin.from("user_roles").select("*");
       const { data: subscriptions } = await supabaseAdmin.from("subscriptions").select("*");
+      const { data: accounts } = await supabaseAdmin
+        .from("accounts")
+        .select("owner_user_id, name, business_code");
 
       const enrichedUsers = users.map((u) => {
         const profile = profiles?.find((p) => p.user_id === u.id);
         const userRoles = roles?.filter((r) => r.user_id === u.id).map((r) => r.role) || [];
         const userSub = subscriptions?.find((s) => s.user_id === u.id && s.status === "active");
+        const acc = accounts?.find((a) => a.owner_user_id === u.id);
         return {
           id: u.id,
           email: u.email,
           full_name: profile?.full_name || "",
           phone: profile?.phone || "",
           user_code: profile?.user_code || null,
+          business_code: acc?.business_code ?? null,
+          business_name: acc?.name ?? null,
           is_blocked: profile?.is_blocked || false,
           feature_keyword_triggers: profile?.feature_keyword_triggers || false,
           created_at: u.created_at,

@@ -13,6 +13,7 @@ import { TeamTab } from "@/components/team/TeamTab";
 import { DangerZoneTab } from "@/components/settings/DangerZoneTab";
 import { RouletteTab } from "@/components/settings/RouletteTab";
 import { useAccount } from "@/hooks/useAccount";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useTheme } from "next-themes";
@@ -21,11 +22,13 @@ import { useNavigate } from "react-router-dom";
 export default function Settings() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
-  const { isOwner } = useAccount();
+  const { isOwner, membership } = useAccount();
+  const qc = useQueryClient();
   const navigate = useNavigate();
   
   const [fullName, setFullName] = useState("");
-  const [userCode, setUserCode] = useState<number | null>(null);
+  const [businessName, setBusinessName] = useState("");
+  const [updatingBusiness, setUpdatingBusiness] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [updatingProfile, setUpdatingProfile] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
@@ -37,17 +40,40 @@ export default function Settings() {
       setLoading(true);
       const { data } = await supabase
         .from("profiles")
-        .select("full_name, user_code")
+        .select("full_name")
         .eq("user_id", user.id)
         .maybeSingle();
       if (data) {
         setFullName(data.full_name || "");
-        setUserCode(data.user_code ?? null);
       }
       setLoading(false);
     };
     fetchProfile();
   }, [user]);
+
+  useEffect(() => {
+    if (membership?.account_name) setBusinessName(membership.account_name);
+  }, [membership?.account_name]);
+
+  const handleUpdateBusinessName = async () => {
+    if (!membership) return;
+    if (businessName.trim().length < 2) {
+      toast.error("Informe um nome válido para o negócio");
+      return;
+    }
+    setUpdatingBusiness(true);
+    const { error } = await supabase
+      .from("accounts")
+      .update({ name: businessName.trim() })
+      .eq("id", membership.account_id);
+    if (error) {
+      toast.error("Erro ao atualizar nome do negócio");
+    } else {
+      toast.success("Nome do negócio atualizado!");
+      qc.invalidateQueries({ queryKey: ["account-membership", user?.id] });
+    }
+    setUpdatingBusiness(false);
+  };
 
   const handleUpdateProfile = async () => {
     if (!user) return;
@@ -122,18 +148,37 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {userCode && (
+              {membership?.business_code && (
                 <div className="space-y-2">
-                  <Label>Seu ID de Usuário</Label>
+                  <Label>ID do Negócio</Label>
                   <div className="flex items-center gap-2">
                     <Hash className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-lg font-mono font-bold text-primary">#{userCode}</span>
+                    <span className="text-lg font-mono font-bold text-primary">#{membership.business_code}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Use este ID ao entrar em contato com o suporte
                   </p>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label htmlFor="businessName">Nome do negócio</Label>
+                <Input
+                  id="businessName"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="Padaria do João"
+                  disabled={!isOwner}
+                />
+                {isOwner ? (
+                  <Button onClick={handleUpdateBusinessName} disabled={updatingBusiness} size="sm" variant="secondary">
+                    {updatingBusiness && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Salvar nome do negócio
+                  </Button>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Apenas o proprietário pode alterar o nome do negócio.</p>
+                )}
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
