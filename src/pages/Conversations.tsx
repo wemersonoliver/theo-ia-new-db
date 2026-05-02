@@ -477,9 +477,18 @@ export default function Conversations() {
             </div>
 
             {/* Messages */}
-            <ChatMessages messages={messages} className="flex-1 min-h-0" />
+            {showAcceptCard ? (
+              <AcceptAssignmentCard
+                pending={selectedPending!}
+                isPending={accept.isPending}
+                onAccept={() => accept.mutate({ phone: selectedPending!.phone })}
+              />
+            ) : (
+              <ChatMessages messages={messages} className="flex-1 min-h-0" />
+            )}
 
             {/* Input */}
+            {!showAcceptCard && (
             <div className="border-t bg-background p-3 shrink-0">
               <div className="flex items-end gap-2">
                 <MediaAttachButton
@@ -515,6 +524,7 @@ export default function Conversations() {
                 {selectedConversation?.ai_active ? "🤖 IA ativa" : "👤 Atendimento manual"}
               </p>
             </div>
+            )}
           </SheetContent>
         </Sheet>
       </DashboardLayout>
@@ -742,9 +752,17 @@ export default function Conversations() {
                 </div>
               </CardHeader>
               <CardContent className="flex h-[calc(100vh-340px)] flex-col p-0">
-                <ChatMessages messages={messages} className="flex-1" />
+                {showAcceptCard ? (
+                  <AcceptAssignmentCard
+                    pending={selectedPending!}
+                    isPending={accept.isPending}
+                    onAccept={() => accept.mutate({ phone: selectedPending!.phone })}
+                  />
+                ) : (
+                  <>
+                    <ChatMessages messages={messages} className="flex-1" />
 
-                <div className="border-t p-4">
+                    <div className="border-t p-4">
                   <div className="flex gap-2">
                     <MediaAttachButton
                       phone={selectedPhone}
@@ -777,7 +795,9 @@ export default function Conversations() {
                       ? "IA ativa - respondendo automaticamente"
                       : "IA desativada - ao enviar mensagem, você assume o atendimento"}
                   </p>
-                </div>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </>
           ) : (
