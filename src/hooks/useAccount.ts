@@ -7,6 +7,7 @@ export type AccountRole = "owner" | "manager" | "seller" | "agent";
 export interface AccountMembership {
   account_id: string;
   account_name: string;
+  business_code: number | null;
   owner_user_id: string;
   role: AccountRole;
   permissions: Record<string, boolean>;
@@ -45,7 +46,7 @@ export function useAccount() {
     queryFn: async (): Promise<AccountMembership | null> => {
       const { data, error } = await supabase
         .from("account_members")
-        .select("account_id, role, permissions, status, accounts!inner(id, name, owner_user_id)")
+        .select("account_id, role, permissions, status, accounts!inner(id, name, owner_user_id, business_code)")
         .eq("user_id", user!.id)
         .eq("status", "active")
         .order("role", { ascending: true })
@@ -57,6 +58,7 @@ export function useAccount() {
       return {
         account_id: data.account_id,
         account_name: acc?.name || "",
+        business_code: acc?.business_code ?? null,
         owner_user_id: acc?.owner_user_id,
         role: data.role as AccountRole,
         permissions: (data.permissions as Record<string, boolean>) || {},

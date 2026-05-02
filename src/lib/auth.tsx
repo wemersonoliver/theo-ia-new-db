@@ -7,7 +7,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string, phone?: string, businessName?: string) => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -44,13 +44,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
-  const signUp = async (email: string, password: string, fullName: string, phone?: string) => {
+  const signUp = async (email: string, password: string, fullName: string, phone?: string, businessName?: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: window.location.origin,
-        data: { full_name: fullName },
+        data: { full_name: fullName, business_name: businessName ?? null },
       },
     });
 
@@ -60,6 +60,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from("profiles")
         .update({ phone })
         .eq("user_id", data.user.id);
+    }
+
+    // Save business name to the auto-created account
+    if (!error && data.user && businessName && businessName.trim().length > 0) {
+      await supabase
+        .from("accounts")
+        .update({ name: businessName.trim() })
+        .eq("owner_user_id", data.user.id);
     }
 
     return { error };

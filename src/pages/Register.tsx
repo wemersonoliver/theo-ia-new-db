@@ -13,6 +13,7 @@ import { getRecaptchaToken, isRecaptchaEnabled, useRecaptchaBadge } from "@/lib/
 
 export default function Register() {
   const [fullName, setFullName] = useState("");
+  const [businessName, setBusinessName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,6 +28,10 @@ export default function Register() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (businessName.trim().length < 2) {
+      toast.error("Informe o nome do seu negócio");
+      return;
+    }
     if (!phone.replace(/\D/g, "").match(/^\d{10,11}$/)) {
       toast.error("Informe um telefone válido com DDD (ex: 47999999999)");
       return;
@@ -54,7 +59,7 @@ export default function Register() {
       }
     }
 
-    const { error } = await signUp(email, password, fullName, phone.replace(/\D/g, ""));
+    const { error } = await signUp(email, password, fullName, phone.replace(/\D/g, ""), businessName.trim());
 
     if (error) {
       toast.error("Erro ao criar conta: " + error.message);
@@ -90,6 +95,17 @@ export default function Register() {
                 placeholder="João Silva"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="businessName">Nome do negócio</Label>
+              <Input
+                id="businessName"
+                type="text"
+                placeholder="Padaria do João"
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
                 required
               />
             </div>
