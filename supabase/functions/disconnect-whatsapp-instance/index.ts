@@ -40,12 +40,35 @@ serve(async (req) => {
 
     const userId = claimsData.user.id;
 
-    // Get user's instance
-    const { data: instance } = await supabase
-      .from("whatsapp_instances")
-      .select("instance_name")
-      .eq("user_id", userId)
-      .maybeSingle();
+    // Optional instanceId in body
+    let bodyInstanceId: string | null = null;
+    try {
+      const body = await req.json();
+      bodyInstanceId = body?.instanceId || null;
+    } catch { /* no body */ }
+
+    // Get target instance
+    let instance: any = null;
+    if (bodyInstanceId) {
+      const { data: ownedAccount } = await supabase
+        .from("accounts").select("id").eq("owner_user_id", userId).maybeSingle();
+      const { data } = await supabase
+        .from("whatsapp_instances")
+        .select("id, instance_name, account_id")
+        .eq("id", bodyInstanceId)
+        .maybeSingle();
+      if (!data || (ownedAccount?.id && data.account_id !== ownedAccount.id)) {
+        return jsonResponse({ error: "Instância não encontrada" }, 404);
+      }
+      instance = data;
+    } else {
+      const { data } = await supabase
+        .from("whatsapp_instances")
+        .select("id, instance_name")
+        .eq("user_id", userId)
+        .maybeSingle();
+      instance = data;
+    }
 
     if (!instance) {
       return jsonResponse({ error: "Nenhuma instância encontrada" }, 404);
@@ -72,7 +95,7 @@ serve(async (req) => {
       return jsonResponse(buildEvolutionErrorPayload(logoutResponse, "Erro ao desconectar instância WhatsApp"), 502);
     }
 
-    // Update database
+    // Update database (target this specific row)
     await supabase
       .from("whatsapp_instances")
       .update({
@@ -82,7 +105,7 @@ serve(async (req) => {
         profile_name: null,
         updated_at: new Date().toISOString(),
       })
-      .eq("user_id", userId);
+      .eq("id", instance.id);
 
     return jsonResponse({ success: true });
 
