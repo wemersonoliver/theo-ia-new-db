@@ -305,7 +305,7 @@ export default function AdminUsers() {
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar por nome, email, telefone ou ID..."
+                  placeholder="Buscar por nome, negócio, email, telefone ou ID..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-9 w-[300px]"
@@ -538,7 +538,7 @@ export default function AdminUsers() {
           <DialogHeader>
             <DialogTitle>Editar Usuário</DialogTitle>
             <DialogDescription>
-              {editDialog?.email} (#{editDialog?.user_code || "—"})
+              {editDialog?.email} (Negócio #{editDialog?.business_code || "—"})
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
