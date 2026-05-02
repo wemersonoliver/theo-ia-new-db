@@ -739,6 +739,31 @@ Regras adicionais:
           functionCallsProcessed++;
           continue;
         }
+
+        // Handle transfer_to_department
+        if (fc.name === "transfer_to_department") {
+          const transferResult = await executeTransferToDepartment(
+            supabase,
+            userId,
+            accountId,
+            phone,
+            String(fc.args?.department_slug || ""),
+            String(fc.args?.reason || ""),
+          );
+          geminiPayload.contents.push(content);
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{ functionResponse: { name: fc.name, response: transferResult } }],
+          });
+          // Encerra o loop: o departamento de destino assumiu o atendimento
+          if ((transferResult as any)?.success) {
+            aiReply = "";
+            functionCallsProcessed = maxFunctionCalls;
+            break;
+          }
+          functionCallsProcessed++;
+          continue;
+        }
         
         // Execute the function
         const functionResult = await executeFunction(supabase, supabaseUrl, fc.name, {
