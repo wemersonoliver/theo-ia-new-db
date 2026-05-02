@@ -698,16 +698,48 @@ serve(async (req) => {
           const existingMessages = conversation.messages || [];
           const updatedMessages = [...existingMessages, newMessage];
 
+          // Se a conversa foi finalizada anteriormente (won/lost/abandoned)
+          // e o cliente voltou a falar, REABRE o atendimento como uma nova jornada:
+          // limpa outcome, reativa IA, libera assigned_to e cria um novo deal
+          // (a roleta vai redistribuir quando ocorrer handoff).
+          const wasFinalized = !!conversation.outcome;
+          const conversationUpdate: Record<string, any> = {
+            messages: updatedMessages,
+            contact_name: contactName || undefined,
+            last_message_at: new Date().toISOString(),
+            total_messages: updatedMessages.length,
+            updated_at: new Date().toISOString(),
+          };
+          if (wasFinalized) {
+            conversationUpdate.outcome = null;
+            conversationUpdate.outcome_reason = null;
+            conversationUpdate.outcome_value_cents = null;
+            conversationUpdate.closed_at = null;
+            conversationUpdate.closed_by = null;
+            conversationUpdate.assigned_to = null;
+            conversationUpdate.ai_active = true;
+          }
+
           await supabase
             .from("whatsapp_conversations")
-            .update({
-              messages: updatedMessages,
-              contact_name: contactName || undefined,
-              last_message_at: new Date().toISOString(),
-              total_messages: updatedMessages.length,
-              updated_at: new Date().toISOString(),
-            })
+            .update(conversationUpdate)
             .eq("id", conversation.id);
+
+          if (wasFinalized) {
+            try {
+              await createCRMDealForNewConversation(
+                supabase,
+                userId,
+                accountId,
+                phone,
+                contactName,
+                ensuredContact?.id ?? null,
+              );
+              console.log("Conversation reopened — new CRM deal created:", phone);
+            } catch (e) {
+              console.error("Error creating CRM deal on reopen:", e);
+            }
+          }
 
           if (ensuredContact?.id) {
             await linkOpenCRMDealToContact(
@@ -721,7 +753,11 @@ serve(async (req) => {
           }
 
           // Check if AI should be activated (for inactive conversations)
-          if (!conversation.ai_active && aiConfig?.keyword_activation_enabled) {
+          if (wasFinalized) {
+            // Conversa reaberta: dispara IA imediatamente para seguir o fluxo (handoff → roleta)
+            const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
+            await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
+          } else if (!conversation.ai_active && aiConfig?.keyword_activation_enabled) {
             const hasKeyword = checkKeywordActivation();
             if (hasKeyword) {
               // Reactivate AI for this conversation
