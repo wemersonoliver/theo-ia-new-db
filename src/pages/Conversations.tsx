@@ -669,6 +669,12 @@ export default function Conversations() {
                               </span>
                               {myPendingPhones.has(conv.phone) ? (
                                 <Badge className="text-xs shrink-0 bg-amber-500 text-white hover:bg-amber-500">Aceitar</Badge>
+                              ) : conv.outcome === "won" ? (
+                                <Badge className="text-xs shrink-0 bg-emerald-500 text-white hover:bg-emerald-500">Ganho</Badge>
+                              ) : conv.outcome === "lost" ? (
+                                <Badge className="text-xs shrink-0 bg-rose-500 text-white hover:bg-rose-500">Perdido</Badge>
+                              ) : conv.outcome === "abandoned" ? (
+                                <Badge variant="secondary" className="text-xs shrink-0">Desistência</Badge>
                               ) : conv.ai_active ? (
                                 <Badge variant="outline" className="text-xs shrink-0">IA</Badge>
                               ) : (
