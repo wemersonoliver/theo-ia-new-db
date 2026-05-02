@@ -21,6 +21,11 @@ export interface DashboardMetrics {
     avgServiceTimeSec: number;
     perAttendant: Record<string, { tma: number; count: number }>;
     perAttendantWait: Record<string, { wait: number; count: number }>;
+    won: number;
+    lost: number;
+    abandoned: number;
+    finalizedTotal: number;
+    conversionRate: number; // 0..100
   };
   variation: {
     leads: number | null;
@@ -29,6 +34,10 @@ export interface DashboardMetrics {
     sales: number | null;
     avgFirstResponseSec: number | null;
     avgServiceTimeSec: number | null;
+    won: number | null;
+    lost: number | null;
+    abandoned: number | null;
+    conversionRate: number | null;
   };
   perSeller: Array<{
     user_id: string;
@@ -37,6 +46,9 @@ export interface DashboardMetrics {
     appointments: number;
     sales: number;
     salesValueCents: number;
+    won: number;
+    lost: number;
+    abandoned: number;
   }>;
   loading: boolean;
 }
