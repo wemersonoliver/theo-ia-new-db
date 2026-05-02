@@ -316,6 +316,13 @@ serve(async (req) => {
       // Notify registered contacts about handoff
       await notifyHandoff(supabase, userId, phone, contactName);
 
+      // Roleta de Atendimento: sorteia próximo atendente entre os membros da conta
+      try {
+        await applyRouletteOnHandoff(supabase, accountId, userId, phone, contactName);
+      } catch (e) {
+        console.error("Error applying roulette on handoff:", e);
+      }
+
       // Move CRM deal to "Atendimento humano"
       try {
         await moveCRMDealToHumanStage(supabase, userId, phone);
