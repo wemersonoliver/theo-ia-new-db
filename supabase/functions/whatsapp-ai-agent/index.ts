@@ -1071,11 +1071,33 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
       return;
     }
 
-    const { data: instance } = await supabase
-      .from("whatsapp_instances")
-      .select("instance_name")
+    // Tenta usar a instância vinculada à conversa (departamento)
+    const { data: conv } = await supabase
+      .from("whatsapp_conversations")
+      .select("instance_id")
       .eq("user_id", userId)
+      .eq("phone", phone)
       .maybeSingle();
+
+    let instance: { instance_name: string } | null = null;
+    if ((conv as any)?.instance_id) {
+      const { data } = await supabase
+        .from("whatsapp_instances")
+        .select("instance_name")
+        .eq("id", (conv as any).instance_id)
+        .maybeSingle();
+      instance = data as any;
+    }
+    if (!instance) {
+      const { data } = await supabase
+        .from("whatsapp_instances")
+        .select("instance_name, is_primary")
+        .eq("user_id", userId)
+        .order("is_primary", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      instance = data as any;
+    }
 
     if (!instance) {
       console.error("Instance not found");
