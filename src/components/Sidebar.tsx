@@ -36,9 +36,6 @@ const navItems = [
   { to: "/support", icon: Ticket, label: "Suporte", perm: "support" },
 ];
 
-const SUPPORT_PHONE = "5547991293662";
-const SUPPORT_MESSAGE = encodeURIComponent("Olá! Preciso de suporte para o Theo IA");
-
 interface SidebarProps {
   mobile?: boolean;
   onNavigate?: () => void;
