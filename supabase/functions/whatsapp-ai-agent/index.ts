@@ -1349,7 +1349,7 @@ async function applyRouletteOnHandoff(
   // Verifica se a roleta está ativa
   const { data: cfg } = await supabase
     .from("roulette_config")
-    .select("enabled")
+    .select("enabled, accept_timeout_minutes, require_online")
     .eq("account_id", accountId)
     .maybeSingle();
 
@@ -1361,10 +1361,48 @@ async function applyRouletteOnHandoff(
   // Sorteia próximo atendente
   const { data: nextUserId, error } = await supabase.rpc("roulette_pick_next", {
     _account_id: accountId,
+    _exclude_user_ids: [],
+    _only_online: cfg?.require_online ?? null,
   });
 
   if (error || !nextUserId) {
-    console.error("Roulette: failed to pick next user", error);
+    console.error("Roulette: failed to pick next user (sem online?)", error);
+    // Notifica owner se ninguém disponível
+    try {
+      const { data: acc } = await supabase
+        .from("accounts")
+        .select("owner_user_id")
+        .eq("id", accountId)
+        .maybeSingle();
+      if (acc?.owner_user_id) {
+        const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+        const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("phone")
+          .eq("user_id", acc.owner_user_id)
+          .maybeSingle();
+        const digits = String(prof?.phone || "").replace(/\D/g, "");
+        const number = digits.length === 10 || digits.length === 11 ? "55" + digits : digits;
+        const { data: sysInst } = await supabase
+          .from("system_whatsapp_instance")
+          .select("instance_name, status")
+          .limit(1)
+          .maybeSingle();
+        if (number && evolutionUrl && evolutionKey && sysInst?.status === "connected") {
+          await fetch(`${evolutionUrl}/message/sendText/${sysInst.instance_name}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", apikey: evolutionKey },
+            body: JSON.stringify({
+              number,
+              text: `⚠️ *Roleta sem atendente*\n\nNenhum membro está disponível${cfg?.require_online ? " (online)" : ""} para atender ${contactName || phone}.`,
+            }),
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Roulette: owner notify error", e);
+    }
     return;
   }
 
@@ -1400,6 +1438,32 @@ async function applyRouletteOnHandoff(
 
   console.log(`Roulette: contact ${phone} assigned to user ${nextUserId}`);
 
+  // Cria assignment para controle de timeout
+  const timeoutMin = cfg?.accept_timeout_minutes ?? 5;
+  try {
+    // Cancela qualquer pendente anterior para o mesmo phone na conta
+    await supabase
+      .from("roulette_assignments")
+      .update({ status: "expired", updated_at: new Date().toISOString() })
+      .eq("account_id", accountId)
+      .eq("phone", phone)
+      .eq("status", "pending");
+
+    await supabase.from("roulette_assignments").insert({
+      account_id: accountId,
+      owner_user_id: userId,
+      user_id: nextUserId,
+      phone,
+      contact_name: contactName,
+      status: "pending",
+      attempts: 1,
+      skipped_user_ids: [],
+      expires_at: new Date(Date.now() + timeoutMin * 60_000).toISOString(),
+    });
+  } catch (e) {
+    console.error("Roulette: failed to create assignment", e);
+  }
+
   // Notifica o atendente sorteado via WhatsApp do sistema
   try {
     const { data: assigneeProfile } = await supabase
@@ -1426,7 +1490,7 @@ async function applyRouletteOnHandoff(
     let target = assigneeDigits;
     if (target.length === 10 || target.length === 11) target = "55" + target;
 
-    const msg = `🎯 *Roleta de Atendimento*\n\nVocê foi designado para atender:\n\n👤 *Cliente:* ${contactName || "Desconhecido"}\n📱 *Telefone:* ${phone}\n⏰ *Horário:* ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+    const msg = `🎯 *Roleta de Atendimento*\n\nVocê foi designado para atender:\n\n👤 *Cliente:* ${contactName || "Desconhecido"}\n📱 *Telefone:* ${phone}\n⏰ *Horário:* ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}\n\n⏱️ *Inicie em até ${timeoutMin} min*, ou a vez será passada ao próximo da fila.`;
 
     await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
       method: "POST",
