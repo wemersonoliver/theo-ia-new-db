@@ -1520,35 +1520,95 @@ export type Database = {
         }
         Relationships: []
       }
+      roulette_assignments: {
+        Row: {
+          accepted_at: string | null
+          account_id: string
+          assigned_at: string
+          attempts: number
+          contact_name: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          owner_user_id: string
+          phone: string
+          skipped_user_ids: string[]
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          account_id: string
+          assigned_at?: string
+          attempts?: number
+          contact_name?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          owner_user_id: string
+          phone: string
+          skipped_user_ids?: string[]
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accepted_at?: string | null
+          account_id?: string
+          assigned_at?: string
+          attempts?: number
+          contact_name?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          owner_user_id?: string
+          phone?: string
+          skipped_user_ids?: string[]
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       roulette_config: {
         Row: {
+          accept_timeout_minutes: number
           account_id: string
           created_at: string
           enabled: boolean
           id: string
           last_assigned_at: string | null
           last_assigned_user_id: string | null
+          online_threshold_seconds: number
           participant_user_ids: string[]
+          require_online: boolean
           updated_at: string
         }
         Insert: {
+          accept_timeout_minutes?: number
           account_id: string
           created_at?: string
           enabled?: boolean
           id?: string
           last_assigned_at?: string | null
           last_assigned_user_id?: string | null
+          online_threshold_seconds?: number
           participant_user_ids?: string[]
+          require_online?: boolean
           updated_at?: string
         }
         Update: {
+          accept_timeout_minutes?: number
           account_id?: string
           created_at?: string
           enabled?: boolean
           id?: string
           last_assigned_at?: string | null
           last_assigned_user_id?: string | null
+          online_threshold_seconds?: number
           participant_user_ids?: string[]
+          require_online?: boolean
           updated_at?: string
         }
         Relationships: []
@@ -2544,6 +2604,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_roulette_assignment: {
+        Args: { _phone: string; _user_id: string }
+        Returns: string
+      }
       auto_advance_admin_deal_to_trial: {
         Args: { _user_id: string }
         Returns: undefined
@@ -2574,7 +2638,16 @@ export type Database = {
         Args: { _account_id: string }
         Returns: boolean
       }
-      roulette_pick_next: { Args: { _account_id: string }; Returns: string }
+      roulette_pick_next:
+        | { Args: { _account_id: string }; Returns: string }
+        | {
+            Args: {
+              _account_id: string
+              _exclude_user_ids?: string[]
+              _only_online?: boolean
+            }
+            Returns: string
+          }
       system_cancel_followup_sequence: {
         Args: { p_phone: string; p_reason: string }
         Returns: number
