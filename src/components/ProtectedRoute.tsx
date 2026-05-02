@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PhoneRequiredDialog } from "@/components/PhoneRequiredDialog";
 import { usePlans } from "@/hooks/usePlans";
+import { PresenceHeartbeat } from "@/hooks/usePresenceHeartbeat";
 
 const TRIAL_DAYS = 15;
 
@@ -164,6 +165,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   return (
     <>
+      <PresenceHeartbeat />
       {needsPhone && user && (
         <PhoneRequiredDialog
           open={needsPhone}
