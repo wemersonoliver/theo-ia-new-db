@@ -41,7 +41,7 @@ import { useMemo } from "react";
 import { toast } from "sonner";
 import { FinalizeDialog } from "@/components/conversations/FinalizeDialog";
 import { useFinalizeConversation } from "@/hooks/useFinalizeConversation";
-import { useAccountRole } from "@/hooks/useAccount";
+import { useAccount } from "@/hooks/useAccount";
 
 // ── Chat messages ─────────────────────────────────────────────────────────────
 function ChatMessages({ messages, className }: { messages: Message[]; className?: string }) {
