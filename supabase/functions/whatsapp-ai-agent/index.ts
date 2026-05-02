@@ -1091,6 +1091,123 @@ function extractDigitsFromRemoteJid(remoteJid: string | null | undefined): strin
     .replace(/\D/g, "");
 }
 
+async function executeTransferToDepartment(
+  supabase: any,
+  userId: string,
+  accountId: string | null,
+  phone: string,
+  departmentSlug: string,
+  reason: string,
+) {
+  try {
+    const slug = (departmentSlug || "").trim().toLowerCase();
+    if (!slug || !accountId) {
+      return { success: false, error: "Departamento inválido" };
+    }
+
+    const { data: dest } = await supabase
+      .from("whatsapp_instances")
+      .select("id, instance_name, display_name, status, ai_enabled, transfer_message, phone_number")
+      .eq("account_id", accountId)
+      .eq("department_slug", slug)
+      .maybeSingle();
+
+    if (!dest) {
+      return { success: false, error: `Departamento "${slug}" não encontrado` };
+    }
+    if (dest.status !== "connected") {
+      return { success: false, error: `Departamento "${dest.display_name || slug}" não está conectado` };
+    }
+
+    // Atualiza a conversa para apontar à nova instância e ajusta IA
+    const aiActive = dest.ai_enabled !== false;
+    await supabase
+      .from("whatsapp_conversations")
+      .update({
+        instance_id: dest.id,
+        ai_active: aiActive,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId)
+      .eq("phone", phone);
+
+    // Reseta sessão IA para o novo departamento começar limpo
+    await supabase
+      .from("whatsapp_ai_sessions")
+      .delete()
+      .eq("user_id", userId)
+      .eq("phone", phone);
+
+    // Mensagem padrão se a instância destino não tiver definida
+    const message =
+      (dest.transfer_message && String(dest.transfer_message).trim()) ||
+      `Olá! A partir de agora seu atendimento continuará por aqui (${dest.display_name || slug}). Em breve responderemos.`;
+
+    // Envia pelo Evolution usando a instância de destino
+    try {
+      const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+      const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+      if (evolutionUrl && evolutionKey) {
+        const candidates = [phone];
+        const variant = getBrazilianPhoneVariant(phone);
+        if (variant && variant !== phone) candidates.push(variant);
+        for (const number of candidates) {
+          const r = await fetch(`${evolutionUrl}/message/sendText/${dest.instance_name}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", apikey: evolutionKey },
+            body: JSON.stringify({ number, text: message }),
+          });
+          if (r.ok) break;
+        }
+      }
+    } catch (e) {
+      console.error("Transfer message send error:", e);
+    }
+
+    // Persiste a mensagem no histórico da conversa
+    try {
+      const { data: conv } = await supabase
+        .from("whatsapp_conversations")
+        .select("id, messages, total_messages")
+        .eq("user_id", userId)
+        .eq("phone", phone)
+        .maybeSingle();
+      if (conv) {
+        const newMsg = {
+          id: crypto.randomUUID(),
+          timestamp: new Date().toISOString(),
+          from_me: true,
+          content: message,
+          type: "text",
+          sent_by: "ai",
+        };
+        const updated = [...((conv as any).messages || []), newMsg];
+        await supabase
+          .from("whatsapp_conversations")
+          .update({
+            messages: updated,
+            total_messages: updated.length,
+            last_message_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", (conv as any).id);
+      }
+    } catch (e) {
+      console.error("Persist transfer message error:", e);
+    }
+
+    return {
+      success: true,
+      department: dest.display_name || slug,
+      ai_enabled: aiActive,
+      reason: reason || null,
+    };
+  } catch (error) {
+    console.error("executeTransferToDepartment error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Erro" };
+  }
+}
+
 async function resolvePreferredChatNumber(instanceName: string, normalizedPhone: string, evolutionUrl: string, evolutionKey: string) {
   try {
     const variant = getBrazilianPhoneVariant(normalizedPhone);
