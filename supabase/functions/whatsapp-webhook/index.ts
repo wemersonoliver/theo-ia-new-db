@@ -582,7 +582,7 @@ serve(async (req) => {
         // Get or create conversation
         const { data: conversation } = await supabase
           .from("whatsapp_conversations")
-          .select("id, messages, ai_active")
+          .select("id, messages, ai_active, outcome, assigned_to")
           .eq("user_id", userId)
           .eq("phone", phone)
           .maybeSingle();
