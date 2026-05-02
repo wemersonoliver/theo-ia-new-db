@@ -113,8 +113,28 @@ serve(async (req) => {
       return jsonResponse({ error: "Erro de configuração do servidor" }, 500);
     }
 
-    // Padrão de nomeação: user_id completo (UUID). Garante unicidade absoluta por usuário.
-    const instanceName = userId;
+    // Reutiliza nome existente, se houver, para preservar instâncias já criadas.
+    const { data: existingInstance } = await supabase
+      .from("whatsapp_instances")
+      .select("instance_name")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    let instanceName = existingInstance?.instance_name || "";
+
+    if (!instanceName) {
+      // Padrão de nomeação: user_code da tabela profiles (ex.: "user_123").
+      // Fallback: UUID completo para garantir unicidade caso o code não exista.
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("user_code")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      instanceName = profileRow?.user_code
+        ? `user_${profileRow.user_code}`
+        : userId;
+    }
 
     // Check if instance exists
     let instanceExists = false;
