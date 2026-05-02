@@ -316,6 +316,13 @@ serve(async (req) => {
       // Notify registered contacts about handoff
       await notifyHandoff(supabase, userId, phone, contactName);
 
+      // Roleta de Atendimento: sorteia próximo atendente entre os membros da conta
+      try {
+        await applyRouletteOnHandoff(supabase, accountId, userId, phone, contactName);
+      } catch (e) {
+        console.error("Error applying roulette on handoff:", e);
+      }
+
       // Move CRM deal to "Atendimento humano"
       try {
         await moveCRMDealToHumanStage(supabase, userId, phone);
@@ -1312,5 +1319,121 @@ async function moveCRMDealToHumanStage(supabase: any, userId: string, phone: str
       .update({ stage_id: humanStage.id, updated_at: new Date().toISOString() })
       .eq("id", deals[0].id);
     console.log("CRM deal moved to Atendimento humano on handoff:", phone);
+  }
+}
+
+async function applyRouletteOnHandoff(
+  supabase: any,
+  accountId: string | null,
+  userId: string,
+  phone: string,
+  contactName: string | null,
+) {
+  if (!accountId) {
+    console.log("Roulette skipped: no account_id");
+    return;
+  }
+
+  // Verifica se a conta tem múltiplos membros ativos (roleta só faz sentido em multi-user)
+  const { data: members } = await supabase
+    .from("account_members")
+    .select("user_id")
+    .eq("account_id", accountId)
+    .eq("status", "active");
+
+  if (!members || members.length < 2) {
+    console.log("Roulette skipped: single-user account");
+    return;
+  }
+
+  // Verifica se a roleta está ativa
+  const { data: cfg } = await supabase
+    .from("roulette_config")
+    .select("enabled")
+    .eq("account_id", accountId)
+    .maybeSingle();
+
+  if (!cfg?.enabled) {
+    console.log("Roulette skipped: disabled");
+    return;
+  }
+
+  // Sorteia próximo atendente
+  const { data: nextUserId, error } = await supabase.rpc("roulette_pick_next", {
+    _account_id: accountId,
+  });
+
+  if (error || !nextUserId) {
+    console.error("Roulette: failed to pick next user", error);
+    return;
+  }
+
+  // Atribui a conversa, contato e deal CRM ao usuário sorteado
+  await supabase
+    .from("whatsapp_conversations")
+    .update({ assigned_to: nextUserId, updated_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("phone", phone);
+
+  await supabase
+    .from("contacts")
+    .update({ assigned_to: nextUserId, updated_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("phone", phone);
+
+  // Atualiza deal CRM ativo (se houver) com o assigned_to
+  const { data: contact } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("phone", phone)
+    .maybeSingle();
+
+  if (contact?.id) {
+    await supabase
+      .from("crm_deals")
+      .update({ assigned_to: nextUserId, updated_at: new Date().toISOString() })
+      .eq("contact_id", contact.id)
+      .is("won_at", null)
+      .is("lost_at", null);
+  }
+
+  console.log(`Roulette: contact ${phone} assigned to user ${nextUserId}`);
+
+  // Notifica o atendente sorteado via WhatsApp do sistema
+  try {
+    const { data: assigneeProfile } = await supabase
+      .from("profiles")
+      .select("phone, full_name")
+      .eq("user_id", nextUserId)
+      .maybeSingle();
+
+    const assigneeDigits = String(assigneeProfile?.phone || "").replace(/\D/g, "");
+    if (!assigneeDigits) return;
+
+    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+    if (!evolutionUrl || !evolutionKey) return;
+
+    const { data: sysInstance } = await supabase
+      .from("system_whatsapp_instance")
+      .select("instance_name, status")
+      .limit(1)
+      .maybeSingle();
+
+    if (!sysInstance || sysInstance.status !== "connected") return;
+
+    let target = assigneeDigits;
+    if (target.length === 10 || target.length === 11) target = "55" + target;
+
+    const msg = `🎯 *Roleta de Atendimento*\n\nVocê foi designado para atender:\n\n👤 *Cliente:* ${contactName || "Desconhecido"}\n📱 *Telefone:* ${phone}\n⏰ *Horário:* ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+
+    await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: evolutionKey },
+      body: JSON.stringify({ number: target, text: msg }),
+    });
+  } catch (err) {
+    console.error("Roulette assignee notify error:", err);
   }
 }

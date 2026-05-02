@@ -11,6 +11,7 @@ import { NotificationsTab } from "@/components/settings/NotificationsTab";
 import { TutorialTab } from "@/components/settings/TutorialTab";
 import { TeamTab } from "@/components/team/TeamTab";
 import { DangerZoneTab } from "@/components/settings/DangerZoneTab";
+import { RouletteTab } from "@/components/settings/RouletteTab";
 import { useAccount } from "@/hooks/useAccount";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -101,6 +102,7 @@ export default function Settings() {
           <TabsTrigger value="profile" className="min-w-fit">Perfil</TabsTrigger>
           <TabsTrigger value="modules" className="min-w-fit">Módulos</TabsTrigger>
           {isOwner && <TabsTrigger value="team" className="min-w-fit">Equipe</TabsTrigger>}
+          <TabsTrigger value="roulette" className="min-w-fit">Roleta</TabsTrigger>
           <TabsTrigger value="notifications" className="min-w-fit">Notificações</TabsTrigger>
           <TabsTrigger value="appearance" className="min-w-fit">Aparência</TabsTrigger>
           <TabsTrigger value="security" className="min-w-fit">Segurança</TabsTrigger>
@@ -201,6 +203,10 @@ export default function Settings() {
 
         <TabsContent value="team">
           <TeamTab />
+        </TabsContent>
+
+        <TabsContent value="roulette">
+          <RouletteTab />
         </TabsContent>
 
         <TabsContent value="appearance">
