@@ -547,6 +547,29 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
 `;
     }
 
+    // Departamentos disponíveis no account (multi-instância)
+    let departmentsBlock = "";
+    try {
+      if (accountId) {
+        const { data: depts } = await supabase
+          .from("whatsapp_instances")
+          .select("id, display_name, department_slug, status, ai_enabled")
+          .eq("account_id", accountId);
+        const list = (depts || []).filter((d: any) => d.department_slug && d.status === "connected");
+        const currentSlug = list.find((d: any) => d.id === (conversation as any)?.instance_id)?.department_slug;
+        const others = list.filter((d: any) => d.department_slug !== currentSlug);
+        if (others.length > 0) {
+          departmentsBlock = `\nDEPARTAMENTOS DISPONÍVEIS PARA TRANSFERÊNCIA:\n` +
+            others.map((d: any) =>
+              `- ${d.display_name || d.department_slug} (slug: ${d.department_slug})${d.ai_enabled === false ? " — atendido por humano" : " — atendido por IA"}`
+            ).join("\n") +
+            `\n\nUse a ferramenta transfer_to_department APENAS quando o cliente claramente precisa de outro setor. Departamento atual: ${currentSlug || "principal"}.\n`;
+        }
+      }
+    } catch (e) {
+      console.error("Error loading departments:", e);
+    }
+
     // Build system prompt with scheduling capabilities
     const nicheLine = aiConfig.business_niche
       ? `Você é ${aiConfig.agent_name || "um assistente virtual"}, atendente especializado(a) no nicho de ${aiConfig.business_niche} via WhatsApp.
@@ -563,6 +586,8 @@ ${businessDescriptionBlock}
 ${aiConfig.custom_prompt || "Seja cordial, profissional e prestativo."}
 
 ${returningClientContext}
+
+${departmentsBlock}
 
 ${knowledgeBase ? `Trechos relevantes da base de conhecimento (use para responder; se não houver informação suficiente, peça ao cliente para esperar a equipe):\n\n${knowledgeBase}` : ""}
 
