@@ -1,72 +1,92 @@
-## Regra: Finalizar atendimento exige classificação (Ganho / Perdido / Desistência)
 
-Todo atendimento (conversa) só pode ser encerrado depois que o atendente o classificar como **Ganho**, **Perdido** ou **Desistência**. A classificação atualiza automaticamente o negócio (deal) vinculado, alimenta as métricas individuais do atendente e as métricas gerais do sistema, com filtro por funil no dashboard.
+## Objetivo
 
-### O que o usuário verá
+Mudar a centralização do sistema de "usuário" para "negócio" (account):
+1. Capturar **Nome do Negócio** no cadastro e permitir editá-lo no Perfil.
+2. Substituir o "ID de Usuário" (`profiles.user_code`) por um **ID do Negócio** (`accounts.business_code`) — único por conta, não por usuário. Assim, todos os membros (owner + equipe) de uma mesma empresa compartilham o mesmo ID exibido.
 
-- Novo botão **"Finalizar atendimento"** no topo do chat (ao lado do nome do contato), visível para o atendente responsável (e owner/manager).
-- Ao clicar, abre um diálogo "Como foi este atendimento?" com 3 opções grandes e coloridas:
-  - **Ganho** (verde) — pede valor da venda (opcional, pré-preenchido com valor do deal) e observação.
-  - **Perdido** (vermelho) — pede motivo (campo de texto curto, obrigatório).
-  - **Desistência** (cinza) — pede observação (opcional).
-- Sem classificação, o chat permanece aberto. Se o atendente tentar fechar/arquivar a conversa, o sistema bloqueia com aviso "Classifique o atendimento antes de finalizá-lo".
-- Após classificar:
-  - A conversa é marcada como finalizada e some da lista ativa (filtro padrão "Em atendimento"); aparece em um novo filtro "Finalizadas" com badge da classificação.
-  - O deal correspondente é movido automaticamente para a etapa Ganho/Perdido do funil dele e recebe `won_at`/`lost_at` + motivo.
-  - Toast de confirmação e som curto.
-- No **Dashboard** novos cartões e quebras:
-  - KPIs novos: **Ganhos**, **Perdidos**, **Desistências**, **Taxa de conversão (Ganho / Total finalizados)**.
-  - Tabela "Desempenho por atendente" ganha colunas **Ganhos / Perdidos / Desist. / Conv.%**.
-  - Os filtros existentes (período, atendente, funil) já se aplicam aos novos números.
+Hoje a tabela `accounts` já existe e cada owner tem 1 account. Vamos só adicionar `business_code` e `name` editável.
 
-### Banco de dados
+---
 
-Migration:
+## 1. Banco de dados (migração)
 
-- `whatsapp_conversations`:
-  - `outcome text` — valores: `won` | `lost` | `abandoned` | `null` (em aberto).
-  - `outcome_reason text` — motivo/observação.
-  - `outcome_value_cents integer` — valor (apenas para Ganho).
-  - `closed_at timestamptz` — quando foi finalizada.
-  - `closed_by uuid` — atendente que finalizou.
-- Índice em `(account_id, closed_at)` e `(account_id, outcome)`.
-- Para cada `crm_pipelines` sem etapa "Ganho"/"Perdido", a migration insere as etapas faltantes ao final (cor verde/vermelho). Atendimento humano segue como etapa intermediária.
+Tabela `public.accounts`:
+- Adicionar coluna `business_code integer UNIQUE` com sequência iniciando em **1000** (para não colidir visualmente com os `user_code` antigos que começam em 100).
+- Backfill: gerar `business_code` para todas as accounts existentes.
+- Tornar `NOT NULL` após backfill.
 
-### Backend (lógica de finalização)
+Atualizar trigger `handle_new_user_account` para usar o `business_name` enviado em `raw_user_meta_data` (campo novo `business_name`), com fallback para `full_name`/"Minha Empresa".
 
-Nova edge function `finalize-conversation` (ou RPC `finalize_conversation`) — preferimos RPC SECURITY DEFINER para atomicidade:
+Não vamos remover `profiles.user_code` (ainda usado por edge functions tipo `create-whatsapp-instance` para nomear instâncias Evolution e por `repair-whatsapp-webhook`). Mantemos como identificador interno técnico; apenas a UI deixa de exibi-lo.
 
-1. Valida que o caller é o `assigned_to` da conversa OU owner/manager.
-2. Valida `outcome ∈ {won, lost, abandoned}` e exige `outcome_reason` quando `lost`.
-3. Atualiza `whatsapp_conversations` com `outcome`, `outcome_reason`, `outcome_value_cents`, `closed_at = now()`, `closed_by = auth.uid()`, `ai_active = false`.
-4. Localiza o `crm_deals` ativo do contato no funil ativo do atendente:
-   - `won` → move para etapa "Ganho", seta `won_at = now()`, atualiza `value_cents` se enviado.
-   - `lost` → move para "Perdido", seta `lost_at = now()`, `lost_reason = motivo`.
-   - `abandoned` → move para "Perdido" com `lost_reason = 'Desistência: ' || motivo` (mantemos só 2 colunas no Kanban; métrica separa).
-5. Cancela follow-up (`cancel_followup_sequence(_user_id, _phone, 'handoff')`).
-6. Insere `crm_activities` com tipo `outcome` registrando a ação.
+## 2. Cadastro (`src/pages/Register.tsx` + `src/lib/auth.tsx`)
 
-### Frontend
+- Novo campo **"Nome do negócio"** (obrigatório), posicionado logo após "Nome completo".
+- `signUp(...)` passa a aceitar `businessName` e envia em `options.data.business_name`.
+- Após o `signUp`, atualizar `accounts.name` para o `businessName` informado (a trigger cria a account com fallback; fazemos `update` explícito pelo `owner_user_id = user.id` para garantir).
 
-- `src/components/conversations/FinalizeDialog.tsx` (novo) — diálogo com 3 cards de classificação + campos condicionais.
-- `src/pages/Conversations.tsx` — botão "Finalizar atendimento" no header do chat; bloqueia ação de "Arquivar" se `outcome` ainda for null; adiciona aba/filtro "Finalizadas" na lista lateral com badge colorido.
-- `src/hooks/useConversations.ts` — incluir novos campos no select e tipos.
-- `src/hooks/useFinalizeConversation.ts` (novo) — mutation que chama a RPC, faz invalidate de `conversations`, `crm-deals` e `dashboard-metrics`.
-- `src/lib/dashboard-metrics.ts` + `src/hooks/useDashboardMetrics.ts`:
-  - Adicionar contagem de `won/lost/abandoned` no período usando `closed_at` + `outcome`.
-  - Por atendente: agregação por `closed_by`.
-  - Aplicar filtro de funil: cruzar `phone` da conversa com contatos cujos deals pertencem a stages do funil escolhido (mesma lógica já usada para tempo de espera).
-- `src/components/dashboard/KPICards.tsx` — novos 3 cards (Ganhos / Perdidos / Desistências) e card de Taxa de conversão.
-- `src/components/dashboard/SellerPerformanceTable.tsx` — colunas Ganhos, Perdidos, Desistências, Conv.%.
+## 3. Perfil (`src/pages/Settings.tsx` — aba Perfil)
 
-### Permissões / RLS
+- Substituir o bloco "Seu ID de Usuário" (#user_code) por **"ID do Negócio"** (#business_code) buscado de `accounts` via `useAccount()`.
+- Adicionar campo editável **"Nome do negócio"** (apenas owner pode editar — usar `isOwner` do `useAccount`). Salva em `accounts.name`.
+- Texto auxiliar: "Use este ID ao entrar em contato com o suporte".
 
-- A RPC roda como `SECURITY DEFINER` validando `auth.uid()`.
-- Policies existentes já cobrem leitura/escrita de `whatsapp_conversations`/`crm_deals` por membros da conta.
-- Owner/manager pode reabrir um atendimento (limpar `outcome`) — botão "Reabrir" só aparece para esses papéis.
+## 4. Hook `useAccount.ts`
 
-### Detalhes técnicos relevantes
+- Incluir `business_code` no select de `accounts` e expor em `AccountMembership`.
 
-- O Kanban e o `useDashboardMetrics` já usam `won_at`/`lost_at` do `crm_deals`, então as métricas atuais de Vendas continuam funcionando — os novos KPIs derivam de `whatsapp_conversations.outcome` para refletir "atendimento finalizado", que é independente de venda fechada via Kanban.
-- "Desistência" não tem campo nativo no `crm_deals`; usamos `lost_at` + `lost_reason` prefixado para manter o funil consistente, mas o relatório no dashboard mostra a coluna separada baseada no `outcome` da conversa.
-- Notificações desktop (hook `useBrowserNotifications` já existente) emitem aviso quando outro membro finaliza um atendimento que estava atribuído a você (caso de override por owner).
+## 5. Painel Admin (`src/pages/AdminUsers.tsx` + `supabase/functions/admin-users`)
+
+- Adicionar coluna **"ID Negócio"** (#business_code) ao lado ou substituindo o "#user_code" exibido hoje.
+- Edge function `admin-users` retorna `business_code` e `business_name` (join com `accounts` pelo `owner_user_id`).
+- Filtro de busca passa a aceitar busca pelo `business_code` também.
+
+## 6. Onboarding / Suporte (referências ao ID)
+
+- Em `mem://features/help-support-system` e fluxos onde a IA de suporte pede "código do usuário", trocar prompt para "código do negócio". (Atualizar `support-ai-agent` e `system-followup-*` se referenciarem `user_code` em mensagens — verificar antes de editar.)
+
+## 7. Compatibilidade
+
+- `create-whatsapp-instance` continua usando `user_code` para nomear instância Evolution (`user_<code>`). **Não muda** — é identificador técnico interno do owner, e renomear instâncias quebraria conexões existentes.
+- Em uma fase futura (não neste plano) podemos avaliar renomear instâncias para `biz_<business_code>`.
+
+---
+
+## Detalhes técnicos
+
+### SQL da migração
+```sql
+CREATE SEQUENCE IF NOT EXISTS accounts_business_code_seq START WITH 1000;
+ALTER TABLE public.accounts
+  ADD COLUMN business_code integer UNIQUE DEFAULT nextval('accounts_business_code_seq');
+UPDATE public.accounts SET business_code = nextval('accounts_business_code_seq')
+  WHERE business_code IS NULL;
+ALTER TABLE public.accounts ALTER COLUMN business_code SET NOT NULL;
+```
+
+Trigger atualizada (substitui a existente `handle_new_user_account`) para ler `NEW.raw_user_meta_data->>'business_name'` antes de cair em `full_name`.
+
+### Validação no Register
+- `businessName.trim().length >= 2` obrigatório, senão toast e bloqueia submit.
+
+### RLS de `accounts`
+- Já permite owner atualizar (verificar policies existentes; se faltar UPDATE, adicionar policy `owner_user_id = auth.uid()`).
+
+---
+
+## Arquivos afetados
+
+- **Nova migração SQL** (coluna + sequence + trigger atualizada + policy update se faltar)
+- `src/pages/Register.tsx` — novo campo
+- `src/lib/auth.tsx` — assinatura `signUp` + update da account
+- `src/pages/Settings.tsx` — exibição do ID do negócio + edição do nome
+- `src/hooks/useAccount.ts` — incluir `business_code`
+- `src/pages/AdminUsers.tsx` — coluna ID Negócio + busca
+- `supabase/functions/admin-users/index.ts` — retornar campos do negócio
+
+## Fora do escopo
+
+- Renomear instâncias Evolution já existentes.
+- Migrar `profiles.user_code` (mantido como identificador técnico interno).
+- Mudanças em landing/marketing.
