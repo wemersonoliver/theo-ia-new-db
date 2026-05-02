@@ -15,10 +15,11 @@ function formatBRL(cents: number): string {
 export function SellerPerformanceTable({ metrics }: Props) {
   const { members } = useTeamMembers();
   const rows = (metrics?.perSeller || [])
-    .filter((r) => r.leads + r.services + r.appointments + r.sales > 0)
+    .filter((r) => r.leads + r.services + r.appointments + r.sales + r.won + r.lost + r.abandoned > 0)
     .map((r) => {
       const member = members.find((m) => m.user_id === r.user_id);
-      const conversion = r.leads > 0 ? Math.round((r.sales / r.leads) * 100) : 0;
+      const finalized = r.won + r.lost + r.abandoned;
+      const conversion = finalized > 0 ? Math.round((r.won / finalized) * 100) : 0;
       return {
         ...r,
         name:
@@ -28,7 +29,7 @@ export function SellerPerformanceTable({ metrics }: Props) {
         conversion,
       };
     })
-    .sort((a, b) => b.sales - a.sales);
+    .sort((a, b) => b.won - a.won);
 
   return (
     <Card>
@@ -50,7 +51,9 @@ export function SellerPerformanceTable({ metrics }: Props) {
                   <TableHead className="text-right">Leads</TableHead>
                   <TableHead className="text-right">Atend.</TableHead>
                   <TableHead className="text-right">Agend.</TableHead>
-                  <TableHead className="text-right">Vendas</TableHead>
+                  <TableHead className="text-right">Ganhos</TableHead>
+                  <TableHead className="text-right">Perdidos</TableHead>
+                  <TableHead className="text-right">Desist.</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead className="text-right">Conv. %</TableHead>
                 </TableRow>
@@ -62,7 +65,9 @@ export function SellerPerformanceTable({ metrics }: Props) {
                     <TableCell className="text-right tabular-nums">{r.leads}</TableCell>
                     <TableCell className="text-right tabular-nums">{r.services}</TableCell>
                     <TableCell className="text-right tabular-nums">{r.appointments}</TableCell>
-                    <TableCell className="text-right tabular-nums">{r.sales}</TableCell>
+                    <TableCell className="text-right tabular-nums text-emerald-600 font-medium">{r.won}</TableCell>
+                    <TableCell className="text-right tabular-nums text-rose-600">{r.lost}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">{r.abandoned}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatBRL(r.salesValueCents)}</TableCell>
                     <TableCell className="text-right tabular-nums">{r.conversion}%</TableCell>
                   </TableRow>
