@@ -983,6 +983,7 @@ export type Database = {
           id: string
           inactivity_hours: number
           inactivity_unit: string
+          instance_id: string | null
           max_days: number
           morning_window_end: string
           morning_window_start: string
@@ -1000,6 +1001,7 @@ export type Database = {
           id?: string
           inactivity_hours?: number
           inactivity_unit?: string
+          instance_id?: string | null
           max_days?: number
           morning_window_end?: string
           morning_window_start?: string
@@ -1017,6 +1019,7 @@ export type Database = {
           id?: string
           inactivity_hours?: number
           inactivity_unit?: string
+          instance_id?: string | null
           max_days?: number
           morning_window_end?: string
           morning_window_start?: string
@@ -2360,6 +2363,7 @@ export type Database = {
           initial_message_1: string | null
           initial_message_2: string | null
           initial_message_3: string | null
+          instance_id: string | null
           keyword_activation_enabled: boolean | null
           max_messages_without_human: number | null
           out_of_hours_message: string | null
@@ -2393,6 +2397,7 @@ export type Database = {
           initial_message_1?: string | null
           initial_message_2?: string | null
           initial_message_3?: string | null
+          instance_id?: string | null
           keyword_activation_enabled?: boolean | null
           max_messages_without_human?: number | null
           out_of_hours_message?: string | null
@@ -2426,6 +2431,7 @@ export type Database = {
           initial_message_1?: string | null
           initial_message_2?: string | null
           initial_message_3?: string | null
+          instance_id?: string | null
           keyword_activation_enabled?: boolean | null
           max_messages_without_human?: number | null
           out_of_hours_message?: string | null
@@ -2446,6 +2452,7 @@ export type Database = {
           created_at: string | null
           handed_off_at: string | null
           id: string
+          instance_id: string | null
           last_human_message_at: string | null
           messages: Json | null
           messages_without_human: number | null
@@ -2459,6 +2466,7 @@ export type Database = {
           created_at?: string | null
           handed_off_at?: string | null
           id?: string
+          instance_id?: string | null
           last_human_message_at?: string | null
           messages?: Json | null
           messages_without_human?: number | null
@@ -2472,6 +2480,7 @@ export type Database = {
           created_at?: string | null
           handed_off_at?: string | null
           id?: string
+          instance_id?: string | null
           last_human_message_at?: string | null
           messages?: Json | null
           messages_without_human?: number | null
@@ -2492,6 +2501,7 @@ export type Database = {
           contact_name: string | null
           created_at: string | null
           id: string
+          instance_id: string | null
           last_message_at: string | null
           messages: Json | null
           outcome: string | null
@@ -2513,6 +2523,7 @@ export type Database = {
           contact_name?: string | null
           created_at?: string | null
           id?: string
+          instance_id?: string | null
           last_message_at?: string | null
           messages?: Json | null
           outcome?: string | null
@@ -2534,6 +2545,7 @@ export type Database = {
           contact_name?: string | null
           created_at?: string | null
           id?: string
+          instance_id?: string | null
           last_message_at?: string | null
           messages?: Json | null
           outcome?: string | null
@@ -2551,43 +2563,61 @@ export type Database = {
       whatsapp_instances: {
         Row: {
           account_id: string | null
+          ai_enabled: boolean
           created_at: string | null
+          department_slug: string | null
+          display_name: string | null
+          followup_enabled: boolean
           id: string
           instance_name: string
+          is_primary: boolean
           last_sync_at: string | null
           pairing_code: string | null
           phone_number: string | null
           profile_name: string | null
           qr_code_base64: string | null
           status: string | null
+          transfer_message: string | null
           updated_at: string | null
           user_id: string
         }
         Insert: {
           account_id?: string | null
+          ai_enabled?: boolean
           created_at?: string | null
+          department_slug?: string | null
+          display_name?: string | null
+          followup_enabled?: boolean
           id?: string
           instance_name: string
+          is_primary?: boolean
           last_sync_at?: string | null
           pairing_code?: string | null
           phone_number?: string | null
           profile_name?: string | null
           qr_code_base64?: string | null
           status?: string | null
+          transfer_message?: string | null
           updated_at?: string | null
           user_id: string
         }
         Update: {
           account_id?: string | null
+          ai_enabled?: boolean
           created_at?: string | null
+          department_slug?: string | null
+          display_name?: string | null
+          followup_enabled?: boolean
           id?: string
           instance_name?: string
+          is_primary?: boolean
           last_sync_at?: string | null
           pairing_code?: string | null
           phone_number?: string | null
           profile_name?: string | null
           qr_code_base64?: string | null
           status?: string | null
+          transfer_message?: string | null
           updated_at?: string | null
           user_id?: string
         }
@@ -2598,6 +2628,7 @@ export type Database = {
           account_id: string | null
           created_at: string | null
           id: string
+          instance_id: string | null
           phone: string
           processed: boolean | null
           scheduled_at: string
@@ -2608,6 +2639,7 @@ export type Database = {
           account_id?: string | null
           created_at?: string | null
           id?: string
+          instance_id?: string | null
           phone: string
           processed?: boolean | null
           scheduled_at: string
@@ -2618,6 +2650,7 @@ export type Database = {
           account_id?: string | null
           created_at?: string | null
           id?: string
+          instance_id?: string | null
           phone?: string
           processed?: boolean | null
           scheduled_at?: string
@@ -2635,6 +2668,7 @@ export type Database = {
         Args: { _phone: string; _user_id: string }
         Returns: string
       }
+      account_plan_tier: { Args: { _account_id: string }; Returns: string }
       auto_advance_admin_deal_to_trial: {
         Args: { _user_id: string }
         Returns: undefined
