@@ -223,7 +223,7 @@ export function useDashboardMetrics(
       // Per seller breakdown
       const sellerMap: Record<
         string,
-        { user_id: string; leads: number; services: number; appointments: number; sales: number; salesValueCents: number }
+        { user_id: string; leads: number; services: number; appointments: number; sales: number; salesValueCents: number; won: number; lost: number; abandoned: number }
       > = {};
       const ensure = (uid: string | null) => {
         const k = uid || "__unassigned__";
