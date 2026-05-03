@@ -791,7 +791,7 @@ const ChatPanel = ({
   </Card>
 );
 
-function PromptTestTab() {
+export function PromptTestTab() {
   const { user } = useAuth();
 
   // Test chat state
