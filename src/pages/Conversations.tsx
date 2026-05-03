@@ -500,41 +500,15 @@ export default function Conversations() {
                   <span>Finalizar</span>
                 </Button>
               )}
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full gap-1.5 justify-center text-destructive hover:text-destructive">
-                    <Trash2 className="h-4 w-4" />
-                    <span>Excluir</span>
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      A conversa será removida permanentemente.
-                      {!selectedConversation?.outcome && (
-                        <span className="block mt-2 text-amber-600 font-medium">
-                          Classifique o atendimento antes de excluir.
-                        </span>
-                      )}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction
-                      disabled={!selectedConversation?.outcome}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      onClick={() => {
-                        if (!selectedConversation?.outcome) return;
-                        deleteConversation.mutate({ phone: selectedPhone! });
-                        setSelectedPhone(null);
-                      }}
-                    >
-                      Excluir
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full gap-1.5 justify-center text-destructive hover:text-destructive"
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Excluir</span>
+              </Button>
             </div>
 
             {/* Messages */}
@@ -595,6 +569,36 @@ export default function Conversations() {
           contactName={selectedConversation?.contact_name}
           onFinalized={() => setSelectedPhone(null)}
         />
+        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
+              <AlertDialogDescription>
+                A conversa será removida permanentemente.
+                {!selectedConversation?.outcome && (
+                  <span className="block mt-2 text-amber-600 font-medium">
+                    Classifique o atendimento antes de excluir.
+                  </span>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={!selectedConversation?.outcome}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => {
+                  if (!selectedConversation?.outcome) return;
+                  deleteConversation.mutate({ phone: selectedPhone! });
+                  setDeleteOpen(false);
+                  closeMobileChat();
+                }}
+              >
+                Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DashboardLayout>
     );
   }
