@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
-import { Key, User, Loader2, Sun, Moon, Hash, CalendarCog, CreditCard, FileText, Bot, ChevronRight } from "lucide-react";
+import { Key, User, Loader2, Sun, Moon, Hash, CalendarCog, CreditCard, FileText, ChevronRight } from "lucide-react";
 import { NotificationsTab } from "@/components/settings/NotificationsTab";
 import { TutorialTab } from "@/components/settings/TutorialTab";
 import { TeamTab } from "@/components/team/TeamTab";
@@ -221,7 +221,6 @@ export default function Settings() {
                 { to: "/appointment-settings", icon: CalendarCog, title: "Configuração de Horários", desc: "Tipos de agendamento e disponibilidade" },
                 { to: "/subscriptions", icon: CreditCard, title: "Assinaturas", desc: "Gerenciar plano e pagamentos" },
                 { to: "/knowledge-base", icon: FileText, title: "Base de Conhecimento", desc: "Documentos usados pela IA" },
-                { to: "/ai-agent", icon: Bot, title: "Agente de IA", desc: "Personalidade, prompts e voz" },
               ].map((m) => (
                 <button
                   key={m.to}
