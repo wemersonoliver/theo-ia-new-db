@@ -229,13 +229,6 @@ export function useDashboardMetrics(
       let followupConvCur = 0;
       let followupConvPrev = 0;
       {
-        const { data: fuActive } = await supabase
-          .from("followup_tracking")
-          .select("id", { count: "exact", head: true })
-          .eq("account_id", accountId)
-          .in("status", ["pending", "scheduled"]);
-        followupActiveCur = (fuActive as any)?.length ?? 0;
-        // head:true returns no rows; need count via separate request
         const { count: activeCount } = await supabase
           .from("followup_tracking")
           .select("id", { count: "exact", head: true })
