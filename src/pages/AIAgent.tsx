@@ -319,9 +319,14 @@ function InterviewTab({
           .eq("id", interviewId);
       }
 
-      // Salva nas instruções do agente IA
-      await saveConfig.mutateAsync({ custom_prompt: editablePrompt });
-      toast.success("Prompt aplicado às Instruções Personalizadas!");
+      // Salva nas instruções do agente IA + ativa com atendimento 24h por padrão
+      await saveConfig.mutateAsync({
+        custom_prompt: editablePrompt,
+        active: true,
+        business_hours_start: "00:00",
+        business_hours_end: "23:59",
+      });
+      toast.success("Agente ativado com atendimento 24h!");
       onPromptApplied();
     } catch {
       toast.error("Erro ao aplicar o prompt");
