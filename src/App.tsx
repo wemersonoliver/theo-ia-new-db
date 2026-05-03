@@ -15,6 +15,7 @@ import ForceChangePassword from "./pages/ForceChangePassword";
 import Dashboard from "./pages/Dashboard";
 import WhatsApp from "./pages/WhatsApp";
 import AIAgent from "./pages/AIAgent";
+import SimulateAttendance from "./pages/SimulateAttendance";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import Conversations from "./pages/Conversations";
 import Contacts from "./pages/Contacts";
@@ -77,6 +78,7 @@ const App = () => (
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/whatsapp" element={<ProtectedRoute><WhatsApp /></ProtectedRoute>} />
               <Route path="/ai-agent" element={<ProtectedRoute><AIAgent /></ProtectedRoute>} />
+              <Route path="/simulate-attendance" element={<ProtectedRoute><SimulateAttendance /></ProtectedRoute>} />
               <Route path="/knowledge-base" element={<ProtectedRoute><KnowledgeBase /></ProtectedRoute>} />
               <Route path="/conversations" element={<ProtectedRoute><Conversations /></ProtectedRoute>} />
               <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />

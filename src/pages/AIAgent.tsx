@@ -791,7 +791,7 @@ const ChatPanel = ({
   </Card>
 );
 
-function PromptTestTab() {
+export function PromptTestTab() {
   const { user } = useAuth();
 
   // Test chat state
@@ -929,8 +929,8 @@ function PromptTestTab() {
         accentClass="text-primary"
       />
       <ChatPanel
-        title="IA Geradora de Prompt"
-        subtitle="Analise o teste e ajuste o prompt em tempo real"
+        title="Ajustar Atendimento"
+        subtitle="Analise o teste e ajuste o seu assistente em tempo real"
         icon={Wand2}
         messages={genMessages}
         input={genInput}
@@ -942,7 +942,7 @@ function PromptTestTab() {
         placeholder="Peça análises ou ajustes no prompt..."
         emptyIcon={Wand2}
         emptyTitle="Consultor de Prompt"
-        emptyDesc="Converse com a IA para analisar o atendimento ao lado e atualizar o prompt automaticamente."
+        emptyDesc="Converse com a IA para analisar o atendimento ao lado e atualizar o seu agente automaticamente."
         accentClass="text-warning"
       />
     </div>
@@ -1088,10 +1088,6 @@ export default function AIAgent() {
           <TabsTrigger value="location" className="min-w-fit gap-1.5">
             <MapPin className="h-3.5 w-3.5" />
             Localização
-          </TabsTrigger>
-          <TabsTrigger value="test" className="min-w-fit gap-1.5">
-            <FlaskConical className="h-3.5 w-3.5" />
-            Testar Prompt
           </TabsTrigger>
           <TabsTrigger value="followup" className="min-w-fit gap-1.5">
             <Repeat className="h-3.5 w-3.5" />
@@ -1519,11 +1515,6 @@ export default function AIAgent() {
         {/* ── ABA ENTREVISTA IA ── */}
         <TabsContent value="interview">
           <InterviewTab onPromptApplied={handlePromptApplied} />
-        </TabsContent>
-
-        {/* ── ABA TESTAR PROMPT ── */}
-        <TabsContent value="test">
-          <PromptTestTab />
         </TabsContent>
 
         {/* ── ABA FOLLOW-UP ── */}
