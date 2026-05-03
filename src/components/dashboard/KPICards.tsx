@@ -4,6 +4,7 @@ import type { DashboardMetrics } from "@/hooks/useDashboardMetrics";
 
 interface Props {
   metrics?: DashboardMetrics;
+  variant?: "basic" | "full";
 }
 
 function VarBadge({ value, inverse = false }: { value: number | null; inverse?: boolean }) {
@@ -23,9 +24,10 @@ function formatBRL(cents: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
 }
 
-export function KPICards({ metrics }: Props) {
-  const items = [
+export function KPICards({ metrics, variant = "full" }: Props) {
+  const allItems = [
     {
+      key: "leads",
       label: "Leads recebidos",
       value: metrics?.current.leads ?? 0,
       variation: metrics?.variation.leads ?? null,
@@ -33,6 +35,7 @@ export function KPICards({ metrics }: Props) {
       tone: "bg-blue-500/10 text-blue-600",
     },
     {
+      key: "services",
       label: "Atendimentos",
       value: metrics?.current.services ?? 0,
       variation: metrics?.variation.services ?? null,
@@ -40,6 +43,7 @@ export function KPICards({ metrics }: Props) {
       tone: "bg-violet-500/10 text-violet-600",
     },
     {
+      key: "appointments",
       label: "Agendamentos",
       value: metrics?.current.appointments ?? 0,
       variation: metrics?.variation.appointments ?? null,
@@ -47,6 +51,7 @@ export function KPICards({ metrics }: Props) {
       tone: "bg-amber-500/10 text-amber-600",
     },
     {
+      key: "sales",
       label: "Vendas concluídas",
       value: metrics?.current.sales ?? 0,
       sub: metrics ? formatBRL(metrics.current.salesValueCents) : "R$ 0,00",
@@ -55,6 +60,7 @@ export function KPICards({ metrics }: Props) {
       tone: "bg-emerald-500/10 text-emerald-600",
     },
     {
+      key: "won",
       label: "Ganhos",
       value: metrics?.current.won ?? 0,
       variation: metrics?.variation.won ?? null,
@@ -62,6 +68,7 @@ export function KPICards({ metrics }: Props) {
       tone: "bg-emerald-500/10 text-emerald-600",
     },
     {
+      key: "lost",
       label: "Perdidos",
       value: metrics?.current.lost ?? 0,
       variation: metrics?.variation.lost ?? null,
@@ -69,6 +76,7 @@ export function KPICards({ metrics }: Props) {
       tone: "bg-rose-500/10 text-rose-600",
     },
     {
+      key: "abandoned",
       label: "Desistências",
       value: metrics?.current.abandoned ?? 0,
       variation: metrics?.variation.abandoned ?? null,
@@ -76,6 +84,7 @@ export function KPICards({ metrics }: Props) {
       tone: "bg-slate-500/10 text-slate-600",
     },
     {
+      key: "conversion",
       label: "Taxa de conversão",
       value: metrics?.current.conversionRate ?? 0,
       sub: `${metrics?.current.won ?? 0} / ${metrics?.current.finalizedTotal ?? 0} finalizados`,
@@ -85,6 +94,7 @@ export function KPICards({ metrics }: Props) {
       isPercent: true,
     },
     {
+      key: "followup",
       label: "Clientes em follow-up",
       value: metrics?.current.followupActive ?? 0,
       sub: `Conversão: ${metrics?.current.followupConversionRate ?? 0}%`,
@@ -93,6 +103,9 @@ export function KPICards({ metrics }: Props) {
       tone: "bg-fuchsia-500/10 text-fuchsia-600",
     },
   ];
+
+  const basicKeys = new Set(["leads", "services", "appointments", "followup"]);
+  const items = variant === "basic" ? allItems.filter((i) => basicKeys.has(i.key)) : allItems;
 
   return (
     <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">

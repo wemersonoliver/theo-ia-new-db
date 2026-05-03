@@ -1,0 +1,50 @@
+import type { DashboardMetrics } from "@/hooks/useDashboardMetrics";
+
+export const MOCK_DASHBOARD_METRICS: DashboardMetrics = {
+  current: {
+    leads: 124,
+    services: 98,
+    appointments: 32,
+    sales: 12,
+    salesValueCents: 482000,
+    avgFirstResponseSec: 95,
+    avgServiceTimeSec: 720,
+    perAttendant: {
+      "mock-1": { tma: 600, count: 35 },
+      "mock-2": { tma: 820, count: 28 },
+      "mock-3": { tma: 540, count: 22 },
+    },
+    perAttendantWait: {
+      "mock-1": { wait: 80, count: 35 },
+      "mock-2": { wait: 110, count: 28 },
+      "mock-3": { wait: 70, count: 22 },
+    },
+    won: 12,
+    lost: 6,
+    abandoned: 4,
+    finalizedTotal: 22,
+    conversionRate: 55,
+    followupActive: 18,
+    followupConversionRate: 28,
+  },
+  variation: {
+    leads: 12,
+    services: 8,
+    appointments: 15,
+    sales: 20,
+    avgFirstResponseSec: -10,
+    avgServiceTimeSec: -5,
+    won: 18,
+    lost: -10,
+    abandoned: -25,
+    conversionRate: 9,
+    followupActive: 5,
+    followupConversionRate: 7,
+  },
+  perSeller: [
+    { user_id: "mock-1", leads: 48, services: 40, appointments: 14, sales: 6, salesValueCents: 240000, won: 6, lost: 2, abandoned: 1 },
+    { user_id: "mock-2", leads: 42, services: 35, appointments: 11, sales: 4, salesValueCents: 162000, won: 4, lost: 3, abandoned: 2 },
+    { user_id: "mock-3", leads: 34, services: 23, appointments: 7, sales: 2, salesValueCents: 80000, won: 2, lost: 1, abandoned: 1 },
+  ],
+  loading: false,
+};
