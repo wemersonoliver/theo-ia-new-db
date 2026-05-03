@@ -26,6 +26,8 @@ export interface DashboardMetrics {
     abandoned: number;
     finalizedTotal: number;
     conversionRate: number; // 0..100
+    followupActive: number;
+    followupConversionRate: number; // 0..100
   };
   variation: {
     leads: number | null;
@@ -38,6 +40,8 @@ export interface DashboardMetrics {
     lost: number | null;
     abandoned: number | null;
     conversionRate: number | null;
+    followupActive: number | null;
+    followupConversionRate: number | null;
   };
   perSeller: Array<{
     user_id: string;
@@ -220,6 +224,33 @@ export function useDashboardMetrics(
       const convRateCur = finalizedCur > 0 ? Math.round((wonCur / finalizedCur) * 100) : 0;
       const convRatePrev = finalizedPrev > 0 ? Math.round((wonPrev / finalizedPrev) * 100) : 0;
 
+      // Follow-up metrics
+      let followupActiveCur = 0;
+      let followupConvCur = 0;
+      let followupConvPrev = 0;
+      {
+        const { count: activeCount } = await supabase
+          .from("followup_tracking")
+          .select("id", { count: "exact", head: true })
+          .eq("account_id", accountId)
+          .in("status", ["pending", "scheduled"]);
+        followupActiveCur = activeCount ?? 0;
+
+        const { data: fuRange } = await supabase
+          .from("followup_tracking")
+          .select("status, created_at")
+          .eq("account_id", accountId)
+          .gte("created_at", fetchStart)
+          .lte("created_at", fetchEnd);
+        const finals = ["engaged", "declined", "exhausted"];
+        const inRangeRows = (fuRange || []).filter((r: any) => inRange(r.created_at) && finals.includes(r.status));
+        const inPrevRows = (fuRange || []).filter((r: any) => inPrev(r.created_at) && finals.includes(r.status));
+        const engCur = inRangeRows.filter((r: any) => r.status === "engaged").length;
+        const engPrev = inPrevRows.filter((r: any) => r.status === "engaged").length;
+        followupConvCur = inRangeRows.length > 0 ? Math.round((engCur / inRangeRows.length) * 100) : 0;
+        followupConvPrev = inPrevRows.length > 0 ? Math.round((engPrev / inPrevRows.length) * 100) : 0;
+      }
+
       // Per seller breakdown
       const sellerMap: Record<
         string,
@@ -280,6 +311,8 @@ export function useDashboardMetrics(
           abandoned: abandonedCur,
           finalizedTotal: finalizedCur,
           conversionRate: convRateCur,
+          followupActive: followupActiveCur,
+          followupConversionRate: followupConvCur,
         },
         variation: {
           leads: pctVariation(convMetricsCur.leads, convMetricsPrev.leads),
@@ -298,6 +331,8 @@ export function useDashboardMetrics(
           lost: pctVariation(lostCur, lostPrev),
           abandoned: pctVariation(abandonedCur, abandonedPrev),
           conversionRate: pctVariation(convRateCur, convRatePrev),
+          followupActive: null,
+          followupConversionRate: pctVariation(followupConvCur, followupConvPrev),
         },
         perSeller: Object.values(sellerMap),
         loading: false,
