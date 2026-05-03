@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useConversations, useConversation, Message } from "@/hooks/useConversations";
 import { usePendingAssignments } from "@/hooks/usePendingAssignments";
 import { AcceptAssignmentCard } from "@/components/AcceptAssignmentCard";
@@ -289,50 +288,35 @@ export default function Conversations() {
     return conversationPicture || contactPictureByPhone.get(phone) || null;
   };
 
-  // Cierre seguro do chat mobile: limpa estados residuais do Radix
-  // (pointer-events e aria-hidden) que podem deixar a tela "branca"/travada.
+  const resetRadixPageLocks = () => {
+    try {
+      const root = document.getElementById("root");
+      document.body.style.removeProperty("pointer-events");
+      document.body.style.removeProperty("overflow");
+      document.body.removeAttribute("data-scroll-locked");
+      document.body.removeAttribute("aria-hidden");
+      document.documentElement.style.removeProperty("overflow");
+      if (root) {
+        root.style.removeProperty("pointer-events");
+        root.removeAttribute("aria-hidden");
+      }
+    } catch {}
+  };
+
+  // No mobile o chat não deve ser um Radix Sheet: ele é a própria tela.
+  // Assim o botão voltar só troca estado React e não deixa portal/overlay residual.
   const closeMobileChat = () => {
-    // Garante que diálogos filhos sejam fechados antes do Sheet
     setDeleteOpen(false);
     setFinalizeOpen(false);
     setSelectedPhone(null);
     setMessageInput("");
-    // Aguarda o ciclo de animação de saída do Sheet (~300ms) antes de
-    // limpar estilos residuais que o Radix pode deixar no DOM em caso
-    // de diálogos aninhados sendo desmontados em cascata (causa da tela
-    // branca no mobile Android/iOS).
-    setTimeout(() => {
-      try {
-        const root = document.getElementById("root");
-        document.body.style.removeProperty("pointer-events");
-        document.body.style.removeProperty("overflow");
-        document.body.removeAttribute("data-scroll-locked");
-        document.body.removeAttribute("aria-hidden");
-        document.documentElement.style.removeProperty("overflow");
-        if (root) {
-          root.style.removeProperty("pointer-events");
-          root.removeAttribute("aria-hidden");
-        }
-      } catch {}
-    }, 350);
+    resetRadixPageLocks();
+    requestAnimationFrame(resetRadixPageLocks);
   };
 
   // Cleanup ao desmontar a página: remove qualquer estilo residual
   useEffect(() => {
-    return () => {
-      try {
-        const root = document.getElementById("root");
-        document.body.style.removeProperty("pointer-events");
-        document.body.style.removeProperty("overflow");
-        document.body.removeAttribute("data-scroll-locked");
-        document.body.removeAttribute("aria-hidden");
-        document.documentElement.style.removeProperty("overflow");
-        if (root) {
-          root.style.removeProperty("pointer-events");
-          root.removeAttribute("aria-hidden");
-        }
-      } catch {}
-    };
+    return resetRadixPageLocks;
   }, []);
 
   function openContactPage(phone: string) {
@@ -410,16 +394,9 @@ export default function Conversations() {
           )}
         </div>
 
-        {/* Mobile Chat Fullscreen Overlay */}
-        <Sheet
-          open={!!selectedPhone}
-          onOpenChange={(open) => {
-            if (!open) {
-              closeMobileChat();
-            }
-          }}
-        >
-          <SheetContent side="right" hideClose className="z-[70] flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden border-l-0 p-0 sm:max-w-none">
+        {/* Mobile Chat Fullscreen Panel */}
+        {selectedPhone && (
+          <div className="fixed inset-0 z-[70] flex h-[100dvh] w-screen flex-col overflow-hidden bg-background">
             {/* Header */}
             <div className="flex items-center gap-2 border-b bg-background px-3 py-2 shrink-0">
               <Button
@@ -560,8 +537,8 @@ export default function Conversations() {
               </p>
             </div>
             )}
-          </SheetContent>
-        </Sheet>
+          </div>
+        )}
         <FinalizeDialog
           open={finalizeOpen}
           onOpenChange={setFinalizeOpen}
