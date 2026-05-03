@@ -223,6 +223,7 @@ export default function Conversations() {
   const canReopen =
     membership?.role === "owner" || membership?.role === "manager";
   const [finalizeOpen, setFinalizeOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"open" | "closed" | "all">("open");
   const [syncing, setSyncing] = useState(false);
   const [searchParams] = useSearchParams();
@@ -291,19 +292,48 @@ export default function Conversations() {
   // Cierre seguro do chat mobile: limpa estados residuais do Radix
   // (pointer-events e aria-hidden) que podem deixar a tela "branca"/travada.
   const closeMobileChat = () => {
+    // Garante que diálogos filhos sejam fechados antes do Sheet
+    setDeleteOpen(false);
+    setFinalizeOpen(false);
     setSelectedPhone(null);
     setMessageInput("");
-    // Aguarda o ciclo de unmount antes de limpar estilos residuais
+    // Aguarda o ciclo de animação de saída do Sheet (~300ms) antes de
+    // limpar estilos residuais que o Radix pode deixar no DOM em caso
+    // de diálogos aninhados sendo desmontados em cascata (causa da tela
+    // branca no mobile Android/iOS).
     setTimeout(() => {
       try {
-        document.body.style.pointerEvents = "";
+        const root = document.getElementById("root");
         document.body.style.removeProperty("pointer-events");
-        document.body.removeAttribute("data-scroll-locked");
         document.body.style.removeProperty("overflow");
+        document.body.removeAttribute("data-scroll-locked");
+        document.body.removeAttribute("aria-hidden");
         document.documentElement.style.removeProperty("overflow");
+        if (root) {
+          root.style.removeProperty("pointer-events");
+          root.removeAttribute("aria-hidden");
+        }
       } catch {}
-    }, 50);
+    }, 350);
   };
+
+  // Cleanup ao desmontar a página: remove qualquer estilo residual
+  useEffect(() => {
+    return () => {
+      try {
+        const root = document.getElementById("root");
+        document.body.style.removeProperty("pointer-events");
+        document.body.style.removeProperty("overflow");
+        document.body.removeAttribute("data-scroll-locked");
+        document.body.removeAttribute("aria-hidden");
+        document.documentElement.style.removeProperty("overflow");
+        if (root) {
+          root.style.removeProperty("pointer-events");
+          root.removeAttribute("aria-hidden");
+        }
+      } catch {}
+    };
+  }, []);
 
   function openContactPage(phone: string) {
     navigate(`/contacts?open=${encodeURIComponent(phone)}`);
