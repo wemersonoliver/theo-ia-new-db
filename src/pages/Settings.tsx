@@ -21,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useTheme } from "next-themes";
+import { cn } from "@/lib/utils";
 
 export default function Settings() {
   const { user } = useAuth();
