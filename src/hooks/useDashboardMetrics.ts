@@ -26,6 +26,8 @@ export interface DashboardMetrics {
     abandoned: number;
     finalizedTotal: number;
     conversionRate: number; // 0..100
+    followupActive: number;
+    followupConversionRate: number; // 0..100
   };
   variation: {
     leads: number | null;
@@ -38,6 +40,8 @@ export interface DashboardMetrics {
     lost: number | null;
     abandoned: number | null;
     conversionRate: number | null;
+    followupActive: number | null;
+    followupConversionRate: number | null;
   };
   perSeller: Array<{
     user_id: string;
