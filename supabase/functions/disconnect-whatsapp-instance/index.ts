@@ -54,7 +54,7 @@ serve(async (req) => {
         .from("accounts").select("id").eq("owner_user_id", userId).maybeSingle();
       const { data } = await supabase
         .from("whatsapp_instances")
-        .select("id, instance_name, account_id")
+        .select("id, instance_name, account_id, status, is_primary")
         .eq("id", bodyInstanceId)
         .maybeSingle();
       if (!data || (ownedAccount?.id && data.account_id !== ownedAccount.id)) {
@@ -64,7 +64,7 @@ serve(async (req) => {
     } else {
       const { data } = await supabase
         .from("whatsapp_instances")
-        .select("id, instance_name")
+        .select("id, instance_name, status, is_primary")
         .eq("user_id", userId)
         .maybeSingle();
       instance = data;
@@ -83,19 +83,40 @@ serve(async (req) => {
       return jsonResponse({ error: "Erro de configuração do servidor" }, 500);
     }
 
-    // Logout from Evolution API
-    const logoutResponse = await evolutionRequest({
-      evolutionUrl,
-      evolutionKey,
-      path: `/instance/logout/${instance.instance_name}`,
-      method: "DELETE",
-    });
+    const wasConnected = instance.status === "connected";
 
-    if (!logoutResponse.ok) {
-      return jsonResponse(buildEvolutionErrorPayload(logoutResponse, "Erro ao desconectar instância WhatsApp"), 502);
+    // Try logout (ignore errors like "instance is not connected")
+    try {
+      await evolutionRequest({
+        evolutionUrl,
+        evolutionKey,
+        path: `/instance/logout/${instance.instance_name}`,
+        method: "DELETE",
+      });
+    } catch (e) {
+      console.log("Logout skipped:", e instanceof Error ? e.message : e);
     }
 
-    // Update database (target this specific row)
+    // If instance was not fully connected (cancel during QR/pending) OR is not the primary,
+    // delete it entirely from Evolution API. Always for non-connected cancellations.
+    if (!wasConnected) {
+      try {
+        await evolutionRequest({
+          evolutionUrl,
+          evolutionKey,
+          path: `/instance/delete/${instance.instance_name}`,
+          method: "DELETE",
+        });
+      } catch (e) {
+        console.log("Delete instance skipped:", e instanceof Error ? e.message : e);
+      }
+
+      // Remove DB row so user can start fresh
+      await supabase.from("whatsapp_instances").delete().eq("id", instance.id);
+      return jsonResponse({ success: true, deleted: true });
+    }
+
+    // Connected case: just mark as disconnected
     await supabase
       .from("whatsapp_instances")
       .update({
