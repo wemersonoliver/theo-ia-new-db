@@ -17,7 +17,6 @@ import {
   Ticket,
   BookOpen,
   ListChecks,
-  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
@@ -27,7 +26,6 @@ import { useAccount } from "@/hooks/useAccount";
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", perm: null as string | null },
   { to: "/whatsapp", icon: Smartphone, label: "WhatsApp", perm: "whatsapp_instance" },
-  { to: "/ai-agent", icon: Bot, label: "Agente IA", perm: "settings" },
   { to: "/crm", icon: Kanban, label: "CRM", perm: "crm" },
   { to: "/conversations", icon: MessageSquare, label: "Conversas", perm: "conversations" },
   { to: "/contacts", icon: Users, label: "Contatos", perm: "contacts" },
