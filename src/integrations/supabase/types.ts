@@ -74,6 +74,8 @@ export type Database = {
           id: string
           name: string
           owner_user_id: string
+          pro_trial_activated: boolean
+          pro_trial_activated_at: string | null
           updated_at: string
         }
         Insert: {
@@ -82,6 +84,8 @@ export type Database = {
           id?: string
           name?: string
           owner_user_id: string
+          pro_trial_activated?: boolean
+          pro_trial_activated_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -90,6 +94,8 @@ export type Database = {
           id?: string
           name?: string
           owner_user_id?: string
+          pro_trial_activated?: boolean
+          pro_trial_activated_at?: string | null
           updated_at?: string
         }
         Relationships: []

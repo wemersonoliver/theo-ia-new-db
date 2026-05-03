@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
 import { useAIConfig } from "@/hooks/useAIConfig";
 import { useAuth } from "@/lib/auth";
-import { PlayCircle, Smartphone, Bot, Sparkles, Eye, ArrowLeft, Lock } from "lucide-react";
+import { PlayCircle, Smartphone, Bot, Sparkles, Eye, ArrowLeft, Lock, Rocket } from "lucide-react";
 import { TutorialPopup } from "@/components/TutorialPopup";
 import { Button } from "@/components/ui/button";
 import { TrialBanner } from "@/components/TrialBanner";
@@ -24,6 +24,8 @@ import { Badge } from "@/components/ui/badge";
 import { useAccountPlan } from "@/hooks/useAccountPlan";
 import { usePlans } from "@/hooks/usePlans";
 import { MOCK_DASHBOARD_METRICS } from "@/lib/dashboard-mock";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "@/hooks/use-toast";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -39,11 +41,36 @@ export default function Dashboard() {
   const [pipelineId, setPipelineId] = useState<string>("all");
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [previewAdvanced, setPreviewAdvanced] = useState(false);
-  const { tier } = useAccountPlan();
+  const [activatingProTrial, setActivatingProTrial] = useState(false);
+  const { tier, baseTier, proTrialActive, trialDaysLeft, accountId } = useAccountPlan();
   const { data: plans = [] } = usePlans();
-  const isBasic = tier === "basic";
+  const queryClient = useQueryClient();
+  // Trial e Basic veem dashboard reduzida (a menos que trial ative o Pro Trial → tier vira "pro")
+  const isBasic = tier === "basic" || tier === "trial";
+  const canActivateProTrial = baseTier === "trial" && !proTrialActive && (trialDaysLeft ?? 0) > 0 && !!accountId;
   const proMonthly = plans.find((p) => p.tier === "pro" && p.billing_period === "monthly");
   const proAnnual = plans.find((p) => p.tier === "pro" && p.billing_period === "annual");
+
+  const handleActivateProTrial = async () => {
+    if (!accountId) return;
+    setActivatingProTrial(true);
+    const { error } = await supabase
+      .from("accounts")
+      .update({ pro_trial_activated: true, pro_trial_activated_at: new Date().toISOString() })
+      .eq("id", accountId);
+    setActivatingProTrial(false);
+    if (error) {
+      toast({ title: "Erro ao ativar teste Pro", description: error.message, variant: "destructive" });
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: ["account-trial-info"] });
+    setUpgradeOpen(false);
+    setPreviewAdvanced(false);
+    toast({
+      title: "Plano Pro liberado!",
+      description: `Você tem acesso a todas as funcionalidades Pro até o fim do seu período de teste${trialDaysLeft ? ` (${trialDaysLeft} dias restantes)` : ""}.`,
+    });
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -174,6 +201,25 @@ export default function Dashboard() {
               A dashboard avançada inclui funil de conversão, performance por vendedor, metas vs realizado, tempos médios de atendimento e espera, e muito mais.
             </DialogDescription>
           </DialogHeader>
+          {canActivateProTrial && (
+            <Card className="border-primary/40 bg-primary/5">
+              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <Rocket className="mt-0.5 h-5 w-5 text-primary" />
+                  <div>
+                    <p className="text-sm font-semibold">Testar plano Pro grátis</p>
+                    <p className="text-xs text-muted-foreground">
+                      Libere todas as funcionalidades Pro até o fim do seu período de teste
+                      {trialDaysLeft ? ` (${trialDaysLeft} dias restantes).` : "."}
+                    </p>
+                  </div>
+                </div>
+                <Button onClick={handleActivateProTrial} disabled={activatingProTrial}>
+                  {activatingProTrial ? "Ativando..." : "Testar Pro grátis"}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             {proMonthly && (
               <Card className="border-primary/30">
