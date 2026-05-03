@@ -1513,10 +1513,6 @@ export default function AIAgent() {
           <InterviewTab onPromptApplied={handlePromptApplied} />
         </TabsContent>
 
-        {/* ── ABA FOLLOW-UP ── */}
-        <TabsContent value="followup">
-          <FollowupTab />
-        </TabsContent>
       </Tabs>
     </DashboardLayout>
   );
