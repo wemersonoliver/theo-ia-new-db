@@ -17,6 +17,7 @@ import {
   Ticket,
   BookOpen,
   ListChecks,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
@@ -31,6 +32,7 @@ const navItems = [
   { to: "/contacts", icon: Users, label: "Contatos", perm: "contacts" },
   { to: "/tasks", icon: ListChecks, label: "Tarefas", perm: "crm" },
   { to: "/appointments", icon: Calendar, label: "Agendamentos", perm: "appointments" },
+  { to: "/ai-agent", icon: Bot, label: "Agente IA", perm: "settings" },
   { to: "/settings", icon: Settings, label: "Configurações", perm: "settings" },
   { to: "/help-center", icon: BookOpen, label: "Central de Ajuda", perm: null },
   { to: "/support", icon: Ticket, label: "Suporte", perm: "support" },
