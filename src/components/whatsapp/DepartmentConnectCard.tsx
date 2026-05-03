@@ -107,7 +107,9 @@ export function DepartmentConnectCard({ instance, onDisconnect, onRefresh, onUpd
       <CardContent className="space-y-4">
         {instance.status === "connected" ? (
           <>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {!instance.is_primary && (
+              <>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs">Nome do departamento</Label>
                 <div className="flex gap-2">
@@ -154,6 +156,14 @@ export function DepartmentConnectCard({ instance, onDisconnect, onRefresh, onUpd
                 disabled={transferMessage === (instance.transfer_message || "")}
               >Salvar mensagem</Button>
             </div>
+              </>
+            )}
+
+            {instance.is_primary && (
+              <p className="text-sm text-muted-foreground">
+                Este é o número principal. As configurações de IA, follow-up e mensagens são gerenciadas nos menus padrões da plataforma.
+              </p>
+            )}
 
             <Button variant="destructive" className="w-full"
               onClick={() => onDisconnect(instance.id)} disabled={isBusy}
