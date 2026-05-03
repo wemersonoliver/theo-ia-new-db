@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
 import { useAIConfig } from "@/hooks/useAIConfig";
 import { useAuth } from "@/lib/auth";
-import { PlayCircle, Smartphone, Bot } from "lucide-react";
+import { PlayCircle, Smartphone, Bot, Sparkles, Eye, ArrowLeft, Lock } from "lucide-react";
 import { TutorialPopup } from "@/components/TutorialPopup";
 import { Button } from "@/components/ui/button";
 import { TrialBanner } from "@/components/TrialBanner";
@@ -21,6 +21,12 @@ import { OnlineUsersCard } from "@/components/dashboard/OnlineUsersCard";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import { presetRange } from "@/lib/dashboard-metrics";
 import { Badge } from "@/components/ui/badge";
+import { useAccountPlan } from "@/hooks/useAccountPlan";
+import { usePlans } from "@/hooks/usePlans";
+import { MOCK_DASHBOARD_METRICS } from "@/lib/dashboard-mock";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -31,6 +37,13 @@ export default function Dashboard() {
   const [period, setPeriod] = useState<PeriodPreset>("30d");
   const [sellerId, setSellerId] = useState<string>("all");
   const [pipelineId, setPipelineId] = useState<string>("all");
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [previewAdvanced, setPreviewAdvanced] = useState(false);
+  const { tier } = useAccountPlan();
+  const { data: plans = [] } = usePlans();
+  const isBasic = tier === "basic";
+  const proMonthly = plans.find((p) => p.tier === "pro" && p.billing_period === "monthly");
+  const proAnnual = plans.find((p) => p.tier === "pro" && p.billing_period === "annual");
 
   useEffect(() => {
     if (!user) return;
@@ -55,12 +68,35 @@ export default function Dashboard() {
   }, [user, navigate]);
 
   const range = useMemo(() => presetRange(period), [period]);
-  const { metrics } = useDashboardMetrics(range, sellerId, pipelineId);
+  const { metrics: realMetrics } = useDashboardMetrics(range, sellerId, pipelineId);
+  const showPreview = isBasic && previewAdvanced;
+  const showBasicOnly = isBasic && !previewAdvanced;
+  const metrics = showPreview ? MOCK_DASHBOARD_METRICS : realMetrics;
 
   return (
     <DashboardLayout title="Dashboard" description="Visão geral do seu atendimento">
       <TrialBanner />
       <TutorialPopup externalOpen={tutorialOpen} onExternalClose={() => setTutorialOpen(false)} />
+
+      {showPreview && (
+        <Card className="mb-4 border-primary/40 bg-primary/5">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <Eye className="h-4 w-4 text-primary" />
+              <span className="font-medium">Pré-visualização com dados fictícios</span>
+              <span className="text-muted-foreground">— disponível no plano Pro</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => setPreviewAdvanced(false)}>
+                <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
+              </Button>
+              <Button size="sm" onClick={() => setUpgradeOpen(true)}>
+                <Sparkles className="mr-2 h-4 w-4" /> Atualizar agora
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 mb-4">
         <DashboardFilters
@@ -71,31 +107,42 @@ export default function Dashboard() {
           pipelineId={pipelineId}
           onPipeline={setPipelineId}
         />
-        <Button variant="outline" onClick={() => setTutorialOpen(true)} className="gap-2 w-full sm:w-auto">
-          <PlayCircle className="h-4 w-4" />
-          Tutorial
-        </Button>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          {showBasicOnly && (
+            <Button variant="outline" onClick={() => setUpgradeOpen(true)} className="gap-2">
+              <Lock className="h-4 w-4" /> Dashboard avançada
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => setTutorialOpen(true)} className="gap-2">
+            <PlayCircle className="h-4 w-4" />
+            Tutorial
+          </Button>
+        </div>
       </div>
 
-      <KPICards metrics={metrics} />
+      <KPICards metrics={metrics} variant={showBasicOnly ? "basic" : "full"} />
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <ConversionFunnel metrics={metrics} />
-        <GoalsVsActualChart metrics={metrics} />
-        <AvgServiceTimeCard metrics={metrics} />
-      </div>
+      {!showBasicOnly && (
+        <>
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+            <ConversionFunnel metrics={metrics} />
+            <GoalsVsActualChart metrics={metrics} />
+            <AvgServiceTimeCard metrics={metrics} />
+          </div>
 
-      <div className="mt-4">
-        <AvgWaitTimeCard metrics={metrics} />
-      </div>
+          <div className="mt-4">
+            <AvgWaitTimeCard metrics={metrics} />
+          </div>
 
-      <div className="mt-4">
-        <OnlineUsersCard />
-      </div>
+          <div className="mt-4">
+            <OnlineUsersCard />
+          </div>
 
-      <div className="mt-4">
-        <SellerPerformanceTable metrics={metrics} />
-      </div>
+          <div className="mt-4">
+            <SellerPerformanceTable metrics={metrics} />
+          </div>
+        </>
+      )}
 
       <Card className="mt-4">
         <CardContent className="flex flex-wrap items-center gap-4 p-4">
@@ -116,6 +163,63 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={upgradeOpen} onOpenChange={setUpgradeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" /> Disponível no plano Pro
+            </DialogTitle>
+            <DialogDescription>
+              A dashboard avançada inclui funil de conversão, performance por vendedor, metas vs realizado, tempos médios de atendimento e espera, e muito mais.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {proMonthly && (
+              <Card className="border-primary/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Pro Mensal</CardTitle>
+                  <CardDescription>
+                    {(proMonthly.price_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: proMonthly.currency || "BRL" })}/mês
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button className="w-full" disabled={!proMonthly.checkout_url}
+                    onClick={() => proMonthly.checkout_url && window.open(proMonthly.checkout_url, "_blank")}>
+                    Atualizar agora
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+            {proAnnual && (
+              <Card className="border-primary">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    Pro Anual <Badge>Melhor oferta</Badge>
+                  </CardTitle>
+                  <CardDescription>
+                    {(proAnnual.price_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: proAnnual.currency || "BRL" })}/ano
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button className="w-full" disabled={!proAnnual.checkout_url}
+                    onClick={() => proAnnual.checkout_url && window.open(proAnnual.checkout_url, "_blank")}>
+                    Atualizar agora
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
+            <Button variant="outline" onClick={() => setUpgradeOpen(false)}>Fechar</Button>
+            {!previewAdvanced && (
+              <Button variant="secondary" onClick={() => { setUpgradeOpen(false); setPreviewAdvanced(true); }}>
+                <Eye className="mr-2 h-4 w-4" /> Visualizar dashboard
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
