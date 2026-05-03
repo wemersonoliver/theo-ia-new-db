@@ -1,31 +1,25 @@
-## Objetivo
+## Fix tela branca ao voltar de conversa no mobile
 
-Transformar os 3 itens da aba "Módulos" (Configuração de Horários, Assinaturas, Base de Conhecimento) em abas próprias dentro de `/settings`, no mesmo padrão visual de "Equipe", "Roleta", "Aparência", etc. Isso simplifica a navegação para usuários leigos, eliminando o passo intermediário do card que redireciona para outra rota.
+### Problema
+No mobile (Android/iOS), ao abrir uma conversa e clicar em voltar, a tela fica branca. Causa: o Radix UI (Sheet/Dialog) deixa estilos residuais (`pointer-events: none`, `aria-hidden`, `overflow: hidden`) no `<body>` e `#root` quando há diálogos aninhados (DealDialog, AlertDialog, FinalizeDialog) sendo desmontados junto com o Sheet de conversa.
 
-## Mudanças
+### Mudanças
 
-### 1. `src/pages/Settings.tsx`
-- Remover a aba `modules` e seu `TabsContent` (a grade com 3 cards).
-- Adicionar 3 novas abas no `TabsList`:
-  - `appointment-settings` → "Horários"
-  - `subscriptions` → "Assinatura"
-  - `knowledge-base` → "Base de Conhecimento"
-- Para cada uma, criar um `TabsContent` que renderiza o conteúdo da página correspondente diretamente (sem `DashboardLayout`, pois já estamos dentro de um).
-- Remover imports não usados (`CalendarCog`, `CreditCard`, `FileText`, `ChevronRight`, `useNavigate`).
+**1. `src/pages/Conversations.tsx`**
+- Refatorar `closeMobileChat` para:
+  - Forçar fechamento de todos os diálogos filhos (DealDialog, AlertDialog de exclusão, FinalizeDialog) antes de fechar o Sheet.
+  - Após 350ms (duração da animação de saída), limpar manualmente do `<body>` e `#root`: `pointer-events`, `overflow`, atributo `aria-hidden` e `data-scroll-locked`.
+- Mover os componentes `DealDialog`, `AlertDialog` e `FinalizeDialog` para FORA do `<SheetContent>` (renderizá-los no nível raiz da página) — assim eles não são desmontados em cascata com o Sheet.
 
-### 2. Refatoração dos conteúdos das páginas
-Para reaproveitar o conteúdo sem duplicar, extrair o "miolo" de cada página em um componente sem `DashboardLayout`:
+**2. `src/components/crm/DealDialog.tsx`**
+- Não há ref direto, mas o warning "Function components cannot be given refs" aparece porque `DialogFooter` (em `src/components/ui/dialog.tsx`) não usa `forwardRef`. Converter `DialogFooter` e `DialogHeader` para `React.forwardRef` em `src/components/ui/dialog.tsx` para eliminar o warning que pode quebrar restauração de foco do Radix.
 
-- `src/pages/AppointmentSettings.tsx` → extrair conteúdo para `src/components/settings/AppointmentSettingsTab.tsx`
-- `src/pages/Subscriptions.tsx` → extrair conteúdo para `src/components/settings/SubscriptionsTab.tsx`
-- `src/pages/KnowledgeBase.tsx` → extrair conteúdo para `src/components/settings/KnowledgeBaseTab.tsx`
+**3. Garantia adicional**
+- Adicionar um `useEffect` de cleanup em `Conversations.tsx` que, ao desmontar a página, garante a limpeza dos estilos residuais.
 
-As rotas existentes (`/appointment-settings`, `/subscriptions`, `/knowledge-base`) continuam funcionando — as páginas passam a ser apenas um wrapper com `DashboardLayout` + o componente Tab, mantendo compatibilidade com links externos (ex: TrialBanner que aponta para `/subscriptions`).
+### Arquivos afetados
+- `src/pages/Conversations.tsx` (lógica de fechamento + reposicionamento de modais)
+- `src/components/ui/dialog.tsx` (forwardRef em Header/Footer)
 
-### 3. Ordem final das abas em Settings
-Perfil | Horários | Assinatura | Base de Conhecimento | Equipe | Roleta | Notificações | Aparência | Segurança | Tutorial | Avançado
-
-## Resultado
-- Aba "Módulos" eliminada.
-- Cada módulo configurável agora é uma aba direta em Configurações.
-- Nenhuma rota quebrada; nenhuma alteração no Sidebar lateral.
+### Resultado esperado
+Voltar da conversa no mobile fecha o Sheet limpamente, sem estilos residuais bloqueando interação ou ocultando a tela.
