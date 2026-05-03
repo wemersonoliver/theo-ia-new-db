@@ -35,6 +35,7 @@ import HelpCenter from "./pages/HelpCenter";
 import HelpCategory from "./pages/HelpCategory";
 import HelpArticle from "./pages/HelpArticle";
 import Tasks from "./pages/Tasks";
+import Followup from "./pages/Followup";
 
 // Admin pages
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -78,6 +79,7 @@ const App = () => (
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/whatsapp" element={<ProtectedRoute><WhatsApp /></ProtectedRoute>} />
               <Route path="/ai-agent" element={<ProtectedRoute><AIAgent /></ProtectedRoute>} />
+              <Route path="/followup" element={<ProtectedRoute><Followup /></ProtectedRoute>} />
               <Route path="/simulate-attendance" element={<ProtectedRoute><SimulateAttendance /></ProtectedRoute>} />
               <Route path="/knowledge-base" element={<ProtectedRoute><KnowledgeBase /></ProtectedRoute>} />
               <Route path="/conversations" element={<ProtectedRoute><Conversations /></ProtectedRoute>} />

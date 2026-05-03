@@ -19,6 +19,7 @@ import {
   ListChecks,
   Bot,
   FlaskConical,
+  Repeat,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
@@ -34,6 +35,7 @@ const navItems = [
   { to: "/tasks", icon: ListChecks, label: "Tarefas", perm: "crm" },
   { to: "/appointments", icon: Calendar, label: "Agendamentos", perm: "appointments" },
   { to: "/ai-agent", icon: Bot, label: "Agente IA", perm: "settings" },
+  { to: "/followup", icon: Repeat, label: "Follow-Up", perm: "settings" },
   { to: "/simulate-attendance", icon: FlaskConical, label: "Simular Atendimento", perm: "settings" },
   { to: "/settings", icon: Settings, label: "Configurações", perm: "settings" },
   { to: "/help-center", icon: BookOpen, label: "Central de Ajuda", perm: null },
