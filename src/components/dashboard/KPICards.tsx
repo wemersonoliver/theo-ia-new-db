@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, Users, MessageSquare, Calendar, DollarSign, Trophy, XCircle, MinusCircle, Percent } from "lucide-react";
+import { TrendingUp, TrendingDown, Users, MessageSquare, Calendar, DollarSign, Trophy, XCircle, MinusCircle, Percent, Repeat } from "lucide-react";
 import type { DashboardMetrics } from "@/hooks/useDashboardMetrics";
 
 interface Props {
@@ -83,6 +83,14 @@ export function KPICards({ metrics }: Props) {
       Icon: Percent,
       tone: "bg-indigo-500/10 text-indigo-600",
       isPercent: true,
+    },
+    {
+      label: "Clientes em follow-up",
+      value: metrics?.current.followupActive ?? 0,
+      sub: `Conversão: ${metrics?.current.followupConversionRate ?? 0}%`,
+      variation: metrics?.variation.followupConversionRate ?? null,
+      Icon: Repeat,
+      tone: "bg-fuchsia-500/10 text-fuchsia-600",
     },
   ];
 
