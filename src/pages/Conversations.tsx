@@ -394,16 +394,9 @@ export default function Conversations() {
           )}
         </div>
 
-        {/* Mobile Chat Fullscreen Overlay */}
-        <Sheet
-          open={!!selectedPhone}
-          onOpenChange={(open) => {
-            if (!open) {
-              closeMobileChat();
-            }
-          }}
-        >
-          <SheetContent side="right" hideClose className="z-[70] flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden border-l-0 p-0 sm:max-w-none">
+        {/* Mobile Chat Fullscreen Panel */}
+        {selectedPhone && (
+          <div className="fixed inset-0 z-[70] flex h-[100dvh] w-screen flex-col overflow-hidden bg-background">
             {/* Header */}
             <div className="flex items-center gap-2 border-b bg-background px-3 py-2 shrink-0">
               <Button
@@ -544,8 +537,8 @@ export default function Conversations() {
               </p>
             </div>
             )}
-          </SheetContent>
-        </Sheet>
+          </div>
+        )}
         <FinalizeDialog
           open={finalizeOpen}
           onOpenChange={setFinalizeOpen}
