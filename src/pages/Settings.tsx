@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
-import { Key, User, Loader2, Sun, Moon, Hash } from "lucide-react";
+import { Key, User, Loader2, Sun, Moon, Hash, Menu } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { NotificationsTab } from "@/components/settings/NotificationsTab";
 import { TutorialTab } from "@/components/settings/TutorialTab";
 import { TeamTab } from "@/components/team/TeamTab";
@@ -20,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useTheme } from "next-themes";
+import { cn } from "@/lib/utils";
 
 export default function Settings() {
   const { user } = useAuth();
@@ -34,6 +36,8 @@ export default function Settings() {
   const [updatingProfile, setUpdatingProfile] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("profile");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -119,25 +123,61 @@ export default function Settings() {
     );
   }
 
+  const tabItems: { value: string; label: string; danger?: boolean; show?: boolean }[] = [
+    { value: "profile", label: "Perfil" },
+    { value: "appointment-settings", label: "Horários" },
+    { value: "subscriptions", label: "Assinatura" },
+    { value: "knowledge-base", label: "Base de Conhecimento" },
+    { value: "team", label: "Equipe", show: !!isOwner },
+    { value: "roulette", label: "Roleta" },
+    { value: "notifications", label: "Notificações" },
+    { value: "appearance", label: "Aparência" },
+    { value: "security", label: "Segurança" },
+    { value: "tutorial", label: "Tutorial" },
+    { value: "danger", label: "Avançado", danger: true, show: !!isOwner },
+  ];
+  const visibleTabs = tabItems.filter((t) => t.show !== false);
+  const activeLabel = visibleTabs.find((t) => t.value === activeTab)?.label ?? "";
+
   return (
     <DashboardLayout 
       title="Configurações" 
       description="Gerencie as configurações do sistema"
     >
-      <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
-          <TabsTrigger value="profile" className="min-w-fit">Perfil</TabsTrigger>
-          <TabsTrigger value="appointment-settings" className="min-w-fit">Horários</TabsTrigger>
-          <TabsTrigger value="subscriptions" className="min-w-fit">Assinatura</TabsTrigger>
-          <TabsTrigger value="knowledge-base" className="min-w-fit">Base de Conhecimento</TabsTrigger>
-          {isOwner && <TabsTrigger value="team" className="min-w-fit">Equipe</TabsTrigger>}
-          <TabsTrigger value="roulette" className="min-w-fit">Roleta</TabsTrigger>
-          <TabsTrigger value="notifications" className="min-w-fit">Notificações</TabsTrigger>
-          <TabsTrigger value="appearance" className="min-w-fit">Aparência</TabsTrigger>
-          <TabsTrigger value="security" className="min-w-fit">Segurança</TabsTrigger>
-          <TabsTrigger value="tutorial" className="min-w-fit">Tutorial</TabsTrigger>
-          {isOwner && <TabsTrigger value="danger" className="min-w-fit text-destructive">Avançado</TabsTrigger>}
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <div className="flex items-center gap-3">
+          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="icon" aria-label="Abrir menu de configurações">
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-72 p-0">
+              <SheetHeader className="border-b p-4">
+                <SheetTitle>Configurações</SheetTitle>
+              </SheetHeader>
+              <nav className="flex flex-col p-2">
+                {visibleTabs.map((t) => (
+                  <button
+                    key={t.value}
+                    onClick={() => {
+                      setActiveTab(t.value);
+                      setMenuOpen(false);
+                    }}
+                    className={cn(
+                      "rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
+                      activeTab === t.value && "bg-accent font-medium",
+                      t.danger && "text-destructive",
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </nav>
+            </SheetContent>
+          </Sheet>
+          <span className="text-lg font-semibold">{activeLabel}</span>
+        </div>
 
         <TabsContent value="profile">
           <Card>
