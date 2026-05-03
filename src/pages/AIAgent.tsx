@@ -929,8 +929,8 @@ function PromptTestTab() {
         accentClass="text-primary"
       />
       <ChatPanel
-        title="IA Geradora de Prompt"
-        subtitle="Analise o teste e ajuste o prompt em tempo real"
+        title="Ajustar Atendimento"
+        subtitle="Analise o teste e ajuste o seu assistente em tempo real"
         icon={Wand2}
         messages={genMessages}
         input={genInput}
@@ -942,7 +942,7 @@ function PromptTestTab() {
         placeholder="Peça análises ou ajustes no prompt..."
         emptyIcon={Wand2}
         emptyTitle="Consultor de Prompt"
-        emptyDesc="Converse com a IA para analisar o atendimento ao lado e atualizar o prompt automaticamente."
+        emptyDesc="Converse com a IA para analisar o atendimento ao lado e atualizar o seu agente automaticamente."
         accentClass="text-warning"
       />
     </div>
