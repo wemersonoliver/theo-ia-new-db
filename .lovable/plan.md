@@ -1,48 +1,55 @@
-# Plano: Dashboard Básica vs Avançada
-
 ## Objetivo
-Separar o dashboard em duas visões conforme o plano do usuário:
-- **Plano Básico**: visão simplificada com apenas 4 KPIs.
-- **Plano Pro / Tester / Super Admin**: dashboard completo (atual).
-- Usuários do plano básico podem visualizar uma **prévia** da dashboard avançada com dados fictícios.
+- Usuários **trial** passam a ver a **dashboard básica** por padrão (igual ao plano Basic).
+- No diálogo "Dashboard avançada" (já existente), trial vê um botão extra **"Testar plano Pro"**.
+- Ao clicar, todas as features Pro ficam liberadas até o fim do período de teste (15 dias).
 
 ## Mudanças
 
-### 1. `src/components/dashboard/KPICards.tsx`
-- Adicionar prop opcional `variant?: "basic" | "full"` (default `"full"`).
-- Quando `variant === "basic"`, renderizar apenas 4 cards: **Leads recebidos, Atendimentos, Agendamentos, Clientes em follow-up**.
-- Mantém o grid responsivo (em básico usar `lg:grid-cols-4`).
+### 1. Banco — flag de pro trial
+Adicionar coluna em `accounts` (compartilhada por toda a equipe, igual ao trial):
+```sql
+ALTER TABLE public.accounts
+  ADD COLUMN pro_trial_activated boolean NOT NULL DEFAULT false,
+  ADD COLUMN pro_trial_activated_at timestamptz;
+```
+RLS atual de `accounts` já permite owner/membro ler; precisa permitir UPDATE pelo owner caso ainda não exista (validar policies; se necessário criar policy `UPDATE` para `owner_user_id = auth.uid()` somente nessas colunas via trigger ou liberar update geral do owner — manter padrão existente).
 
-### 2. `src/pages/Dashboard.tsx`
-- Usar `useAccountPlan()` para obter `tier`.
-- Definir `isBasic = tier === "basic"` (trial e pro/tester veem completa; trial mantém comportamento atual = completa).
-- Estado local `previewAdvanced: boolean` para alternar visualização demo.
-- Se `isBasic && !previewAdvanced`:
-  - Renderizar apenas `<KPICards variant="basic" />`.
-  - Mostrar botão **"Dashboard avançada"** que abre um Dialog informando: *"Disponível apenas no plano Pro"*, com:
-    - Botão **"Atualizar agora"** → redireciona ao checkout (usar `usePlans` igual ao `WhatsApp.tsx`, oferecer Pro Mensal/Anual).
-    - Botão **"Visualizar dashboard"** → fecha dialog e ativa `previewAdvanced = true`.
-- Se `isBasic && previewAdvanced`:
-  - Renderizar dashboard completa, **mas alimentada por métricas fictícias** (não chamar/ignorar `useDashboardMetrics`).
-  - Banner fixo no topo: *"Pré-visualização com dados fictícios — disponível no plano Pro"* + botão **"Voltar"** (desativa preview) e **"Atualizar agora"** (abre dialog de upgrade).
-- Caso contrário (Pro/Tester/Trial/Super Admin): comportamento atual inalterado.
+### 2. `src/hooks/useAccountPlan.ts`
+- Buscar também `accounts.pro_trial_activated` + `accounts.created_at` do owner do usuário (via `account_members` → `accounts`).
+- Calcular dias restantes do trial (15 dias). Se `tier === "trial"` **e** `pro_trial_activated` **e** dias restantes > 0 → tratar como **`pro`** (efetivo) para o restante da app.
+- Expor também `tier` original (`baseTier: "trial"`) e `proTrialActive: boolean` para a UI mostrar mensagens corretas.
 
-### 3. Dados fictícios para preview
-Criar `src/lib/dashboard-mock.ts` exportando `MOCK_DASHBOARD_METRICS: DashboardMetrics` com valores plausíveis (leads ~120, services ~95, appointments ~32, sales ~12, salesValueCents ~480000, won/lost/abandoned, conversionRate ~28, followupActive ~18, followupConversionRate ~22, variações coerentes, sellers fictícios, séries para funil/goals/avgServiceTime/avgWaitTime).
-- Passar esse mock para todos os componentes filhos (`KPICards`, `ConversionFunnel`, `GoalsVsActualChart`, `AvgServiceTimeCard`, `AvgWaitTimeCard`, `SellerPerformanceTable`) via prop `metrics`.
-- Filtros e `OnlineUsersCard` permanecem renderizados, mas sem efeito real no modo preview.
+```ts
+return { tier, baseTier, maxInstances, proTrialActive, proTrialDaysLeft, isLoading };
+```
 
-### 4. Dialog de upgrade
-- Componente inline em `Dashboard.tsx` (mesmo padrão do `WhatsApp.tsx`): título "Disponível no plano Pro", lista benefícios curtos da dashboard avançada (funil de conversão, performance de vendedores, metas, tempos médios), e dois botões de checkout (Pro Mensal / Pro Anual) usando `usePlans`.
+Como praticamente toda a app usa `tier === "pro" | "tester"` para liberar features (ex.: `WhatsApp.tsx`, `Dashboard.tsx`, etc.), elevar o tier efetivo já libera **todas** as opções Pro automaticamente — sem precisar tocar em cada feature.
 
-## Comportamento por tier
-| Tier | Visão padrão | Botão "Dashboard avançada" | Preview demo |
-|------|--------------|----------------------------|--------------|
-| basic | KPIs reduzidos (4) | Sim | Sim (mock) |
-| trial | Completa (atual) | Não | — |
-| pro / tester / super_admin | Completa (atual) | Não | — |
+### 3. `src/pages/Dashboard.tsx`
+- `isBasic` passa a ser `baseTier === "basic" || baseTier === "trial"` (ambos veem dashboard reduzida quando não há pro ativo).
+- Já com a mudança no hook, se trial ativou Pro Trial, `tier` vira `"pro"` → `isBasic` = false → dashboard avançada renderiza normalmente.
+- No diálogo "Disponível no plano Pro":
+  - Se `baseTier === "trial"` e `!proTrialActive`: exibir card/botão extra **"Testar plano Pro grátis"** com texto: *"Libere todas as funcionalidades do plano Pro até o fim do seu período de teste (`X` dias restantes)."*
+  - Ao confirmar: `update accounts set pro_trial_activated=true, pro_trial_activated_at=now() where id = <account_id>`, invalidar query `useAccountPlan` (`queryClient.invalidateQueries(["account-plan"])` ou usar realtime/refetch), fechar diálogo, exibir toast de sucesso.
+- Manter botões de checkout Pro Mensal/Anual e "Visualizar dashboard" (preview com mock) inalterados — preview continua disponível.
+
+### 4. Comportamento por tier (atualizado)
+| Situação                                       | Dashboard padrão | Botões no dialog                              |
+|------------------------------------------------|------------------|-----------------------------------------------|
+| trial (sem pro trial)                          | Básica           | Testar Pro grátis · Pro Mensal/Anual · Preview |
+| trial com pro trial ativo (dentro de 15 dias)  | Avançada (real)  | — (não aparece dialog)                        |
+| basic                                          | Básica           | Pro Mensal/Anual · Preview                    |
+| pro / tester / super_admin                     | Avançada (real)  | — (não aparece dialog)                        |
+
+Após expiração do trial, `ProtectedRoute` continua bloqueando acesso (CheckoutScreen), independentemente do pro trial ter sido ativado.
+
+## Detalhes técnicos
+- Acionar update via `supabase.from("accounts").update({...}).eq("id", accountId)` no clique. `accountId` obtido por `useAccount()`.
+- Garantir que `useAccountPlan` invalide/refetch após mutation (usar `useMutation` + `queryClient.invalidateQueries({ queryKey: ["account-plan", ...] })`; renomear queryKey existente do hook se necessário para uma key estável).
+- Não criar fluxo de "desativar" pro trial — uma vez ativado fica até expirar com o trial.
+- Sem mudanças em `KPICards` (já recebe `variant`).
 
 ## Arquivos afetados
-- `src/pages/Dashboard.tsx` (principal)
-- `src/components/dashboard/KPICards.tsx` (variant)
-- `src/lib/dashboard-mock.ts` (novo)
+- Migração SQL nova (accounts.pro_trial_activated/_at)
+- `src/hooks/useAccountPlan.ts`
+- `src/pages/Dashboard.tsx`
