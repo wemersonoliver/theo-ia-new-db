@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
 import { useAccountPlan } from "@/hooks/useAccountPlan";
+import { usePlans } from "@/hooks/usePlans";
 import { DepartmentConnectCard } from "@/components/whatsapp/DepartmentConnectCard";
 import { Loader2, Lock, Plus, Sparkles } from "lucide-react";
 import { useState } from "react";
@@ -20,8 +21,10 @@ export default function WhatsApp() {
     createInstance, disconnectInstance, refreshQRCode, updateInstance,
   } = useWhatsAppInstances();
   const { tier, maxInstances } = useAccountPlan();
+  const { data: plans = [] } = usePlans();
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [newName, setNewName] = useState("");
 
   const openAddDialog = () => { setNewName(""); setDialogOpen(true); };
@@ -56,6 +59,17 @@ export default function WhatsApp() {
   const isPro = tier === "pro" || tier === "tester";
   const canAdd = instances.length < maxInstances;
 
+  const proMonthly = plans.find((p) => p.tier === "pro" && p.billing_period === "monthly");
+  const proAnnual = plans.find((p) => p.tier === "pro" && p.billing_period === "annual");
+
+  const handleAddClick = () => {
+    if (!isPro) {
+      setUpgradeOpen(true);
+      return;
+    }
+    openAddDialog();
+  };
+
   return (
     <DashboardLayout
       title="WhatsApp"
@@ -66,9 +80,9 @@ export default function WhatsApp() {
           {instances.length}/{maxInstances} departamentos · plano{" "}
           <span className="font-medium uppercase">{tier}</span>
         </p>
-        {canAdd && instances.length > 0 && (
-          <Button size="sm" onClick={openAddDialog}>
-            <Plus className="mr-2 h-4 w-4" /> Novo departamento
+        {instances.length > 0 && (
+          <Button size="sm" onClick={handleAddClick}>
+            <Plus className="mr-2 h-4 w-4" /> Novo número de WhatsApp
           </Button>
         )}
       </div>
@@ -93,39 +107,16 @@ export default function WhatsApp() {
             );
           }
 
-          if (isLocked) {
-            return (
-              <Card key={`locked-${index}`} className="relative opacity-60">
-                <div className="absolute right-3 top-3"><Lock className="h-4 w-4 text-muted-foreground" /></div>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-primary" /> Departamento extra
-                  </CardTitle>
-                  <CardDescription>Conecte mais um número de WhatsApp</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Badge variant="outline">Disponível no plano Pro</Badge>
-                  <p className="text-sm text-muted-foreground">
-                    O plano Pro permite até 3 departamentos, cada um com IA, follow-up e mensagem de transferência próprios.
-                  </p>
-                  <Button className="w-full" onClick={() => navigate("/subscriptions")}>
-                    Fazer upgrade
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          }
-
           return (
             <Card key={`empty-${index}`} className="border-dashed">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Plus className="h-5 w-5" /> {index === 0 ? "Departamento principal" : "Novo departamento"}
+                  <Plus className="h-5 w-5" /> {index === 0 ? "Número principal" : "Novo número de WhatsApp"}
                 </CardTitle>
                 <CardDescription>
                   {index === 0
                     ? "Conecte o primeiro número da sua empresa"
-                    : "Adicione um número adicional para outro setor"}
+                    : "Adicione um número adicional de WhatsApp"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -139,8 +130,10 @@ export default function WhatsApp() {
                     Conectar WhatsApp
                   </Button>
                 ) : (
-                  <Button className="w-full" variant="outline" onClick={openAddDialog}>
-                    <Plus className="mr-2 h-4 w-4" /> Adicionar departamento
+                  <Button className="w-full" variant="outline" onClick={handleAddClick}>
+                    {!isPro && <Lock className="mr-2 h-4 w-4" />}
+                    {isPro ? <Plus className="mr-2 h-4 w-4" /> : null}
+                    Novo número de WhatsApp
                   </Button>
                 )}
               </CardContent>
@@ -152,9 +145,9 @@ export default function WhatsApp() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Adicionar departamento</DialogTitle>
+            <DialogTitle>Novo número de WhatsApp</DialogTitle>
             <DialogDescription>
-              Cada departamento usa um número de WhatsApp independente. A IA pode transferir conversas entre eles.
+              Cada número opera como um departamento independente. A IA pode transferir conversas entre eles.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -176,6 +169,59 @@ export default function WhatsApp() {
               {createInstance.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Criar
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={upgradeOpen} onOpenChange={setUpgradeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" /> Disponível no plano Pro
+            </DialogTitle>
+            <DialogDescription>
+              Conectar mais de um número de WhatsApp é uma funcionalidade exclusiva do plano Pro.
+              Faça o upgrade agora e libere até 3 números, cada um com IA, follow-up e mensagem de transferência próprios.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {proMonthly && (
+              <Card className="border-primary/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Pro Mensal</CardTitle>
+                  <CardDescription>
+                    {(proMonthly.price_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: proMonthly.currency || "BRL" })}/mês
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button className="w-full" disabled={!proMonthly.checkout_url}
+                    onClick={() => proMonthly.checkout_url && window.open(proMonthly.checkout_url, "_blank")}>
+                    Atualizar agora
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+            {proAnnual && (
+              <Card className="border-primary">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    Pro Anual <Badge>Melhor oferta</Badge>
+                  </CardTitle>
+                  <CardDescription>
+                    {(proAnnual.price_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: proAnnual.currency || "BRL" })}/ano
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button className="w-full" disabled={!proAnnual.checkout_url}
+                    onClick={() => proAnnual.checkout_url && window.open(proAnnual.checkout_url, "_blank")}>
+                    Atualizar agora
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUpgradeOpen(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
