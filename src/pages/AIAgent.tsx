@@ -1089,10 +1089,6 @@ export default function AIAgent() {
             <MapPin className="h-3.5 w-3.5" />
             Localização
           </TabsTrigger>
-          <TabsTrigger value="followup" className="min-w-fit gap-1.5">
-            <Repeat className="h-3.5 w-3.5" />
-            Follow-Up
-          </TabsTrigger>
         </TabsList>
 
         {/* ── ABA GERAL ── */}
@@ -1517,10 +1513,6 @@ export default function AIAgent() {
           <InterviewTab onPromptApplied={handlePromptApplied} />
         </TabsContent>
 
-        {/* ── ABA FOLLOW-UP ── */}
-        <TabsContent value="followup">
-          <FollowupTab />
-        </TabsContent>
       </Tabs>
     </DashboardLayout>
   );
