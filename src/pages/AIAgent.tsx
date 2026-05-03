@@ -1089,10 +1089,6 @@ export default function AIAgent() {
             <MapPin className="h-3.5 w-3.5" />
             Localização
           </TabsTrigger>
-          <TabsTrigger value="test" className="min-w-fit gap-1.5">
-            <FlaskConical className="h-3.5 w-3.5" />
-            Testar Prompt
-          </TabsTrigger>
           <TabsTrigger value="followup" className="min-w-fit gap-1.5">
             <Repeat className="h-3.5 w-3.5" />
             Follow-Up
@@ -1519,11 +1515,6 @@ export default function AIAgent() {
         {/* ── ABA ENTREVISTA IA ── */}
         <TabsContent value="interview">
           <InterviewTab onPromptApplied={handlePromptApplied} />
-        </TabsContent>
-
-        {/* ── ABA TESTAR PROMPT ── */}
-        <TabsContent value="test">
-          <PromptTestTab />
         </TabsContent>
 
         {/* ── ABA FOLLOW-UP ── */}
