@@ -11,6 +11,17 @@ import { useEffect, useState } from "react";
 
 const AI_HOURS_DRAFT_KEY = "theo-ai-hours-draft";
 
+const getStoredDraft = () => {
+  const draft = sessionStorage.getItem(AI_HOURS_DRAFT_KEY);
+  if (!draft) return null;
+  try {
+    return JSON.parse(draft);
+  } catch {
+    sessionStorage.removeItem(AI_HOURS_DRAFT_KEY);
+    return null;
+  }
+};
+
 const DAYS = [
   { value: 0, label: "Dom" },
   { value: 1, label: "Seg" },
@@ -24,8 +35,8 @@ const DAYS = [
 export function AIHoursTab() {
   const { config, saveConfig } = useAIConfig();
   const [formData, setFormData] = useState(() => {
-    const draft = sessionStorage.getItem(AI_HOURS_DRAFT_KEY);
-    if (draft) return JSON.parse(draft);
+    const draft = getStoredDraft();
+    if (draft) return draft;
     return {
     business_hours_start: "00:00",
     business_hours_end: "23:59",
@@ -36,7 +47,7 @@ export function AIHoursTab() {
   const [readyToPersist, setReadyToPersist] = useState(() => !!sessionStorage.getItem(AI_HOURS_DRAFT_KEY));
 
   useEffect(() => {
-    const draft = sessionStorage.getItem(AI_HOURS_DRAFT_KEY);
+    const draft = getStoredDraft();
     if (draft) return;
     if (config) {
       setFormData({
