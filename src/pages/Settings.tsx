@@ -16,6 +16,7 @@ import { RouletteTab } from "@/components/settings/RouletteTab";
 import { AppointmentSettingsTab } from "@/components/settings/AppointmentSettingsTab";
 import { SubscriptionsTab } from "@/components/settings/SubscriptionsTab";
 import { KnowledgeBaseTab } from "@/components/settings/KnowledgeBaseTab";
+import { AISettingsTab } from "@/components/settings/AISettingsTab";
 import { useAccount } from "@/hooks/useAccount";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -125,6 +126,7 @@ export default function Settings() {
 
   const tabItems: { value: string; label: string; danger?: boolean; show?: boolean }[] = [
     { value: "profile", label: "Perfil" },
+    { value: "ai-settings", label: "Configurações de IA" },
     { value: "appointment-settings", label: "Horários" },
     { value: "subscriptions", label: "Assinatura" },
     { value: "knowledge-base", label: "Base de Conhecimento" },
@@ -253,6 +255,10 @@ export default function Settings() {
 
         <TabsContent value="appointment-settings">
           <AppointmentSettingsTab />
+        </TabsContent>
+
+        <TabsContent value="ai-settings">
+          <AISettingsTab />
         </TabsContent>
 
         <TabsContent value="subscriptions">
