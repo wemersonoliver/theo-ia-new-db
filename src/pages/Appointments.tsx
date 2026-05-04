@@ -21,6 +21,9 @@ import {
   startOfWeek,
 } from "date-fns";
 import { CalendarCheck, Loader2, Plus } from "lucide-react";
+import { Settings as SettingsIcon } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AppointmentSettingsTab } from "@/components/settings/AppointmentSettingsTab";
 
 export default function Appointments() {
   const { user } = useAuth();
@@ -41,6 +44,7 @@ export default function Appointments() {
   const [dialogDefaultDate, setDialogDefaultDate] = useState<Date | undefined>(undefined);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerDate, setDrawerDate] = useState<Date | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Range visível
   const range = useMemo(() => {
@@ -207,6 +211,14 @@ export default function Appointments() {
             </div>
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <SettingsIcon className="h-4 w-4 mr-2" />
+              Config de horários
+            </Button>
+            <Button
+              size="sm"
               onClick={() => {
                 setDialogDefaultDate(cursor);
                 setDialogOpen(true);
@@ -216,6 +228,15 @@ export default function Appointments() {
               Novo
             </Button>
           </div>
+
+          <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+            <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Configurações de horários</DialogTitle>
+              </DialogHeader>
+              <AppointmentSettingsTab />
+            </DialogContent>
+          </Dialog>
 
           {/* Calendário */}
           {isLoading ? (
