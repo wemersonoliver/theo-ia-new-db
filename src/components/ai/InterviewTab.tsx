@@ -306,6 +306,7 @@ export function InterviewTab({ onPromptApplied }: { onPromptApplied?: () => void
         business_hours_end: "23:59",
       });
       toast.success("Agente ativado com atendimento 24h!");
+      sessionStorage.removeItem(INTERVIEW_DRAFT_KEY);
       onPromptApplied?.();
     } catch {
       toast.error("Erro ao aplicar o prompt");
@@ -326,6 +327,7 @@ export function InterviewTab({ onPromptApplied }: { onPromptApplied?: () => void
     setAnalysisMode("idle");
     setPhonesInput("");
     setPhonesError("");
+    sessionStorage.removeItem(INTERVIEW_DRAFT_KEY);
   };
 
   if (interviewState === "idle") {
