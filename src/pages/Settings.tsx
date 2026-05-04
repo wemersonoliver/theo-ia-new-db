@@ -127,7 +127,6 @@ export default function Settings() {
   const tabItems: { value: string; label: string; danger?: boolean; show?: boolean }[] = [
     { value: "profile", label: "Perfil" },
     { value: "ai-settings", label: "Configurações de IA" },
-    { value: "appointment-settings", label: "Horários" },
     { value: "subscriptions", label: "Assinatura" },
     { value: "knowledge-base", label: "Base de Conhecimento" },
     { value: "team", label: "Equipe", show: !!isOwner },
@@ -251,10 +250,6 @@ export default function Settings() {
               </Button>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="appointment-settings">
-          <AppointmentSettingsTab />
         </TabsContent>
 
         <TabsContent value="ai-settings">
