@@ -7,6 +7,8 @@ import { Loader2, Timer } from "lucide-react";
 import { useAIConfig } from "@/hooks/useAIConfig";
 import { useEffect, useState } from "react";
 
+const AI_GENERAL_DRAFT_KEY = "theo-ai-general-draft";
+
 export function AIGeneralTab() {
   const { config, saveConfig } = useAIConfig();
   const [formData, setFormData] = useState({
@@ -20,6 +22,11 @@ export function AIGeneralTab() {
   });
 
   useEffect(() => {
+    const draft = sessionStorage.getItem(AI_GENERAL_DRAFT_KEY);
+    if (draft) {
+      setFormData(JSON.parse(draft));
+      return;
+    }
     if (config) {
       setFormData({
         agent_name: config.agent_name || "Assistente Virtual",
@@ -33,7 +40,13 @@ export function AIGeneralTab() {
     }
   }, [config]);
 
-  const handleSave = () => saveConfig.mutate(formData);
+  useEffect(() => {
+    sessionStorage.setItem(AI_GENERAL_DRAFT_KEY, JSON.stringify(formData));
+  }, [formData]);
+
+  const handleSave = () => saveConfig.mutate(formData, {
+    onSuccess: () => sessionStorage.removeItem(AI_GENERAL_DRAFT_KEY),
+  });
 
   return (
     <div className="space-y-6">
