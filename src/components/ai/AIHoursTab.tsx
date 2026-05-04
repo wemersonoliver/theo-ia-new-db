@@ -9,6 +9,8 @@ import { Clock, Loader2 } from "lucide-react";
 import { useAIConfig } from "@/hooks/useAIConfig";
 import { useEffect, useState } from "react";
 
+const AI_HOURS_DRAFT_KEY = "theo-ai-hours-draft";
+
 const DAYS = [
   { value: 0, label: "Dom" },
   { value: 1, label: "Seg" },
@@ -29,6 +31,11 @@ export function AIHoursTab() {
   });
 
   useEffect(() => {
+    const draft = sessionStorage.getItem(AI_HOURS_DRAFT_KEY);
+    if (draft) {
+      setFormData(JSON.parse(draft));
+      return;
+    }
     if (config) {
       setFormData({
         business_hours_start: config.business_hours_start || "00:00",
@@ -39,6 +46,10 @@ export function AIHoursTab() {
     }
   }, [config]);
 
+  useEffect(() => {
+    sessionStorage.setItem(AI_HOURS_DRAFT_KEY, JSON.stringify(formData));
+  }, [formData]);
+
   const handleDayToggle = (day: number) => {
     setFormData((prev) => ({
       ...prev,
@@ -48,7 +59,9 @@ export function AIHoursTab() {
     }));
   };
 
-  const handleSave = () => saveConfig.mutate(formData);
+  const handleSave = () => saveConfig.mutate(formData, {
+    onSuccess: () => sessionStorage.removeItem(AI_HOURS_DRAFT_KEY),
+  });
 
   return (
     <div className="space-y-6">
