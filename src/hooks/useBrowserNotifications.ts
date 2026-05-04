@@ -70,9 +70,9 @@ export function BrowserNotificationsProvider() {
           if (seenIdsRef.current.has(row.id)) return;
           seenIdsRef.current.add(row.id);
 
-          const name = row.contact_name || row.phone;
+          const name = row.contact_name || "Sem nome";
           const minutes = config?.accept_timeout_minutes ?? 5;
-          const body = `${name} foi atribuído a você. Aceite em até ${minutes} min.`;
+          const body = `👤 ${name}\n📱 ${row.phone}\nAceite em até ${minutes} min.`;
 
           playDing();
 
