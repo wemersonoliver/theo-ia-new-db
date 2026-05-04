@@ -57,7 +57,14 @@ import AdminTasks from "./pages/admin/AdminTasks";
 import AdminPlans from "./pages/admin/AdminPlans";
 import AdminAICosts from "./pages/admin/AdminAICosts";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
