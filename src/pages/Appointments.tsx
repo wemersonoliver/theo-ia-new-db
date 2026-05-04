@@ -199,7 +199,7 @@ export default function Appointments() {
 
           {/* Filtros + botão Novo */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex-1 min-w-[280px]">
+            <div className="flex-1 min-w-0 sm:min-w-[280px] w-full">
               <AppointmentFilters
                 selectedAssignees={selectedAssignees}
                 onAssigneesChange={setSelectedAssignees}
@@ -213,6 +213,7 @@ export default function Appointments() {
               size="sm"
               variant="outline"
               onClick={() => setSettingsOpen(true)}
+              className="flex-1 sm:flex-none"
             >
               <SettingsIcon className="h-4 w-4 mr-2" />
               Config de horários
@@ -223,6 +224,7 @@ export default function Appointments() {
                 setDialogDefaultDate(cursor);
                 setDialogOpen(true);
               }}
+              className="flex-1 sm:flex-none"
             >
               <Plus className="h-4 w-4 mr-2" />
               Novo
@@ -230,7 +232,7 @@ export default function Appointments() {
           </div>
 
           <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-            <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-5xl max-h-[90vh] w-[95vw] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Configurações de horários</DialogTitle>
               </DialogHeader>

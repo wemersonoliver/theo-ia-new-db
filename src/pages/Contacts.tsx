@@ -226,7 +226,7 @@ export default function Contacts() {
     <DashboardLayout title="Contatos" description="Gerencie os contatos do seu WhatsApp">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <div className="relative flex-1 max-w-sm">
+        <div className="relative w-full sm:flex-1 sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar por nome, telefone, email ou tag..."
@@ -235,12 +235,13 @@ export default function Contacts() {
             className="pl-9"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Button
             variant="outline"
             size="sm"
             onClick={() => syncFromConversations.mutate()}
             disabled={syncFromConversations.isPending}
+            className="flex-1 sm:flex-none"
           >
             {syncFromConversations.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -249,11 +250,11 @@ export default function Contacts() {
             )}
             Sincronizar
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setIsImportDialog(true)}>
+          <Button variant="outline" size="sm" onClick={() => setIsImportDialog(true)} className="flex-1 sm:flex-none">
             <Upload className="h-4 w-4 mr-2" />
             Importar
           </Button>
-          <Button size="sm" onClick={openNew}>
+          <Button size="sm" onClick={openNew} className="flex-1 sm:flex-none">
             <Plus className="h-4 w-4 mr-2" />
             Novo Contato
           </Button>

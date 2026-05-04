@@ -78,7 +78,11 @@ export function NotificationsTab() {
             </div>
           </div>
           <div className="flex items-end">
-            <Button onClick={handleAdd} disabled={createContact.isPending || !newPhone.trim()}>
+            <Button
+              onClick={handleAdd}
+              disabled={createContact.isPending || !newPhone.trim()}
+              className="w-full sm:w-auto gap-2"
+            >
               {createContact.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (

@@ -222,7 +222,7 @@ function MonthView({
               }}
               onDragLeave={() => setDragOverDate?.(null)}
               onDrop={(e) => onDrop?.(e, day)}
-              className={`min-h-[110px] cursor-pointer border-b border-r p-1.5 transition ${
+              className={`min-h-[72px] sm:min-h-[110px] cursor-pointer border-b border-r p-1 sm:p-1.5 transition ${
                 inMonth ? "bg-background" : "bg-muted/30"
               } ${isDragOver ? "ring-2 ring-primary ring-inset bg-accent" : "hover:bg-accent/50"}`}
             >

@@ -112,7 +112,7 @@ export function AppointmentDialog({
             <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Consulta inicial" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="phone">Telefone *</Label>
               <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(11) 99999-9999" />
@@ -123,7 +123,7 @@ export function AppointmentDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div className="space-y-2">
               <Label htmlFor="date">Data *</Label>
               <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -132,7 +132,7 @@ export function AppointmentDialog({
               <Label htmlFor="time">Hora *</Label>
               <Input id="time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 col-span-2 sm:col-span-1">
               <Label htmlFor="dur">Duração (min)</Label>
               <Input id="dur" type="number" min={5} step={5} value={duration} onChange={(e) => setDuration(Number(e.target.value) || 30)} />
             </div>
