@@ -9,11 +9,22 @@ import { useEffect, useState } from "react";
 
 const AI_GENERAL_DRAFT_KEY = "theo-ai-general-draft";
 
+const getStoredDraft = () => {
+  const draft = sessionStorage.getItem(AI_GENERAL_DRAFT_KEY);
+  if (!draft) return null;
+  try {
+    return JSON.parse(draft);
+  } catch {
+    sessionStorage.removeItem(AI_GENERAL_DRAFT_KEY);
+    return null;
+  }
+};
+
 export function AIGeneralTab() {
   const { config, saveConfig } = useAIConfig();
   const [formData, setFormData] = useState(() => {
-    const draft = sessionStorage.getItem(AI_GENERAL_DRAFT_KEY);
-    if (draft) return JSON.parse(draft);
+    const draft = getStoredDraft();
+    if (draft) return draft;
     return {
     agent_name: "Assistente Virtual",
     business_niche: "",
@@ -27,7 +38,7 @@ export function AIGeneralTab() {
   const [readyToPersist, setReadyToPersist] = useState(() => !!sessionStorage.getItem(AI_GENERAL_DRAFT_KEY));
 
   useEffect(() => {
-    const draft = sessionStorage.getItem(AI_GENERAL_DRAFT_KEY);
+    const draft = getStoredDraft();
     if (draft) return;
     if (config) {
       setFormData({
