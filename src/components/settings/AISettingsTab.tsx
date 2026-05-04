@@ -5,10 +5,20 @@ import { AIGeneralTab } from "@/components/ai/AIGeneralTab";
 import { AIHoursTab } from "@/components/ai/AIHoursTab";
 import { InterviewTab } from "@/components/ai/InterviewTab";
 
+const AI_SETTINGS_TAB_KEY = "theo-ai-settings-active-tab";
+
 export function AISettingsTab() {
-  const [tab, setTab] = useState("general");
+  const [tab, setTab] = useState(() => sessionStorage.getItem(AI_SETTINGS_TAB_KEY) || "general");
+
+  const handleTabChange = (value: string) => {
+    setTab(value);
+    sessionStorage.setItem(AI_SETTINGS_TAB_KEY, value);
+  };
+
+  const handlePromptApplied = () => handleTabChange("general");
+
   return (
-    <Tabs value={tab} onValueChange={setTab} className="space-y-6">
+    <Tabs value={tab} onValueChange={handleTabChange} className="space-y-6">
       <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
         <TabsTrigger value="general" className="min-w-fit gap-1.5">
           <Bot className="h-3.5 w-3.5" />
@@ -25,7 +35,7 @@ export function AISettingsTab() {
       </TabsList>
       <TabsContent value="general"><AIGeneralTab /></TabsContent>
       <TabsContent value="hours"><AIHoursTab /></TabsContent>
-      <TabsContent value="interview"><InterviewTab onPromptApplied={() => setTab("general")} /></TabsContent>
+      <TabsContent value="interview"><InterviewTab onPromptApplied={handlePromptApplied} /></TabsContent>
     </Tabs>
   );
 }
