@@ -56,7 +56,7 @@ export default function Settings() {
       setLoading(false);
     };
     fetchProfile();
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (membership?.account_name) setBusinessName(membership.account_name);
