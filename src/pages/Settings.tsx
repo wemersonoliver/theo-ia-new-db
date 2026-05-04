@@ -25,6 +25,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 
+const SETTINGS_ACTIVE_TAB_KEY = "theo-settings-active-tab";
+
 export default function Settings() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -38,8 +40,13 @@ export default function Settings() {
   const [updatingProfile, setUpdatingProfile] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem(SETTINGS_ACTIVE_TAB_KEY) || "profile");
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    sessionStorage.setItem(SETTINGS_ACTIVE_TAB_KEY, value);
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -147,7 +154,7 @@ export default function Settings() {
       title="Configurações" 
       description="Gerencie as configurações do sistema"
     >
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
         <div className="flex items-center gap-3">
           <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
             <SheetTrigger asChild>
@@ -164,7 +171,7 @@ export default function Settings() {
                   <button
                     key={t.value}
                     onClick={() => {
-                      setActiveTab(t.value);
+                      handleTabChange(t.value);
                       setMenuOpen(false);
                     }}
                     className={cn(
