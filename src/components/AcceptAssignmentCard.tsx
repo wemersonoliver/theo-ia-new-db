@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Hand, Loader2, Clock } from "lucide-react";
+import { Hand, Loader2, Clock, User, Phone } from "lucide-react";
 import { PendingAssignment } from "@/hooks/usePendingAssignments";
 
 interface Props {
@@ -35,10 +35,22 @@ export function AcceptAssignmentCard({ pending, onAccept, isPending }: Props) {
           </div>
           <CardTitle className="mt-2">Atendimento aguardando aceite</CardTitle>
           <CardDescription>
-            {pending.contact_name || pending.phone} foi atribuído a você pela roleta.
+            Um cliente foi atribuído a você pela roleta.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5 text-sm">
+            <div className="flex items-center gap-2">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium text-foreground">
+                {pending.contact_name || "Sem nome"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              <span className="font-mono text-foreground">{pending.phone}</span>
+            </div>
+          </div>
           <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
             Ao aceitar, este lead vira sua responsabilidade e passa a contar nas suas métricas no dashboard.
           </div>
