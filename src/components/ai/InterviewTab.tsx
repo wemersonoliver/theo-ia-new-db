@@ -34,6 +34,8 @@ const ANALYSIS_LOADING_MESSAGES = [
 type InterviewMessage = { role: "user" | "assistant"; content: string };
 type InterviewState = "idle" | "chat" | "completed";
 
+const INTERVIEW_DRAFT_KEY = "theo-ai-interview-draft";
+
 export function InterviewTab({ onPromptApplied }: { onPromptApplied?: () => void }) {
   const { user } = useAuth();
   const { saveConfig } = useAIConfig();
@@ -56,6 +58,41 @@ export function InterviewTab({ onPromptApplied }: { onPromptApplied?: () => void
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const draft = sessionStorage.getItem(INTERVIEW_DRAFT_KEY);
+    if (!draft) return;
+    try {
+      const parsed = JSON.parse(draft);
+      setInterviewState(parsed.interviewState ?? "idle");
+      setCompanyName(parsed.companyName ?? "");
+      setSegment(parsed.segment ?? "");
+      setMessages(Array.isArray(parsed.messages) ? parsed.messages : []);
+      setInterviewId(parsed.interviewId ?? null);
+      setUserInput(parsed.userInput ?? "");
+      setGeneratedPrompt(parsed.generatedPrompt ?? "");
+      setEditablePrompt(parsed.editablePrompt ?? "");
+      setAnalysisMode(parsed.analysisMode ?? "idle");
+      setPhonesInput(parsed.phonesInput ?? "");
+    } catch {
+      sessionStorage.removeItem(INTERVIEW_DRAFT_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem(INTERVIEW_DRAFT_KEY, JSON.stringify({
+      interviewState,
+      companyName,
+      segment,
+      messages,
+      interviewId,
+      userInput,
+      generatedPrompt,
+      editablePrompt,
+      analysisMode,
+      phonesInput,
+    }));
+  }, [interviewState, companyName, segment, messages, interviewId, userInput, generatedPrompt, editablePrompt, analysisMode, phonesInput]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
