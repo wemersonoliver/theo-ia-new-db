@@ -11,7 +11,10 @@ const AI_GENERAL_DRAFT_KEY = "theo-ai-general-draft";
 
 export function AIGeneralTab() {
   const { config, saveConfig } = useAIConfig();
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(() => {
+    const draft = sessionStorage.getItem(AI_GENERAL_DRAFT_KEY);
+    if (draft) return JSON.parse(draft);
+    return {
     agent_name: "Assistente Virtual",
     business_niche: "",
     business_description: "",
@@ -19,14 +22,13 @@ export function AIGeneralTab() {
     max_messages_without_human: 10,
     response_delay_seconds: 5,
     handoff_message: "Um momento, vou transferir você para um atendente.",
+    };
   });
+  const [readyToPersist, setReadyToPersist] = useState(() => !!sessionStorage.getItem(AI_GENERAL_DRAFT_KEY));
 
   useEffect(() => {
     const draft = sessionStorage.getItem(AI_GENERAL_DRAFT_KEY);
-    if (draft) {
-      setFormData(JSON.parse(draft));
-      return;
-    }
+    if (draft) return;
     if (config) {
       setFormData({
         agent_name: config.agent_name || "Assistente Virtual",
@@ -37,12 +39,14 @@ export function AIGeneralTab() {
         response_delay_seconds: config.response_delay_seconds ?? 5,
         handoff_message: config.handoff_message || "",
       });
+      setReadyToPersist(true);
     }
   }, [config]);
 
   useEffect(() => {
+    if (!readyToPersist) return;
     sessionStorage.setItem(AI_GENERAL_DRAFT_KEY, JSON.stringify(formData));
-  }, [formData]);
+  }, [formData, readyToPersist]);
 
   const handleSave = () => saveConfig.mutate(formData, {
     onSuccess: () => sessionStorage.removeItem(AI_GENERAL_DRAFT_KEY),
