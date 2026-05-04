@@ -56,6 +56,7 @@ import AdminHelpCenter from "./pages/admin/AdminHelpCenter";
 import AdminTasks from "./pages/admin/AdminTasks";
 import AdminPlans from "./pages/admin/AdminPlans";
 import AdminAICosts from "./pages/admin/AdminAICosts";
+import AdminSimulateSupport from "./pages/admin/AdminSimulateSupport";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -112,6 +113,7 @@ const App = () => (
               <Route path="/admin/system-whatsapp" element={<AdminSystemWhatsApp />} />
               <Route path="/admin/conversations" element={<AdminConversations />} />
               <Route path="/admin/ai-config" element={<AdminAIConfig />} />
+              <Route path="/admin/simulate-support" element={<AdminSimulateSupport />} />
               <Route path="/admin/support" element={<AdminSupport />} />
               <Route path="/admin/tutorial-videos" element={<AdminTutorialVideos />} />
               <Route path="/admin/notifications" element={<AdminNotifications />} />
