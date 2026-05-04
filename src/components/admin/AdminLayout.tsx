@@ -34,7 +34,7 @@ export function AdminLayout({ children, title, description }: AdminLayoutProps) 
   if (!isSuperAdmin) return <Navigate to="/dashboard" replace />;
 
   return (
-    <div className="flex h-screen bg-[hsl(222,47%,8%)] text-slate-200">
+    <div className="dark flex h-screen bg-[hsl(222,47%,8%)] text-slate-200">
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
         <AdminSidebar />

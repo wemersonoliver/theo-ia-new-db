@@ -78,10 +78,10 @@ export default function AdminSystemWhatsApp() {
   return (
     <AdminLayout title="WhatsApp do Sistema" description="WhatsApp para notificações da plataforma">
       <div className="space-y-4">
-        <Card className="border-primary/20 bg-primary/5">
+        <Card className="border-primary/40 bg-primary/15">
           <CardContent className="flex items-center gap-3 py-4">
-            <Bell className="h-5 w-5 text-primary" />
-            <p className="text-sm">
+            <Bell className="h-5 w-5 shrink-0 text-primary" />
+            <p className="text-sm text-foreground">
               Este WhatsApp é usado exclusivamente para enviar notificações do sistema (agendamentos, transferências de atendimento, etc.) para todos os usuários da plataforma.
             </p>
           </CardContent>
