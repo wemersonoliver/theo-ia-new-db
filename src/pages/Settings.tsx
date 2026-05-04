@@ -17,6 +17,7 @@ import { AppointmentSettingsTab } from "@/components/settings/AppointmentSetting
 import { SubscriptionsTab } from "@/components/settings/SubscriptionsTab";
 import { KnowledgeBaseTab } from "@/components/settings/KnowledgeBaseTab";
 import { AISettingsTab } from "@/components/settings/AISettingsTab";
+import { RemindersTab } from "@/components/settings/RemindersTab";
 import { useAccount } from "@/hooks/useAccount";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -127,6 +128,7 @@ export default function Settings() {
   const tabItems: { value: string; label: string; danger?: boolean; show?: boolean }[] = [
     { value: "profile", label: "Perfil" },
     { value: "ai-settings", label: "Configurações de IA" },
+    { value: "reminders", label: "Lembretes" },
     { value: "subscriptions", label: "Assinatura" },
     { value: "knowledge-base", label: "Base de Conhecimento" },
     { value: "team", label: "Equipe", show: !!isOwner },
@@ -254,6 +256,10 @@ export default function Settings() {
 
         <TabsContent value="ai-settings">
           <AISettingsTab />
+        </TabsContent>
+
+        <TabsContent value="reminders">
+          <RemindersTab />
         </TabsContent>
 
         <TabsContent value="subscriptions">
