@@ -7,9 +7,25 @@ import { Loader2, Timer } from "lucide-react";
 import { useAIConfig } from "@/hooks/useAIConfig";
 import { useEffect, useState } from "react";
 
+const AI_GENERAL_DRAFT_KEY = "theo-ai-general-draft";
+
+const getStoredDraft = () => {
+  const draft = sessionStorage.getItem(AI_GENERAL_DRAFT_KEY);
+  if (!draft) return null;
+  try {
+    return JSON.parse(draft);
+  } catch {
+    sessionStorage.removeItem(AI_GENERAL_DRAFT_KEY);
+    return null;
+  }
+};
+
 export function AIGeneralTab() {
   const { config, saveConfig } = useAIConfig();
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(() => {
+    const draft = getStoredDraft();
+    if (draft) return draft;
+    return {
     agent_name: "Assistente Virtual",
     business_niche: "",
     business_description: "",
@@ -17,9 +33,13 @@ export function AIGeneralTab() {
     max_messages_without_human: 10,
     response_delay_seconds: 5,
     handoff_message: "Um momento, vou transferir você para um atendente.",
+    };
   });
+  const [readyToPersist, setReadyToPersist] = useState(() => !!sessionStorage.getItem(AI_GENERAL_DRAFT_KEY));
 
   useEffect(() => {
+    const draft = getStoredDraft();
+    if (draft) return;
     if (config) {
       setFormData({
         agent_name: config.agent_name || "Assistente Virtual",
@@ -30,10 +50,18 @@ export function AIGeneralTab() {
         response_delay_seconds: config.response_delay_seconds ?? 5,
         handoff_message: config.handoff_message || "",
       });
+      setReadyToPersist(true);
     }
   }, [config]);
 
-  const handleSave = () => saveConfig.mutate(formData);
+  useEffect(() => {
+    if (!readyToPersist) return;
+    sessionStorage.setItem(AI_GENERAL_DRAFT_KEY, JSON.stringify(formData));
+  }, [formData, readyToPersist]);
+
+  const handleSave = () => saveConfig.mutate(formData, {
+    onSuccess: () => sessionStorage.removeItem(AI_GENERAL_DRAFT_KEY),
+  });
 
   return (
     <div className="space-y-6">

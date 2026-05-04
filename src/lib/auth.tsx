@@ -19,12 +19,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const updateUserIfChanged = (nextUser: User | null) => {
+    setUser((currentUser) => {
+      if (!currentUser && !nextUser) return currentUser;
+      if (currentUser?.id === nextUser?.id && currentUser?.email === nextUser?.email) return currentUser;
+      return nextUser;
+    });
+  };
+
   useEffect(() => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
-        setUser(session?.user ?? null);
+        updateUserIfChanged(session?.user ?? null);
         setLoading(false);
       }
     );
@@ -32,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Then check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setUser(session?.user ?? null);
+      updateUserIfChanged(session?.user ?? null);
       setLoading(false);
     });
 
