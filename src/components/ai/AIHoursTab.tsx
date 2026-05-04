@@ -23,19 +23,21 @@ const DAYS = [
 
 export function AIHoursTab() {
   const { config, saveConfig } = useAIConfig();
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(() => {
+    const draft = sessionStorage.getItem(AI_HOURS_DRAFT_KEY);
+    if (draft) return JSON.parse(draft);
+    return {
     business_hours_start: "00:00",
     business_hours_end: "23:59",
     business_days: [0, 1, 2, 3, 4, 5, 6] as number[],
     out_of_hours_message: "Olá! Estou fora do horário de atendimento. Retornarei em breve!",
+    };
   });
+  const [readyToPersist, setReadyToPersist] = useState(() => !!sessionStorage.getItem(AI_HOURS_DRAFT_KEY));
 
   useEffect(() => {
     const draft = sessionStorage.getItem(AI_HOURS_DRAFT_KEY);
-    if (draft) {
-      setFormData(JSON.parse(draft));
-      return;
-    }
+    if (draft) return;
     if (config) {
       setFormData({
         business_hours_start: config.business_hours_start || "00:00",
@@ -43,12 +45,14 @@ export function AIHoursTab() {
         business_days: config.business_days || [0, 1, 2, 3, 4, 5, 6],
         out_of_hours_message: config.out_of_hours_message || "",
       });
+      setReadyToPersist(true);
     }
   }, [config]);
 
   useEffect(() => {
+    if (!readyToPersist) return;
     sessionStorage.setItem(AI_HOURS_DRAFT_KEY, JSON.stringify(formData));
-  }, [formData]);
+  }, [formData, readyToPersist]);
 
   const handleDayToggle = (day: number) => {
     setFormData((prev) => ({
