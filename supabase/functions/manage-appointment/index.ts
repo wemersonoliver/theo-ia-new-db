@@ -258,6 +258,9 @@ serve(async (req) => {
         // Notify registered contacts about new appointment
         await notifyAppointment(supabase, userId, contactName, phone, date, time, title);
 
+        // Move CRM deal to "Agendamento Realizado"
+        await moveCRMDealByPhone(supabase, userId, phone, "Agendamento Realizado");
+
         return new Response(JSON.stringify({ 
           success: true,
           appointment,
@@ -421,6 +424,9 @@ serve(async (req) => {
           });
         }
 
+        // Move CRM deal to "Agendamento Confirmado"
+        await moveCRMDealByPhone(supabase, userId, aptToConfirm.phone, "Agendamento Confirmado");
+
         return new Response(JSON.stringify({ 
           success: true,
           message: `Presença confirmada para ${aptToConfirm.title} em ${formatDate(aptToConfirm.appointment_date)} às ${aptToConfirm.appointment_time.slice(0, 5)}.`
@@ -580,5 +586,102 @@ async function notifyAppointment(supabase: any, userId: string, contactName: str
     console.log(`Appointment notification sent to ${notifContacts.length} contacts via ${sysInstance?.status === "connected" ? "system" : "user"} instance`);
   } catch (error) {
     console.error("Error sending appointment notifications:", error);
+  }
+}
+
+/**
+ * Move o deal CRM ativo (ligado ao contato pelo telefone) para uma etapa específica do pipeline do usuário.
+ * - Nunca retrocede: só move se a etapa-alvo tiver position >= etapa atual.
+ * - Ignora deals já ganhos/perdidos.
+ */
+async function moveCRMDealByPhone(
+  supabase: any,
+  userId: string,
+  phone: string | null | undefined,
+  targetStageName: string,
+) {
+  try {
+    if (!phone) return;
+
+    // Pipeline mais antigo do usuário
+    const { data: pipelines } = await supabase
+      .from("crm_pipelines")
+      .select("id")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .limit(1);
+
+    if (!pipelines || pipelines.length === 0) return;
+    const pipelineId = pipelines[0].id;
+
+    const { data: stages } = await supabase
+      .from("crm_stages")
+      .select("id, name, position")
+      .eq("pipeline_id", pipelineId)
+      .order("position", { ascending: true });
+
+    if (!stages || stages.length === 0) return;
+
+    const target = stages.find(
+      (s: any) => String(s.name).toLowerCase() === targetStageName.toLowerCase(),
+    );
+    if (!target) {
+      console.log(`moveCRMDealByPhone: target stage "${targetStageName}" not found`);
+      return;
+    }
+
+    // Localiza contato
+    const { data: contact } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("phone", phone)
+      .maybeSingle();
+
+    if (!contact) return;
+
+    // Deal ativo do contato
+    const stageIds = stages.map((s: any) => s.id);
+    const { data: deals } = await supabase
+      .from("crm_deals")
+      .select("id, stage_id")
+      .eq("user_id", userId)
+      .eq("contact_id", contact.id)
+      .in("stage_id", stageIds)
+      .is("won_at", null)
+      .is("lost_at", null)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+
+    if (!deals || deals.length === 0) return;
+    const deal = deals[0];
+
+    if (deal.stage_id === target.id) return;
+
+    const currentStage = stages.find((s: any) => s.id === deal.stage_id);
+    if (currentStage && currentStage.position > target.position) {
+      console.log(`moveCRMDealByPhone: deal já em etapa posterior (${currentStage.name}), ignorando`);
+      return;
+    }
+
+    // Posição final na coluna alvo
+    const { count } = await supabase
+      .from("crm_deals")
+      .select("id", { count: "exact", head: true })
+      .eq("stage_id", target.id)
+      .eq("user_id", userId);
+
+    await supabase
+      .from("crm_deals")
+      .update({
+        stage_id: target.id,
+        position: count || 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", deal.id);
+
+    console.log(`CRM deal moved to "${targetStageName}" for ${phone}`);
+  } catch (e) {
+    console.error("moveCRMDealByPhone error:", e);
   }
 }
