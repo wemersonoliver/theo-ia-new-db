@@ -248,13 +248,13 @@ Regras adicionais:
 
 CONTEXTO: Esta é uma SIMULAÇÃO DE TESTE. Responda como se fosse um atendimento real via WhatsApp. O usuário está testando a qualidade das respostas.`;
 
-    // Build conversation for Gemini
-    const geminiContents: any[] = [
-      { role: "user", parts: [{ text: systemPrompt }] },
-      { role: "model", parts: [{ text: "Entendido. Vou seguir essas instruções e usar as ferramentas de agendamento quando necessário." }] },
-    ];
+    // Build conversation for Gemini.
+    // IMPORTANTE: usamos systemInstruction (campo nativo) em vez de empilhar o prompt
+    // como turno user/model — assim o Gemini mantém a persona em TODOS os turnos
+    // e não "esquece" o prompt depois de algumas mensagens (causa de respostas
+    // alucinadas com persona aleatória, ex.: "clínica de estética").
+    const geminiContents: any[] = [];
 
-    // Add history
     for (const msg of (messages || [])) {
       geminiContents.push({
         role: msg.role === "assistant" ? "model" : "user",
@@ -262,13 +262,13 @@ CONTEXTO: Esta é uma SIMULAÇÃO DE TESTE. Responda como se fosse um atendiment
       });
     }
 
-    // Add new user message
     if (userMessage) {
       geminiContents.push({ role: "user", parts: [{ text: userMessage }] });
     }
 
     const geminiPayload: any = {
       contents: geminiContents,
+      systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
       tools: [schedulingTools],
       generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
     };
