@@ -258,6 +258,9 @@ serve(async (req) => {
         // Notify registered contacts about new appointment
         await notifyAppointment(supabase, userId, contactName, phone, date, time, title);
 
+        // Move CRM deal to "Agendamento Realizado"
+        await moveCRMDealByPhone(supabase, userId, phone, "Agendamento Realizado");
+
         return new Response(JSON.stringify({ 
           success: true,
           appointment,
@@ -420,6 +423,9 @@ serve(async (req) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" } 
           });
         }
+
+        // Move CRM deal to "Agendamento Confirmado"
+        await moveCRMDealByPhone(supabase, userId, aptToConfirm.phone, "Agendamento Confirmado");
 
         return new Response(JSON.stringify({ 
           success: true,
