@@ -220,10 +220,37 @@ serve(async (req) => {
         }
 
         // Create appointment
+        // Resolve account_id (owner do user_id) para o agendamento aparecer no calendário
+        let resolvedAccountId: string | null = null;
+        try {
+          const { data: ownAccount } = await supabase
+            .from("accounts")
+            .select("id")
+            .eq("owner_user_id", userId)
+            .maybeSingle();
+          resolvedAccountId = ownAccount?.id || null;
+
+          if (!resolvedAccountId) {
+            const { data: memberAccount } = await supabase
+              .from("account_members")
+              .select("account_id")
+              .eq("user_id", userId)
+              .eq("status", "active")
+              .order("invited_at", { ascending: true })
+              .limit(1)
+              .maybeSingle();
+            resolvedAccountId = memberAccount?.account_id || null;
+          }
+        } catch (e) {
+          console.error("Error resolving account_id:", e);
+        }
+
         const { data: appointment, error } = await supabase
           .from("appointments")
           .insert({
             user_id: userId,
+            account_id: resolvedAccountId,
+            assigned_to: userId,
             phone,
             contact_name: contactName,
             title,
