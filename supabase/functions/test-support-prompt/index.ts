@@ -104,10 +104,10 @@ serve(async (req) => {
       ? `${SYSTEM_PROMPT}\n\n## Instruções Adicionais do Administrador\n\n${customPrompt}`
       : SYSTEM_PROMPT;
 
-    const geminiContents: any[] = [
-      { role: "user", parts: [{ text: fullPrompt }] },
-      { role: "model", parts: [{ text: "Entendido. Vou simular o atendimento como o agente de suporte real." }] },
-    ];
+    // Usa systemInstruction (campo nativo do Gemini) para garantir que a persona
+    // seja respeitada em todos os turnos, evitando alucinações de persona quando
+    // o histórico cresce.
+    const geminiContents: any[] = [];
 
     for (const msg of (messages || [])) {
       geminiContents.push({
@@ -122,6 +122,7 @@ serve(async (req) => {
 
     const geminiRes = await fetchGeminiWithRetry(geminiApiKey, {
       contents: geminiContents,
+      systemInstruction: { role: "system", parts: [{ text: fullPrompt }] },
       generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
     });
 

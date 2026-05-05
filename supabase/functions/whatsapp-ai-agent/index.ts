@@ -670,10 +670,13 @@ Regras adicionais:
     // Call Gemini with function calling
     const geminiPayload: any = {
       contents: [
-        { role: "user", parts: [{ text: systemPrompt }] },
-        { role: "model", parts: [{ text: "Entendido. Vou seguir essas instruções e usar as ferramentas de agendamento quando necessário." }] },
         ...conversationMessages,
       ],
+      // systemInstruction nativo do Gemini: mantém a persona/regras em TODOS os
+      // turnos com prioridade alta. Empilhar o prompt como turno user/model fazia
+      // o modelo "esquecer" a persona em conversas longas e alucinar nichos
+      // aleatórios (ex.: "clínica de estética").
+      systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
       tools: [schedulingTools],
       generationConfig: {
         temperature: 0.7,
