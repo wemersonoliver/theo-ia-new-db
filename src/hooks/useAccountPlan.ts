@@ -5,7 +5,8 @@ import { useAuth } from "@/lib/auth";
 
 export type PlanTier = "trial" | "basic" | "pro" | "tester";
 
-const TRIAL_DAYS = 15;
+const TRIAL_POLICY_CUTOFF = new Date("2026-05-06T00:00:00Z");
+const trialDaysFor = (createdAt: Date) => (createdAt >= TRIAL_POLICY_CUTOFF ? 7 : 15);
 
 export function useAccountPlan() {
   const { data: subscription, isLoading } = useUserSubscription();
@@ -65,9 +66,9 @@ export function useAccountPlan() {
   // Calcula dias restantes do trial (compartilhado pela conta — usa created_at da account)
   let trialDaysLeft: number | null = null;
   if (baseTier === "trial" && accountTrialInfo?.accountCreatedAt) {
-    const created = new Date(accountTrialInfo.accountCreatedAt).getTime();
-    const diffDays = Math.floor((Date.now() - created) / (1000 * 60 * 60 * 24));
-    trialDaysLeft = Math.max(0, TRIAL_DAYS - diffDays);
+    const createdDate = new Date(accountTrialInfo.accountCreatedAt);
+    const diffDays = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
+    trialDaysLeft = Math.max(0, trialDaysFor(createdDate) - diffDays);
   }
 
   const proTrialActive =
