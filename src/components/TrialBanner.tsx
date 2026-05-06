@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { usePlans } from "@/hooks/usePlans";
 
-const TRIAL_DAYS = 15;
+const TRIAL_POLICY_CUTOFF = new Date("2026-05-06T00:00:00Z");
+const trialDaysFor = (createdAt: Date) => (createdAt >= TRIAL_POLICY_CUTOFF ? 7 : 15);
 
 const fmtBRL = (cents: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 }).format((cents || 0) / 100);
@@ -68,8 +69,9 @@ export function TrialBanner() {
 
       const trialAnchor = ownerProfile?.created_at || (membership as any)?.accounts?.created_at;
       if (trialAnchor) {
-        const diffMs = Date.now() - new Date(trialAnchor).getTime();
-        const left = TRIAL_DAYS - Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const createdAt = new Date(trialAnchor);
+        const diffMs = Date.now() - createdAt.getTime();
+        const left = trialDaysFor(createdAt) - Math.floor(diffMs / (1000 * 60 * 60 * 24));
         if (left > 0) {
           setDaysLeft(left);
           setShow(true);

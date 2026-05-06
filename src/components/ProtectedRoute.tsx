@@ -11,7 +11,13 @@ import { usePlans } from "@/hooks/usePlans";
 import { PresenceHeartbeat } from "@/hooks/usePresenceHeartbeat";
 import { BrowserNotificationsProvider } from "@/hooks/useBrowserNotifications";
 
-const TRIAL_DAYS = 15;
+// Novos usuários (criados a partir desta data) têm 7 dias de teste.
+// Usuários anteriores mantêm os 15 dias originais.
+const TRIAL_POLICY_CUTOFF = new Date("2026-05-06T00:00:00Z");
+const TRIAL_DAYS_NEW = 7;
+const TRIAL_DAYS_LEGACY = 15;
+const trialDaysFor = (createdAt: Date) =>
+  createdAt >= TRIAL_POLICY_CUTOFF ? TRIAL_DAYS_NEW : TRIAL_DAYS_LEGACY;
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -126,7 +132,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         const now = new Date();
         const diffMs = now.getTime() - createdAt.getTime();
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        const daysLeft = TRIAL_DAYS - diffDays;
+        const daysLeft = trialDaysFor(createdAt) - diffDays;
 
         if (daysLeft <= 0) {
           setIsTrialExpired(true);
@@ -232,7 +238,7 @@ function CheckoutScreen({ isBlocked, signOut }: { isBlocked: boolean; signOut: (
           <p className="text-muted-foreground max-w-md mx-auto">
             {isBlocked
               ? "Sua assinatura não está ativa. Escolha um plano para continuar usando o Theo IA."
-              : "Seus 15 dias gratuitos acabaram! Escolha um plano para continuar automatizando seu atendimento."}
+              : "Seu período de teste gratuito acabou! Escolha um plano para continuar automatizando seu atendimento."}
           </p>
         </div>
 
