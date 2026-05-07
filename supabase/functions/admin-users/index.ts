@@ -61,7 +61,7 @@ serve(async (req) => {
       const { data: subscriptions } = await supabaseAdmin.from("subscriptions").select("*");
       const { data: accounts } = await supabaseAdmin
         .from("accounts")
-        .select("owner_user_id, name, business_code");
+        .select("owner_user_id, name, business_code, created_at, trial_extra_days");
 
       const enrichedUsers = users.map((u) => {
         const profile = profiles?.find((p) => p.user_id === u.id);
@@ -76,6 +76,8 @@ serve(async (req) => {
           user_code: profile?.user_code || null,
           business_code: acc?.business_code ?? null,
           business_name: acc?.name ?? null,
+          account_created_at: acc?.created_at ?? null,
+          trial_extra_days: acc?.trial_extra_days ?? 0,
           is_blocked: profile?.is_blocked || false,
           feature_keyword_triggers: profile?.feature_keyword_triggers || false,
           created_at: u.created_at,

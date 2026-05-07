@@ -1,0 +1,1 @@
+ALTER TABLE public.accounts ADD COLUMN IF NOT EXISTS trial_extra_days integer NOT NULL DEFAULT 0;
