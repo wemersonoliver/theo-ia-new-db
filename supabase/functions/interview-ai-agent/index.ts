@@ -11,6 +11,94 @@ const GEMINI_API_KEY = Deno.env.get("GOOGLE_GEMINI_API_KEY");
 const GEMINI_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
+async function extractAndSaveBusinessData(
+  adminClient: ReturnType<typeof createClient>,
+  userId: string,
+  companyName: string,
+  segment: string,
+  messages: Array<{ role: string; content: string }>,
+  generatedPrompt: string | null,
+) {
+  // Find the support CRM deal for this user
+  const { data: deal } = await adminClient
+    .from("admin_crm_deals")
+    .select("id")
+    .eq("user_ref_id", userId)
+    .maybeSingle();
+  if (!deal) {
+    console.log("No admin_crm_deal found for user", userId);
+    return;
+  }
+
+  // Build a compact transcript for the summarizer
+  const transcript = messages
+    .slice(-30)
+    .map((m) => `${m.role === "assistant" ? "IA" : "Cliente"}: ${m.content}`)
+    .join("\n")
+    .slice(0, 12000);
+
+  let businessName = (companyName || "").trim() || null;
+  let businessSegment = (segment || "").trim() || null;
+  let businessSummary: string | null = null;
+
+  if (GEMINI_API_KEY) {
+    try {
+      const tool = {
+        function_declarations: [{
+          name: "registrar_negocio",
+          description: "Registra dados estruturados do negócio do cliente",
+          parameters: {
+            type: "object",
+            properties: {
+              business_name: { type: "string", description: "Nome oficial da empresa" },
+              segment: { type: "string", description: "Segmento/nicho de mercado (ex: Estética, Odontologia, E-commerce)" },
+              summary: { type: "string", description: "Resumo de 2-4 frases sobre o negócio: o que faz, público-alvo, principais produtos/serviços e dores típicas do segmento que a IA pode tocar." },
+            },
+            required: ["business_name", "segment", "summary"],
+          },
+        }],
+      };
+      const prompt = `Extraia dados do negócio com base na entrevista abaixo.\n\nDados informados:\n- Empresa: ${companyName}\n- Segmento: ${segment}\n\nTrecho da entrevista:\n${transcript}\n\n${generatedPrompt ? `Prompt gerado (referência):\n${generatedPrompt.slice(0, 4000)}\n` : ""}\nGere o resumo em português brasileiro, conciso, focado em DOR e PROPOSTA DE VALOR (para uso em follow-up de vendas).`;
+
+      const resp = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          tools: [tool],
+          toolConfig: { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["registrar_negocio"] } },
+          generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+        }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const parts = data.candidates?.[0]?.content?.parts || [];
+        const fnCall = parts.find((p: any) => p.functionCall)?.functionCall;
+        const args = fnCall?.args || {};
+        if (args.business_name) businessName = String(args.business_name).trim();
+        if (args.segment) businessSegment = String(args.segment).trim();
+        if (args.summary) businessSummary = String(args.summary).trim().slice(0, 2000);
+      } else {
+        console.error("Gemini summary failed:", resp.status, await resp.text());
+      }
+    } catch (e) {
+      console.error("Gemini summary error:", e);
+    }
+  }
+
+  const { error } = await adminClient
+    .from("admin_crm_deals")
+    .update({
+      business_name: businessName,
+      business_segment: businessSegment,
+      business_summary: businessSummary,
+      business_data_updated_at: new Date().toISOString(),
+    })
+    .eq("id", deal.id);
+  if (error) console.error("Failed to update admin_crm_deal:", error);
+  else console.log("Business data saved for deal", deal.id);
+}
+
 const SYSTEM_PROMPT = `Você é um especialista em atendimento digital e automação de WhatsApp com IA. Sua missão é conduzir uma entrevista consultiva COMPLETA e DETALHADA para criar o prompt de atendimento ideal para a empresa informada.
 
 PASSO 1 — IDENTIFICAÇÃO DA INTENÇÃO (OBRIGATÓRIO — Pergunta 1):
@@ -463,6 +551,26 @@ serve(async (req) => {
         .update(updateData)
         .eq("id", interviewId)
         .eq("user_id", userId);
+
+      // On finish: extract business data and update support CRM deal
+      if (hasFinished) {
+        try {
+          const adminClient = createClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          );
+          await extractAndSaveBusinessData(
+            adminClient,
+            userId as string,
+            companyName,
+            segment,
+            newMessages,
+            generatedPrompt,
+          );
+        } catch (e) {
+          console.error("Business data extraction failed:", e);
+        }
+      }
     }
 
     return new Response(

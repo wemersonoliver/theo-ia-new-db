@@ -29,12 +29,17 @@ async function generateSequence(
   contactName: string | null,
   agentName: string,
   bargainingTools: string,
+  business: { name: string | null; segment: string | null; summary: string | null } | null,
 ): Promise<SequenceMessage[] | null> {
+  const personalized = !!(business && (business.name || business.segment || business.summary));
+  const businessBlock = personalized
+    ? `\nNEGÓCIO DO CLIENTE:\n- Empresa: ${business!.name || "(não informada)"}\n- Segmento: ${business!.segment || "(não informado)"}\n- Resumo: ${business!.summary || "(sem resumo)"}\n\nPERSONALIZAÇÃO OBRIGATÓRIA:\n- Cite o nicho/empresa em pelo menos 4 das 12 mensagens.\n- Use dores REAIS do segmento (ex.: estética → no-show, agenda lotada; loja → carrinho abandonado).\n- Conecte cada hook narrativo (dor, prova social, escassez) ao contexto do negócio dele.\n`
+    : "";
   const prompt = `Você é especialista em vendas. Gere SEQUÊNCIA NARRATIVA de ${TOTAL_STEPS} mensagens de follow-up (manhã/tarde × 6 dias) para reativar lead inativo no WhatsApp do suporte da plataforma Theo IA.
 
 CONVERSA ANTERIOR:
 ${contextText || "(sem histórico — cliente nunca respondeu)"}
-
+${businessBlock}
 DADOS:
 - Atendente IA: ${agentName}
 - Cliente: ${contactName || "(nome desconhecido)"}
@@ -187,12 +192,44 @@ serve(async (req) => {
           .join("\n");
         const sanitizedName = sanitizeContactName(conversation.contact_name);
 
+        // Look up business data via profiles → admin_crm_deals
+        let business: { name: string | null; segment: string | null; summary: string | null } | null = null;
+        try {
+          const digits = tracking.phone.replace(/\D/g, "");
+          const candidates = new Set<string>([digits]);
+          if (digits.length === 13 && digits.startsWith("55")) candidates.add(digits.slice(2));
+          if (digits.length === 12 && digits.startsWith("55")) candidates.add(digits.slice(2));
+          if (digits.length === 11) candidates.add(digits.slice(0, 2) + digits.slice(3));
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("user_id, phone")
+            .in("phone", Array.from(candidates));
+          const userId = profiles?.[0]?.user_id;
+          if (userId) {
+            const { data: deal } = await supabase
+              .from("admin_crm_deals")
+              .select("business_name, business_segment, business_summary")
+              .eq("user_ref_id", userId)
+              .maybeSingle();
+            if (deal && (deal.business_name || deal.business_segment || deal.business_summary)) {
+              business = {
+                name: deal.business_name,
+                segment: deal.business_segment,
+                summary: deal.business_summary,
+              };
+            }
+          }
+        } catch (e) {
+          console.error("business lookup failed for", tracking.phone, e);
+        }
+
         const seq = await generateSequence(
           geminiKey,
           contextText,
           sanitizedName,
           agentName,
           config.bargaining_tools || "",
+          business,
         );
         if (!seq) continue;
 
@@ -217,6 +254,7 @@ serve(async (req) => {
           status: "scheduled",
           sequence_generated_at: new Date().toISOString(),
           next_scheduled_at: schedule[0],
+          engagement_data: { ...(tracking.engagement_data || {}), personalization: business ? "personalized" : "generic" },
           updated_at: new Date().toISOString(),
         }).eq("id", tracking.id);
 

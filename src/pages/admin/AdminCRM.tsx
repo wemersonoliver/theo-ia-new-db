@@ -3,6 +3,7 @@ import { AdminKanbanBoard } from "@/components/admin/AdminKanbanBoard";
 import { PipelineSelector } from "@/components/crm/PipelineSelector";
 import { PipelineSettingsDialog } from "@/components/crm/PipelineSettingsDialog";
 import { AdminCRMFilters, EMPTY_ADMIN_FILTERS, useFilteredAdminDeals, type AdminCRMFilterState } from "@/components/admin/AdminCRMFilters";
+import { AdminCRMStats } from "@/components/admin/AdminCRMStats";
 import { useAdminCRMPipelines } from "@/hooks/useAdminCRMPipelines";
 import { useAdminCRMStages } from "@/hooks/useAdminCRMStages";
 import { useAdminCRMDeals } from "@/hooks/useAdminCRMDeals";
@@ -95,6 +96,8 @@ export default function AdminCRM() {
             <Loader2 className="h-8 w-8 animate-spin text-slate-500" />
           </div>
         ) : (
+          <>
+          <AdminCRMStats deals={filteredDeals} stages={stages} />
           <AdminKanbanBoard
             stages={stages}
             deals={filteredDeals}
@@ -103,6 +106,7 @@ export default function AdminCRM() {
             onMoveDeal={moveDeal}
             onDeleteDeal={deleteDeal}
           />
+          </>
         )}
       </div>
 
