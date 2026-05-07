@@ -422,6 +422,18 @@ export default function AdminUsers() {
                           >
                             <CreditCard className="h-4 w-4" />
                           </Button>
+                          {!u.subscription && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { setTrialDialog(u); setTrialDays("7"); }}
+                              disabled={actionLoading}
+                              title={`Estender trial${u.trial_extra_days ? ` (+${u.trial_extra_days}d extras)` : ""}`}
+                              className="text-sky-400 border-sky-500/30 hover:bg-sky-500/10"
+                            >
+                              <CalendarPlus className="h-4 w-4" />
+                            </Button>
+                          )}
                           {u.subscription && (
                             <Button
                               variant="outline"
