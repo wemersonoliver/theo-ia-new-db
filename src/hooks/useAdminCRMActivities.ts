@@ -27,7 +27,7 @@ export function useAdminCRMActivities(dealId: string | null) {
         .eq("deal_id", dealId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data || []) as AdminCRMActivity[];
+      return ((data as unknown) || []) as AdminCRMActivity[];
     },
   });
 
