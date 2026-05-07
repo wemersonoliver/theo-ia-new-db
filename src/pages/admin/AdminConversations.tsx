@@ -386,6 +386,22 @@ export default function AdminConversations() {
                 <ChatMessages messages={messages} />
                 <div className="border-t border-slate-800 p-4">
                   <div className="flex gap-2">
+                    <MediaAttachButton
+                      phone={selectedPhone}
+                      disabled={sendMessage.isPending}
+                      isSending={sendMedia.isPending}
+                      onSend={async ({ file, caption, phone }) => {
+                        await sendMedia.mutateAsync({ phone, file, caption });
+                      }}
+                    />
+                    <RecordSendAudioButton
+                      phone={selectedPhone}
+                      disabled={sendMessage.isPending}
+                      isSending={sendMedia.isPending}
+                      onSend={async ({ file, caption, phone }) => {
+                        await sendMedia.mutateAsync({ phone, file, caption });
+                      }}
+                    />
                     <Textarea
                       value={messageInput}
                       onChange={(e) => setMessageInput(e.target.value)}
