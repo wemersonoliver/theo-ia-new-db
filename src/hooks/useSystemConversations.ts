@@ -114,7 +114,48 @@ export function useSystemConversations() {
     onError: (e: Error) => toast.error(`Erro ao enviar: ${e.message}`),
   });
 
-  return { conversations: conversations || [], isLoading, toggleAI, sendMessage, deleteConversation, finalizeConversation };
+  const sendMedia = useMutation({
+    mutationFn: async ({ phone, file, caption }: { phone: string; file: File; caption?: string }) => {
+      const mt = (file.type || "").toLowerCase();
+      const mediaType: "image" | "video" | "audio" | "document" =
+        mt.startsWith("image/") ? "image" :
+        mt.startsWith("video/") ? "video" :
+        mt.startsWith("audio/") ? "audio" : "document";
+
+      const safeName = file.name
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `system/${phone}/outgoing/${Date.now()}_${safeName}`;
+      const { error: upErr } = await supabase.storage
+        .from("whatsapp-media")
+        .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
+      if (upErr) throw upErr;
+
+      const { data: pub } = supabase.storage.from("whatsapp-media").getPublicUrl(path);
+      const mediaUrl = pub.publicUrl;
+
+      const { data, error } = await supabase.functions.invoke("send-whatsapp-media", {
+        body: {
+          phone,
+          mediaUrl,
+          mediaType,
+          filename: file.name,
+          caption: caption || "",
+          mimetype: file.type || undefined,
+          system: true,
+        },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, { phone }) => {
+      queryClient.invalidateQueries({ queryKey: ["system-conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["system-conversation", phone] });
+    },
+    onError: (e: Error) => toast.error(`Erro ao enviar mídia: ${e.message}`),
+  });
+
+  return { conversations: conversations || [], isLoading, toggleAI, sendMessage, sendMedia, deleteConversation, finalizeConversation };
 }
 
 export function useSystemConversation(phone: string) {
