@@ -448,7 +448,19 @@ serve(async (req) => {
 
         const rawPhone = remoteJid.replace("@s.whatsapp.net", "");
         const phone = normalizeBrazilianPhone(rawPhone);
-        
+
+        // Unwrap ephemeral / viewOnce / documentWithCaption wrappers
+        const innerMsg2 =
+          msg.message?.ephemeralMessage?.message ||
+          msg.message?.viewOnceMessage?.message ||
+          msg.message?.viewOnceMessageV2?.message ||
+          msg.message?.viewOnceMessageV2Extension?.message ||
+          msg.message?.documentWithCaptionMessage?.message ||
+          msg.message;
+        if (innerMsg2 && innerMsg2 !== msg.message) {
+          msg.message = { ...msg.message, ...innerMsg2 };
+        }
+
         // Detect message type
         const isAudioMessage = !!msg.message?.audioMessage;
         const isImageMessage = !!msg.message?.imageMessage;
