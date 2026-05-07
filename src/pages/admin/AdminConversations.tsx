@@ -12,6 +12,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSystemConversations, useSystemConversation } from "@/hooks/useSystemConversations";
 import type { Message } from "@/hooks/useConversations";
 import { MediaBubble } from "@/components/MediaBubble";
+import { MediaAttachButton } from "@/components/MediaAttachButton";
+import { RecordSendAudioButton } from "@/components/RecordSendAudioButton";
 import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff, Trash2, ArrowLeft, CheckCircle2, RotateCcw,
 } from "lucide-react";
