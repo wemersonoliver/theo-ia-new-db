@@ -100,8 +100,93 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_crm_activities: {
+        Row: {
+          content: string
+          created_at: string
+          created_by: string | null
+          deal_id: string
+          id: string
+          metadata: Json
+          type: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          created_by?: string | null
+          deal_id: string
+          id?: string
+          metadata?: Json
+          type?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          deal_id?: string
+          id?: string
+          metadata?: Json
+          type?: string
+        }
+        Relationships: []
+      }
+      admin_crm_deal_tasks: {
+        Row: {
+          assigned_to: string | null
+          completed: boolean
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          created_by: string | null
+          deal_id: string
+          description: string | null
+          due_date: string | null
+          id: string
+          reminder_sent: boolean
+          reminder_sent_at: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          completed?: boolean
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          deal_id: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          reminder_sent?: boolean
+          reminder_sent_at?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          completed?: boolean
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          deal_id?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          reminder_sent?: boolean
+          reminder_sent_at?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       admin_crm_deals: {
         Row: {
+          business_data_updated_at: string | null
+          business_name: string | null
+          business_segment: string | null
+          business_summary: string | null
           created_at: string
           description: string | null
           expected_close_date: string | null
@@ -122,6 +207,10 @@ export type Database = {
           won_at: string | null
         }
         Insert: {
+          business_data_updated_at?: string | null
+          business_name?: string | null
+          business_segment?: string | null
+          business_summary?: string | null
           created_at?: string
           description?: string | null
           expected_close_date?: string | null
@@ -142,6 +231,10 @@ export type Database = {
           won_at?: string | null
         }
         Update: {
+          business_data_updated_at?: string | null
+          business_name?: string | null
+          business_segment?: string | null
+          business_summary?: string | null
           created_at?: string
           description?: string | null
           expected_close_date?: string | null
