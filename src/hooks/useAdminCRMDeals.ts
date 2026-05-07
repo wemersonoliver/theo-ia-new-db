@@ -21,6 +21,10 @@ export interface AdminCRMDeal {
   lost_reason: string | null;
   created_at: string;
   updated_at: string;
+  business_name?: string | null;
+  business_segment?: string | null;
+  business_summary?: string | null;
+  business_data_updated_at?: string | null;
   // joined from profiles
   user_email?: string | null;
   user_phone?: string | null;
