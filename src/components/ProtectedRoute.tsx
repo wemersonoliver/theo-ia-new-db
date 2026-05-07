@@ -135,10 +135,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         const extra = (membership as any)?.accounts?.trial_extra_days ?? 0;
         const daysLeft = trialDaysFor(createdAt) + extra - diffDays;
 
-        if (daysLeft <= 0) {
+        if (daysLeft < 0) {
           setIsTrialExpired(true);
         } else {
-          setTrialDaysLeft(daysLeft);
+          setTrialDaysLeft(Math.max(daysLeft, 1));
         }
       }
 
