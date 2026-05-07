@@ -463,6 +463,26 @@ serve(async (req) => {
         .update(updateData)
         .eq("id", interviewId)
         .eq("user_id", userId);
+
+      // On finish: extract business data and update support CRM deal
+      if (hasFinished) {
+        try {
+          const adminClient = createClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          );
+          await extractAndSaveBusinessData(
+            adminClient,
+            userId as string,
+            companyName,
+            segment,
+            newMessages,
+            generatedPrompt,
+          );
+        } catch (e) {
+          console.error("Business data extraction failed:", e);
+        }
+      }
     }
 
     return new Response(
