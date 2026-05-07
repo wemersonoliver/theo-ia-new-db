@@ -34,7 +34,7 @@ export function useAccountPlan() {
     queryFn: async () => {
       const { data: membership } = await supabase
         .from("account_members")
-        .select("account_id, accounts!inner(id, owner_user_id, created_at, pro_trial_activated, pro_trial_activated_at)")
+        .select("account_id, accounts!inner(id, owner_user_id, created_at, pro_trial_activated, pro_trial_activated_at, trial_extra_days)")
         .eq("user_id", user!.id)
         .eq("status", "active")
         .order("role", { ascending: true })
@@ -47,6 +47,7 @@ export function useAccountPlan() {
         ownerUserId: acc.owner_user_id as string,
         accountCreatedAt: acc.created_at as string,
         proTrialActivated: !!acc.pro_trial_activated,
+        trialExtraDays: (acc.trial_extra_days as number) ?? 0,
       };
     },
   });
@@ -68,7 +69,8 @@ export function useAccountPlan() {
   if (baseTier === "trial" && accountTrialInfo?.accountCreatedAt) {
     const createdDate = new Date(accountTrialInfo.accountCreatedAt);
     const diffDays = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
-    trialDaysLeft = Math.max(0, trialDaysFor(createdDate) - diffDays);
+    const extra = accountTrialInfo.trialExtraDays ?? 0;
+    trialDaysLeft = Math.max(0, trialDaysFor(createdDate) + extra - diffDays);
   }
 
   const proTrialActive =
