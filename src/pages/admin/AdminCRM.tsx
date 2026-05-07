@@ -8,7 +8,7 @@ import { useAdminCRMPipelines } from "@/hooks/useAdminCRMPipelines";
 import { useAdminCRMStages } from "@/hooks/useAdminCRMStages";
 import { useAdminCRMDeals } from "@/hooks/useAdminCRMDeals";
 import { useMemo, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +22,7 @@ export default function AdminCRM() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [filters, setFilters] = useState<AdminCRMFilterState>(EMPTY_ADMIN_FILTERS);
   const [syncing, setSyncing] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
   const { toast } = useToast();
   const activePipeline = useMemo(() => pipelines.find(p => p.id === activePipelineId) || null, [pipelines, activePipelineId]);
 
@@ -43,6 +44,24 @@ export default function AdminCRM() {
       toast({ title: "Falha ao sincronizar", description: e?.message ?? "Erro desconhecido", variant: "destructive" });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleBackfillBusiness = async () => {
+    if (!confirm("Preencher nome, segmento e resumo dos negócios para todos os deals com entrevista concluída? (não sobrescreve dados já preenchidos)")) return;
+    setBackfilling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("backfill-business-data", { body: { overwrite: false, limit: 200 } });
+      if (error) throw error;
+      toast({
+        title: "Preenchimento concluído",
+        description: `Atualizados: ${data?.updated ?? 0} • Pulados: ${data?.skipped ?? 0} • Sem deal: ${data?.missing ?? 0}`,
+      });
+      await refetch();
+    } catch (e: any) {
+      toast({ title: "Falha no preenchimento", description: e?.message ?? "Erro", variant: "destructive" });
+    } finally {
+      setBackfilling(false);
     }
   };
 
@@ -80,6 +99,16 @@ export default function AdminCRM() {
             >
               <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
               Sincronizar WhatsApp
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBackfillBusiness}
+              disabled={backfilling}
+              className="h-9 gap-1.5 bg-amber-600/20 border-amber-600/50 text-amber-200 hover:bg-amber-600/30 hover:text-amber-100"
+            >
+              <Sparkles className={`h-3.5 w-3.5 ${backfilling ? "animate-pulse" : ""}`} />
+              {backfilling ? "Preenchendo..." : "Preencher negócios (IA)"}
             </Button>
             <PipelineSelector
               pipelines={pipelines as any}
