@@ -12,6 +12,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSystemConversations, useSystemConversation } from "@/hooks/useSystemConversations";
 import type { Message } from "@/hooks/useConversations";
 import { MediaBubble } from "@/components/MediaBubble";
+import { MediaAttachButton } from "@/components/MediaAttachButton";
+import { RecordSendAudioButton } from "@/components/RecordSendAudioButton";
 import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff, Trash2, ArrowLeft, CheckCircle2, RotateCcw,
 } from "lucide-react";
@@ -61,7 +63,7 @@ function ChatMessages({ messages }: { messages: Message[] }) {
 
 export default function AdminConversations() {
   const [searchParams] = useSearchParams();
-  const { conversations, isLoading, toggleAI, sendMessage, deleteConversation, finalizeConversation } = useSystemConversations();
+  const { conversations, isLoading, toggleAI, sendMessage, sendMedia, deleteConversation, finalizeConversation } = useSystemConversations();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const { messages } = useSystemConversation(selectedPhone || "");
@@ -223,6 +225,22 @@ export default function AdminConversations() {
             <ChatMessages messages={messages} />
             <div className="border-t border-slate-800 p-3 bg-slate-900 shrink-0">
               <div className="flex items-end gap-2">
+                <MediaAttachButton
+                  phone={selectedPhone}
+                  disabled={sendMessage.isPending}
+                  isSending={sendMedia.isPending}
+                  onSend={async ({ file, caption, phone }) => {
+                    await sendMedia.mutateAsync({ phone, file, caption });
+                  }}
+                />
+                <RecordSendAudioButton
+                  phone={selectedPhone}
+                  disabled={sendMessage.isPending}
+                  isSending={sendMedia.isPending}
+                  onSend={async ({ file, caption, phone }) => {
+                    await sendMedia.mutateAsync({ phone, file, caption });
+                  }}
+                />
                 <Textarea
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
@@ -368,6 +386,22 @@ export default function AdminConversations() {
                 <ChatMessages messages={messages} />
                 <div className="border-t border-slate-800 p-4">
                   <div className="flex gap-2">
+                    <MediaAttachButton
+                      phone={selectedPhone}
+                      disabled={sendMessage.isPending}
+                      isSending={sendMedia.isPending}
+                      onSend={async ({ file, caption, phone }) => {
+                        await sendMedia.mutateAsync({ phone, file, caption });
+                      }}
+                    />
+                    <RecordSendAudioButton
+                      phone={selectedPhone}
+                      disabled={sendMessage.isPending}
+                      isSending={sendMedia.isPending}
+                      onSend={async ({ file, caption, phone }) => {
+                        await sendMedia.mutateAsync({ phone, file, caption });
+                      }}
+                    />
                     <Textarea
                       value={messageInput}
                       onChange={(e) => setMessageInput(e.target.value)}
