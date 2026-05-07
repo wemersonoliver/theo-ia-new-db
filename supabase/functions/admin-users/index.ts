@@ -49,7 +49,7 @@ serve(async (req) => {
       });
     }
 
-    const { action, userId, password, subscriptionData, profileData } = await req.json();
+    const { action, userId, password, subscriptionData, profileData, extraDays } = await req.json();
 
     if (action === "list_users") {
       const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
@@ -202,6 +202,33 @@ serve(async (req) => {
       if (error) throw error;
       
       return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "extend_trial") {
+      if (!userId) throw new Error("userId required");
+      const days = Number(extraDays);
+      if (!Number.isFinite(days)) throw new Error("extraDays inválido");
+
+      // Acha account onde o usuário é owner
+      const { data: acc } = await supabaseAdmin
+        .from("accounts")
+        .select("id, trial_extra_days")
+        .eq("owner_user_id", userId)
+        .maybeSingle();
+      if (!acc) throw new Error("Account não encontrada para este usuário");
+
+      const current = acc.trial_extra_days ?? 0;
+      const next = Math.max(0, current + days);
+
+      const { error } = await supabaseAdmin
+        .from("accounts")
+        .update({ trial_extra_days: next })
+        .eq("id", acc.id);
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ success: true, trial_extra_days: next }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
