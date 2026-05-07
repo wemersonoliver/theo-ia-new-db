@@ -642,6 +642,44 @@ export default function AdminUsers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog Estender Trial */}
+      <Dialog open={!!trialDialog} onOpenChange={() => { setTrialDialog(null); setTrialDays("7"); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Estender Teste Gratuito</DialogTitle>
+            <DialogDescription>
+              {trialDialog?.full_name || trialDialog?.email}
+              {trialDialog?.account_created_at && (
+                <> • Conta criada em {new Date(trialDialog.account_created_at).toLocaleDateString("pt-BR")}</>
+              )}
+              <br />
+              Dias extras já concedidos: <strong>{trialDialog?.trial_extra_days || 0}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>Dias a adicionar</Label>
+            <Input
+              type="number"
+              value={trialDays}
+              onChange={(e) => setTrialDays(e.target.value)}
+              placeholder="Ex.: 7 (use negativo para reduzir)"
+            />
+            <p className="text-xs text-muted-foreground">
+              O valor é somado aos dias já concedidos. Use número negativo para reduzir.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setTrialDialog(null); setTrialDays("7"); }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleExtendTrial} disabled={actionLoading}>
+              {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Aplicar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
