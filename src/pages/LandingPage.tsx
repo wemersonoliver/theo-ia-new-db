@@ -169,28 +169,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Vídeo Demonstração */}
-      <section className="px-4 py-16">
-        <div className="mx-auto max-w-4xl text-center">
-          <h2 className="mb-4 text-3xl font-bold md:text-4xl">
-            Configure em <span className="text-[hsl(217,91%,60%)]">poucos passos</span>
-          </h2>
-          <p className="mx-auto mb-8 max-w-2xl text-lg text-slate-300">
-            Veja como é fácil configurar o sistema. Em poucos minutos você já tem um agente inteligente atendendo seus clientes <strong className="text-white">24 horas por dia, 7 dias por semana</strong>.
-          </p>
-          <div className="relative mx-auto w-full aspect-video rounded-2xl overflow-hidden border-2 border-[hsl(217,91%,60%)]/30 shadow-2xl shadow-[hsl(217,91%,60%)]/10">
-            <iframe
-              src="https://www.youtube.com/embed/XekoWzM4CPM"
-              title="Demonstração Theo IA"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="absolute inset-0 w-full h-full"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Estatísticas de Tempo de Resposta */}
       <section className="px-4 py-20">
         <div className="mx-auto max-w-5xl">
           <Badge className="mx-auto mb-4 flex w-fit items-center border-[hsl(0,84%,60%)]/30 bg-[hsl(0,84%,60%)]/10 text-[hsl(0,84%,60%)]">
