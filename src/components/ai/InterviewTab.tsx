@@ -304,6 +304,7 @@ export function InterviewTab({ onPromptApplied }: { onPromptApplied?: () => void
         active: true,
         business_hours_start: "00:00",
         business_hours_end: "23:59",
+        business_days: [0, 1, 2, 3, 4, 5, 6],
       });
       toast.success("Agente ativado com atendimento 24h!");
       sessionStorage.removeItem(INTERVIEW_DRAFT_KEY);
