@@ -57,7 +57,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       // Resolve account: own account (owner) OR account where user is a member
       const { data: membership } = await supabase
         .from("account_members")
-        .select("account_id, role, must_change_password, accounts!inner(owner_user_id, created_at)")
+        .select("account_id, role, must_change_password, accounts!inner(owner_user_id, created_at, trial_extra_days)")
         .eq("user_id", user.id)
         .eq("status", "active")
         .order("role", { ascending: true })
@@ -132,7 +132,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         const now = new Date();
         const diffMs = now.getTime() - createdAt.getTime();
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        const daysLeft = trialDaysFor(createdAt) - diffDays;
+        const extra = (membership as any)?.accounts?.trial_extra_days ?? 0;
+        const daysLeft = trialDaysFor(createdAt) + extra - diffDays;
 
         if (daysLeft <= 0) {
           setIsTrialExpired(true);

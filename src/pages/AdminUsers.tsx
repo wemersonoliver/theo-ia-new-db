@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Search, Pencil, Trash2, LogIn, Zap, ZapOff } from "lucide-react";
+import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Search, Pencil, Trash2, LogIn, Zap, ZapOff, CalendarPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { startImpersonation } from "@/lib/impersonation";
 
@@ -44,6 +44,8 @@ interface AdminUser {
   user_code: number | null;
   business_code: number | null;
   business_name: string | null;
+  account_created_at: string | null;
+  trial_extra_days: number;
   is_blocked: boolean;
   feature_keyword_triggers: boolean;
   created_at: string;
@@ -76,6 +78,8 @@ export default function AdminUsers() {
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [deleteDialog, setDeleteDialog] = useState<AdminUser | null>(null);
+  const [trialDialog, setTrialDialog] = useState<AdminUser | null>(null);
+  const [trialDays, setTrialDays] = useState("7");
 
   useEffect(() => {
     fetchUsers();
@@ -243,6 +247,28 @@ export default function AdminUsers() {
     setActionLoading(false);
   };
 
+  const handleExtendTrial = async () => {
+    if (!trialDialog) return;
+    const days = parseInt(trialDays, 10);
+    if (!Number.isFinite(days) || days === 0) {
+      toast({ title: "Erro", description: "Informe um número de dias (use negativo para reduzir)", variant: "destructive" });
+      return;
+    }
+    setActionLoading(true);
+    const { data, error } = await supabase.functions.invoke("admin-users", {
+      body: { action: "extend_trial", userId: trialDialog.id, extraDays: days },
+    });
+    if (error) {
+      toast({ title: "Erro", description: "Falha ao estender trial", variant: "destructive" });
+    } else {
+      toast({ title: "Sucesso", description: `Trial atualizado: +${data?.trial_extra_days || 0} dias extras totais` });
+      setTrialDialog(null);
+      setTrialDays("7");
+      fetchUsers();
+    }
+    setActionLoading(false);
+  };
+
   const handleImpersonate = async (target: AdminUser) => {
     if (!confirm(`Entrar como ${target.full_name || target.email}?\n\nVocê terá acesso TOTAL à conta dele em modo suporte. Um banner amarelo no topo permite voltar ao admin a qualquer momento.`)) return;
     setActionLoading(true);
@@ -396,6 +422,18 @@ export default function AdminUsers() {
                           >
                             <CreditCard className="h-4 w-4" />
                           </Button>
+                          {!u.subscription && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { setTrialDialog(u); setTrialDays("7"); }}
+                              disabled={actionLoading}
+                              title={`Estender trial${u.trial_extra_days ? ` (+${u.trial_extra_days}d extras)` : ""}`}
+                              className="text-sky-400 border-sky-500/30 hover:bg-sky-500/10"
+                            >
+                              <CalendarPlus className="h-4 w-4" />
+                            </Button>
+                          )}
                           {u.subscription && (
                             <Button
                               variant="outline"
@@ -600,6 +638,44 @@ export default function AdminUsers() {
             <Button variant="destructive" onClick={handleDeleteUser} disabled={actionLoading}>
               {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Excluir Permanentemente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Estender Trial */}
+      <Dialog open={!!trialDialog} onOpenChange={() => { setTrialDialog(null); setTrialDays("7"); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Estender Teste Gratuito</DialogTitle>
+            <DialogDescription>
+              {trialDialog?.full_name || trialDialog?.email}
+              {trialDialog?.account_created_at && (
+                <> • Conta criada em {new Date(trialDialog.account_created_at).toLocaleDateString("pt-BR")}</>
+              )}
+              <br />
+              Dias extras já concedidos: <strong>{trialDialog?.trial_extra_days || 0}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>Dias a adicionar</Label>
+            <Input
+              type="number"
+              value={trialDays}
+              onChange={(e) => setTrialDays(e.target.value)}
+              placeholder="Ex.: 7 (use negativo para reduzir)"
+            />
+            <p className="text-xs text-muted-foreground">
+              O valor é somado aos dias já concedidos. Use número negativo para reduzir.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setTrialDialog(null); setTrialDays("7"); }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleExtendTrial} disabled={actionLoading}>
+              {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Aplicar
             </Button>
           </DialogFooter>
         </DialogContent>
