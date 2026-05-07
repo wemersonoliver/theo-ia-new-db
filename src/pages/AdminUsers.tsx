@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Search, Pencil, Trash2, LogIn, Zap, ZapOff } from "lucide-react";
+import { Loader2, Lock, Unlock, KeyRound, Users, CreditCard, XCircle, Search, Pencil, Trash2, LogIn, Zap, ZapOff, CalendarPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { startImpersonation } from "@/lib/impersonation";
 
@@ -44,6 +44,8 @@ interface AdminUser {
   user_code: number | null;
   business_code: number | null;
   business_name: string | null;
+  account_created_at: string | null;
+  trial_extra_days: number;
   is_blocked: boolean;
   feature_keyword_triggers: boolean;
   created_at: string;
@@ -76,6 +78,8 @@ export default function AdminUsers() {
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [deleteDialog, setDeleteDialog] = useState<AdminUser | null>(null);
+  const [trialDialog, setTrialDialog] = useState<AdminUser | null>(null);
+  const [trialDays, setTrialDays] = useState("7");
 
   useEffect(() => {
     fetchUsers();
@@ -238,6 +242,28 @@ export default function AdminUsers() {
     } else {
       toast({ title: "Sucesso", description: `Usuário ${deleteDialog.email} excluído permanentemente` });
       setDeleteDialog(null);
+      fetchUsers();
+    }
+    setActionLoading(false);
+  };
+
+  const handleExtendTrial = async () => {
+    if (!trialDialog) return;
+    const days = parseInt(trialDays, 10);
+    if (!Number.isFinite(days) || days === 0) {
+      toast({ title: "Erro", description: "Informe um número de dias (use negativo para reduzir)", variant: "destructive" });
+      return;
+    }
+    setActionLoading(true);
+    const { data, error } = await supabase.functions.invoke("admin-users", {
+      body: { action: "extend_trial", userId: trialDialog.id, extraDays: days },
+    });
+    if (error) {
+      toast({ title: "Erro", description: "Falha ao estender trial", variant: "destructive" });
+    } else {
+      toast({ title: "Sucesso", description: `Trial atualizado: +${data?.trial_extra_days || 0} dias extras totais` });
+      setTrialDialog(null);
+      setTrialDays("7");
       fetchUsers();
     }
     setActionLoading(false);
