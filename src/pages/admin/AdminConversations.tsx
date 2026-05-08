@@ -300,6 +300,7 @@ export default function AdminConversations() {
               <MessageSquare className="h-4 w-4" /> Conversas ({filteredConversations.length})
             </CardTitle>
             {TabsBar}
+            {SearchBar}
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[calc(100vh-260px)]">
