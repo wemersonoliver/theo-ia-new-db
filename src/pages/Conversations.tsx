@@ -661,6 +661,15 @@ export default function Conversations() {
                 <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
               </Button>
             </div>
+            <div className="relative mt-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar por nome, email ou telefone..."
+                className="pl-9 h-9"
+              />
+            </div>
             <div className="mt-2 inline-flex rounded-md border bg-muted/40 p-0.5 text-xs">
               {(["open","closed","all"] as const).map((k) => (
                 <button
