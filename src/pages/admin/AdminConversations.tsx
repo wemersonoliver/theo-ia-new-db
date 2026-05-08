@@ -16,6 +16,7 @@ import { MediaAttachButton } from "@/components/MediaAttachButton";
 import { RecordSendAudioButton } from "@/components/RecordSendAudioButton";
 import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff, Trash2, ArrowLeft, CheckCircle2, RotateCcw,
+  Search,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -69,6 +70,7 @@ export default function AdminConversations() {
   const { messages } = useSystemConversation(selectedPhone || "");
   const isMobile = useIsMobile();
   const [tab, setTab] = useState<"human" | "ai" | "finalized">("ai");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Auto-select phone from query param and pre-fill message
   useEffect(() => {
@@ -84,11 +86,32 @@ export default function AdminConversations() {
 
   const selectedConv = conversations.find((c) => c.phone === selectedPhone);
 
+  const matchesSearch = (c: typeof conversations[number]) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const name = (c.contact_name || "").toLowerCase();
+    const phone = (c.phone || "").toLowerCase();
+    const email = ((c as any).user_email || "").toLowerCase();
+    return name.includes(q) || phone.includes(q) || email.includes(q);
+  };
   const humanList = conversations.filter((c) => !c.finalized_at && !c.ai_active);
   const aiList = conversations.filter((c) => !c.finalized_at && c.ai_active);
   const finalizedList = conversations.filter((c) => !!c.finalized_at);
-  const filteredConversations =
+  const baseList =
     tab === "human" ? humanList : tab === "ai" ? aiList : finalizedList;
+  const filteredConversations = baseList.filter(matchesSearch);
+
+  const SearchBar = (
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+      <Input
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        placeholder="Buscar por nome, email ou telefone..."
+        className="pl-9 h-9 bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-500"
+      />
+    </div>
+  );
 
   const TabsBar = (
     <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="w-full">
@@ -118,6 +141,7 @@ export default function AdminConversations() {
       <AdminLayout title="Conversas do Sistema" description="Conversas via WhatsApp do sistema">
         <div className="space-y-2">
           {TabsBar}
+          {SearchBar}
           {isLoading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-slate-500" /></div>
           ) : filteredConversations.length === 0 ? (
@@ -276,6 +300,7 @@ export default function AdminConversations() {
               <MessageSquare className="h-4 w-4" /> Conversas ({filteredConversations.length})
             </CardTitle>
             {TabsBar}
+            {SearchBar}
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[calc(100vh-260px)]">

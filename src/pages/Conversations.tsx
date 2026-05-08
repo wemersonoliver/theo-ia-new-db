@@ -30,7 +30,7 @@ import {
 import {
   MessageSquare, Send, Loader2, User, Bot, Power, PowerOff,
   Tag, ExternalLink, Kanban, CheckCircle, Trash2, ArrowLeft, RefreshCw,
-  Trophy, XCircle, MinusCircle, RotateCcw,
+  Trophy, XCircle, MinusCircle, RotateCcw, Search,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -225,6 +225,7 @@ export default function Conversations() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"open" | "closed" | "all">("open");
   const [syncing, setSyncing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchParams] = useSearchParams();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
@@ -232,6 +233,10 @@ export default function Conversations() {
   const isMobile = useIsMobile();
   const contactPictureByPhone = useMemo(
     () => new Map(contacts.map((contact) => [contact.phone, contact.profile_picture_url])),
+    [contacts],
+  );
+  const contactByPhone = useMemo(
+    () => new Map(contacts.map((c) => [c.phone, c])),
     [contacts],
   );
 
@@ -252,8 +257,17 @@ export default function Conversations() {
           if (statusFilter === "all") return true;
           if (statusFilter === "closed") return !!c.outcome;
           return !c.outcome;
+        })
+        .filter((c) => {
+          const q = searchQuery.trim().toLowerCase();
+          if (!q) return true;
+          const contact = contactByPhone.get(c.phone);
+          const name = (c.contact_name || contact?.name || "").toLowerCase();
+          const email = (contact?.email || "").toLowerCase();
+          const phone = (c.phone || "").toLowerCase();
+          return name.includes(q) || email.includes(q) || phone.includes(q);
         }),
-    [rawConversations, otherPendingPhones, statusFilter],
+    [rawConversations, otherPendingPhones, statusFilter, searchQuery, contactByPhone],
   );
 
   const selectedPending = useMemo(
@@ -338,6 +352,15 @@ export default function Conversations() {
     return (
       <DashboardLayout title="Conversas">
         <div className="space-y-2 w-full max-w-full overflow-x-hidden">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por nome, email ou telefone..."
+              className="pl-9"
+            />
+          </div>
           {conversations.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
@@ -637,6 +660,15 @@ export default function Conversations() {
               >
                 <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
               </Button>
+            </div>
+            <div className="relative mt-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar por nome, email ou telefone..."
+                className="pl-9 h-9"
+              />
             </div>
             <div className="mt-2 inline-flex rounded-md border bg-muted/40 p-0.5 text-xs">
               {(["open","closed","all"] as const).map((k) => (
