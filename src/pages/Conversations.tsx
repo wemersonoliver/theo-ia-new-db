@@ -352,6 +352,15 @@ export default function Conversations() {
     return (
       <DashboardLayout title="Conversas">
         <div className="space-y-2 w-full max-w-full overflow-x-hidden">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por nome, email ou telefone..."
+              className="pl-9"
+            />
+          </div>
           {conversations.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
