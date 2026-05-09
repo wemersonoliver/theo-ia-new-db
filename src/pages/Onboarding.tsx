@@ -266,6 +266,7 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
   const [connectionMode, setConnectionMode] = useState<"qr" | "code">("qr");
   const [phoneInput, setPhoneInput] = useState("");
   const [cachedPairingCode, setCachedPairingCode] = useState<string | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
 
   useEffect(() => { instanceStatusRef.current = instance?.status; }, [instance?.status]);
 
