@@ -2,11 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system - Professional/Corporate theme */
+/* Theo IA — "Neon Synapse" futuristic design system.
+   All colors HSL. Tokens drive everything; do not use raw colors in components. */
 
-/* Hide reCAPTCHA badge by default; show only on auth pages (body.show-recaptcha).
-   We comply with Google's terms by displaying the attribution text inline
-   on those pages. */
 .grecaptcha-badge {
   visibility: hidden !important;
   opacity: 0 !important;
@@ -20,7 +18,8 @@ body.show-recaptcha .grecaptcha-badge {
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
+    /* Light — clean futuristic */
+    --background: 210 40% 98%;
     --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
@@ -29,86 +28,124 @@ body.show-recaptcha .grecaptcha-badge {
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 217 91% 50%;
+    --primary: 217 100% 55%;
     --primary-foreground: 0 0% 100%;
+    --primary-glow: 200 100% 60%;
 
     --secondary: 210 40% 96%;
     --secondary-foreground: 222 47% 11%;
 
     --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted-foreground: 215 16% 42%;
 
-    --accent: 142 76% 36%;
+    --accent: 190 100% 45%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 217 91% 50%;
+    --border: 214 32% 88%;
+    --input: 214 32% 88%;
+    --ring: 217 100% 55%;
 
-    --radius: 0.5rem;
+    --radius: 0.875rem;
 
-    --success: 142 76% 36%;
+    --success: 142 76% 38%;
     --success-foreground: 0 0% 100%;
 
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --sidebar-background: 222 47% 11%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 217 91% 60%;
+    --neon-cyan: 190 100% 50%;
+    --neon-purple: 265 90% 60%;
+    --neon-green: 142 76% 45%;
+
+    /* Sidebar (dark even in light mode for contrast — keeps brand identity) */
+    --sidebar-background: 222 60% 6%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 217 100% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 47% 18%;
+    --sidebar-accent: 220 45% 12%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222 47% 18%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-border: 220 50% 14%;
+    --sidebar-ring: 217 100% 60%;
+
+    --gradient-aurora: radial-gradient(ellipse 80% 60% at 20% 0%, hsl(217 100% 55% / 0.18), transparent 60%),
+                       radial-gradient(ellipse 70% 50% at 90% 20%, hsl(190 100% 50% / 0.15), transparent 60%),
+                       radial-gradient(ellipse 60% 50% at 50% 100%, hsl(265 90% 60% / 0.12), transparent 60%);
+    --gradient-primary: linear-gradient(135deg, hsl(217 100% 55%), hsl(190 100% 50%));
+    --gradient-glow: linear-gradient(135deg, hsl(217 100% 60% / 0.85), hsl(265 90% 60% / 0.85));
+
+    --glow-primary: 0 0 40px hsl(217 100% 55% / 0.35);
+    --glow-cyan: 0 0 40px hsl(190 100% 50% / 0.35);
+    --glow-purple: 0 0 40px hsl(265 90% 60% / 0.35);
+    --shadow-elevated: 0 20px 60px -20px hsl(220 60% 10% / 0.25);
+    --shadow-glass: inset 0 1px 0 hsl(0 0% 100% / 0.05);
+
+    --blur-glass: 14px;
   }
 
   .dark {
-    --background: 222 47% 5%;
+    /* Dark — deep navy + neon (default for app) */
+    --background: 222 60% 4%;
     --foreground: 210 40% 98%;
 
-    --card: 222 47% 8%;
+    --card: 222 50% 8%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222 47% 8%;
+    --popover: 222 55% 7%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 217 100% 62%;
+    --primary-foreground: 222 60% 6%;
+    --primary-glow: 200 100% 65%;
 
-    --secondary: 217 33% 17%;
+    --secondary: 220 35% 14%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 220 35% 12%;
+    --muted-foreground: 215 25% 70%;
 
-    --accent: 142 76% 36%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 190 100% 55%;
+    --accent-foreground: 222 60% 6%;
 
-    --destructive: 0 63% 31%;
+    --destructive: 0 70% 55%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 217 91% 60%;
+    --border: 220 50% 16%;
+    --input: 220 45% 14%;
+    --ring: 217 100% 62%;
 
-    --success: 142 76% 36%;
-    --success-foreground: 0 0% 100%;
+    --success: 142 76% 45%;
+    --success-foreground: 222 60% 6%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 222 60% 6%;
 
-    --sidebar-background: 222 47% 5%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 217 91% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 47% 12%;
+    --neon-cyan: 190 100% 60%;
+    --neon-purple: 265 90% 70%;
+    --neon-green: 142 76% 50%;
+
+    --sidebar-background: 222 65% 4%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 217 100% 62%;
+    --sidebar-primary-foreground: 222 60% 6%;
+    --sidebar-accent: 220 50% 10%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222 47% 12%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-border: 220 50% 12%;
+    --sidebar-ring: 217 100% 62%;
+
+    --gradient-aurora: radial-gradient(ellipse 80% 60% at 20% 0%, hsl(217 100% 55% / 0.28), transparent 60%),
+                       radial-gradient(ellipse 70% 50% at 90% 20%, hsl(190 100% 55% / 0.22), transparent 60%),
+                       radial-gradient(ellipse 60% 50% at 50% 100%, hsl(265 90% 65% / 0.18), transparent 60%);
+    --gradient-primary: linear-gradient(135deg, hsl(217 100% 60%), hsl(190 100% 55%));
+    --gradient-glow: linear-gradient(135deg, hsl(217 100% 65% / 0.9), hsl(265 90% 70% / 0.9));
+
+    --glow-primary: 0 0 50px hsl(217 100% 60% / 0.45);
+    --glow-cyan: 0 0 50px hsl(190 100% 55% / 0.45);
+    --glow-purple: 0 0 50px hsl(265 90% 65% / 0.45);
+    --shadow-elevated: 0 25px 80px -25px hsl(217 100% 55% / 0.25);
+    --shadow-glass: inset 0 1px 0 hsl(0 0% 100% / 0.06);
   }
 }
 
@@ -117,9 +154,20 @@ body.show-recaptcha .grecaptcha-badge {
     @apply border-border;
   }
 
+  html {
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    background-image: var(--gradient-aurora);
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.02em;
   }
 }
 
@@ -127,8 +175,72 @@ body.show-recaptcha .grecaptcha-badge {
   .whatsapp-bubble-sent {
     @apply bg-accent text-accent-foreground rounded-2xl rounded-br-sm;
   }
-  
   .whatsapp-bubble-received {
     @apply bg-card text-card-foreground rounded-2xl rounded-bl-sm border;
+  }
+
+  /* Glass surfaces */
+  .glass {
+    background: hsl(var(--card) / 0.55);
+    backdrop-filter: blur(var(--blur-glass));
+    -webkit-backdrop-filter: blur(var(--blur-glass));
+    border: 1px solid hsl(var(--border) / 0.6);
+    box-shadow: var(--shadow-glass);
+  }
+  .glass-strong {
+    background: hsl(var(--card) / 0.75);
+    backdrop-filter: blur(calc(var(--blur-glass) + 4px));
+    -webkit-backdrop-filter: blur(calc(var(--blur-glass) + 4px));
+    border: 1px solid hsl(var(--border) / 0.7);
+  }
+
+  /* Glow utilities */
+  .glow-primary { box-shadow: var(--glow-primary); }
+  .glow-cyan { box-shadow: var(--glow-cyan); }
+  .glow-purple { box-shadow: var(--glow-purple); }
+  .text-glow-primary { text-shadow: 0 0 24px hsl(var(--primary) / 0.55); }
+  .text-glow-cyan { text-shadow: 0 0 24px hsl(var(--neon-cyan) / 0.55); }
+
+  .gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .bg-aurora {
+    background-image: var(--gradient-aurora);
+  }
+
+  .border-gradient {
+    position: relative;
+    background-clip: padding-box;
+    border: 1px solid transparent;
+  }
+  .border-gradient::before {
+    content: "";
+    position: absolute; inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: var(--gradient-primary);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0.6;
+  }
+
+  .hover-glow {
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
+  .hover-glow:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--glow-primary);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-float, .animate-pulse-glow, .animate-sparkle, .animate-aurora-shift, .animate-shimmer {
+      animation: none !important;
+    }
   }
 }
