@@ -90,18 +90,21 @@ export function DepartmentConnectCard({ instance, onDisconnect, onRefresh, onUpd
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <CardTitle className="flex items-center gap-2 truncate">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <CardTitle className="flex items-center gap-2 min-w-0">
               <Smartphone className="h-5 w-5 shrink-0" />
-              {instance.display_name || "Departamento"}
-              {instance.is_primary && <Badge variant="outline" className="ml-1 text-xs">Principal</Badge>}
+              <span className="truncate">{instance.display_name || "Departamento"}</span>
+              {instance.is_primary && <Badge variant="outline" className="ml-1 text-xs shrink-0">Principal</Badge>}
             </CardTitle>
             <CardDescription className="truncate">
-              {instance.phone_number || "Não conectado"} • <code className="text-xs">{instance.instance_name}</code>
+              {instance.phone_number || "Não conectado"}
             </CardDescription>
+            <code className="block truncate text-[10px] text-muted-foreground mt-0.5">
+              {instance.instance_name}
+            </code>
           </div>
-          {statusBadge()}
+          <div className="shrink-0">{statusBadge()}</div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -181,8 +184,8 @@ export function DepartmentConnectCard({ instance, onDisconnect, onRefresh, onUpd
             <TabsContent value="qr" className="flex flex-col items-center">
               {qrImageSrc ? (
                 <div className="space-y-3 text-center">
-                  <div className="rounded-lg border bg-white p-4">
-                    <img src={qrImageSrc} alt="QR Code" className={cn("h-56 w-56", isBusy && "opacity-50")} />
+                  <div className="rounded-lg border bg-white p-3 sm:p-4 inline-block max-w-full">
+                    <img src={qrImageSrc} alt="QR Code" className={cn("h-44 w-44 sm:h-56 sm:w-56 max-w-full", isBusy && "opacity-50")} />
                   </div>
                   <p className="text-sm text-muted-foreground">QR expira em <span className="font-bold text-primary">{countdown}s</span></p>
                 </div>
