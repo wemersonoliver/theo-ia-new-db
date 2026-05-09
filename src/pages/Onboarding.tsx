@@ -184,25 +184,13 @@ export default function Onboarding() {
         <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto overflow-x-hidden">
           <div className={cn("mx-auto w-full min-w-0", currentStep === "test_prompt" ? "max-w-6xl" : "max-w-3xl")}>
             {currentStep === "welcome" && (
-              <WelcomeStep onNext={() => goToStep("appointments_question")} />
+              <WelcomeStep onNext={() => goToStep("interview")} />
             )}
             {currentStep === "whatsapp" && (
               <WhatsAppStep onNext={goNext} />
             )}
-            {currentStep === "appointments_question" && (
-              <AppointmentsQuestionStep onAnswer={handleAppointmentsAnswer} />
-            )}
-            {currentStep === "appointments_config" && (
-              <AppointmentsConfigStep onNext={goNext} />
-            )}
             {currentStep === "interview" && (
               <InterviewStep onNext={goNext} />
-            )}
-            {currentStep === "location_question" && (
-              <LocationQuestionStep onAnswer={handleLocationAnswer} />
-            )}
-            {currentStep === "location" && (
-              <LocationStep onNext={goNext} />
             )}
             {currentStep === "test_prompt" && (
               <TestPromptStep onNext={goNext} />
