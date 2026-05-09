@@ -19,7 +19,7 @@ import { OnboardingVideo } from "@/components/OnboardingVideo";
 import {
   Sparkles, Smartphone, QrCode, Loader2, RefreshCw, CheckCircle2, XCircle,
   Calendar, Bot, FlaskConical, PartyPopper, ArrowRight,
-  Check, Send, Wand2,
+  Check, Send, Wand2, Copy,
   MessageCircle, Hash,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -266,6 +266,7 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
   const [connectionMode, setConnectionMode] = useState<"qr" | "code">("qr");
   const [phoneInput, setPhoneInput] = useState("");
   const [cachedPairingCode, setCachedPairingCode] = useState<string | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
 
   useEffect(() => { instanceStatusRef.current = instance?.status; }, [instance?.status]);
 
@@ -361,6 +362,18 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
       createInstance.mutate(phoneInput);
     } else {
       refreshQRCode.mutate(phoneInput);
+    }
+  };
+
+  const handleCopyCode = async () => {
+    try {
+      const raw = (cachedPairingCode || instance?.pairing_code || "").replace(/-/g, "");
+      await navigator.clipboard.writeText(raw);
+      setCodeCopied(true);
+      toast.success("Código copiado!");
+      setTimeout(() => setCodeCopied(false), 2000);
+    } catch {
+      toast.error("Não foi possível copiar");
     }
   };
 
@@ -477,6 +490,10 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
                         )}
                       </div>
                       <div className="flex gap-2 justify-center">
+                        <Button size="sm" onClick={handleCopyCode} disabled={isRefreshing}>
+                          {codeCopied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                          {codeCopied ? "Copiado" : "Copiar"}
+                        </Button>
                         <Button variant="outline" size="sm" onClick={() => { setIsRefreshing(true); setCachedPairingCode(null); refreshQRCode.mutate(phoneInput); }} disabled={isRefreshing}>
                           <RefreshCw className="mr-2 h-4 w-4" /> Novo Código
                         </Button>
