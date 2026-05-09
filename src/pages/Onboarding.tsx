@@ -67,9 +67,6 @@ export default function Onboarding() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<OnboardingStep>("welcome");
-  const [skippedSteps, setSkippedSteps] = useState<Set<OnboardingStep>>(new Set());
-  const [usesAppointments, setUsesAppointments] = useState<boolean | null>(null);
-  const [hasPublicLocation, setHasPublicLocation] = useState<boolean | null>(null);
 
   // Membros secundários (não-owner) não fazem onboarding
   useEffect(() => {
@@ -86,8 +83,8 @@ export default function Onboarding() {
     })();
   }, [user, navigate]);
 
-  // Calculate visible steps (removing skipped)
-  const visibleSteps = STEP_ORDER.filter(s => !skippedSteps.has(s));
+  // All steps are always visible (no skip logic anymore)
+  const visibleSteps = STEP_ORDER;
   const currentIndex = visibleSteps.indexOf(currentStep);
   const progressPercent = ((currentIndex) / (visibleSteps.length - 1)) * 100;
 
@@ -95,41 +92,26 @@ export default function Onboarding() {
 
   const goNext = () => {
     const idx = STEP_ORDER.indexOf(currentStep);
-    for (let i = idx + 1; i < STEP_ORDER.length; i++) {
-      if (!skippedSteps.has(STEP_ORDER[i])) {
-        setCurrentStep(STEP_ORDER[i]);
-        return;
-      }
-    }
-  };
-
-  const handleAppointmentsAnswer = (answer: boolean) => {
-    setUsesAppointments(answer);
-    if (!answer) {
-      setSkippedSteps(prev => new Set([...prev, "appointments_config"]));
-      setCurrentStep("interview");
-    } else {
-      setCurrentStep("appointments_config");
-    }
-  };
-
-  const handleLocationAnswer = (answer: boolean) => {
-    setHasPublicLocation(answer);
-    if (!answer) {
-      setSkippedSteps(prev => new Set([...prev, "location"]));
-      setCurrentStep("test_prompt");
-    } else {
-      setCurrentStep("location");
+    if (idx + 1 < STEP_ORDER.length) {
+      setCurrentStep(STEP_ORDER[idx + 1]);
     }
   };
 
   const handleFinish = async () => {
     if (!user) return;
 
-    // Activate AI agent automatically
+    // Fallback: ensure AI agent is active 24h with the requested defaults
+    // (in case the user skipped the interview entirely)
     await supabase
       .from("whatsapp_ai_config")
-      .update({ active: true } as any)
+      .update({
+        active: true,
+        business_hours_start: "00:00",
+        business_hours_end: "23:59",
+        business_days: [0, 1, 2, 3, 4, 5, 6],
+        max_messages_without_human: 50,
+        response_delay_seconds: 15,
+      } as any)
       .eq("user_id", user.id);
 
     const { error } = await supabase
