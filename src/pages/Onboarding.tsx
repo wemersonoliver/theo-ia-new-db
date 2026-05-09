@@ -708,24 +708,26 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
                 <div ref={messagesEndRef} />
               </div>
             </ScrollArea>
-            <div className="border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4">
-              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_2.5rem_2.5rem] items-end gap-2">
+            <div className="border-t p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:p-4">
+              <div className="flex min-w-0 items-end gap-1.5 sm:gap-2">
                 <Textarea
                   value={userInput}
                   onChange={e => setUserInput(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                   placeholder="Digite sua resposta..."
                   disabled={isLoading}
-                  className="min-h-[60px] min-w-0 resize-none"
+                  className="min-h-[60px] min-w-0 flex-1 resize-none text-base"
                   rows={2}
                 />
-                <AudioRecordButton
-                  onTranscription={(text) => setUserInput(prev => prev ? prev + " " + text : text)}
-                  disabled={isLoading}
-                />
-                <Button onClick={handleSend} disabled={!userInput.trim() || isLoading} size="icon" className="self-end">
-                  <Send className="h-4 w-4" />
-                </Button>
+                <div className="flex shrink-0 items-end gap-1.5 sm:gap-2">
+                  <AudioRecordButton
+                    onTranscription={(text) => setUserInput(prev => prev ? prev + " " + text : text)}
+                    disabled={isLoading}
+                  />
+                  <Button onClick={handleSend} disabled={!userInput.trim() || isLoading} size="icon" className="shrink-0 self-end">
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
