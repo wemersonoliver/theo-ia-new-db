@@ -99,6 +99,233 @@ async function extractAndSaveBusinessData(
   else console.log("Business data saved for deal", deal.id);
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Apply interview-collected configuration to the user's account.
+// Extracts structured data from the conversation via Gemini function calling
+// and persists into whatsapp_ai_config, appointment_types, notification_contacts
+// and followup_config. Service role bypasses RLS.
+// ──────────────────────────────────────────────────────────────────────────
+async function applyInterviewConfig(
+  adminClient: ReturnType<typeof createClient>,
+  userId: string,
+  companyName: string,
+  segment: string,
+  messages: Array<{ role: string; content: string }>,
+  generatedPrompt: string | null,
+): Promise<{
+  appointment_types_created: number;
+  notification_contact_created: boolean;
+  address_set: boolean;
+}> {
+  const summary = {
+    appointment_types_created: 0,
+    notification_contact_created: false,
+    address_set: false,
+  };
+
+  // Resolve account_id (owner)
+  const { data: account } = await adminClient
+    .from("accounts")
+    .select("id")
+    .eq("owner_user_id", userId)
+    .maybeSingle();
+  const accountId = account?.id || null;
+
+  // Build transcript
+  const transcript = messages
+    .slice(-40)
+    .map((m) => `${m.role === "assistant" ? "IA" : "Cliente"}: ${m.content}`)
+    .join("\n")
+    .slice(0, 14000);
+
+  let extracted: any = {};
+
+  if (GEMINI_API_KEY) {
+    try {
+      const tool = {
+        function_declarations: [{
+          name: "registrar_configuracao_negocio",
+          description: "Registra a configuração estruturada do negócio extraída da entrevista",
+          parameters: {
+            type: "object",
+            properties: {
+              agent_name: { type: "string", description: "Nome do agente virtual definido na entrevista (ex: Sofia, Theo). Se não foi informado, use 'Assistente Virtual'." },
+              business_niche: { type: "string", description: "Nicho/segmento do negócio (curto, ex: 'Clínica de estética')" },
+              business_description: { type: "string", description: "Descrição rápida do negócio em 1-2 frases" },
+              uses_appointments: { type: "boolean", description: "Se o negócio trabalha com agendamentos" },
+              appointment_types: {
+                type: "array",
+                description: "Tipos de agendamento coletados (vazio se não usa agendamentos)",
+                items: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" },
+                    duration_minutes: { type: "integer", description: "Duração em minutos (default 30 se não informado)" },
+                    days_of_week: { type: "array", items: { type: "integer" }, description: "Dias da semana 0=domingo a 6=sábado" },
+                    start_time: { type: "string", description: "HH:MM" },
+                    end_time: { type: "string", description: "HH:MM" },
+                  },
+                  required: ["name"],
+                },
+              },
+              notification_phone: { type: "string", description: "Número de WhatsApp para receber notificações do sistema (apenas dígitos com DDD, ex: 5511999999999). String vazia se não informado." },
+              business_address: { type: "string", description: "Endereço completo do local de atendimento. String vazia se for 100% online." },
+              business_location_name: { type: "string", description: "Nome do local (ex: 'Clínica Bem Estar - Unidade Centro'). String vazia se não houver." },
+            },
+            required: ["agent_name", "business_niche", "business_description", "uses_appointments"],
+          },
+        }],
+      };
+
+      const prompt = `Extraia a configuração estruturada do negócio com base na entrevista abaixo.\n\nDados informados:\n- Empresa: ${companyName}\n- Segmento: ${segment}\n\nTrecho da entrevista:\n${transcript}\n\n${generatedPrompt ? `Prompt gerado (referência):\n${generatedPrompt.slice(0, 4000)}\n` : ""}\nRegras:\n- Para appointment_types: só inclua se o cliente confirmou que trabalha com agendamentos. Use os horários e dias mencionados. Se mencionou só 'segunda a sexta', use [1,2,3,4,5].\n- Para notification_phone: extraia apenas dígitos. Adicione 55 no início se for número brasileiro sem DDI.\n- Para business_address: deixe vazio se for atendimento online/remoto.`;
+
+      const resp = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          tools: [tool],
+          toolConfig: { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["registrar_configuracao_negocio"] } },
+          generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+        }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const parts = data.candidates?.[0]?.content?.parts || [];
+        const fnCall = parts.find((p: any) => p.functionCall)?.functionCall;
+        extracted = fnCall?.args || {};
+      } else {
+        console.error("Gemini config extraction failed:", resp.status, await resp.text());
+      }
+    } catch (e) {
+      console.error("Gemini config extraction error:", e);
+    }
+  }
+
+  // ─── 1. Upsert whatsapp_ai_config ───────────────────────────────────────
+  const aiConfigUpdate: Record<string, unknown> = {
+    agent_name: (extracted.agent_name || "Assistente Virtual").toString().slice(0, 100),
+    business_niche: (extracted.business_niche || segment || "").toString().slice(0, 200) || null,
+    business_description: (extracted.business_description || "").toString().slice(0, 1000) || null,
+    custom_prompt: generatedPrompt,
+    active: true,
+    business_hours_start: "00:00",
+    business_hours_end: "23:59",
+    business_days: [0, 1, 2, 3, 4, 5, 6],
+    max_messages_without_human: 50,
+    response_delay_seconds: 15,
+  };
+  if (extracted.business_address && extracted.business_address.trim()) {
+    aiConfigUpdate.business_address = extracted.business_address.trim();
+    summary.address_set = true;
+  }
+  if (extracted.business_location_name && extracted.business_location_name.trim()) {
+    aiConfigUpdate.business_location_name = extracted.business_location_name.trim();
+  }
+
+  const { data: existingCfg } = await adminClient
+    .from("whatsapp_ai_config")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existingCfg) {
+    const { error: updErr } = await adminClient
+      .from("whatsapp_ai_config")
+      .update(aiConfigUpdate)
+      .eq("id", existingCfg.id);
+    if (updErr) console.error("Failed updating whatsapp_ai_config:", updErr);
+  } else {
+    const { error: insErr } = await adminClient
+      .from("whatsapp_ai_config")
+      .insert({ user_id: userId, account_id: accountId, ...aiConfigUpdate });
+    if (insErr) console.error("Failed inserting whatsapp_ai_config:", insErr);
+  }
+
+  // ─── 2. Insert appointment_types (skip duplicates by name) ──────────────
+  if (extracted.uses_appointments && Array.isArray(extracted.appointment_types)) {
+    const { data: existingTypes } = await adminClient
+      .from("appointment_types")
+      .select("name")
+      .eq("user_id", userId);
+    const existingNames = new Set((existingTypes || []).map((t: any) => (t.name || "").toLowerCase().trim()));
+
+    for (const t of extracted.appointment_types) {
+      const name = (t.name || "").toString().trim();
+      if (!name) continue;
+      if (existingNames.has(name.toLowerCase())) continue;
+
+      const days = Array.isArray(t.days_of_week) && t.days_of_week.length > 0
+        ? t.days_of_week.filter((d: any) => Number.isInteger(d) && d >= 0 && d <= 6)
+        : [1, 2, 3, 4, 5];
+      const startTime = /^\d{2}:\d{2}$/.test(t.start_time || "") ? `${t.start_time}:00` : "08:00:00";
+      const endTime = /^\d{2}:\d{2}$/.test(t.end_time || "") ? `${t.end_time}:00` : "18:00:00";
+      const duration = Number.isInteger(t.duration_minutes) && t.duration_minutes > 0 ? t.duration_minutes : 30;
+
+      const { error: aptErr } = await adminClient.from("appointment_types").insert({
+        user_id: userId,
+        account_id: accountId,
+        name,
+        duration_minutes: duration,
+        days_of_week: days,
+        start_time: startTime,
+        end_time: endTime,
+        max_appointments_per_slot: 1,
+        is_active: true,
+      });
+      if (aptErr) console.error("Failed inserting appointment_type:", aptErr);
+      else summary.appointment_types_created++;
+    }
+  }
+
+  // ─── 3. Insert notification_contact ─────────────────────────────────────
+  if (extracted.notification_phone) {
+    let phone = String(extracted.notification_phone).replace(/\D/g, "");
+    if (phone.length >= 10 && phone.length <= 11) phone = "55" + phone;
+    if (phone.length >= 12 && phone.length <= 13) {
+      const { data: existingNotif } = await adminClient
+        .from("notification_contacts")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("phone", phone)
+        .maybeSingle();
+      if (!existingNotif) {
+        const { error: notErr } = await adminClient.from("notification_contacts").insert({
+          user_id: userId,
+          account_id: accountId,
+          phone,
+          name: "Notificações do Sistema",
+          notify_appointments: true,
+          notify_handoffs: true,
+        });
+        if (notErr) console.error("Failed inserting notification_contact:", notErr);
+        else summary.notification_contact_created = true;
+      }
+    }
+  }
+
+  // ─── 4. Upsert followup_config (defaults + enabled) ─────────────────────
+  const { data: existingFu } = await adminClient
+    .from("followup_config")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (existingFu) {
+    await adminClient
+      .from("followup_config")
+      .update({ enabled: true })
+      .eq("id", existingFu.id);
+  } else {
+    await adminClient.from("followup_config").insert({
+      user_id: userId,
+      account_id: accountId,
+      enabled: true,
+    });
+  }
+
+  return summary;
+}
+
 const SYSTEM_PROMPT = `Você é um especialista em atendimento digital e automação de WhatsApp com IA. Sua missão é conduzir uma entrevista consultiva COMPLETA e DETALHADA para criar o prompt de atendimento ideal para a empresa informada.
 
 PASSO 1 — IDENTIFICAÇÃO DA INTENÇÃO (OBRIGATÓRIO — Pergunta 1):
@@ -117,7 +344,9 @@ Após identificar a intenção, você DEVE obrigatoriamente coletar TODAS as inf
 □ PRODUTOS/SERVIÇOS/MODALIDADES: Quais são? Detalhe cada um (público-alvo, descrição, o que inclui)
 □ VALORES E PLANOS: Preços de cada serviço/produto, planos disponíveis, formas de pagamento, taxas extras (matrícula, adesão, etc.)
 □ HORÁRIOS DE FUNCIONAMENTO: Grade completa de horários por dia da semana, horários específicos por modalidade/serviço se aplicável
-□ ENDEREÇO E LOCALIZAÇÃO: Endereço completo, pontos de referência, como chegar
+□ AGENDAMENTOS: Pergunte EXPLICITAMENTE "Você trabalha com agendamentos (consultas, reuniões, sessões com horário marcado)?". Se SIM, colete para CADA tipo de agendamento: nome do serviço, duração em minutos, dias da semana disponíveis e horário (início/fim). Se NÃO, registre e siga.
+□ ENDEREÇO E LOCALIZAÇÃO: Endereço completo do local de atendimento, pontos de referência, como chegar. Se for 100% online/remoto, pergunte e registre como online.
+□ CONTATO DE NOTIFICAÇÃO: Pergunte EXPLICITAMENTE "Qual número de WhatsApp você quer usar para receber notificações do sistema (novos agendamentos, transferências para humano, etc.)?". Aceite qualquer formato e confirme.
 □ DIFERENCIAIS COMPETITIVOS: O que diferencia a empresa da concorrência? Qual o principal argumento de venda?
 □ PROCESSO DE AGENDAMENTO/COMPRA: Quais dados o cliente precisa fornecer? Existe aula experimental/teste grátis? Como funciona?
 
@@ -525,6 +754,7 @@ serve(async (req) => {
     }
 
     // Update history in database
+    let appliedConfigSummary: any = null;
     if (interviewId) {
       const newMessages = [...messages];
       if (userMessage && messages.length > 0) {
@@ -567,6 +797,18 @@ serve(async (req) => {
             newMessages,
             generatedPrompt,
           );
+          try {
+            appliedConfigSummary = await applyInterviewConfig(
+              adminClient,
+              userId as string,
+              companyName,
+              segment,
+              newMessages,
+              generatedPrompt,
+            );
+          } catch (e) {
+            console.error("applyInterviewConfig failed:", e);
+          }
         } catch (e) {
           console.error("Business data extraction failed:", e);
         }
@@ -581,6 +823,7 @@ serve(async (req) => {
         requestAnalyzeAuto,
         requestAnalyzePhones,
         skipAnalysis,
+        appliedConfig: appliedConfigSummary,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

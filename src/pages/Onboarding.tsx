@@ -11,41 +11,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
-import { LocationPicker } from "@/components/LocationPicker";
 import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
 import { useAIConfig } from "@/hooks/useAIConfig";
-import { useAppointmentTypes } from "@/hooks/useAppointmentTypes";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { OnboardingVideo } from "@/components/OnboardingVideo";
 import {
   Sparkles, Smartphone, QrCode, Loader2, RefreshCw, CheckCircle2, XCircle,
-  Calendar, Bot, MapPin, FlaskConical, PartyPopper, ChevronRight, ArrowRight,
-  Check, Send, Copy, Clock, Plus, Trash2, Power, Wand2, Tag, Pencil,
+  Calendar, Bot, FlaskConical, PartyPopper, ArrowRight,
+  Check, Send, Wand2,
   MessageCircle, Hash,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-type OnboardingStep = "welcome" | "appointments_question" | "appointments_config" | "interview" | "whatsapp" | "location_question" | "location" | "test_prompt" | "completed";
+type OnboardingStep = "welcome" | "interview" | "whatsapp" | "test_prompt" | "completed";
 
 type InterviewMessage = { role: "user" | "assistant"; content: string };
 
 const STEP_ORDER: OnboardingStep[] = [
-  "welcome", "appointments_question", "appointments_config",
-  "interview", "whatsapp", "location_question", "location", "test_prompt", "completed"
+  "welcome", "interview", "whatsapp", "test_prompt", "completed"
 ];
 
 const STEP_LABELS: Record<string, string> = {
   welcome: "Boas-vindas",
-  appointments_question: "Agendamentos",
-  appointments_config: "Configurar Horários",
   interview: "Entrevista IA",
   whatsapp: "Conectar WhatsApp",
-  location_question: "Local de Atendimento",
-  location: "Endereço",
   test_prompt: "Testar Prompt",
   completed: "Concluído",
 };
@@ -73,9 +64,6 @@ export default function Onboarding() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<OnboardingStep>("welcome");
-  const [skippedSteps, setSkippedSteps] = useState<Set<OnboardingStep>>(new Set());
-  const [usesAppointments, setUsesAppointments] = useState<boolean | null>(null);
-  const [hasPublicLocation, setHasPublicLocation] = useState<boolean | null>(null);
 
   // Membros secundários (não-owner) não fazem onboarding
   useEffect(() => {
@@ -92,8 +80,8 @@ export default function Onboarding() {
     })();
   }, [user, navigate]);
 
-  // Calculate visible steps (removing skipped)
-  const visibleSteps = STEP_ORDER.filter(s => !skippedSteps.has(s));
+  // All steps are always visible (no skip logic anymore)
+  const visibleSteps = STEP_ORDER;
   const currentIndex = visibleSteps.indexOf(currentStep);
   const progressPercent = ((currentIndex) / (visibleSteps.length - 1)) * 100;
 
@@ -101,41 +89,26 @@ export default function Onboarding() {
 
   const goNext = () => {
     const idx = STEP_ORDER.indexOf(currentStep);
-    for (let i = idx + 1; i < STEP_ORDER.length; i++) {
-      if (!skippedSteps.has(STEP_ORDER[i])) {
-        setCurrentStep(STEP_ORDER[i]);
-        return;
-      }
-    }
-  };
-
-  const handleAppointmentsAnswer = (answer: boolean) => {
-    setUsesAppointments(answer);
-    if (!answer) {
-      setSkippedSteps(prev => new Set([...prev, "appointments_config"]));
-      setCurrentStep("interview");
-    } else {
-      setCurrentStep("appointments_config");
-    }
-  };
-
-  const handleLocationAnswer = (answer: boolean) => {
-    setHasPublicLocation(answer);
-    if (!answer) {
-      setSkippedSteps(prev => new Set([...prev, "location"]));
-      setCurrentStep("test_prompt");
-    } else {
-      setCurrentStep("location");
+    if (idx + 1 < STEP_ORDER.length) {
+      setCurrentStep(STEP_ORDER[idx + 1]);
     }
   };
 
   const handleFinish = async () => {
     if (!user) return;
 
-    // Activate AI agent automatically
+    // Fallback: ensure AI agent is active 24h with the requested defaults
+    // (in case the user skipped the interview entirely)
     await supabase
       .from("whatsapp_ai_config")
-      .update({ active: true } as any)
+      .update({
+        active: true,
+        business_hours_start: "00:00",
+        business_hours_end: "23:59",
+        business_days: [0, 1, 2, 3, 4, 5, 6],
+        max_messages_without_human: 50,
+        response_delay_seconds: 15,
+      } as any)
       .eq("user_id", user.id);
 
     const { error } = await supabase
@@ -208,25 +181,13 @@ export default function Onboarding() {
         <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto overflow-x-hidden">
           <div className={cn("mx-auto w-full min-w-0", currentStep === "test_prompt" ? "max-w-6xl" : "max-w-3xl")}>
             {currentStep === "welcome" && (
-              <WelcomeStep onNext={() => goToStep("appointments_question")} />
+              <WelcomeStep onNext={() => goToStep("interview")} />
             )}
             {currentStep === "whatsapp" && (
               <WhatsAppStep onNext={goNext} />
             )}
-            {currentStep === "appointments_question" && (
-              <AppointmentsQuestionStep onAnswer={handleAppointmentsAnswer} />
-            )}
-            {currentStep === "appointments_config" && (
-              <AppointmentsConfigStep onNext={goNext} />
-            )}
             {currentStep === "interview" && (
               <InterviewStep onNext={goNext} />
-            )}
-            {currentStep === "location_question" && (
-              <LocationQuestionStep onAnswer={handleLocationAnswer} />
-            )}
-            {currentStep === "location" && (
-              <LocationStep onNext={goNext} />
             )}
             {currentStep === "test_prompt" && (
               <TestPromptStep onNext={goNext} />
@@ -549,233 +510,6 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
   );
 }
 
-// ─── STEP 3: APPOINTMENTS QUESTION ─────────────────────────────────────────────
-function AppointmentsQuestionStep({ onAnswer }: { onAnswer: (yes: boolean) => void }) {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-8">
-      <OnboardingVideo stepKey="appointments" />
-      <div className="space-y-4">
-        <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-          <Calendar className="h-8 w-8 text-primary" />
-        </div>
-        <h2 className="text-2xl font-bold">Você trabalha com agendamentos?</h2>
-        <p className="text-muted-foreground max-w-md mx-auto">
-          Exemplos: consultas, aulas experimentais, serviços com horário marcado, reuniões, atendimentos agendados, etc.
-        </p>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full">
-        <Button size="lg" onClick={() => onAnswer(true)} className="gap-2 px-4 sm:px-8 w-full sm:w-auto">
-          <Check className="h-5 w-5" /> Sim, trabalho com agendamentos
-        </Button>
-        <Button size="lg" variant="outline" onClick={() => onAnswer(false)} className="gap-2 px-4 sm:px-8 w-full sm:w-auto">
-          Não, pular esta etapa
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ─── STEP 4: APPOINTMENTS CONFIG ────────────────────────────────────────────────
-function AppointmentsConfigStep({ onNext }: { onNext: () => void }) {
-  const { appointmentTypes, isLoading, saveType, deleteType, toggleActive } = useAppointmentTypes();
-
-  const emptyForm = {
-    name: "", description: "", duration_minutes: 30,
-    days_of_week: [1, 2, 3, 4, 5] as number[],
-    start_time: "08:00", end_time: "18:00", max_appointments_per_slot: 1,
-  };
-
-  const [form, setForm] = useState(emptyForm);
-  const [editingId, setEditingId] = useState<string | null>(null);
-
-  const toggleDay = (day: number) => {
-    setForm(prev => ({
-      ...prev,
-      days_of_week: prev.days_of_week.includes(day)
-        ? prev.days_of_week.filter(d => d !== day)
-        : [...prev.days_of_week, day].sort(),
-    }));
-  };
-
-  const handleSave = () => {
-    if (!form.name.trim()) { toast.error("Informe o nome do serviço"); return; }
-    if (form.days_of_week.length === 0) { toast.error("Selecione pelo menos um dia"); return; }
-    saveType.mutate({
-      id: editingId || undefined,
-      name: form.name.trim(),
-      description: form.description.trim() || null,
-      duration_minutes: form.duration_minutes,
-      days_of_week: form.days_of_week,
-      start_time: form.start_time + (form.start_time.length === 5 ? ":00" : ""),
-      end_time: form.end_time + (form.end_time.length === 5 ? ":00" : ""),
-      max_appointments_per_slot: form.max_appointments_per_slot,
-    });
-    setForm(emptyForm);
-    setEditingId(null);
-  };
-
-  const handleEdit = (type: typeof appointmentTypes[0]) => {
-    setEditingId(type.id);
-    setForm({
-      name: type.name,
-      description: type.description || "",
-      duration_minutes: type.duration_minutes,
-      days_of_week: type.days_of_week || [1, 2, 3, 4, 5],
-      start_time: type.start_time?.slice(0, 5) || "08:00",
-      end_time: type.end_time?.slice(0, 5) || "18:00",
-      max_appointments_per_slot: type.max_appointments_per_slot || 1,
-    });
-  };
-
-  const formatTime = (time: string) => time?.slice(0, 5) || "";
-  const dayLabels = (days: number[]) => days.map(d => DAYS.find(dd => dd.value === d)?.label?.slice(0, 3)).filter(Boolean).join(", ");
-
-  return (
-    <div className="space-y-6">
-      <OnboardingVideo stepKey="appointments" />
-      <div className="space-y-2">
-        <h2 className="text-2xl font-bold flex items-center gap-2">
-          <Clock className="h-6 w-6 text-primary" />
-          Configurar Agendamentos
-        </h2>
-        <p className="text-muted-foreground">
-          Cadastre seus serviços com os dias e horários em que cada um está disponível. A IA usará essas informações para agendar automaticamente.
-        </p>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Formulário */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Plus className="h-4 w-4" /> {editingId ? "Editar Serviço" : "Adicionar Serviço"}
-            </CardTitle>
-            <CardDescription>
-              Defina o serviço, dias, horários e duração.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nome do Serviço</Label>
-              <Input
-                placeholder="Ex: Corte de Cabelo, Consulta, Aula..."
-                value={form.name}
-                onChange={e => setForm({ ...form, name: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Descrição (opcional)</Label>
-              <Textarea
-                placeholder="Descreva brevemente o serviço..."
-                value={form.description}
-                onChange={e => setForm({ ...form, description: e.target.value })}
-                rows={2}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Dias Disponíveis</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {DAYS.map(day => (
-                  <label key={day.value} className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm cursor-pointer hover:bg-accent/50">
-                    <Checkbox checked={form.days_of_week.includes(day.value)} onCheckedChange={() => toggleDay(day.value)} />
-                    {day.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Horário Início</Label>
-                <Input type="time" value={form.start_time} onChange={e => setForm({ ...form, start_time: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Horário Fim</Label>
-                <Input type="time" value={form.end_time} onChange={e => setForm({ ...form, end_time: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Duração (min)</Label>
-                <Input type="number" min={5} max={480} step={5} value={form.duration_minutes}
-                  onChange={e => setForm({ ...form, duration_minutes: parseInt(e.target.value) || 30 })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Vagas por Horário</Label>
-                <Input type="number" min={1} max={100} value={form.max_appointments_per_slot}
-                  onChange={e => setForm({ ...form, max_appointments_per_slot: parseInt(e.target.value) || 1 })} />
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={handleSave} className="flex-1" disabled={saveType.isPending}>
-                {saveType.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                {editingId ? "Salvar Alterações" : "Adicionar Serviço"}
-              </Button>
-              {editingId && (
-                <Button variant="outline" onClick={() => { setEditingId(null); setForm(emptyForm); }}>
-                  Cancelar
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Lista de serviços */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Tag className="h-4 w-4" /> Serviços Cadastrados
-            </CardTitle>
-            <CardDescription>Cada serviço com seus dias e horários próprios</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {appointmentTypes.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8 text-sm">
-                Nenhum serviço cadastrado ainda.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {appointmentTypes.map(type => (
-                  <div key={type.id} className="rounded-lg border p-3 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Switch
-                          checked={type.is_active}
-                          onCheckedChange={checked => toggleActive.mutate({ id: type.id, isActive: checked })}
-                        />
-                        <p className={cn("font-medium text-sm", !type.is_active && "text-muted-foreground")}>{type.name}</p>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(type)}>
-                          <Pencil className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => deleteType.mutate(type.id)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                    {type.description && <p className="text-xs text-muted-foreground pl-12 line-clamp-1">{type.description}</p>}
-                    <div className="text-xs text-muted-foreground pl-12 space-y-0.5">
-                      <p>{type.duration_minutes}min · {type.max_appointments_per_slot === 1 ? "1 vaga" : `${type.max_appointments_per_slot} vagas`}</p>
-                      <p>{dayLabels(type.days_of_week || [])} · {formatTime(type.start_time)} - {formatTime(type.end_time)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="flex justify-end">
-        <Button onClick={onNext} size="lg" className="gap-2">
-          Próximo Passo <ArrowRight className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 // ─── STEP 5: INTERVIEW ──────────────────────────────────────────────────────────
 function InterviewStep({ onNext }: { onNext: () => void }) {
   const { user } = useAuth();
@@ -792,6 +526,11 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
   const [generatedPrompt, setGeneratedPrompt] = useState("");
   const [editablePrompt, setEditablePrompt] = useState("");
   const [isApplying, setIsApplying] = useState(false);
+  const [appliedSummary, setAppliedSummary] = useState<{
+    appointment_types_created: number;
+    notification_contact_created: boolean;
+    address_set: boolean;
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -827,6 +566,7 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
       if (data.finished) {
         setGeneratedPrompt(data.generatedPrompt || "");
         setEditablePrompt(data.generatedPrompt || "");
+        if (data.appliedConfig) setAppliedSummary(data.appliedConfig);
         setState("completed");
       }
     } catch (err) {
@@ -866,8 +606,18 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
       if (interviewId) {
         await supabase.from("entrevistas_config").update({ generated_prompt: editablePrompt, status: "completed" }).eq("id", interviewId);
       }
-      await saveConfig.mutateAsync({ custom_prompt: editablePrompt });
-      toast.success("Prompt aplicado com sucesso!");
+      // Backend already applied full config (24h, 50 msgs, 15s, agent name, niche, etc.)
+      // Just sync the (possibly edited) prompt and ensure active=true.
+      await saveConfig.mutateAsync({
+        custom_prompt: editablePrompt,
+        active: true,
+        business_hours_start: "00:00",
+        business_hours_end: "23:59",
+        business_days: [0, 1, 2, 3, 4, 5, 6],
+        max_messages_without_human: 50,
+        response_delay_seconds: 15,
+      });
+      toast.success("Agente IA configurado e ativado 24h!");
       onNext();
     } catch { toast.error("Erro ao aplicar prompt"); } finally { setIsApplying(false); }
   };
@@ -889,14 +639,6 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
           }
         </p>
       </div>
-
-      {state !== "completed" && (
-        <div className="flex justify-end">
-          <Button variant="ghost" size="sm" onClick={onNext} className="text-muted-foreground">
-            Pular este passo
-          </Button>
-        </div>
-      )}
 
       {state === "idle" && (
         <Card>
@@ -980,82 +722,33 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
           </CardHeader>
           <CardContent className="space-y-4">
             <Textarea value={editablePrompt} onChange={e => setEditablePrompt(e.target.value)} rows={12} className="font-mono text-sm resize-y" />
+            {appliedSummary && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-2">
+                <p className="text-sm font-semibold text-primary flex items-center gap-2">
+                  <Sparkles className="h-4 w-4" /> Configurações aplicadas automaticamente
+                </p>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li className="flex items-start gap-2"><Check className="h-4 w-4 text-primary mt-0.5 shrink-0" /> Agente IA ativo 24h, 7 dias por semana</li>
+                  <li className="flex items-start gap-2"><Check className="h-4 w-4 text-primary mt-0.5 shrink-0" /> Follow-up automático habilitado</li>
+                  <li className="flex items-start gap-2"><Check className="h-4 w-4 text-primary mt-0.5 shrink-0" /> Limite de 50 mensagens sem humano · resposta após 15s</li>
+                  {appliedSummary.appointment_types_created > 0 && (
+                    <li className="flex items-start gap-2"><Check className="h-4 w-4 text-primary mt-0.5 shrink-0" /> {appliedSummary.appointment_types_created} tipo(s) de agendamento criado(s)</li>
+                  )}
+                  {appliedSummary.notification_contact_created && (
+                    <li className="flex items-start gap-2"><Check className="h-4 w-4 text-primary mt-0.5 shrink-0" /> Contato de notificação cadastrado</li>
+                  )}
+                  {appliedSummary.address_set && (
+                    <li className="flex items-start gap-2"><Check className="h-4 w-4 text-primary mt-0.5 shrink-0" /> Endereço de atendimento salvo</li>
+                  )}
+                </ul>
+              </div>
+            )}
             <Button onClick={handleApply} disabled={isApplying} size="lg" className="w-full">
               {isApplying ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Aplicando...</> : <><Check className="mr-2 h-4 w-4" />Aplicar Prompt e Continuar</>}
             </Button>
           </CardContent>
         </Card>
       )}
-    </div>
-  );
-}
-
-// ─── STEP 6: LOCATION QUESTION ──────────────────────────────────────────────────
-function LocationQuestionStep({ onAnswer }: { onAnswer: (yes: boolean) => void }) {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-8">
-      <OnboardingVideo stepKey="location_question" />
-      <div className="space-y-4">
-        <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-          <MapPin className="h-8 w-8 text-primary" />
-        </div>
-        <h2 className="text-2xl font-bold">Você tem um local de atendimento?</h2>
-        <p className="text-muted-foreground max-w-md mx-auto">
-          Se seus clientes podem ir até um local físico (clínica, loja, escritório, academia), configure o endereço para a IA enviar a localização no WhatsApp.
-        </p>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full">
-        <Button size="lg" onClick={() => onAnswer(true)} className="gap-2 px-4 sm:px-8 w-full sm:w-auto">
-          <Check className="h-5 w-5" /> Sim, tenho um local
-        </Button>
-        <Button size="lg" variant="outline" onClick={() => onAnswer(false)} className="gap-2 px-4 sm:px-8 w-full sm:w-auto">
-          Não, pular esta etapa
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ─── STEP 7: LOCATION ───────────────────────────────────────────────────────────
-function LocationStep({ onNext }: { onNext: () => void }) {
-  const { config, saveConfig } = useAIConfig();
-
-  const handleLocationUpdate = async (data: {
-    business_address: string;
-    business_latitude: number | null;
-    business_longitude: number | null;
-    business_location_name: string;
-  }) => {
-    await saveConfig.mutateAsync(data);
-  };
-
-  return (
-    <div className="space-y-6">
-      <OnboardingVideo stepKey="location" />
-      <div className="space-y-2">
-        <h2 className="text-2xl font-bold flex items-center gap-2">
-          <MapPin className="h-6 w-6 text-primary" />
-          Localização do Negócio
-        </h2>
-        <p className="text-muted-foreground">
-          Configure o endereço do seu local. Quando um cliente perguntar "onde fica?", a IA enviará automaticamente a localização.
-        </p>
-      </div>
-
-      <LocationPicker
-        address={config?.business_address || ""}
-        latitude={config?.business_latitude || null}
-        longitude={config?.business_longitude || null}
-        locationName={config?.business_location_name || ""}
-        onUpdate={handleLocationUpdate}
-      />
-
-      <div className="flex justify-end">
-        <Button onClick={onNext} size="lg" className="gap-2">
-          Próximo Passo <ArrowRight className="h-4 w-4" />
-        </Button>
-      </div>
     </div>
   );
 }
