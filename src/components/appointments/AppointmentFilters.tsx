@@ -75,11 +75,11 @@ export function AppointmentFilters({
       : `${selectedAssignees.length} selecionado${selectedAssignees.length > 1 ? "s" : ""}`;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
       {/* Responsável */}
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="h-9 gap-2" disabled={!canSeeAll}>
+          <Button variant="outline" size="sm" className="h-9 w-full justify-start gap-2 sm:w-auto" disabled={!canSeeAll}>
             <Users className="h-4 w-4" />
             <span className="text-xs">{assigneeLabel}</span>
           </Button>
@@ -133,15 +133,15 @@ export function AppointmentFilters({
       </Popover>
 
       {/* Status chips */}
-      <div className="flex items-center gap-1">
-        <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+      <div className="flex flex-wrap items-center gap-1 overflow-x-auto">
+        <Filter className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         {STATUSES.map((s) => {
           const active = selectedStatuses.includes(s.value);
           return (
             <button
               key={s.value}
               onClick={() => toggleStatus(s.value)}
-              className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+              className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
                 active
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border bg-background text-muted-foreground hover:bg-accent"
@@ -164,7 +164,7 @@ export function AppointmentFilters({
       </div>
 
       {/* Busca */}
-      <div className="relative ml-auto flex-1 min-w-[180px] max-w-xs">
+      <div className="relative w-full sm:ml-auto sm:flex-1 sm:min-w-[180px] sm:max-w-xs">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={search}
