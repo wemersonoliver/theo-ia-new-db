@@ -529,6 +529,11 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
   const [generatedPrompt, setGeneratedPrompt] = useState("");
   const [editablePrompt, setEditablePrompt] = useState("");
   const [isApplying, setIsApplying] = useState(false);
+  const [appliedSummary, setAppliedSummary] = useState<{
+    appointment_types_created: number;
+    notification_contact_created: boolean;
+    address_set: boolean;
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -564,6 +569,7 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
       if (data.finished) {
         setGeneratedPrompt(data.generatedPrompt || "");
         setEditablePrompt(data.generatedPrompt || "");
+        if (data.appliedConfig) setAppliedSummary(data.appliedConfig);
         setState("completed");
       }
     } catch (err) {
@@ -603,8 +609,18 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
       if (interviewId) {
         await supabase.from("entrevistas_config").update({ generated_prompt: editablePrompt, status: "completed" }).eq("id", interviewId);
       }
-      await saveConfig.mutateAsync({ custom_prompt: editablePrompt });
-      toast.success("Prompt aplicado com sucesso!");
+      // Backend already applied full config (24h, 50 msgs, 15s, agent name, niche, etc.)
+      // Just sync the (possibly edited) prompt and ensure active=true.
+      await saveConfig.mutateAsync({
+        custom_prompt: editablePrompt,
+        active: true,
+        business_hours_start: "00:00",
+        business_hours_end: "23:59",
+        business_days: [0, 1, 2, 3, 4, 5, 6],
+        max_messages_without_human: 50,
+        response_delay_seconds: 15,
+      });
+      toast.success("Agente IA configurado e ativado 24h!");
       onNext();
     } catch { toast.error("Erro ao aplicar prompt"); } finally { setIsApplying(false); }
   };
@@ -626,14 +642,6 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
           }
         </p>
       </div>
-
-      {state !== "completed" && (
-        <div className="flex justify-end">
-          <Button variant="ghost" size="sm" onClick={onNext} className="text-muted-foreground">
-            Pular este passo
-          </Button>
-        </div>
-      )}
 
       {state === "idle" && (
         <Card>
