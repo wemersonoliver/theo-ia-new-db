@@ -23,6 +23,8 @@ import {
   MessageCircle, Hash,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AuroraBackground } from "@/components/fx/AuroraBackground";
+import { FloatingSparkles } from "@/components/fx/FloatingSparkles";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type OnboardingStep = "welcome" | "interview" | "whatsapp" | "test_prompt" | "completed";
@@ -125,12 +127,14 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col overflow-x-hidden">
+    <div className="relative min-h-screen flex flex-col overflow-x-hidden">
+      <AuroraBackground intensity="default" className="fixed" />
+      <FloatingSparkles count={12} className="fixed" />
       {/* Top Progress Bar */}
-      <div className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b px-4 py-3">
+      <div className="sticky top-0 z-50 bg-background/70 backdrop-blur-xl border-b border-border/60 px-4 py-3">
         <div className="max-w-4xl mx-auto space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="font-medium text-foreground">Configuração Inicial</span>
+            <span className="font-display font-semibold text-foreground">Configuração Inicial</span>
             <div className="flex items-center gap-3">
               <span className="text-muted-foreground">
                 {currentIndex + 1} de {visibleSteps.length} passos

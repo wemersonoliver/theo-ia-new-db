@@ -10,6 +10,8 @@ import { Loader2, MessageSquare, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getRecaptchaToken, isRecaptchaEnabled, useRecaptchaBadge } from "@/lib/recaptcha";
+import { AuroraBackground } from "@/components/fx/AuroraBackground";
+import { FloatingSparkles } from "@/components/fx/FloatingSparkles";
 
 export default function Register() {
   const [fullName, setFullName] = useState("");
@@ -74,13 +76,18 @@ export default function Register() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
+    <div className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden">
+      <AuroraBackground intensity="vivid" />
+      <FloatingSparkles count={18} />
+      <Card className="relative w-full max-w-md glass-strong border-primary/20 shadow-glow-primary animate-scale-in">
         <CardHeader className="space-y-1 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-            <MessageSquare className="h-6 w-6 text-primary-foreground" />
+          <div className="mx-auto mb-4 relative">
+            <div className="absolute inset-0 rounded-2xl bg-primary/40 blur-xl animate-pulse-glow" />
+            <div className="relative mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-primary shadow-glow-primary">
+              <MessageSquare className="h-7 w-7 text-primary-foreground" />
+            </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Criar conta</CardTitle>
+          <CardTitle className="text-2xl font-display font-bold">Criar conta</CardTitle>
           <CardDescription>
             Preencha os dados abaixo para começar
           </CardDescription>
