@@ -1,0 +1,2 @@
+ALTER TABLE public.system_whatsapp_conversations REPLICA IDENTITY FULL;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.system_whatsapp_conversations;
