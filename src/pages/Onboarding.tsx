@@ -16,7 +16,6 @@ import { Switch } from "@/components/ui/switch";
 import { LocationPicker } from "@/components/LocationPicker";
 import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
 import { useAIConfig } from "@/hooks/useAIConfig";
-import { useAppointmentTypes } from "@/hooks/useAppointmentTypes";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { OnboardingVideo } from "@/components/OnboardingVideo";
@@ -29,23 +28,18 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-type OnboardingStep = "welcome" | "appointments_question" | "appointments_config" | "interview" | "whatsapp" | "location_question" | "location" | "test_prompt" | "completed";
+type OnboardingStep = "welcome" | "interview" | "whatsapp" | "test_prompt" | "completed";
 
 type InterviewMessage = { role: "user" | "assistant"; content: string };
 
 const STEP_ORDER: OnboardingStep[] = [
-  "welcome", "appointments_question", "appointments_config",
-  "interview", "whatsapp", "location_question", "location", "test_prompt", "completed"
+  "welcome", "interview", "whatsapp", "test_prompt", "completed"
 ];
 
 const STEP_LABELS: Record<string, string> = {
   welcome: "Boas-vindas",
-  appointments_question: "Agendamentos",
-  appointments_config: "Configurar Horários",
   interview: "Entrevista IA",
   whatsapp: "Conectar WhatsApp",
-  location_question: "Local de Atendimento",
-  location: "Endereço",
   test_prompt: "Testar Prompt",
   completed: "Concluído",
 };
