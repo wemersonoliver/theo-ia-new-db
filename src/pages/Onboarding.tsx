@@ -365,6 +365,18 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
     }
   };
 
+  const handleCopyCode = async () => {
+    try {
+      const raw = (cachedPairingCode || instance?.pairing_code || "").replace(/-/g, "");
+      await navigator.clipboard.writeText(raw);
+      setCodeCopied(true);
+      toast.success("Código copiado!");
+      setTimeout(() => setCodeCopied(false), 2000);
+    } catch {
+      toast.error("Não foi possível copiar");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <OnboardingVideo stepKey="whatsapp" />
