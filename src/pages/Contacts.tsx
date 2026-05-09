@@ -235,13 +235,13 @@ export default function Contacts() {
             className="pl-9"
           />
         </div>
-        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+        <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:flex-wrap sm:w-auto">
           <Button
             variant="outline"
             size="sm"
             onClick={() => syncFromConversations.mutate()}
             disabled={syncFromConversations.isPending}
-            className="flex-1 sm:flex-none"
+            className="w-full sm:w-auto"
           >
             {syncFromConversations.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -250,11 +250,11 @@ export default function Contacts() {
             )}
             Sincronizar
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setIsImportDialog(true)} className="flex-1 sm:flex-none">
+          <Button variant="outline" size="sm" onClick={() => setIsImportDialog(true)} className="w-full sm:w-auto">
             <Upload className="h-4 w-4 mr-2" />
             Importar
           </Button>
-          <Button size="sm" onClick={openNew} className="flex-1 sm:flex-none">
+          <Button size="sm" onClick={openNew} className="col-span-2 w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             Novo Contato
           </Button>

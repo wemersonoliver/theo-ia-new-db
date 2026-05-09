@@ -25,7 +25,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
 
       <div className="relative flex flex-1 flex-col min-w-0">
         {/* Header Mobile com Hambúrguer - CSS-first: visível até lg */}
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-border/60 bg-background/70 backdrop-blur-xl px-4 lg:hidden">
+        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-border/60 bg-background px-4 lg:hidden">
           <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">
