@@ -490,6 +490,10 @@ function WhatsAppStep({ onNext }: { onNext: () => void }) {
                         )}
                       </div>
                       <div className="flex gap-2 justify-center">
+                        <Button size="sm" onClick={handleCopyCode} disabled={isRefreshing}>
+                          {codeCopied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                          {codeCopied ? "Copiado" : "Copiar"}
+                        </Button>
                         <Button variant="outline" size="sm" onClick={() => { setIsRefreshing(true); setCachedPairingCode(null); refreshQRCode.mutate(phoneInput); }} disabled={isRefreshing}>
                           <RefreshCw className="mr-2 h-4 w-4" /> Novo Código
                         </Button>
