@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Mic, MicOff, Loader2, Trash2 } from "lucide-react";
+import { Mic, MicOff, Loader2, Trash2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -199,10 +199,10 @@ export function AudioRecordButton({ onTranscription, disabled }: AudioRecordButt
             <button
               type="button"
               onClick={stopRecording}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
               title="Enviar"
             >
-              <MicOff className="h-5 w-5" />
+              <Send className="h-5 w-5" />
             </button>
           </div>
         </div>
