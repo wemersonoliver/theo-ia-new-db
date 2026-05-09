@@ -325,35 +325,35 @@ export default function Contacts() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((contact) => (
             <Card key={contact.id} className="group hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
+              <CardContent className="p-4 overflow-hidden">
+                <div className="flex items-start gap-3 min-w-0">
                   <WhatsAppAvatar
                     name={contact.name}
                     phone={contact.phone}
                     pictureUrl={contact.profile_picture_url}
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">
+                    <p className="font-semibold text-sm truncate break-all">
                       {contact.name || <span className="text-muted-foreground italic">Sem nome</span>}
                     </p>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5 min-w-0">
                       <Phone className="h-3 w-3 shrink-0" />
                       <span className="truncate">{contact.phone}</span>
                     </div>
                     {contact.email && (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5 min-w-0">
                         <Mail className="h-3 w-3 shrink-0" />
                         <span className="truncate">{contact.email}</span>
                       </div>
                     )}
                     {(contact as any).address && (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5 min-w-0">
                         <MapPin className="h-3 w-3 shrink-0" />
                         <span className="truncate">{(contact as any).address}</span>
                       </div>
                     )}
                     {contact.notes && (
-                      <div className="flex items-start gap-1 text-xs text-muted-foreground mt-1">
+                      <div className="flex items-start gap-1 text-xs text-muted-foreground mt-1 min-w-0">
                         <FileText className="h-3 w-3 shrink-0 mt-0.5" />
                         <span className="line-clamp-2">{contact.notes}</span>
                       </div>
