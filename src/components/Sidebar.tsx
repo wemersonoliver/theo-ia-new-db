@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import theoLogo from "@/assets/logo_theo_ia.png";
 import { useAccount } from "@/hooks/useAccount";
+import { ThemeToggle } from "@/components/fx/ThemeToggle";
 
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", perm: null as string | null },
@@ -84,34 +85,48 @@ export function Sidebar({ mobile, onNavigate }: SidebarProps) {
     <>
       <aside
         className={cn(
-          "flex h-full flex-col bg-sidebar text-sidebar-foreground transition-all duration-300",
+          "relative flex h-full flex-col bg-sidebar text-sidebar-foreground transition-all duration-300 border-r border-sidebar-border/60 overflow-hidden",
           mobile ? "w-full" : (collapsed ? "w-16" : "w-64")
         )}
       >
+        {/* Subtle inner glow */}
+        <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
+        <div aria-hidden className="pointer-events-none absolute -top-20 -left-20 h-60 w-60 rounded-full bg-primary/15 blur-3xl" />
         {/* Header */}
-        <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
+        <div className="relative flex h-16 items-center justify-between border-b border-sidebar-border/60 px-4">
           {showFull ? (
             <div className="flex items-center gap-2">
-              <img src={theoLogo} alt="Theo IA" className="h-8 w-8 rounded-lg" />
-              <span className="text-lg font-bold text-sidebar-primary">Theo IA</span>
+              <div className="relative">
+                <div className="absolute inset-0 rounded-lg bg-primary/40 blur-md animate-pulse-glow" />
+                <img src={theoLogo} alt="Theo IA" className="relative h-8 w-8 rounded-lg" />
+              </div>
+              <span className="text-lg font-display font-bold tracking-tight">
+                Theo <span className="gradient-text">IA</span>
+              </span>
             </div>
           ) : (
-            <img src={theoLogo} alt="Theo IA" className="h-8 w-8 rounded-lg" />
+            <div className="relative">
+              <div className="absolute inset-0 rounded-lg bg-primary/40 blur-md animate-pulse-glow" />
+              <img src={theoLogo} alt="Theo IA" className="relative h-8 w-8 rounded-lg" />
+            </div>
           )}
-          {!mobile && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setCollapsed(!collapsed)}
-              className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            >
-              {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {showFull && <ThemeToggle />}
+            {!mobile && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setCollapsed(!collapsed)}
+                className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              >
+                {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-1 p-2">
+        <nav className="relative flex-1 space-y-1 overflow-y-auto p-2">
           {allNavItems.map((item) => {
             const isActive = location.pathname === item.to;
             return (
@@ -120,34 +135,40 @@ export function Sidebar({ mobile, onNavigate }: SidebarProps) {
                 to={item.to}
                 onClick={onNavigate}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 transition-colors",
+                  "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-200",
                   isActive
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    ? "bg-gradient-to-r from-primary/30 via-primary/15 to-transparent text-primary-foreground shadow-glow-primary border border-primary/40"
+                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-0.5"
                 )}
               >
-                <item.icon className="h-5 w-5 shrink-0" />
-                {showFull && <span>{item.label}</span>}
+                {isActive && (
+                  <span className="absolute left-0 top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-full bg-primary shadow-glow-primary" />
+                )}
+                <item.icon className={cn("h-5 w-5 shrink-0 transition-colors", isActive && "text-primary drop-shadow-[0_0_6px_hsl(var(--primary))]")} />
+                {showFull && <span className={cn("text-sm font-medium", isActive && "text-foreground")}>{item.label}</span>}
               </NavLink>
             );
           })}
         </nav>
 
         {/* User Section */}
-        <div className="border-t border-sidebar-border p-4">
+        <div className="relative border-t border-sidebar-border/60 p-4 space-y-2">
           {showFull && user && (
-            <p className="mb-2 truncate text-sm text-sidebar-foreground/70">
-              {user.email}
-            </p>
+            <div className="glass rounded-xl px-3 py-2 flex items-center gap-2">
+              <div className="h-7 w-7 rounded-full bg-gradient-primary flex items-center justify-center text-xs font-semibold text-primary-foreground shadow-glow-primary">
+                {user.email?.[0]?.toUpperCase()}
+              </div>
+              <p className="truncate text-xs text-sidebar-foreground/80">{user.email}</p>
+            </div>
           )}
           <Button
-            variant="ghost"
+            variant="glass"
             size={showFull ? "default" : "icon"}
             onClick={() => {
               signOut();
               onNavigate?.();
             }}
-            className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="w-full justify-start"
           >
             <LogOut className="h-5 w-5 shrink-0" />
             {showFull && <span className="ml-2">Sair</span>}
