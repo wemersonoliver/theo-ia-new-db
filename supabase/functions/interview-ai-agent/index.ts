@@ -782,6 +782,7 @@ serve(async (req) => {
         .eq("user_id", userId);
 
       // On finish: extract business data and update support CRM deal
+      let appliedConfigSummary: any = null;
       if (hasFinished) {
         try {
           const adminClient = createClient(
@@ -796,6 +797,18 @@ serve(async (req) => {
             newMessages,
             generatedPrompt,
           );
+          try {
+            appliedConfigSummary = await applyInterviewConfig(
+              adminClient,
+              userId as string,
+              companyName,
+              segment,
+              newMessages,
+              generatedPrompt,
+            );
+          } catch (e) {
+            console.error("applyInterviewConfig failed:", e);
+          }
         } catch (e) {
           console.error("Business data extraction failed:", e);
         }
@@ -810,6 +823,7 @@ serve(async (req) => {
         requestAnalyzeAuto,
         requestAnalyzePhones,
         skipAnalysis,
+        appliedConfig: appliedConfigSummary,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
