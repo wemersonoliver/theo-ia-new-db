@@ -1186,7 +1186,7 @@ serve(async (req) => {
     // Get conversation history
     const { data: conversation } = await supabase
       .from("system_whatsapp_conversations")
-      .select("messages, ai_active")
+      .select("messages, ai_active, contact_name")
       .eq("phone", phone)
       .maybeSingle();
 
@@ -1199,11 +1199,59 @@ serve(async (req) => {
 
     const history = (conversation?.messages || []) as any[];
 
-    // Build prompt with admin custom prompt
+    // Lookup customer profile + CRM business data by phone so the AI ALWAYS knows who the lead is
+    let customerContext = "";
+    try {
+      const phoneDigits = String(phone).replace(/\D/g, "");
+      const localPhone = phoneDigits.startsWith("55") ? phoneDigits.slice(2) : phoneDigits;
+      const last8 = phoneDigits.slice(-8);
+
+      let { data: profile } = await supabase
+        .from("profiles")
+        .select("user_id, full_name, email, phone")
+        .or(`phone.eq.${phoneDigits},phone.eq.${localPhone}`)
+        .maybeSingle();
+
+      if (!profile && last8) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, full_name, email, phone")
+          .ilike("phone", `%${last8}%`)
+          .limit(1);
+        profile = profiles?.[0] || null;
+      }
+
+      let deal: any = null;
+      if (profile?.user_id) {
+        const { data: d } = await supabase
+          .from("admin_crm_deals")
+          .select("title, business_name, business_segment, business_summary")
+          .eq("user_ref_id", profile.user_id)
+          .maybeSingle();
+        deal = d;
+      }
+
+      const knownName = profile?.full_name || conversation?.contact_name || null;
+      if (knownName || deal) {
+        customerContext = `\n\n## Cliente Identificado (NÃO pergunte o nome novamente)\n` +
+          (knownName ? `- Nome: ${knownName}\n` : "") +
+          (profile?.email ? `- Email: ${profile.email}\n` : "") +
+          (profile?.phone ? `- Telefone: ${profile.phone}\n` : "") +
+          (deal?.business_name ? `- Negócio: ${deal.business_name}\n` : "") +
+          (deal?.business_segment ? `- Segmento: ${deal.business_segment}\n` : "") +
+          (deal?.business_summary ? `- Resumo do negócio: ${deal.business_summary}\n` : "") +
+          `\nIMPORTANTE: Este cliente JÁ está cadastrado. Use o primeiro nome (${(knownName || "").split(" ")[0]}) naturalmente. NUNCA pergunte o nome dele(a) ou o ramo de atividade — você já sabe.`;
+      }
+    } catch (e) {
+      console.error("Failed to load customer context:", e);
+    }
+
+    // Build prompt with admin custom prompt + customer context
     const customPrompt = sysConfig.custom_prompt || "";
-    const fullPrompt = customPrompt 
-      ? `${SYSTEM_PROMPT}\n\n## Instruções Adicionais do Administrador\n\n${customPrompt}`
-      : SYSTEM_PROMPT;
+    const fullPrompt =
+      (customPrompt
+        ? `${SYSTEM_PROMPT}\n\n## Instruções Adicionais do Administrador\n\n${customPrompt}`
+        : SYSTEM_PROMPT) + customerContext;
 
     // Call Gemini with tools
     const aiResponse = await callGeminiWithTools(geminiApiKey, fullPrompt, history, supabase, phone);
