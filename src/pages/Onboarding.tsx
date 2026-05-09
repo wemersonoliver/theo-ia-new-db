@@ -233,9 +233,8 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 
       <div className="grid gap-3 text-left max-w-md w-full">
         {[
-          { icon: Smartphone, text: "Conectar seu WhatsApp" },
           { icon: Bot, text: "Configurar seu Agente IA personalizado" },
-          { icon: Calendar, text: "Definir horários de atendimento (opcional)" },
+          { icon: Smartphone, text: "Conectar seu WhatsApp" },
           { icon: FlaskConical, text: "Testar tudo antes de começar" },
         ].map((item, i) => (
           <div key={i} className="flex items-center gap-3 rounded-lg border p-3">
