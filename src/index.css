@@ -243,4 +243,22 @@ body.show-recaptcha .grecaptcha-badge {
       animation: none !important;
     }
   }
+
+  /* Mobile performance: disable expensive effects that cause jank/repaints */
+  @media (max-width: 1023px) {
+    body {
+      background-attachment: scroll;
+      background-image: none;
+      background-color: hsl(var(--background));
+    }
+    .glass, .glass-strong {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      background: hsl(var(--card) / 0.92) !important;
+    }
+    .animate-float, .animate-pulse-glow, .animate-sparkle, .animate-aurora-shift, .animate-shimmer {
+      animation: none !important;
+    }
+    .hide-on-mobile-fx { display: none !important; }
+  }
 }
