@@ -19,7 +19,7 @@ import { OnboardingVideo } from "@/components/OnboardingVideo";
 import {
   Sparkles, Smartphone, QrCode, Loader2, RefreshCw, CheckCircle2, XCircle,
   Calendar, Bot, FlaskConical, PartyPopper, ArrowRight,
-  Check, Send, Wand2,
+  Check, Send, Wand2, Copy,
   MessageCircle, Hash,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
