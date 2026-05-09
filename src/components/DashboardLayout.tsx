@@ -4,6 +4,7 @@ import { Menu, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { WhatsAppDisconnectedBanner } from "@/components/WhatsAppDisconnectedBanner";
+import { AuroraBackground } from "@/components/fx/AuroraBackground";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -15,15 +16,16 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen w-full">
+    <div className="relative flex min-h-screen w-full">
+      <AuroraBackground intensity="subtle" className="fixed" />
       {/* Sidebar Desktop - CSS-first: hidden em mobile, block em lg+ */}
       <div className="hidden lg:block">
         <Sidebar />
       </div>
 
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className="relative flex flex-1 flex-col min-w-0">
         {/* Header Mobile com Hambúrguer - CSS-first: visível até lg */}
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background px-4 lg:hidden">
+        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-border/60 bg-background/70 backdrop-blur-xl px-4 lg:hidden">
           <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -35,7 +37,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
               <Sidebar mobile onNavigate={() => setSidebarOpen(false)} />
             </SheetContent>
           </Sheet>
-          <h1 className="text-lg font-semibold truncate">{title}</h1>
+          <h1 className="text-lg font-display font-semibold truncate">{title}</h1>
         </header>
 
         <WhatsAppDisconnectedBanner />
@@ -44,9 +46,11 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
           <div className="container py-4 md:py-6 max-w-full">
             {/* Título desktop - hidden em mobile, block em lg+ */}
             <div className="mb-6 hidden lg:block">
-              <h1 className="text-2xl font-bold text-foreground">{title}</h1>
+              <h1 className="text-3xl font-display font-bold text-foreground tracking-tight">
+                {title}
+              </h1>
               {description && (
-                <p className="text-muted-foreground">{description}</p>
+                <p className="text-muted-foreground mt-1">{description}</p>
               )}
             </div>
             {/* Descrição mobile - visível até lg */}
@@ -63,7 +67,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
         href="https://wa.me/5547991293662"
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-20 right-6 z-50 flex items-center gap-2 rounded-full bg-[#25D366] px-4 py-3 text-white shadow-lg transition-transform hover:scale-105"
+        className="fixed bottom-20 right-6 z-50 flex items-center gap-2 rounded-full bg-[hsl(var(--neon-green))] px-4 py-3 text-white shadow-[0_0_30px_hsl(var(--neon-green)/0.5)] transition-all hover:scale-105 hover:shadow-[0_0_50px_hsl(var(--neon-green)/0.7)]"
       >
         <MessageCircle className="h-5 w-5" />
         <span className="hidden sm:inline text-sm font-medium">Suporte</span>
