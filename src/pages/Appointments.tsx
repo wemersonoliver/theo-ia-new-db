@@ -197,23 +197,23 @@ export default function Appointments() {
             </Card>
           )}
 
-          {/* Filtros + botão Novo */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex-1 min-w-0 sm:min-w-[280px] w-full">
-              <AppointmentFilters
-                selectedAssignees={selectedAssignees}
-                onAssigneesChange={setSelectedAssignees}
-                selectedStatuses={selectedStatuses}
-                onStatusesChange={setSelectedStatuses}
-                search={search}
-                onSearchChange={setSearch}
-              />
-            </div>
+          {/* Filtros */}
+          <AppointmentFilters
+            selectedAssignees={selectedAssignees}
+            onAssigneesChange={setSelectedAssignees}
+            selectedStatuses={selectedStatuses}
+            onStatusesChange={setSelectedStatuses}
+            search={search}
+            onSearchChange={setSearch}
+          />
+
+          {/* Ações */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
             <Button
               size="sm"
               variant="outline"
               onClick={() => setSettingsOpen(true)}
-              className="flex-1 sm:flex-none"
+              className="w-full sm:w-auto"
             >
               <SettingsIcon className="h-4 w-4 mr-2" />
               Config de horários
@@ -224,7 +224,7 @@ export default function Appointments() {
                 setDialogDefaultDate(cursor);
                 setDialogOpen(true);
               }}
-              className="flex-1 sm:flex-none"
+              className="w-full sm:w-auto"
             >
               <Plus className="h-4 w-4 mr-2" />
               Novo
