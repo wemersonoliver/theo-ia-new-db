@@ -725,6 +725,27 @@ function InterviewStep({ onNext }: { onNext: () => void }) {
           </CardHeader>
           <CardContent className="space-y-4">
             <Textarea value={editablePrompt} onChange={e => setEditablePrompt(e.target.value)} rows={12} className="font-mono text-sm resize-y" />
+            {appliedSummary && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-2">
+                <p className="text-sm font-semibold text-primary flex items-center gap-2">
+                  <Sparkles className="h-4 w-4" /> Configurações aplicadas automaticamente
+                </p>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li className="flex items-start gap-2"><Check className="h-4 w-4 text-primary mt-0.5 shrink-0" /> Agente IA ativo 24h, 7 dias por semana</li>
+                  <li className="flex items-start gap-2"><Check className="h-4 w-4 text-primary mt-0.5 shrink-0" /> Follow-up automático habilitado</li>
+                  <li className="flex items-start gap-2"><Check className="h-4 w-4 text-primary mt-0.5 shrink-0" /> Limite de 50 mensagens sem humano · resposta após 15s</li>
+                  {appliedSummary.appointment_types_created > 0 && (
+                    <li className="flex items-start gap-2"><Check className="h-4 w-4 text-primary mt-0.5 shrink-0" /> {appliedSummary.appointment_types_created} tipo(s) de agendamento criado(s)</li>
+                  )}
+                  {appliedSummary.notification_contact_created && (
+                    <li className="flex items-start gap-2"><Check className="h-4 w-4 text-primary mt-0.5 shrink-0" /> Contato de notificação cadastrado</li>
+                  )}
+                  {appliedSummary.address_set && (
+                    <li className="flex items-start gap-2"><Check className="h-4 w-4 text-primary mt-0.5 shrink-0" /> Endereço de atendimento salvo</li>
+                  )}
+                </ul>
+              </div>
+            )}
             <Button onClick={handleApply} disabled={isApplying} size="lg" className="w-full">
               {isApplying ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Aplicando...</> : <><Check className="mr-2 h-4 w-4" />Aplicar Prompt e Continuar</>}
             </Button>
