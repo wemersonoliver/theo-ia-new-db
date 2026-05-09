@@ -344,7 +344,9 @@ Após identificar a intenção, você DEVE obrigatoriamente coletar TODAS as inf
 □ PRODUTOS/SERVIÇOS/MODALIDADES: Quais são? Detalhe cada um (público-alvo, descrição, o que inclui)
 □ VALORES E PLANOS: Preços de cada serviço/produto, planos disponíveis, formas de pagamento, taxas extras (matrícula, adesão, etc.)
 □ HORÁRIOS DE FUNCIONAMENTO: Grade completa de horários por dia da semana, horários específicos por modalidade/serviço se aplicável
-□ ENDEREÇO E LOCALIZAÇÃO: Endereço completo, pontos de referência, como chegar
+□ AGENDAMENTOS: Pergunte EXPLICITAMENTE "Você trabalha com agendamentos (consultas, reuniões, sessões com horário marcado)?". Se SIM, colete para CADA tipo de agendamento: nome do serviço, duração em minutos, dias da semana disponíveis e horário (início/fim). Se NÃO, registre e siga.
+□ ENDEREÇO E LOCALIZAÇÃO: Endereço completo do local de atendimento, pontos de referência, como chegar. Se for 100% online/remoto, pergunte e registre como online.
+□ CONTATO DE NOTIFICAÇÃO: Pergunte EXPLICITAMENTE "Qual número de WhatsApp você quer usar para receber notificações do sistema (novos agendamentos, transferências para humano, etc.)?". Aceite qualquer formato e confirme.
 □ DIFERENCIAIS COMPETITIVOS: O que diferencia a empresa da concorrência? Qual o principal argumento de venda?
 □ PROCESSO DE AGENDAMENTO/COMPRA: Quais dados o cliente precisa fornecer? Existe aula experimental/teste grátis? Como funciona?
 
