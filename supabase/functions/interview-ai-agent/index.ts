@@ -754,6 +754,7 @@ serve(async (req) => {
     }
 
     // Update history in database
+    let appliedConfigSummary: any = null;
     if (interviewId) {
       const newMessages = [...messages];
       if (userMessage && messages.length > 0) {
@@ -782,7 +783,6 @@ serve(async (req) => {
         .eq("user_id", userId);
 
       // On finish: extract business data and update support CRM deal
-      let appliedConfigSummary: any = null;
       if (hasFinished) {
         try {
           const adminClient = createClient(
