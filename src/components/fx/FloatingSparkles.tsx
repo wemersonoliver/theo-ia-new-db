@@ -37,7 +37,7 @@ export function FloatingSparkles({ count = 14, className, color = "mixed" }: Flo
   }, [count, color]);
 
   return (
-    <div aria-hidden className={cn("pointer-events-none absolute inset-0 overflow-hidden -z-10", className)}>
+    <div aria-hidden className={cn("pointer-events-none absolute inset-0 overflow-hidden -z-10 hide-on-mobile-fx", className)}>
       {sparkles.map((s) => (
         <span
           key={s.id}

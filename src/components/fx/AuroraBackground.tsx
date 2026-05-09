@@ -15,7 +15,7 @@ export function AuroraBackground({ className, intensity = "default" }: AuroraBac
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none absolute inset-0 overflow-hidden -z-10",
+        "pointer-events-none absolute inset-0 overflow-hidden -z-10 hide-on-mobile-fx",
         opacity,
         className,
       )}
