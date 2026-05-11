@@ -7,6 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/lib/auth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -76,6 +77,7 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <ImpersonationBanner />
+            <InstallPrompt />
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<Login />} />
