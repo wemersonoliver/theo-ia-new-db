@@ -694,6 +694,151 @@ export type Database = {
           },
         ]
       }
+      attendance_flow_runs: {
+        Row: {
+          current_step: number
+          finished_at: string | null
+          flow_id: string
+          id: string
+          last_error: string | null
+          next_run_at: string
+          phone: string
+          started_at: string
+          status: string
+          trigger_message: string | null
+        }
+        Insert: {
+          current_step?: number
+          finished_at?: string | null
+          flow_id: string
+          id?: string
+          last_error?: string | null
+          next_run_at?: string
+          phone: string
+          started_at?: string
+          status?: string
+          trigger_message?: string | null
+        }
+        Update: {
+          current_step?: number
+          finished_at?: string | null
+          flow_id?: string
+          id?: string
+          last_error?: string | null
+          next_run_at?: string
+          phone?: string
+          started_at?: string
+          status?: string
+          trigger_message?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_flow_runs_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "attendance_flows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attendance_flow_steps: {
+        Row: {
+          caption: string | null
+          content: string | null
+          created_at: string
+          delay_before_seconds: number
+          flow_id: string
+          id: string
+          media_path: string | null
+          media_url: string | null
+          position: number
+          recording_indicator: boolean
+          type: string
+          typing_indicator: boolean
+          updated_at: string
+        }
+        Insert: {
+          caption?: string | null
+          content?: string | null
+          created_at?: string
+          delay_before_seconds?: number
+          flow_id: string
+          id?: string
+          media_path?: string | null
+          media_url?: string | null
+          position?: number
+          recording_indicator?: boolean
+          type: string
+          typing_indicator?: boolean
+          updated_at?: string
+        }
+        Update: {
+          caption?: string | null
+          content?: string | null
+          created_at?: string
+          delay_before_seconds?: number
+          flow_id?: string
+          id?: string
+          media_path?: string | null
+          media_url?: string | null
+          position?: number
+          recording_indicator?: boolean
+          type?: string
+          typing_indicator?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_flow_steps_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "attendance_flows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attendance_flows: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          only_first_contact: boolean
+          pause_support_ai: boolean
+          trigger_match_mode: string
+          trigger_text: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          only_first_contact?: boolean
+          pause_support_ai?: boolean
+          trigger_match_mode?: string
+          trigger_text: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          only_first_contact?: boolean
+          pause_support_ai?: boolean
+          trigger_match_mode?: string
+          trigger_text?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
           account_id: string | null

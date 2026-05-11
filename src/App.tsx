@@ -58,6 +58,8 @@ import AdminTasks from "./pages/admin/AdminTasks";
 import AdminPlans from "./pages/admin/AdminPlans";
 import AdminAICosts from "./pages/admin/AdminAICosts";
 import AdminSimulateSupport from "./pages/admin/AdminSimulateSupport";
+import AdminFlows from "./pages/admin/AdminFlows";
+import AdminFlowEditor from "./pages/admin/AdminFlowEditor";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -128,6 +130,8 @@ const App = () => (
               <Route path="/admin/help-center" element={<AdminHelpCenter />} />
               <Route path="/admin/plans" element={<AdminPlans />} />
               <Route path="/admin/ai-costs" element={<AdminAICosts />} />
+              <Route path="/admin/flows" element={<AdminFlows />} />
+              <Route path="/admin/flows/:id" element={<AdminFlowEditor />} />
               <Route path="/admin" element={<AdminLogin />} />
 
               <Route path="*" element={<NotFound />} />

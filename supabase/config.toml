@@ -48,6 +48,9 @@ verify_jwt = false
 [functions.verify-recaptcha]
 verify_jwt = false
 
+[functions.attendance-flow-dispatch]
+verify_jwt = false
+
 [functions.notify-api-failure]
 verify_jwt = false
 

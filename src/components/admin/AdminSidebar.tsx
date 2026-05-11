@@ -22,6 +22,7 @@ import {
   BookOpen,
   ListChecks,
   Package,
+  Workflow,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -43,6 +44,7 @@ const adminNavItems = [
   { to: "/admin/support", icon: Ticket, label: "Suporte" },
   { to: "/admin/support-calendar", icon: Calendar, label: "Agenda de Suporte" },
   { to: "/admin/tutorial-videos", icon: Video, label: "Vídeos Tutoriais" },
+  { to: "/admin/flows", icon: Workflow, label: "Fluxos de Atendimento" },
   { to: "/admin/help-center", icon: BookOpen, label: "Central de Ajuda" },
   { to: "/admin/notifications", icon: Bell, label: "Notificações" },
   { to: "/admin/logs", icon: ScrollText, label: "Logs" },
