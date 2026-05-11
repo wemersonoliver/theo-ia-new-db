@@ -9,6 +9,83 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function normalizeTriggerText(s: string): string {
+  return (s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+async function tryStartAttendanceFlow(
+  supabase: any,
+  phone: string,
+  content: string,
+  isNewConversation: boolean,
+): Promise<{ matched: boolean; pauseAi: boolean }> {
+  try {
+    if (!content) return { matched: false, pauseAi: false };
+    const normalized = normalizeTriggerText(content);
+    if (!normalized) return { matched: false, pauseAi: false };
+
+    const { data: flows } = await supabase
+      .from("attendance_flows")
+      .select("id, trigger_text, trigger_match_mode, pause_support_ai, only_first_contact")
+      .eq("is_active", true);
+
+    if (!flows || flows.length === 0) return { matched: false, pauseAi: false };
+
+    let matched: any = null;
+    for (const f of flows) {
+      const trig = normalizeTriggerText(f.trigger_text || "");
+      if (!trig) continue;
+      if (f.only_first_contact && !isNewConversation) continue;
+      if (f.trigger_match_mode === "contains") {
+        if (normalized.includes(trig)) { matched = f; break; }
+      } else {
+        if (normalized === trig) { matched = f; break; }
+      }
+    }
+
+    if (!matched) return { matched: false, pauseAi: false };
+
+    // Garante que não há outro run ativo para esse phone+flow
+    const { data: existing } = await supabase
+      .from("attendance_flow_runs")
+      .select("id")
+      .eq("flow_id", matched.id)
+      .eq("phone", phone)
+      .eq("status", "running")
+      .maybeSingle();
+
+    if (!existing) {
+      await supabase.from("attendance_flow_runs").insert({
+        flow_id: matched.id,
+        phone,
+        current_step: 0,
+        status: "running",
+        next_run_at: new Date().toISOString(),
+        trigger_message: content,
+      });
+    }
+
+    // Dispatch fire-and-forget
+    const url = Deno.env.get("SUPABASE_URL")!;
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    fetch(`${url}/functions/v1/attendance-flow-dispatch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: "{}",
+    }).catch(() => {});
+
+    return { matched: true, pauseAi: matched.pause_support_ai !== false };
+  } catch (e) {
+    console.error("tryStartAttendanceFlow error:", e);
+    return { matched: false, pauseAi: false };
+  }
+}
+
 function extractPairingCode(payload: Record<string, any> | null | undefined): string | null {
   const raw = payload?.pairingCode || payload?.qrcode?.pairingCode || payload?.code?.pairingCode || null;
   if (typeof raw !== "string") return null;
