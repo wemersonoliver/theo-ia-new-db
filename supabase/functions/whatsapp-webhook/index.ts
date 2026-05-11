@@ -372,11 +372,20 @@ serve(async (req) => {
               .update(updateData)
               .eq("id", conv.id);
 
-            // Trigger support AI if not from me and AI is active
-            if (!isFromMe && conv.ai_active) {
-              triggerSupportAI(phone, content).catch(err => 
-                console.error("Error triggering support AI:", err)
-              );
+            // Tenta disparar fluxo de atendimento (campanha) antes da IA de Suporte
+            if (!isFromMe) {
+              const flowResult = await tryStartAttendanceFlow(supabase, phone, content, false);
+              if (flowResult.matched) {
+                if (flowResult.pauseAi) {
+                  await supabase.from("system_whatsapp_conversations")
+                    .update({ ai_active: false })
+                    .eq("id", conv.id);
+                }
+              } else if (conv.ai_active) {
+                triggerSupportAI(phone, content).catch(err =>
+                  console.error("Error triggering support AI:", err)
+                );
+              }
             }
 
             // Mark follow-up tracking as engaged when lead replies
@@ -397,7 +406,7 @@ serve(async (req) => {
                 });
             }
           } else {
-            await supabase
+            const { data: insertedConv } = await supabase
               .from("system_whatsapp_conversations")
               .insert({
                 phone,
@@ -406,12 +415,23 @@ serve(async (req) => {
                 last_message_at: new Date().toISOString(),
                 total_messages: 1,
                 ai_active: !isFromMe,
-              });
+              })
+              .select("id")
+              .maybeSingle();
 
             if (!isFromMe) {
-              triggerSupportAI(phone, content).catch(err =>
-                console.error("Error triggering support AI:", err)
-              );
+              const flowResult = await tryStartAttendanceFlow(supabase, phone, content, true);
+              if (flowResult.matched) {
+                if (flowResult.pauseAi && insertedConv?.id) {
+                  await supabase.from("system_whatsapp_conversations")
+                    .update({ ai_active: false })
+                    .eq("id", insertedConv.id);
+                }
+              } else {
+                triggerSupportAI(phone, content).catch(err =>
+                  console.error("Error triggering support AI:", err)
+                );
+              }
             }
           }
 
