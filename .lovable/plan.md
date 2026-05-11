@@ -1,51 +1,41 @@
-## Objetivo
+## PWA Simples — Theo IA
 
-Expandir a aba **Vídeos Tutoriais** do super admin (`/admin/tutorial-videos`) para gerenciar vídeos de duas categorias separadas:
+Implementar apenas manifest e meta tags (sem Service Worker). Isso torna o app instalável em Android, iOS e desktop sem risco de cache obsoleto.
 
-1. **Onboarding** (já existente) — passos do fluxo de cadastro
-2. **Menus do sistema** (novo) — cada item da sidebar do usuário
+### Passos
 
-Manter o mesmo padrão visual atual: card por item, opção de link YouTube ou upload de arquivo, e badge verde "Vídeo anexado" / "YouTube" no canto superior do card quando já houver vídeo salvo.
+1. **Gerar ícones PWA**
+   - Gerar ícone 192x192 (`public/icon-192.png`) e 512x512 (`public/icon-512.png`) com fundo transparente e versão maskable (`public/icon-maskable.png`).
+   - Usar o logo/identidade do Theo IA (IA / WhatsApp / tom profissional).
 
----
+2. **Criar manifest.webmanifest**
+   - `name: "Theo IA"`, `short_name: "Theo IA"`
+   - `display: "standalone"`, `orientation: "portrait"`
+   - `theme_color: "#0F172A"`, `background_color: "#0F172A"`
+   - `start_url: "/"`, `scope: "/"`
+   - Ícones: 192, 512 e maskable.
 
-## Mudanças
+3. **Atualizar index.html**
+   - Adicionar `<link rel="manifest" href="/manifest.webmanifest" />`
+   - Adicionar `<link rel="apple-touch-icon" href="/icon-192.png" />`
+   - Adicionar meta tags Apple:
+     - `apple-mobile-web-app-capable: yes`
+     - `apple-mobile-web-app-status-bar-style: black-translucent`
+     - `apple-mobile-web-app-title: Theo IA`
+   - Manter todo o restante (OG, Pixel, Clarity, reCAPTCHA) intacto.
 
-### 1. `src/pages/admin/AdminTutorialVideos.tsx`
+4. **Componente InstallPrompt (leve)**
+   - Criar `src/components/pwa/InstallPrompt.tsx`.
+   - Ouvir `beforeinstallprompt` e exibir botão flutuante/toast "Instalar Theo IA" (Android/Desktop).
+   - Detectar iOS via user-agent e mostrar instruções "Compartilhar > Adicionar à Tela Inicial".
+   - Adicionar o componente no `App.tsx` (condicional, não bloqueante).
 
-- Envolver a listagem em um `<Tabs>` de nível superior com duas guias:
-  - **Onboarding** — mantém os 7 passos atuais (`welcome`, `whatsapp`, `appointments`, `interview`, `location_question`, `location`, `test_prompt`).
-  - **Menus** — nova lista com os itens da sidebar usando o prefixo `menu_` para não colidir com chaves de onboarding:
-    - `menu_dashboard` — Dashboard
-    - `menu_conversations` — Conversas
-    - `menu_whatsapp` — WhatsApp
-    - `menu_ai_agent` — Agente IA
-    - `menu_simulate` — Simular Atendimento
-    - `menu_followup` — Follow-Up
-    - `menu_crm` — CRM
-    - `menu_contacts` — Contatos
-    - `menu_tasks` — Tarefas
-    - `menu_appointments` — Agendamentos
-    - `menu_settings` — Configurações
-    - `menu_help` — Central de Ajuda
-    - `menu_support` — Suporte
-- Extrair o conteúdo do card (atual `.map`) para um componente interno reutilizável `TutorialVideoCard` que recebe `{ key, label }` para evitar duplicação entre as duas guias.
-- O badge "Vídeo anexado / YouTube" continua aparecendo automaticamente em qualquer card cujo `step_key` já tenha registro com `file_path` ou `video_url` na tabela `onboarding_tutorial_videos` (mesma tabela, mesmo hook — apenas chaves novas).
+### O que NÃO inclui (versão simples)
+- Nenhum Service Worker / vite-plugin-pwa.
+- Nenhum cache offline, update banner ou fallback offline.
+- Sem risco de usuários presos em versão antiga.
 
-### 2. Backend / banco
-
-Nenhuma migração necessária. A tabela `onboarding_tutorial_videos` já tem `step_key` como texto livre com unique constraint, então as novas chaves `menu_*` convivem sem conflito. O hook `useTutorialVideos` permanece igual.
-
-### 3. Fora do escopo (não alterar agora)
-
-- Não vou exibir esses vídeos automaticamente nas páginas de menu do usuário — o pedido é apenas pela aba de gestão no super admin, mantendo o mesmo padrão visual de "vídeo anexado". Se quiser que cada página exiba um botão "Tutorial" para o usuário final, posso fazer numa segunda etapa.
-
----
-
-## Resultado esperado
-
-Em `/admin/tutorial-videos`, o super admin vê duas abas no topo. Cada aba lista cards (um por passo/menu) com:
-- Tabs internas "Link YouTube" / "Anexar Vídeo"
-- Preview do vídeo quando salvo
-- Badge "Vídeo anexado" / "YouTube" no header do card quando já existe upload
-- Botão "Remover vídeo"
+### Resultado
+- App instalável com ícone na home screen.
+- Experiência standalone (sem barra de endereço).
+- Splash screen automática no Android; iOS via meta tags.
