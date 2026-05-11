@@ -18,6 +18,22 @@ const ONBOARDING_STEPS = [
   { key: "test_prompt", label: "Testar Prompt" },
 ];
 
+const MENU_STEPS = [
+  { key: "menu_dashboard", label: "Dashboard" },
+  { key: "menu_conversations", label: "Conversas" },
+  { key: "menu_whatsapp", label: "WhatsApp" },
+  { key: "menu_ai_agent", label: "Agente IA" },
+  { key: "menu_simulate", label: "Simular Atendimento" },
+  { key: "menu_followup", label: "Follow-Up" },
+  { key: "menu_crm", label: "CRM" },
+  { key: "menu_contacts", label: "Contatos" },
+  { key: "menu_tasks", label: "Tarefas" },
+  { key: "menu_appointments", label: "Agendamentos" },
+  { key: "menu_settings", label: "Configurações" },
+  { key: "menu_help", label: "Central de Ajuda" },
+  { key: "menu_support", label: "Suporte" },
+];
+
 export default function AdminTutorialVideos() {
   const { videos, isLoading, upsertVideo, uploadVideo, deleteVideo } = useTutorialVideos();
   const [urls, setUrls] = useState<Record<string, string>>({});
@@ -55,15 +71,7 @@ export default function AdminTutorialVideos() {
 
   const isPending = upsertVideo.isPending || uploadVideo.isPending || deleteVideo.isPending;
 
-  return (
-    <AdminLayout title="Vídeos Tutoriais" description="Gerencie os vídeos exibidos em cada etapa do onboarding">
-      <div className="max-w-3xl space-y-4">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          ONBOARDING_STEPS.map((step) => {
+  const renderStepCard = (step: { key: string; label: string }) => {
             const currentUrl = urls[step.key] || "";
             const embedUrl = getYouTubeEmbedUrl(currentUrl);
             const existingVideo = videos.find((v) => v.step_key === step.key);
@@ -187,7 +195,28 @@ export default function AdminTutorialVideos() {
                 </CardContent>
               </Card>
             );
-          })
+  };
+
+  return (
+    <AdminLayout title="Vídeos Tutoriais" description="Gerencie os vídeos exibidos no onboarding e nos menus do sistema">
+      <div className="max-w-3xl">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <Tabs defaultValue="onboarding" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 bg-slate-800 mb-4">
+              <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
+              <TabsTrigger value="menus">Menus</TabsTrigger>
+            </TabsList>
+            <TabsContent value="onboarding" className="space-y-4 mt-0">
+              {ONBOARDING_STEPS.map(renderStepCard)}
+            </TabsContent>
+            <TabsContent value="menus" className="space-y-4 mt-0">
+              {MENU_STEPS.map(renderStepCard)}
+            </TabsContent>
+          </Tabs>
         )}
       </div>
     </AdminLayout>
