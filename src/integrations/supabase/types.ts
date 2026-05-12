@@ -2693,6 +2693,45 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_ai_config_history: {
+        Row: {
+          agent_name: string | null
+          business_description: string | null
+          business_niche: string | null
+          change_source: string | null
+          changed_at: string
+          changed_by: string | null
+          config_id: string
+          custom_prompt: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          agent_name?: string | null
+          business_description?: string | null
+          business_niche?: string | null
+          change_source?: string | null
+          changed_at?: string
+          changed_by?: string | null
+          config_id: string
+          custom_prompt?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          agent_name?: string | null
+          business_description?: string | null
+          business_niche?: string | null
+          change_source?: string | null
+          changed_at?: string
+          changed_by?: string | null
+          config_id?: string
+          custom_prompt?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       whatsapp_ai_sessions: {
         Row: {
           account_id: string | null
