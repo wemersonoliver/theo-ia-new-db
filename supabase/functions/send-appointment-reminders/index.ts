@@ -55,11 +55,15 @@ serve(async (req) => {
         "Olá {nome}! Lembrando que você tem um agendamento {dia_referencia} às {hora}. Por favor, confirme sua presença respondendo SIM ou informe se precisa reagendar.";
 
       const businessStart = config.business_hours_start || "08:00";
-      const businessEnd = config.business_hours_end || "18:00";
+      const businessEnd = config.business_hours_end || "19:00";
       const [bStartH, bStartM] = businessStart.split(":").map(Number);
       const [bEndH, bEndM] = businessEnd.split(":").map(Number);
-      const businessStartMinutes = bStartH * 60 + bStartM;
-      const businessEndMinutes = bEndH * 60 + bEndM;
+      // Piso global de educação comercial: 08:00–19:00 BRT.
+      // Mesmo que o usuário configure 00:00–23:59, NUNCA enviar fora dessa janela.
+      const GLOBAL_FLOOR_MIN = 8 * 60;   // 08:00
+      const GLOBAL_CEIL_MIN  = 19 * 60;  // 19:00
+      const businessStartMinutes = Math.max(bStartH * 60 + bStartM, GLOBAL_FLOOR_MIN);
+      const businessEndMinutes   = Math.min(bEndH * 60 + bEndM,   GLOBAL_CEIL_MIN);
 
       // Fetch appointments for today and tomorrow that haven't been reminded
       const { data: appointments } = await supabase
