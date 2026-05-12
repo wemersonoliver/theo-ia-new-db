@@ -1,0 +1,1 @@
+UPDATE public.accounts SET trial_extra_days = 5, updated_at = now() WHERE id = '2ab457c6-0fb8-4112-8ec9-a72a96f3e776';
