@@ -710,8 +710,21 @@ serve(async (req) => {
 
         // Handle outgoing messages (sent by human via WhatsApp)
         if (isFromMe) {
+          const outgoingId = msg.key?.id || null;
+          // Dedup: se a mensagem já foi gravada pelo whatsapp-ai-agent
+          // com o mesmo id da Evolution, este é apenas o eco do envio.
+          // NÃO duplica no histórico, NÃO desativa a IA, NÃO cancela follow-up.
+          if (outgoingId && conversation) {
+            const existing = (conversation.messages || []) as any[];
+            const already = existing.find((m) => m?.id === outgoingId);
+            if (already) {
+              console.log(`[webhook] echo de mensagem da IA (id=${outgoingId}) — pulando duplicata`);
+              continue;
+            }
+          }
+
           const outgoingMessage: any = {
-            id: msg.key?.id || crypto.randomUUID(),
+            id: outgoingId || crypto.randomUUID(),
             timestamp: new Date().toISOString(),
             from_me: true,
             content,
