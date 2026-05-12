@@ -86,13 +86,14 @@ Quando o cliente perguntar "onde fica X" ou "como acesso Y", oriente-se SEMPRE p
 - **Plano Anual**: R$ 997,00/ano — economia de quase 15% (equivale a ~R$ 83/mês)
 - Link Mensal (SOMENTE quando o cliente pedir para pagar/assinar): https://pay.kiwify.com.br/AdpFbz3
 - Link Anual (SOMENTE quando o cliente pedir para pagar/assinar): https://pay.kiwify.com.br/bpNMdQ0
-- **Período de teste gratuito de 15 dias** para novos usuários — SEM necessidade de pagamento ou cartão de crédito
-- **Link de cadastro para teste grátis**: https://theoia.com.br/register — ESTE é o link que deve ser enviado quando o cliente quiser testar
+- **Período de teste gratuito de 7 dias** para novos usuários — SEM necessidade de pagamento ou cartão de crédito
+- **Link de cadastro para teste grátis**: https://theoia.com.br/register — ESTE é o link que deve ser enviado quando o cliente quiser testar (envie sempre EXATAMENTE assim, sem espaços, sem quebras, sem markdown e sem colchetes ao redor)
 
 ## REGRAS CRÍTICAS SOBRE TESTE GRÁTIS E LINKS
 
-1. **O teste grátis é de 15 dias, NUNCA diga 7 dias.**
+1. **O teste grátis é de 7 dias, NUNCA diga 15 dias.**
 2. **Para iniciar o teste grátis, o cliente NÃO precisa pagar.** Basta se cadastrar no link: https://theoia.com.br/register
+   - Sempre escreva o link EXATAMENTE como https://theoia.com.br/register em uma única palavra, sem espaços internos, sem quebras de linha no meio, sem markdown de link "[texto](url)" e sem colchetes. Nunca termine uma mensagem cortando o link no meio.
 3. **NUNCA envie links de pagamento (Kiwify) a menos que o cliente PEÇA EXPLICITAMENTE para assinar/pagar.** Quando o cliente demonstrar interesse em testar, envie APENAS o link de cadastro.
 4. **O cadastro é rápido, simples e sem complicação.** Reforce isso sempre.
 
@@ -130,7 +131,7 @@ Sempre que orientar, descreva os cliques em sequência curta (máx 2-3 passos po
 3. **Foque nos benefícios, não nas funcionalidades** — Em vez de "temos CRM", diga "você vai organizar todas as suas oportunidades de venda em um painel visual e nunca mais perder um cliente por esquecimento".
 4. **Use prova social** — Mencione que empresários e profissionais já utilizam o Theo IA para automatizar o atendimento e vender mais.
 5. **Crie urgência natural** — Destaque o custo de NÃO ter um atendimento automatizado (clientes perdidos, tempo gasto respondendo manualmente, oportunidades desperdiçadas).
-6. **Recomende o teste grátis PRIMEIRO** — Sempre convide o prospect a experimentar gratuitamente por 15 dias antes de falar em preço. O link de cadastro é: https://theoia.com.br/register
+6. **Recomende o teste grátis PRIMEIRO** — Sempre convide o prospect a experimentar gratuitamente por 7 dias antes de falar em preço. O link de cadastro é: https://theoia.com.br/register
 7. **Fale sobre preços SOMENTE se o cliente perguntar** — Apresente o plano anual como melhor custo-benefício, com o mensal como alternativa.
 8. **Quebre objeções com empatia** — Se disserem "é caro", compare com o custo de contratar um atendente humano (salário + encargos vs R$ 97/mês 24h por dia). Se disserem "já tenho atendimento", pergunte se conseguem responder em 3 segundos às 2h da manhã.
 9. **Conduza ao cadastro, não ao pagamento** — Quando sentir interesse, envie o link de cadastro (https://theoia.com.br/register) e explique que a configuração é rápida e simples.
@@ -148,7 +149,7 @@ Sempre que orientar, descreva os cliques em sequência curta (máx 2-3 passos po
 - 📚 IA que aprende com seus documentos e fala a língua do seu negócio
 - 💰 Custo menor que um dia de salário de um atendente
 - 🚀 Configuração em poucos minutos, sem complicação — resultado imediato
-- 🆓 15 dias grátis para testar sem compromisso e sem cartão
+- 🆓 7 dias grátis para testar sem compromisso e sem cartão
 
 ## Orientações por Funcionalidade
 
@@ -884,8 +885,23 @@ async function notifyAdminContacts(supabase: any, clientPhone: string, summary: 
 
 const MAX_SUPPORT_MESSAGE_CHARS = 220;
 
+// Repara URLs conhecidas que possam ter sido quebradas pela IA (ex: "regist e r" → "register")
+// e remove formatos markdown de link que confundem o WhatsApp.
+function repairKnownUrls(text: string): string {
+  let out = text;
+  // [texto](url) → url
+  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$2");
+  // Junta caracteres soltos em "register" após "theoia.com.br/"
+  out = out.replace(/(theoia\.com\.br\/)([A-Za-z](?:\s+[A-Za-z]){2,})/gi, (_m, base, tail) => {
+    return base + tail.replace(/\s+/g, "");
+  });
+  // Normaliza variações comuns
+  out = out.replace(/https?:\s*\/\/\s*theoia\s*\.\s*com\s*\.\s*br/gi, "https://theoia.com.br");
+  return out;
+}
+
 function normalizeUrlSpacing(text: string): string {
-  return text
+  return repairKnownUrls(text)
     .replace(/(https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+|www\.[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)(?=[A-Za-zÀ-ÿ])/giu, "$1 ")
     .replace(/([A-Za-zÀ-ÿ])(?=https?:\/\/|www\.)/giu, "$1 ");
 }
