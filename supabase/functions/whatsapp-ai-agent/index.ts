@@ -893,18 +893,20 @@ Regras adicionais:
     // Split response into parts for more human-like delivery
     const parts = splitMessage(aiReply);
 
-    // Send each part with typing simulation delay
+    // Send each part with typing simulation delay AND persist each one with the
+    // real WhatsApp message id returned by Evolution. The webhook will then
+    // dedupe by id when the fromMe=true echo arrives — no more duplicate
+    // messages in the conversation history and the AI no longer "disables
+    // itself" right after replying.
     for (let i = 0; i < parts.length; i++) {
       if (i > 0) {
         // Delay proporcional ao tamanho da mensagem anterior (simula digitação ~40 chars/sec)
         const typingDelay = Math.min(Math.max(parts[i].length * 25, 1000), 4000);
         await delay(typingDelay + Math.random() * 800);
       }
-      await sendWhatsAppMessage(supabase, userId, phone, parts[i]);
+      const wid = await sendWhatsAppMessage(supabase, userId, phone, parts[i]);
+      await saveAIMessage(supabase, userId, phone, parts[i], "ai", wid);
     }
-
-    // Save full response to conversation
-    await saveAIMessage(supabase, userId, phone, aiReply, "ai");
 
     // Update session
     await supabase
