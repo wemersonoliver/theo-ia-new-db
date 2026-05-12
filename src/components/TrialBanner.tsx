@@ -35,13 +35,14 @@ export function TrialBanner() {
       // Resolve owner da conta (assinatura/trial são compartilhados)
       const { data: membership } = await supabase
         .from("account_members")
-        .select("accounts!inner(owner_user_id, created_at)")
+        .select("accounts!inner(owner_user_id, created_at, trial_extra_days)")
         .eq("user_id", user.id)
         .eq("status", "active")
         .limit(1)
         .maybeSingle();
 
       const ownerId = (membership as any)?.accounts?.owner_user_id || user.id;
+      const trialExtraDays = Number((membership as any)?.accounts?.trial_extra_days ?? 0);
 
       // Se owner é super_admin, não mostra banner
       if (ownerId !== user.id) {
@@ -71,7 +72,7 @@ export function TrialBanner() {
       if (trialAnchor) {
         const createdAt = new Date(trialAnchor);
         const diffMs = Date.now() - createdAt.getTime();
-        const left = trialDaysFor(createdAt) - Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const left = trialDaysFor(createdAt) + trialExtraDays - Math.floor(diffMs / (1000 * 60 * 60 * 24));
         if (left > 0) {
           setDaysLeft(left);
           setShow(true);
