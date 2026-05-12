@@ -885,8 +885,23 @@ async function notifyAdminContacts(supabase: any, clientPhone: string, summary: 
 
 const MAX_SUPPORT_MESSAGE_CHARS = 220;
 
+// Repara URLs conhecidas que possam ter sido quebradas pela IA (ex: "regist e r" → "register")
+// e remove formatos markdown de link que confundem o WhatsApp.
+function repairKnownUrls(text: string): string {
+  let out = text;
+  // [texto](url) → url
+  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$2");
+  // Junta caracteres soltos em "register" após "theoia.com.br/"
+  out = out.replace(/(theoia\.com\.br\/)([A-Za-z](?:\s+[A-Za-z]){2,})/gi, (_m, base, tail) => {
+    return base + tail.replace(/\s+/g, "");
+  });
+  // Normaliza variações comuns
+  out = out.replace(/https?:\s*\/\/\s*theoia\s*\.\s*com\s*\.\s*br/gi, "https://theoia.com.br");
+  return out;
+}
+
 function normalizeUrlSpacing(text: string): string {
-  return text
+  return repairKnownUrls(text)
     .replace(/(https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+|www\.[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)(?=[A-Za-zÀ-ÿ])/giu, "$1 ")
     .replace(/([A-Za-zÀ-ÿ])(?=https?:\/\/|www\.)/giu, "$1 ");
 }
