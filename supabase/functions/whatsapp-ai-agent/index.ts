@@ -1249,14 +1249,19 @@ async function resolvePreferredChatNumber(instanceName: string, normalizedPhone:
   return null;
 }
 
-async function sendWhatsAppMessage(supabase: any, userId: string, phone: string, message: string) {
+async function sendWhatsAppMessage(
+  supabase: any,
+  userId: string,
+  phone: string,
+  message: string,
+): Promise<string | null> {
   try {
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
 
     if (!evolutionUrl || !evolutionKey) {
       console.error("Evolution API not configured in secrets");
-      return;
+      return null;
     }
 
     // Tenta usar a instância vinculada à conversa (departamento)
@@ -1289,7 +1294,7 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
 
     if (!instance) {
       console.error("Instance not found");
-      return;
+      return null;
     }
 
     const resolvedChatNumber = await resolvePreferredChatNumber(instance.instance_name, phone, evolutionUrl, evolutionKey);
@@ -1319,7 +1324,19 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
       const responseText = await response.text();
       if (response.ok) {
         console.log(`Message sent via ${candidate} (instance: ${instance.instance_name})`);
-        return;
+        // Evolution returns the WhatsApp message id in key.id — capture it so we
+        // can persist the message under that id and let the webhook dedupe by id.
+        try {
+          const parsed = JSON.parse(responseText);
+          const wid =
+            parsed?.key?.id ||
+            parsed?.messageId ||
+            parsed?.message?.key?.id ||
+            null;
+          return typeof wid === "string" ? wid : null;
+        } catch {
+          return null;
+        }
       }
 
       lastErrorBody = responseText;
@@ -1330,17 +1347,26 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
 
       if (!isInvalidNumber) {
         console.error(`Evolution send error (${candidate}):`, responseText);
-        return;
+        return null;
       }
       console.warn(`Number ${candidate} rejected by Evolution, trying variant...`);
     }
     console.error("Evolution send failed for all variants:", lastErrorBody);
+    return null;
   } catch (error) {
     console.error("Send message error:", error);
+    return null;
   }
 }
 
-async function saveAIMessage(supabase: any, userId: string, phone: string, content: string, sentBy: string) {
+async function saveAIMessage(
+  supabase: any,
+  userId: string,
+  phone: string,
+  content: string,
+  sentBy: string,
+  messageId?: string | null,
+) {
   const { data: conversation } = await supabase
     .from("whatsapp_conversations")
     .select("id, messages")
@@ -1349,7 +1375,7 @@ async function saveAIMessage(supabase: any, userId: string, phone: string, conte
     .maybeSingle();
 
   const newMessage = {
-    id: crypto.randomUUID(),
+    id: messageId || crypto.randomUUID(),
     timestamp: new Date().toISOString(),
     from_me: true,
     content,
@@ -1359,6 +1385,10 @@ async function saveAIMessage(supabase: any, userId: string, phone: string, conte
 
   if (conversation) {
     const existingMessages = conversation.messages || [];
+    // Dedup: se a mensagem já existe (saved by webhook race), não duplica.
+    if (messageId && existingMessages.some((m: any) => m?.id === messageId)) {
+      return;
+    }
     const updatedMessages = [...existingMessages, newMessage];
 
     await supabase
