@@ -16,11 +16,23 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const now = new Date();
-    const todayStr = now.toISOString().split("T")[0];
-    const tomorrowDate = new Date(now);
+    // ============================================================
+    // CRITICAL: todo o cálculo de horário precisa estar em BRT
+    // (America/Sao_Paulo). O runtime do Deno roda em UTC e
+    // appointment_time / business_hours_* estão em horário local BRT.
+    // ============================================================
+    const TZ = "America/Sao_Paulo";
+    const nowUtc = new Date();
+    // Pseudo-Date representando o relógio local BRT (campos
+    // getHours/getMinutes/getDate refletem BRT).
+    const nowBrt = new Date(nowUtc.toLocaleString("en-US", { timeZone: TZ }));
+    const fmtDate = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const todayStr = fmtDate(nowBrt);
+    const tomorrowDate = new Date(nowBrt);
     tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-    const tomorrowStr = tomorrowDate.toISOString().split("T")[0];
+    const tomorrowStr = fmtDate(tomorrowDate);
+    const currentMinutes = nowBrt.getHours() * 60 + nowBrt.getMinutes();
 
     // Get all AI configs with reminders enabled
     const { data: configs } = await supabase
@@ -62,7 +74,11 @@ serve(async (req) => {
 
       if (!appointments || appointments.length === 0) continue;
 
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      // Guard global: nunca enviar fora do horário comercial (BRT).
+      const withinBusinessHours =
+        currentMinutes >= businessStartMinutes &&
+        currentMinutes <= businessEndMinutes;
+      if (!withinBusinessHours) continue;
 
       for (const apt of appointments) {
         const [aptH, aptM] = apt.appointment_time.split(":").map(Number);
@@ -70,30 +86,50 @@ serve(async (req) => {
         const isToday = apt.appointment_date === todayStr;
         const isTomorrow = apt.appointment_date === tomorrowStr;
 
+        // Janela ideal: [aptMinutes - hoursBefore*60, aptMinutes]
+        const idealStart = aptMinutes - hoursBefore * 60;
+
         let shouldSendNow = false;
 
         if (isToday) {
-          const reminderTime = aptMinutes - (hoursBefore * 60);
-          
-          if (reminderTime < businessStartMinutes) {
-            if (currentMinutes >= businessStartMinutes && currentMinutes <= businessEndMinutes && aptMinutes > currentMinutes) {
-              shouldSendNow = true;
-            }
-          } else if (currentMinutes >= reminderTime && currentMinutes <= aptMinutes) {
+          // Se a janela ideal começa antes do expediente, espera abrir,
+          // MAS nunca antes (evita enviar fora do expediente) e nunca
+          // depois do horário do agendamento.
+          const effectiveStart = Math.max(idealStart, businessStartMinutes);
+          // Nunca enviar mais cedo que hoursBefore antes (respeita prazo).
+          // effectiveStart já garante isso. Não enviar depois do compromisso.
+          if (
+            currentMinutes >= effectiveStart &&
+            currentMinutes <= Math.min(aptMinutes, businessEndMinutes)
+          ) {
             shouldSendNow = true;
           }
         } else if (isTomorrow) {
-          const reminderTime = aptMinutes - (hoursBefore * 60);
-
-          if (reminderTime < businessStartMinutes) {
-            const sendTime = businessEndMinutes - 120;
-            if (currentMinutes >= sendTime && currentMinutes <= businessEndMinutes) {
+          // Só faz sentido lembrar hoje se a janela de amanhã cair antes
+          // do expediente (ex.: agendamento 08:00 + 2h antes = 06:00).
+          // Nesse caso, mandamos hoje nas últimas 2h antes do fechamento.
+          if (idealStart < businessStartMinutes) {
+            const sendWindowStart = Math.max(
+              businessEndMinutes - 120,
+              businessStartMinutes,
+            );
+            if (
+              currentMinutes >= sendWindowStart &&
+              currentMinutes <= businessEndMinutes
+            ) {
               shouldSendNow = true;
             }
           }
         }
 
-        if (!shouldSendNow) continue;
+        if (!shouldSendNow) {
+          console.log(
+            `[skip] apt=${apt.id} date=${apt.appointment_date} time=${apt.appointment_time} ` +
+              `nowBRT=${String(nowBrt.getHours()).padStart(2, "0")}:${String(nowBrt.getMinutes()).padStart(2, "0")} ` +
+              `business=${businessStart}-${businessEnd} hoursBefore=${hoursBefore}`,
+          );
+          continue;
+        }
 
         // Build message from template
         const diaReferencia = isToday ? "hoje" : "amanhã";
