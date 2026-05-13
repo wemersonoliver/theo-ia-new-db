@@ -775,24 +775,19 @@ Regras adicionais:
           const handoffReason = String(fc.args?.reason || "Solicitação de atendimento humano");
           console.log("[HANDOFF] Tool request_human_handoff acionada:", handoffReason);
 
-          // 1. Marca sessão como handed_off
+          // 1. Registra horário do handoff na sessão (sem desativar a IA)
           await supabase
             .from("whatsapp_ai_sessions")
             .upsert({
               user_id: userId,
               account_id: accountId,
               phone,
-              status: "handed_off",
               handed_off_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             }, { onConflict: "user_id,phone" });
 
-          // 2. Desativa IA na conversa
-          await supabase
-            .from("whatsapp_conversations")
-            .update({ ai_active: false, updated_at: new Date().toISOString() })
-            .eq("user_id", userId)
-            .eq("phone", phone);
+          // 2. IA continua ativa (ai_active permanece true) até um humano
+          //    efetivamente assumir e enviar mensagem manual.
 
           // 3. Mensagem de transição ao cliente (se configurada)
           const handoffMsg = aiConfig.handoff_message
