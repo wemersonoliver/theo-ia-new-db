@@ -20,6 +20,7 @@ function containsFunctionCallCode(text: string): boolean {
     /check_available_slots\s*\(/i,
     /create_appointment\s*\(/i,
     /cancel_appointment\s*\(/i,
+    /reschedule_appointment\s*\(/i,
     /list_appointments\s*\(/i,
     /confirm_appointment\s*\(/i,
     /update_appointment_tags\s*\(/i,
@@ -31,7 +32,7 @@ function containsFunctionCallCode(text: string): boolean {
 
 // Tenta extrair uma chamada de função do texto com código
 function extractFunctionCallFromText(text: string): { name: string; args: Record<string, string> } | null {
-  const pattern = /(check_available_slots|create_appointment|cancel_appointment|list_appointments|confirm_appointment|update_appointment_tags)\s*\(\s*([^)]*)\)/i;
+  const pattern = /(check_available_slots|create_appointment|cancel_appointment|reschedule_appointment|list_appointments|confirm_appointment|update_appointment_tags)\s*\(\s*([^)]*)\)/i;
   
   const match = text.match(pattern);
   if (match) {
@@ -109,6 +110,32 @@ const schedulingTools = {
           time: {
             type: "string",
             description: "Horário do agendamento a cancelar no formato HH:MM"
+          }
+        },
+        required: ["date", "time"]
+      }
+    },
+    {
+      name: "reschedule_appointment",
+      description: "Reagenda um agendamento existente do cliente, atualizando o agendamento atual para a nova data e horário. Use quando o cliente pedir para remarcar/reagendar e informar o novo horário.",
+      parameters: {
+        type: "object",
+        properties: {
+          appointmentId: {
+            type: "string",
+            description: "ID do agendamento existente a reagendar, se disponível no contexto"
+          },
+          date: {
+            type: "string",
+            description: "Nova data do agendamento no formato YYYY-MM-DD"
+          },
+          time: {
+            type: "string",
+            description: "Novo horário do agendamento no formato HH:MM"
+          },
+          title: {
+            type: "string",
+            description: "Tipo de serviço ou título do agendamento"
           }
         },
         required: ["date", "time"]
@@ -257,6 +284,87 @@ function isHumanHandoffRequest(text: string | null | undefined): boolean {
     /\bnao quero (falar|conversar) com (a )?(ia|bot|robo|maquina)\b/,
   ];
   return patterns.some((re) => re.test(t));
+}
+
+function normalizeTextForIntent(text: string | null | undefined): string {
+  return String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function isRescheduleIntent(text: string | null | undefined): boolean {
+  const t = normalizeTextForIntent(text);
+  return /(reagend|remarc|mudar|trocar|alterar)/.test(t);
+}
+
+function toDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function addDays(base: Date, days: number): Date {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function nextWeekday(base: Date, targetDay: number): Date {
+  const current = base.getDay();
+  let diff = (targetDay - current + 7) % 7;
+  if (diff === 0) diff = 7;
+  return addDays(base, diff);
+}
+
+function parseAppointmentDateTimeFromText(text: string | null | undefined, today: Date): { date: string; time: string } | null {
+  const raw = String(text || "");
+  const normalized = normalizeTextForIntent(raw);
+  const timeMatch = normalized.match(/\b(?:as|às|a|para)?\s*(\d{1,2})(?::|h)(\d{2})?\b/);
+  if (!timeMatch) return null;
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2] || "00");
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  const time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+
+  let date: Date | null = null;
+  const isoMatch = normalized.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
+  const brMatch = normalized.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if (isoMatch) {
+    date = new Date(`${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}T00:00:00`);
+  } else if (brMatch) {
+    const day = Number(brMatch[1]);
+    const month = Number(brMatch[2]) - 1;
+    const yearRaw = brMatch[3] ? Number(brMatch[3]) : today.getFullYear();
+    const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+    date = new Date(year, month, day);
+  } else if (/\bdepois de amanha\b/.test(normalized)) {
+    date = addDays(today, 2);
+  } else if (/\bamanha\b/.test(normalized)) {
+    date = addDays(today, 1);
+  } else {
+    const weekdays: Record<string, number> = {
+      domingo: 0,
+      segunda: 1,
+      "segunda-feira": 1,
+      terca: 2,
+      "terca-feira": 2,
+      quarta: 3,
+      "quarta-feira": 3,
+      quinta: 4,
+      "quinta-feira": 4,
+      sexta: 5,
+      "sexta-feira": 5,
+      sabado: 6,
+    };
+    for (const [word, day] of Object.entries(weekdays)) {
+      if (new RegExp(`\\b${word}\\b`).test(normalized)) {
+        date = nextWeekday(today, day);
+        break;
+      }
+    }
+  }
+
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return { date: toDateKey(date), time };
 }
 
 // Executa o handoff completo (mensagem ao cliente, notificação, roleta, CRM, follow-up).
@@ -557,6 +665,71 @@ serve(async (req) => {
     const todayStr = today.toISOString().split("T")[0];
     const todayFormatted = today.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 
+    // Salvaguarda determinística para reagendamento: quando o cliente já está
+    // em fluxo de remarcar e envia nova data/horário, não dependemos do Gemini.
+    // Atualizamos o agendamento existente diretamente, evitando "sumir" sem ação.
+    const parsedRescheduleTarget = parseAppointmentDateTimeFromText(messageContent, today);
+    const recentIndicatesReschedule = isRescheduleIntent(messageContent)
+      || recentMessages.slice(-8).some((m: any) => {
+        const t = normalizeTextForIntent(m?.content || m?.ai_content || "");
+        return isRescheduleIntent(t)
+          || /qual seria o novo dia/.test(t)
+          || /novo horario/.test(t)
+          || /vou cancelar seu agendamento/.test(t);
+      });
+
+    if (parsedRescheduleTarget && recentIndicatesReschedule) {
+      const { data: aptToReschedule } = await supabase
+        .from("appointments")
+        .select("id, title, appointment_date, appointment_time")
+        .eq("user_id", userId)
+        .eq("phone", phone)
+        .eq("status", "scheduled")
+        .gte("appointment_date", todayStr)
+        .order("appointment_date", { ascending: true })
+        .order("appointment_time", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (aptToReschedule) {
+        console.log("[RESCHEDULE SAFEGUARD] Executing deterministic reschedule", JSON.stringify({
+          appointmentId: aptToReschedule.id,
+          target: parsedRescheduleTarget,
+        }));
+
+        const rescheduleResult = await executeFunction(supabase, supabaseUrl, "reschedule_appointment", {
+          userId,
+          phone,
+          contactName,
+          appointmentId: aptToReschedule.id,
+          date: parsedRescheduleTarget.date,
+          time: parsedRescheduleTarget.time,
+          title: aptToReschedule.title || "Agendamento",
+        });
+
+        const reply = rescheduleResult?.success
+          ? `Perfeito! Reagendei seu ${aptToReschedule.title || "agendamento"} para ${parsedRescheduleTarget.date} às ${parsedRescheduleTarget.time}. Te esperamos! 💪`
+          : String(rescheduleResult?.message || "Não consegui reagendar nesse horário. Pode me passar outra opção?");
+
+        const wid = await sendWhatsAppMessage(supabase, userId, phone, reply);
+        await saveAIMessage(supabase, userId, phone, reply, "ai", wid);
+        await supabase
+          .from("whatsapp_ai_sessions")
+          .upsert({
+            user_id: userId,
+            account_id: accountId,
+            phone,
+            status: "active",
+            messages_without_human: messagesCount + 1,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "user_id,phone" });
+
+        return new Response(JSON.stringify({ success: true, response: reply, rescheduled: !!rescheduleResult?.success }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Check if this client has upcoming appointments with reminder_sent (pending confirmation)
     let pendingConfirmationContext = "";
     try {
@@ -711,10 +884,11 @@ Você tem acesso a ferramentas para gerenciar agendamentos. Quando o cliente:
 - Perguntar sobre disponibilidade ou horários: Use check_available_slots
 - Quiser marcar/agendar algo: Primeiro verifique disponibilidade, depois use create_appointment
 - Quiser cancelar um agendamento: Use cancel_appointment
+- Quiser remarcar/reagendar/trocar horário: Use reschedule_appointment assim que tiver a nova data e horário. NÃO diga que cancelou/reagendou antes da ferramenta retornar success: true.
 - Quiser ver seus agendamentos: Use list_appointments
 - Confirmar presença (responder "sim", "confirmo", "confirmado", "vou sim", etc.): Use confirm_appointment
 - O sistema envia lembretes automáticos. Quando o cliente responder confirmando, use confirm_appointment imediatamente.
-- Quando o cliente responder que não pode ir, ofereça reagendamento: cancele o atual e inicie novo agendamento.
+- Quando o cliente responder que não pode ir e quiser outro horário, use reschedule_appointment para atualizar o agendamento existente. Não crie um segundo agendamento e não deixe o antigo ativo.
 
 Hoje é ${todayFormatted} (${todayStr}).
 Ao mencionar datas, converta para o formato YYYY-MM-DD para as funções.
@@ -724,6 +898,7 @@ REGRAS CRÍTICAS - NUNCA VIOLE:
 - NUNCA escreva código (Python, JS, default_api, print, etc). Use APENAS as tools por function calling.
 - Responda SEMPRE em linguagem natural, conversacional e em português brasileiro.
 - OBRIGATÓRIO: Só diga que um agendamento foi criado APÓS create_appointment retornar success: true. Nunca simule.
+- OBRIGATÓRIO: Só diga que um agendamento foi cancelado/reagendado APÓS cancel_appointment/reschedule_appointment retornar success: true. Nunca simule.
 - Se o cliente confirmou data, horário, serviço e nome, chame create_appointment IMEDIATAMENTE.
 - Sempre que o cliente informar o nome, guarde e passe no campo client_name.
 
@@ -1180,6 +1355,7 @@ async function executeFunction(supabase: any, supabaseUrl: string, name: string,
       userId: args.userId,
       phone: args.phone,
       contactName: resolvedContactName,
+      appointmentId: args.appointmentId,
       date: args.date,
       time: args.time,
       title: args.title,
