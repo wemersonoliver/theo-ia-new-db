@@ -186,6 +186,20 @@ const schedulingTools = {
         },
         required: ["department_slug"]
       }
+    },
+    {
+      name: "request_human_handoff",
+      description: "Transfere o atendimento para um ATENDENTE HUMANO da equipe. Use SEMPRE que o cliente: (a) pedir explicitamente para falar com humano/atendente/responsável, (b) tiver demanda fora do escopo da IA (cancelamento, trancamento, reclamação, problema de pagamento, situação delicada), (c) demonstrar irritação/insatisfação, (d) você não souber resolver após tentar. NUNCA diga que houve 'problema técnico'. Apenas chame esta tool e o sistema notifica a equipe automaticamente.",
+      parameters: {
+        type: "object",
+        properties: {
+          reason: {
+            type: "string",
+            description: "Motivo curto da transferência (ex.: 'Cliente quer trancar matrícula por motivo de saúde')."
+          }
+        },
+        required: ["reason"]
+      }
     }
   ]
 };
@@ -638,6 +652,11 @@ ANTI-LOOP DE MÍDIA (NUNCA VIOLE):
 - Se acionou send_location, apenas siga o atendimento normalmente; não comente sobre o envio.
 - Se o cliente repetir o pedido (ex.: "manda localização" 3x), responda UMA vez com endereço + link e siga adiante.
 
+TRANSFERÊNCIA PARA HUMANO (CRÍTICO):
+- SEMPRE que o cliente pedir para falar com humano/atendente, ou trouxer demanda fora do escopo (cancelar, trancar, reclamar, problema de pagamento, situação delicada, demonstrar irritação), CHAME a tool request_human_handoff IMEDIATAMENTE.
+- NUNCA escreva "tive um problema técnico", "não consegui te transferir", "vou verificar e já te retorno" sem chamar a tool. Se precisa transferir, CHAME A TOOL — o sistema notifica a equipe automaticamente.
+- Após chamar request_human_handoff, NÃO envie mais mensagens — o sistema envia a mensagem de transição.
+
 ANÁLISE DE IMAGENS E DOCUMENTOS:
 - Quando o cliente enviar uma imagem ou documento, você receberá o conteúdo visual diretamente.
 - Analise o conteúdo da imagem/documento e responda de forma contextualizada.
@@ -751,6 +770,47 @@ Regras adicionais:
           });
           functionCallsProcessed++;
           continue;
+        }
+
+        // Handle request_human_handoff (transfere para humano da equipe)
+        if (fc.name === "request_human_handoff") {
+          const handoffReason = String(fc.args?.reason || "Solicitação de atendimento humano");
+          console.log("[HANDOFF] Tool request_human_handoff acionada:", handoffReason);
+
+          // 1. Marca sessão como handed_off
+          await supabase
+            .from("whatsapp_ai_sessions")
+            .upsert({
+              user_id: userId,
+              account_id: accountId,
+              phone,
+              status: "handed_off",
+              handed_off_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }, { onConflict: "user_id,phone" });
+
+          // 2. Desativa IA na conversa
+          await supabase
+            .from("whatsapp_conversations")
+            .update({ ai_active: false, updated_at: new Date().toISOString() })
+            .eq("user_id", userId)
+            .eq("phone", phone);
+
+          // 3. Mensagem de transição ao cliente (se configurada)
+          const handoffMsg = aiConfig.handoff_message
+            || "Entendi! Já estou te transferindo para um atendente da nossa equipe. Em instantes alguém vai te responder por aqui. 🙌";
+          await sendWhatsAppMessage(supabase, userId, phone, handoffMsg);
+          await saveAIMessage(supabase, userId, phone, handoffMsg, "ai");
+
+          // 4. Notifica equipe
+          try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff err:", e); }
+          try { await applyRouletteOnHandoff(supabase, accountId, userId, phone, contactName); } catch (e) { console.error("roulette err:", e); }
+          try { await moveCRMDealToHumanStage(supabase, userId, phone); } catch (e) { console.error("crm move err:", e); }
+          try { await supabase.rpc("cancel_followup_sequence", { p_user_id: userId, p_phone: phone, p_reason: "handoff" }); } catch (e) { console.error("cancel followup err:", e); }
+
+          aiReply = "";
+          functionCallsProcessed = maxFunctionCalls;
+          break;
         }
 
         // Handle transfer_to_department
