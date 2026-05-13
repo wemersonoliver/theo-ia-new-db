@@ -82,10 +82,23 @@ Quando o cliente perguntar "onde fica X" ou "como acesso Y", oriente-se SEMPRE p
 
 ## Planos e Preços
 
-- **Plano Mensal**: R$ 97,00/mês — acesso completo a todas as funcionalidades
-- **Plano Anual**: R$ 997,00/ano — economia de quase 15% (equivale a ~R$ 83/mês)
-- Link Mensal (SOMENTE quando o cliente pedir para pagar/assinar): https://pay.kiwify.com.br/AdpFbz3
-- Link Anual (SOMENTE quando o cliente pedir para pagar/assinar): https://pay.kiwify.com.br/bpNMdQ0
+Existem DOIS planos, cada um com versão mensal e anual:
+
+**BASIC** — uso individual (1 único usuário/operador)
+- Basic Mensal: R$ 97,00/mês — link: https://pay.kiwify.com.br/AdpFbz3
+- Basic Anual: R$ 997,00/ano — link: https://pay.kiwify.com.br/bpNMdQ0
+- Inclui: Atendimento IA 24/7, Agendamentos, Base de conhecimento, Lembretes, Suporte padrão
+
+**PRO** — para equipes (multi-usuários, vários operadores na mesma conta)
+- Pro Mensal: R$ 147,00/mês — link: https://pay.kiwify.com.br/yEubqi0
+- Pro Anual: R$ 1.499,00/ano — link: https://pay.kiwify.com.br/XDGIcIi
+- Inclui: tudo do Basic + recursos avançados de IA, suporte prioritário VIP, prioridade em novidades, cadastro de equipe (múltiplos usuários)
+
+REGRA CRÍTICA SOBRE MULTI-USUÁRIOS:
+- O cadastro de mais de um usuário/operador na mesma conta é EXCLUSIVO do plano PRO.
+- Se o cliente perguntar "quantos usuários posso cadastrar" ou demonstrar interesse em equipe, explique que no Basic é apenas 1 usuário e que para equipe precisa do plano Pro.
+- NUNCA prometa cadastro de múltiplos usuários no plano Basic (R$ 97/mês).
+
 - **Período de teste gratuito de 7 dias** para novos usuários — SEM necessidade de pagamento ou cartão de crédito
 - **Link de cadastro para teste grátis**: https://theoia.com.br/register — ESTE é o link que deve ser enviado quando o cliente quiser testar (envie sempre EXATAMENTE assim, sem espaços, sem quebras, sem markdown e sem colchetes ao redor)
 
@@ -891,10 +904,18 @@ function repairKnownUrls(text: string): string {
   let out = text;
   // [texto](url) → url
   out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$2");
-  // Junta caracteres soltos em "register" após "theoia.com.br/"
-  out = out.replace(/(theoia\.com\.br\/)([A-Za-z](?:\s+[A-Za-z]){2,})/gi, (_m, base, tail) => {
-    return base + tail.replace(/\s+/g, "");
-  });
+  // Junta qualquer fragmento letra+espaços após "theoia.com.br/" se o resultado bater com um path conhecido.
+  // Cobre casos como "regist e r", "regis ter", "reg ister", "register" puro.
+  out = out.replace(
+    /(theoia\.com\.br\/)([A-Za-z][A-Za-z\s]{0,30}[A-Za-z])(?=[\s.,!?)\]]|$)/gi,
+    (match, base, tail) => {
+      const joined = (tail as string).replace(/\s+/g, "").toLowerCase();
+      if (["register", "registrar", "login", "cadastro", "cadastrar"].includes(joined)) {
+        return base + joined;
+      }
+      return match;
+    },
+  );
   // Normaliza variações comuns
   out = out.replace(/https?:\s*\/\/\s*theoia\s*\.\s*com\s*\.\s*br/gi, "https://theoia.com.br");
   return out;
