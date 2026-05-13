@@ -243,6 +243,56 @@ async function fetchGeminiWithRetry(apiKey: string, payload: any, maxRetries = 3
   throw new Error("Gemini API rate limit exceeded after retries");
 }
 
+// Detecta se o texto do cliente é claramente um pedido de atendimento humano.
+function isHumanHandoffRequest(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const t = String(text).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const patterns = [
+    /\bfalar (com )?(uma? )?(atendente|humano|pessoa|alguem|gente|consultor|vendedor|responsavel)\b/,
+    /\bquero (falar|conversar) com (alguem|atendente|humano|uma pessoa|gente)\b/,
+    /\b(atendente|humano|pessoa real)\b.*\b(por favor|agora|urgente)?\b/,
+    /\bme transfere\b/,
+    /\btransfere para (um )?(atendente|humano)\b/,
+    /\bchama (um )?(atendente|humano|gerente)\b/,
+    /\bnao quero (falar|conversar) com (a )?(ia|bot|robo|maquina)\b/,
+  ];
+  return patterns.some((re) => re.test(t));
+}
+
+// Executa o handoff completo (mensagem ao cliente, notificação, roleta, CRM, follow-up).
+async function performHandoff(
+  supabase: any,
+  userId: string,
+  accountId: string | null,
+  phone: string,
+  contactName: string | null,
+  aiConfig: any,
+) {
+  try {
+    await supabase
+      .from("whatsapp_ai_sessions")
+      .upsert({
+        user_id: userId,
+        account_id: accountId,
+        phone,
+        handed_off_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id,phone" });
+
+    const handoffMsg = aiConfig?.handoff_message
+      || "Entendi! Já estou te transferindo para um atendente da nossa equipe. Em instantes alguém vai te responder por aqui. 🙌";
+    try { await sendWhatsAppMessage(supabase, userId, phone, handoffMsg); } catch (e) { console.error("handoff send err:", e); }
+    try { await saveAIMessage(supabase, userId, phone, handoffMsg, "ai"); } catch (e) { console.error("handoff save err:", e); }
+
+    try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff err:", e); }
+    try { await applyRouletteOnHandoff(supabase, accountId, userId, phone, contactName); } catch (e) { console.error("roulette err:", e); }
+    try { await moveCRMDealToHumanStage(supabase, userId, phone); } catch (e) { console.error("crm move err:", e); }
+    try { await supabase.rpc("cancel_followup_sequence", { p_user_id: userId, p_phone: phone, p_reason: "handoff" }); } catch (e) { console.error("cancel followup err:", e); }
+  } catch (e) {
+    console.error("performHandoff fatal:", e);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -920,6 +970,15 @@ Regras adicionais:
 
     if (!aiReply) {
       console.error("No AI reply generated");
+      // Fallback: se o cliente claramente pediu um humano, faz o handoff manualmente
+      // mesmo que o Gemini tenha falhado em chamar a tool.
+      if (isHumanHandoffRequest(messageContent)) {
+        console.log("[HANDOFF FALLBACK] Detectado pedido de atendimento humano por palavra-chave");
+        await performHandoff(supabase, userId, accountId, phone, contactName, aiConfig);
+        return new Response(JSON.stringify({ handoff: true, fallback: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       return new Response(JSON.stringify({ error: "No AI response" }), { 
         status: 500, 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
