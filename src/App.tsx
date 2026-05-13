@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,58 +9,67 @@ import { AuthProvider } from "@/lib/auth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import ForceChangePassword from "./pages/ForceChangePassword";
-import Dashboard from "./pages/Dashboard";
-import WhatsApp from "./pages/WhatsApp";
-import AIAgent from "./pages/AIAgent";
-import SimulateAttendance from "./pages/SimulateAttendance";
-import KnowledgeBase from "./pages/KnowledgeBase";
-import Conversations from "./pages/Conversations";
-import Contacts from "./pages/Contacts";
-import Appointments from "./pages/Appointments";
-import AppointmentSettings from "./pages/AppointmentSettings";
-import Settings from "./pages/Settings";
-import Subscriptions from "./pages/Subscriptions";
-import NotFound from "./pages/NotFound";
-import CRM from "./pages/CRM";
-import Products from "./pages/Products";
-import LandingPage from "./pages/LandingPage";
-import Onboarding from "./pages/Onboarding";
-import Support from "./pages/Support";
-import Investors from "./pages/Investors";
-import Investment from "./pages/Investment";
-import HelpCenter from "./pages/HelpCenter";
-import HelpCategory from "./pages/HelpCategory";
-import HelpArticle from "./pages/HelpArticle";
-import Tasks from "./pages/Tasks";
-import Followup from "./pages/Followup";
 
-// Admin pages
-import AdminLogin from "./pages/admin/AdminLogin";
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminLogs from "./pages/admin/AdminLogs";
-import AdminUsers from "./pages/AdminUsers";
-import AdminSystemWhatsApp from "./pages/AdminSystemWhatsApp";
-import AdminConversations from "./pages/admin/AdminConversations";
-import AdminAIConfig from "./pages/admin/AdminAIConfig";
-import AdminSupport from "./pages/admin/AdminSupport";
-import AdminTutorialVideos from "./pages/admin/AdminTutorialVideos";
-import AdminNotifications from "./pages/admin/AdminNotifications";
-import AdminCRM from "./pages/admin/AdminCRM";
-import AdminVoiceCosts from "./pages/admin/AdminVoiceCosts";
-import AdminCreditsManager from "./pages/admin/AdminCreditsManager";
-import AdminSupportCalendar from "./pages/admin/AdminSupportCalendar";
-import AdminHelpCenter from "./pages/admin/AdminHelpCenter";
-import AdminTasks from "./pages/admin/AdminTasks";
-import AdminPlans from "./pages/admin/AdminPlans";
-import AdminAICosts from "./pages/admin/AdminAICosts";
-import AdminSimulateSupport from "./pages/admin/AdminSimulateSupport";
-import AdminFlows from "./pages/admin/AdminFlows";
-import AdminFlowEditor from "./pages/admin/AdminFlowEditor";
+// Páginas públicas leves carregadas eagerly para entrada rápida
+import LandingPage from "./pages/LandingPage";
+import Login from "./pages/Login";
+import NotFound from "./pages/NotFound";
+
+// Restante: code-splitting via React.lazy (reduz bundle inicial — crítico em mobile/3G)
+const Register = lazy(() => import("./pages/Register"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const ForceChangePassword = lazy(() => import("./pages/ForceChangePassword"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const WhatsApp = lazy(() => import("./pages/WhatsApp"));
+const AIAgent = lazy(() => import("./pages/AIAgent"));
+const SimulateAttendance = lazy(() => import("./pages/SimulateAttendance"));
+const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase"));
+const Conversations = lazy(() => import("./pages/Conversations"));
+const Contacts = lazy(() => import("./pages/Contacts"));
+const Appointments = lazy(() => import("./pages/Appointments"));
+const AppointmentSettings = lazy(() => import("./pages/AppointmentSettings"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Subscriptions = lazy(() => import("./pages/Subscriptions"));
+const CRM = lazy(() => import("./pages/CRM"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const Support = lazy(() => import("./pages/Support"));
+const Investors = lazy(() => import("./pages/Investors"));
+const Investment = lazy(() => import("./pages/Investment"));
+const HelpCenter = lazy(() => import("./pages/HelpCenter"));
+const HelpCategory = lazy(() => import("./pages/HelpCategory"));
+const HelpArticle = lazy(() => import("./pages/HelpArticle"));
+const Tasks = lazy(() => import("./pages/Tasks"));
+const Followup = lazy(() => import("./pages/Followup"));
+
+// Admin pages (lazy)
+const AdminLogin = lazy(() => import("./pages/admin/AdminLogin"));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminLogs = lazy(() => import("./pages/admin/AdminLogs"));
+const AdminUsers = lazy(() => import("./pages/AdminUsers"));
+const AdminSystemWhatsApp = lazy(() => import("./pages/AdminSystemWhatsApp"));
+const AdminConversations = lazy(() => import("./pages/admin/AdminConversations"));
+const AdminAIConfig = lazy(() => import("./pages/admin/AdminAIConfig"));
+const AdminSupport = lazy(() => import("./pages/admin/AdminSupport"));
+const AdminTutorialVideos = lazy(() => import("./pages/admin/AdminTutorialVideos"));
+const AdminNotifications = lazy(() => import("./pages/admin/AdminNotifications"));
+const AdminCRM = lazy(() => import("./pages/admin/AdminCRM"));
+const AdminVoiceCosts = lazy(() => import("./pages/admin/AdminVoiceCosts"));
+const AdminCreditsManager = lazy(() => import("./pages/admin/AdminCreditsManager"));
+const AdminSupportCalendar = lazy(() => import("./pages/admin/AdminSupportCalendar"));
+const AdminHelpCenter = lazy(() => import("./pages/admin/AdminHelpCenter"));
+const AdminTasks = lazy(() => import("./pages/admin/AdminTasks"));
+const AdminPlans = lazy(() => import("./pages/admin/AdminPlans"));
+const AdminAICosts = lazy(() => import("./pages/admin/AdminAICosts"));
+const AdminSimulateSupport = lazy(() => import("./pages/admin/AdminSimulateSupport"));
+const AdminFlows = lazy(() => import("./pages/admin/AdminFlows"));
+const AdminFlowEditor = lazy(() => import("./pages/admin/AdminFlowEditor"));
+
+const RouteFallback = () => (
+  <div className="flex min-h-screen items-center justify-center bg-background">
+    <div className="h-10 w-10 animate-spin rounded-full border-2 border-muted border-t-primary" />
+  </div>
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -80,6 +90,7 @@ const App = () => (
           <BrowserRouter>
             <ImpersonationBanner />
             <InstallPrompt />
+            <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<Login />} />
@@ -136,6 +147,7 @@ const App = () => (
 
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </Suspense>
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>
