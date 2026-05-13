@@ -1,0 +1,2 @@
+UPDATE public.whatsapp_pending_responses SET scheduled_at = now(), processed = false, updated_at = now() WHERE processed = false;
+UPDATE public.whatsapp_conversations SET ai_processing_until = NULL WHERE ai_processing_until IS NOT NULL AND ai_processing_until > now();
