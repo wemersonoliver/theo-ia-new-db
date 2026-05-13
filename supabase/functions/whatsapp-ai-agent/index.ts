@@ -319,12 +319,9 @@ serve(async (req) => {
       .eq("phone", phone)
       .maybeSingle();
 
-    if (session?.status === "handed_off") {
-      console.log("Conversation handed off, skipping AI");
-      return new Response(JSON.stringify({ skipped: true, reason: "Handed off" }), { 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
-    }
+    // Importante: NÃO bloqueamos a IA aqui mesmo após handoff.
+    // A IA deve continuar respondendo até que um humano efetivamente assuma
+    // (o que naturalmente desativa via ai_active=false ao enviar mensagem manual).
 
     // Check message limit
     const messagesCount = session?.messages_without_human || 0;
@@ -333,14 +330,15 @@ serve(async (req) => {
         await sendWhatsAppMessage(supabase, userId, phone, aiConfig.handoff_message);
         await saveAIMessage(supabase, userId, phone, aiConfig.handoff_message, "ai");
       }
-      
+
+      // Marca a sessão para registro mas SEM desativar a IA — ela deve continuar
+      // até um humano efetivamente assumir.
       await supabase
         .from("whatsapp_ai_sessions")
         .upsert({
           user_id: userId,
           account_id: accountId,
           phone,
-          status: "handed_off",
           handed_off_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }, { onConflict: "user_id,phone" });
@@ -777,24 +775,19 @@ Regras adicionais:
           const handoffReason = String(fc.args?.reason || "Solicitação de atendimento humano");
           console.log("[HANDOFF] Tool request_human_handoff acionada:", handoffReason);
 
-          // 1. Marca sessão como handed_off
+          // 1. Registra horário do handoff na sessão (sem desativar a IA)
           await supabase
             .from("whatsapp_ai_sessions")
             .upsert({
               user_id: userId,
               account_id: accountId,
               phone,
-              status: "handed_off",
               handed_off_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             }, { onConflict: "user_id,phone" });
 
-          // 2. Desativa IA na conversa
-          await supabase
-            .from("whatsapp_conversations")
-            .update({ ai_active: false, updated_at: new Date().toISOString() })
-            .eq("user_id", userId)
-            .eq("phone", phone);
+          // 2. IA continua ativa (ai_active permanece true) até um humano
+          //    efetivamente assumir e enviar mensagem manual.
 
           // 3. Mensagem de transição ao cliente (se configurada)
           const handoffMsg = aiConfig.handoff_message
@@ -1488,6 +1481,67 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
       displayName = conv?.contact_name || "Desconhecido";
     }
 
+    // Buscar últimas mensagens para gerar resumo da conversa
+    let conversationSummary = "";
+    try {
+      const { data: convData } = await supabase
+        .from("whatsapp_conversations")
+        .select("messages")
+        .eq("user_id", userId)
+        .eq("phone", clientPhone)
+        .maybeSingle();
+      const msgs: any[] = Array.isArray(convData?.messages) ? convData!.messages : [];
+      const lastMsgs = msgs.slice(-12);
+      if (lastMsgs.length > 0) {
+        const transcript = lastMsgs
+          .map((m: any) => {
+            const who = m.sender === "ai" || m.role === "assistant" || m.from_me ? "Atendente" : "Cliente";
+            const text = String(m.content || m.text || m.message || "").trim();
+            return text ? `${who}: ${text}` : "";
+          })
+          .filter(Boolean)
+          .join("\n");
+        const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
+        if (apiKey && transcript) {
+          try {
+            const r = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [{
+                    role: "user",
+                    parts: [{
+                      text: `Resuma em 1 a 2 frases curtas (máx 240 caracteres) o que o CLIENTE precisa nesta conversa de WhatsApp. Seja direto, sem saudações, sem listas. Idioma: pt-BR.\n\nConversa:\n${transcript}`,
+                    }],
+                  }],
+                  generationConfig: { temperature: 0.3, maxOutputTokens: 120 },
+                }),
+              },
+            );
+            if (r.ok) {
+              const j = await r.json();
+              const txt = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("").trim();
+              if (txt) conversationSummary = txt.replace(/\s+/g, " ").trim();
+            }
+          } catch (e) {
+            console.error("Handoff summary gemini err:", e);
+          }
+        }
+        // Fallback: usa última mensagem do cliente
+        if (!conversationSummary) {
+          const lastClient = [...lastMsgs].reverse().find((m: any) =>
+            !(m.sender === "ai" || m.role === "assistant" || m.from_me)
+          );
+          const t = String(lastClient?.content || lastClient?.text || lastClient?.message || "").trim();
+          if (t) conversationSummary = t.length > 240 ? t.slice(0, 237) + "..." : t;
+        }
+      }
+    } catch (e) {
+      console.error("Handoff summary build err:", e);
+    }
+
     // Try by account_id first (works for accounts with team), fall back to user_id
     const accId = await resolveAccountId(supabase, userId);
     let notifContacts: any[] | null = null;
@@ -1538,7 +1592,15 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
 
     if (recipients.size === 0) return;
 
-    const message = `🔔 *Transferência de Atendimento*\n\nUm cliente precisa de atendimento humano.\n\n👤 *Nome:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n⏰ *Horário:* ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+    const horario = new Date().toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "America/Sao_Paulo",
+    });
+    const summaryBlock = conversationSummary
+      ? `\n📝 *Resumo:* ${conversationSummary}`
+      : "";
+    const message = `🔔 *Transferência de Atendimento*\n\nUm cliente precisa de atendimento humano.\n\n👤 *Nome:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n⏰ *Horário:* ${horario}${summaryBlock}`;
 
     // Enviar SEMPRE pela instância de suporte (system) diretamente via Evolution API
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
