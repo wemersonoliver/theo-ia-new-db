@@ -292,7 +292,7 @@ function normalizeTextForIntent(text: string | null | undefined): string {
 
 function isRescheduleIntent(text: string | null | undefined): boolean {
   const t = normalizeTextForIntent(text);
-  return /\b(reagend|remarc|mudar|trocar|alterar)\b/.test(t);
+  return /(reagend|remarc|mudar|trocar|alterar)/.test(t);
 }
 
 function toDateKey(date: Date): string {
@@ -336,10 +336,10 @@ function parseAppointmentDateTimeFromText(text: string | null | undefined, today
     const yearRaw = brMatch[3] ? Number(brMatch[3]) : today.getFullYear();
     const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
     date = new Date(year, month, day);
-  } else if (/\bamanha\b/.test(normalized)) {
-    date = addDays(today, 1);
   } else if (/\bdepois de amanha\b/.test(normalized)) {
     date = addDays(today, 2);
+  } else if (/\bamanha\b/.test(normalized)) {
+    date = addDays(today, 1);
   } else {
     const weekdays: Record<string, number> = {
       domingo: 0,
