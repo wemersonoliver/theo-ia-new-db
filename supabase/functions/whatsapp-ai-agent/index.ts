@@ -375,7 +375,13 @@ serve(async (req) => {
 
     // Check message limit
     const messagesCount = session?.messages_without_human || 0;
-    if (messagesCount >= (aiConfig.max_messages_without_human || 10)) {
+    // Evita reenviar a mensagem de transferência se já houve handoff recente
+    // (dentro dos últimos 60 minutos). O handoff dispara via tool durante a
+    // conversa e não deve ser duplicado pelo bloco de limite.
+    const recentlyHandedOff = session?.handed_off_at
+      ? (Date.now() - new Date(session.handed_off_at).getTime()) < 60 * 60 * 1000
+      : false;
+    if (messagesCount >= (aiConfig.max_messages_without_human || 10) && !recentlyHandedOff) {
       if (aiConfig.handoff_message) {
         await sendWhatsAppMessage(supabase, userId, phone, aiConfig.handoff_message);
         await saveAIMessage(supabase, userId, phone, aiConfig.handoff_message, "ai");
