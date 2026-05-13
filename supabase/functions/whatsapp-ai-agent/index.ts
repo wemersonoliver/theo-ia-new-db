@@ -319,12 +319,9 @@ serve(async (req) => {
       .eq("phone", phone)
       .maybeSingle();
 
-    if (session?.status === "handed_off") {
-      console.log("Conversation handed off, skipping AI");
-      return new Response(JSON.stringify({ skipped: true, reason: "Handed off" }), { 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
-    }
+    // Importante: NÃO bloqueamos a IA aqui mesmo após handoff.
+    // A IA deve continuar respondendo até que um humano efetivamente assuma
+    // (o que naturalmente desativa via ai_active=false ao enviar mensagem manual).
 
     // Check message limit
     const messagesCount = session?.messages_without_human || 0;
@@ -333,14 +330,15 @@ serve(async (req) => {
         await sendWhatsAppMessage(supabase, userId, phone, aiConfig.handoff_message);
         await saveAIMessage(supabase, userId, phone, aiConfig.handoff_message, "ai");
       }
-      
+
+      // Marca a sessão para registro mas SEM desativar a IA — ela deve continuar
+      // até um humano efetivamente assumir.
       await supabase
         .from("whatsapp_ai_sessions")
         .upsert({
           user_id: userId,
           account_id: accountId,
           phone,
-          status: "handed_off",
           handed_off_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }, { onConflict: "user_id,phone" });
