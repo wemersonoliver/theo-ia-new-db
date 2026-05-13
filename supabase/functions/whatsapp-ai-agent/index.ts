@@ -665,6 +665,71 @@ serve(async (req) => {
     const todayStr = today.toISOString().split("T")[0];
     const todayFormatted = today.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 
+    // Salvaguarda determinística para reagendamento: quando o cliente já está
+    // em fluxo de remarcar e envia nova data/horário, não dependemos do Gemini.
+    // Atualizamos o agendamento existente diretamente, evitando "sumir" sem ação.
+    const parsedRescheduleTarget = parseAppointmentDateTimeFromText(messageContent, today);
+    const recentIndicatesReschedule = isRescheduleIntent(messageContent)
+      || recentMessages.slice(-8).some((m: any) => {
+        const t = normalizeTextForIntent(m?.content || m?.ai_content || "");
+        return isRescheduleIntent(t)
+          || /qual seria o novo dia/.test(t)
+          || /novo horario/.test(t)
+          || /vou cancelar seu agendamento/.test(t);
+      });
+
+    if (parsedRescheduleTarget && recentIndicatesReschedule) {
+      const { data: aptToReschedule } = await supabase
+        .from("appointments")
+        .select("id, title, appointment_date, appointment_time")
+        .eq("user_id", userId)
+        .eq("phone", phone)
+        .eq("status", "scheduled")
+        .gte("appointment_date", todayStr)
+        .order("appointment_date", { ascending: true })
+        .order("appointment_time", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (aptToReschedule) {
+        console.log("[RESCHEDULE SAFEGUARD] Executing deterministic reschedule", JSON.stringify({
+          appointmentId: aptToReschedule.id,
+          target: parsedRescheduleTarget,
+        }));
+
+        const rescheduleResult = await executeFunction(supabase, supabaseUrl, "reschedule_appointment", {
+          userId,
+          phone,
+          contactName,
+          appointmentId: aptToReschedule.id,
+          date: parsedRescheduleTarget.date,
+          time: parsedRescheduleTarget.time,
+          title: aptToReschedule.title || "Agendamento",
+        });
+
+        const reply = rescheduleResult?.success
+          ? `Perfeito! Reagendei seu ${aptToReschedule.title || "agendamento"} para ${parsedRescheduleTarget.date} às ${parsedRescheduleTarget.time}. Te esperamos! 💪`
+          : String(rescheduleResult?.message || "Não consegui reagendar nesse horário. Pode me passar outra opção?");
+
+        const wid = await sendWhatsAppMessage(supabase, userId, phone, reply);
+        await saveAIMessage(supabase, userId, phone, reply, "ai", wid);
+        await supabase
+          .from("whatsapp_ai_sessions")
+          .upsert({
+            user_id: userId,
+            account_id: accountId,
+            phone,
+            status: "active",
+            messages_without_human: messagesCount + 1,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "user_id,phone" });
+
+        return new Response(JSON.stringify({ success: true, response: reply, rescheduled: !!rescheduleResult?.success }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Check if this client has upcoming appointments with reminder_sent (pending confirmation)
     let pendingConfirmationContext = "";
     try {
