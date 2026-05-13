@@ -599,6 +599,40 @@ REGRAS DE CONFIRMAÇÃO:
       console.error("Error checking pending confirmations:", e);
     }
 
+    // Load ALL upcoming scheduled appointments for this client so the AI
+    // knows agendamentos já existentes e NÃO ofereça de novo.
+    let existingAppointmentsContext = "";
+    try {
+      const { data: upcomingAppointments } = await supabase
+        .from("appointments")
+        .select("id, title, appointment_date, appointment_time, status")
+        .eq("user_id", userId)
+        .eq("phone", phone)
+        .eq("status", "scheduled")
+        .gte("appointment_date", todayStr)
+        .order("appointment_date", { ascending: true })
+        .order("appointment_time", { ascending: true })
+        .limit(5);
+
+      if (upcomingAppointments && upcomingAppointments.length > 0) {
+        const list = upcomingAppointments.map((a: any) => {
+          const [h, m] = a.appointment_time.split(":");
+          const dateObj = new Date(a.appointment_date + "T00:00:00");
+          const dateFormatted = dateObj.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+          return `- ${a.title} em ${dateFormatted} às ${h}:${m} (ID: ${a.id})`;
+        }).join("\n");
+
+        existingAppointmentsContext = `
+AGENDAMENTOS JÁ EXISTENTES DESTE CLIENTE:
+${list}
+
+REGRA CRÍTICA: Este cliente JÁ POSSUI o(s) agendamento(s) acima. NÃO ofereça novamente "agendar semana experimental", "marcar visita", "agendar avaliação" ou qualquer outro tipo de agendamento que já esteja na lista. Se o cliente perguntar algo geral (ex: "diferenciais", "preço", "como funciona"), responda a dúvida e, se quiser engajar, faça referência ao agendamento existente (ex: "Já te espero ${"${dateFormatted}"} às ${"${h}:${m}"}!" ou "Qualquer coisa antes da sua semana experimental, é só me chamar."). Só ofereça novo agendamento se o cliente pedir explicitamente para remarcar/agendar outro horário.
+`;
+      }
+    } catch (e) {
+      console.error("Error loading existing appointments:", e);
+    }
+
     // Build returning client context
     let returningClientContext = "";
     if (contextSummary && contactName) {
@@ -662,6 +696,8 @@ ${knowledgeBase ? `Trechos relevantes da base de conhecimento (use para responde
 ${productsCatalog}
 
 ${pendingConfirmationContext}
+
+${existingAppointmentsContext}
 
 ${aiConfig.business_latitude && aiConfig.business_longitude ? `LOCALIZAÇÃO DO NEGÓCIO:
 Você tem a ferramenta send_location para enviar a localização do negócio como um pin no mapa do WhatsApp.
