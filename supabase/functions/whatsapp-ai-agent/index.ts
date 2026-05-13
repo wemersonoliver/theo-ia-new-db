@@ -1066,8 +1066,8 @@ function splitMessage(text: string): string[] {
     }
     if (buffer) merged.push(buffer);
     
-    // Limita a no máximo 5 mensagens
-    return merged.slice(0, 5);
+    // Limita a no máximo 2 mensagens (regra de brevidade)
+    return merged.slice(0, 2);
   }
 
   // 2. Se não tem parágrafos, tenta dividir por sentenças em mensagens longas
@@ -1088,7 +1088,7 @@ function splitMessage(text: string): string[] {
       }
       if (current) chunks.push(current.trim());
       
-      return chunks.slice(0, 5);
+      return chunks.slice(0, 2);
     }
   }
 
