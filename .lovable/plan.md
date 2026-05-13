@@ -1,115 +1,70 @@
+## Plano de melhorias — Academia Mexicomigo (consultoriafontoura@gmail.com)
 
-# Fluxos de Atendimento (Campanhas) — Super Admin
+Cliente identificado:
+- user_id: `744e33a8-3b85-4593-948e-bcaf81f8397b`
+- account_id: `9f9b5baf-17ab-45ae-b78b-7f12fa745567`
 
-Nova área no painel super admin para criar fluxos automáticos no estilo Typebot, disparados quando uma mensagem específica chega no **WhatsApp do sistema** (ex.: "Olá! Quero saber mais sobre o Theo IA").
+### 1. Reescrever o prompt da Isa (não copiar literalmente o enviado)
 
-## 1. Banco de dados
+O prompt do cliente é longo, repetitivo e prescritivo demais — o que faz a IA "recitar" e perder naturalidade. Vou consolidar em um prompt **enxuto, persuasivo e com linguagem de academia**, mantendo TODAS as regras críticas e informações comerciais, mas reescritas para:
 
-Três novas tabelas (todas com RLS — somente `super_admin` gerencia):
+- **Tom**: enérgico, direto, "treineiro", com gírias leves do mundo fitness ("bora", "treino forte", "shape", "consistência"), sem exagero de emoji.
+- **Tamanho**: mensagens curtas (1–3 frases). Nada de blocos longos. Cadência de conversa, não de catálogo.
+- **Persuasão (armas do Cialdini aplicadas com sutileza)**:
+  - *Autoridade*: citar Carlos Fontoura (43 anos, recordista, campeão) só quando faz sentido — nunca como abertura.
+  - *Prova social*: "milhares de alunos de todas as idades transformaram o shape aqui".
+  - *Escassez/urgência leve*: "essa condição do Clube+ tá rodando agora", "anual sai por menos da metade do mensal — vale travar".
+  - *Reciprocidade*: oferecer a semana experimental de R$22 abatível, mostrar que está "ajudando", não vendendo.
+  - *Compromisso e coerência*: pequenos "sins" antes do fechamento ("seu objetivo é ganhar massa, certo? então o ideal é treinar 4–5x"). 
+  - *Ancoragem*: sempre apresentar mensal R$169 antes do Clube+ R$79 médio (ancoragem de preço).
+- **Estrutura interna do prompt** (seções claras para a IA, não para o cliente):
+  1. Identidade (Isa, consultora da Mexicomigo).
+  2. Tom e estilo (curto, persuasivo, linguagem de academia, 1 emoji por mensagem no máx).
+  3. Regras invioláveis (não cumprimentar 2x, não repetir info, ler histórico, conduzir ao fechamento com sutileza, etc.).
+  4. Objetivo: visita / aula experimental paga / fechamento de plano.
+  5. Catálogo enxuto (planos, preços, condições, descontos) — entregue só quando perguntado.
+  6. Diferenciais e autoridade (usar de forma cirúrgica).
+  7. Estrutura/horários/exceções (13h, 22h, 11h sáb/feriado, chuveiros, estacionamento, kids, instrutores).
+  8. Oferta de contenção (FontouraConcept online — só quando o lead hesitar).
+  9. Cliente ativo: detectar, não oferecer planos, responder com tom motivacional curto.
 
-**`attendance_flows`** — cada fluxo/campanha
-- `name`, `description`
-- `trigger_text` (texto exato que dispara — comparação normalizada: trim + lowercase + remoção de acentos)
-- `trigger_match_mode` (`exact` | `contains`) — começamos só com `exact`, mas deixamos preparado
-- `is_active` (boolean)
-- `pause_support_ai` (boolean, default true) — enquanto o fluxo roda, a IA de Suporte não responde
-- `only_first_contact` (boolean, default false) — opcional: só dispara em conversas novas
-- `created_by`, timestamps
+O prompt final terá ~1500–2000 caracteres (vs. 4480 atuais), mais fácil para o Gemini executar com fidelidade.
 
-**`attendance_flow_steps`** — passos ordenados de cada fluxo
-- `flow_id`, `position` (int)
-- `type`: `text` | `audio` | `video` | `image` | `link` | `delay`
-- `content` (texto da mensagem ou URL/legenda do link)
-- `media_path` (storage path para áudio/vídeo/imagem enviados pelo admin)
-- `media_url` (alternativa: URL externa direta)
-- `delay_before_seconds` (int, default 0) — tempo a esperar **antes** desse passo
-- `typing_indicator` (boolean, default true para `text`/`link`)
-- `recording_indicator` (boolean, default true para `audio`)
-- `caption` (legenda opcional para mídia)
+### 2. Horários de atendimento da IA
 
-**`attendance_flow_runs`** — execução em andamento por contato
-- `flow_id`, `phone`, `current_step`, `status` (`running`|`done`|`canceled`|`error`)
-- `next_run_at` (timestamp para agendamento)
-- `last_error`, `started_at`, `finished_at`
-- Único parcial: `(flow_id, phone)` enquanto `status='running'`
+Manter 24/7 (`00:00–23:59`, todos os dias) no `whatsapp_ai_config`.
 
-**Storage**: novo bucket privado `attendance-flow-media` (RLS: super admin escreve; edge function lê via service role).
+Motivo: a regra do cliente diz "responder normalmente em qualquer horário; só não enviar **espontâneo** fora do comercial". Quem controla envios espontâneos é o follow-up, não o horário da IA.
 
-## 2. Detecção do gatilho
+### 3. Janelas de follow-up
 
-No `supabase/functions/whatsapp-webhook/index.ts`, na branch da **conversa do sistema** (linhas ~273–342), antes de chamar `triggerSupportAI`:
+Já estão corretas: 08:00–12:00 e 13:00–19:00. Sem alteração.
 
-1. Normalizar `content` recebido.
-2. Buscar `attendance_flows` ativo com `trigger_text` correspondente.
-3. Se houver match:
-   - Cancelar/pular `triggerSupportAI`.
-   - Se `pause_support_ai`, marcar `system_whatsapp_conversations.ai_active = false` para essa conversa.
-   - Criar `attendance_flow_runs` (status `running`, `current_step = 0`, `next_run_at = now()`).
-   - Disparar (fire-and-forget) a edge function `attendance-flow-dispatch`.
+### 4. Bloquear follow-ups aos domingos (mudança global de código)
 
-## 3. Execução do fluxo (edge functions)
+Hoje `_followup-window.ts` não exclui domingo. Vou:
+- Em `isWithinWindow`: retornar `false` quando o dia da semana BRT for 0 (domingo).
+- Em `generateScheduleSequence`: ao avançar o cursor para um novo dia, se cair em domingo, pular para segunda.
 
-**`attendance-flow-dispatch`** (verify_jwt = false, invocada pelo webhook e pelo cron)
-- Pega o run, lê o passo atual.
-- Se `delay_before_seconds > 0` e ainda não passou, atualiza `next_run_at` e sai (cron pega depois).
-- Antes de enviar:
-  - Se `type=text|link` e `typing_indicator`: chama Evolution `sendPresence` com `composing` por ~2-4s (proporcional ao tamanho do texto, com teto).
-  - Se `type=audio` e `recording_indicator`: chama Evolution `sendPresence` com `recording`.
-- Envia via WhatsApp do sistema (instância global, mesma rota usada por `support-ai-agent`):
-  - `text`/`link`: `send-whatsapp-message` (sistema)
-  - `audio`/`video`/`image`: `send-whatsapp-media` (sistema), passando base64 do storage ou URL
-- Avança `current_step`. Se acabou, `status='done'`. Senão, agenda `next_run_at = now() + delay_before_seconds_do_próximo`.
-- Importante: se o usuário responder antes do fluxo terminar, **não cancelamos** automaticamente (o admin escolhe via `pause_support_ai`); a IA de Suporte fica desligada até o run terminar.
+Afeta todos os usuários do follow-up — é uma boa prática geral para WhatsApp e evita bloqueios por spam.
 
-**Cron (pg_cron)**: a cada 30s chama `attendance-flow-dispatch` para processar todos os runs `running` com `next_run_at <= now()`.
+### 5. Follow-up rotativo para clientes ativos
 
-## 4. UI — `/admin/flows` (Construtor visual)
+**Adiado**, conforme sua orientação. Será tratado em uma próxima entrega.
 
-Item novo no `AdminSidebar` ("Fluxos de Atendimento", ícone `Workflow`).
+---
 
-**Tela lista**: tabela de fluxos (nome, gatilho, status, total de passos, ações: editar/duplicar/ativar/excluir) + botão "Novo Fluxo".
+### Resumo das mudanças desta entrega
 
-**Tela editor** (`/admin/flows/:id`):
-- Cabeçalho: nome, descrição, **mensagem-gatilho**, switches (`Ativo`, `Pausar IA de Suporte`).
-- **Canvas vertical de passos** (estilo Typebot simplificado):
-  - Lista ordenável (drag-and-drop com `@dnd-kit`, já usado no CRM Kanban).
-  - Cada passo é um card colorido por tipo, mostrando: ícone, prévia do conteúdo, delay e indicadores (digitando/gravando).
-  - Botão `+` entre cards abre um menu para escolher o tipo do próximo passo: **Texto, Áudio, Vídeo, Imagem, Link, Tempo (delay puro)**.
-- **Editor de cada tipo**:
-  - Texto: `<Textarea>` + `delay_before_seconds` + switch "mostrar 'digitando…'".
-  - Áudio: upload (.mp3/.ogg) → storage; campo opcional URL externa; `delay_before_seconds` + switch "mostrar 'gravando áudio…'".
-  - Vídeo: upload (.mp4) ou URL + caption + delay.
-  - Imagem: upload + caption + delay.
-  - Link: texto da mensagem (com URL inline) + delay + switch "digitando".
-  - Tempo: só `delay_before_seconds` (passo "espera pura").
-- Botão **"Testar fluxo"**: campo para informar telefone + dispara um run imediato (insert em `attendance_flow_runs`, chama dispatch). Mostra log das últimas execuções desse fluxo (últimos 20 runs com status).
+| Item | Onde | Tipo |
+|---|---|---|
+| Novo prompt enxuto e persuasivo da Isa | `whatsapp_ai_config.custom_prompt` (account `9f9b5baf...`) | UPDATE de dado |
+| Horários da IA | sem alteração | — |
+| Janelas de follow-up | sem alteração | — |
+| Excluir domingos do follow-up (global) | `supabase/functions/_followup-window.ts` | edição de código |
 
-Acesso protegido por `super_admin` (mesmo padrão de `/admin/*`).
+### Validação após implementar
 
-## 5. Indicadores "digitando" e "gravando" no WhatsApp
-
-Evolution API expõe `POST /chat/sendPresence/{instance}` com `{ number, delay, presence: "composing" | "recording" }`. O dispatcher chama isso imediatamente antes do envio real, com delay proporcional ao conteúdo (texto: ~40ms por caractere, máx 6s; áudio: duração estimada do arquivo, máx 8s). Isso reproduz o comportamento natural do Typebot/WhatsApp.
-
-## 6. Detalhes técnicos
-
-- Tabelas com RLS `has_role(auth.uid(),'super_admin')`.
-- Bucket `attendance-flow-media` com policy: leitura/escrita só super admin; service role acessa em background.
-- Edge function `attendance-flow-dispatch`: `verify_jwt = false`, usa service role.
-- Cron `pg_cron`: `select cron.schedule('attendance-flow-tick', '*/30 * * * * *', ...)` chamando `attendance-flow-dispatch` (sem payload — processa fila inteira).
-- Reaproveita instância global de WhatsApp do sistema (`system_whatsapp_instance`) — mesmas helpers já usadas em `support-ai-agent`.
-- Logs em `attendance_flow_runs.last_error` para debug.
-- Match de gatilho: comparação normalizada (trim + lower + remove acentos) para tolerar variações de capitalização/espaço.
-
-## 7. Entregáveis
-
-1. Migração SQL: 3 tabelas + RLS + índices + bucket de storage + cron job.
-2. Edge function `attendance-flow-dispatch` (+ `config.toml`).
-3. Hook do webhook do sistema para disparar o fluxo no match.
-4. Hooks React: `useAttendanceFlows`, `useAttendanceFlowSteps`, `useAttendanceFlowRuns`.
-5. Páginas: `src/pages/admin/AdminFlows.tsx` (lista) e `src/pages/admin/AdminFlowEditor.tsx` (editor visual).
-6. Item no `AdminSidebar` + rotas em `App.tsx`.
-
-## 8. Fora do escopo desta entrega
-
-- Ramificações condicionais (if/else, botões interativos, captura de variáveis). Estrutura linear primeiro; podemos evoluir para grafo depois sem migrar dados (basta adicionar `next_step_id` opcional).
-- Disparar a partir do WhatsApp do **usuário final** (clientes dos clientes) — esta entrega é só no WhatsApp do sistema, conforme o caso de uso descrito (campanha do Theo IA).
+- Conferir o prompt salvo no painel do cliente (Configurações → IA → Geral).
+- Testar 3–4 conversas no "Simular Atendimento": dúvida sobre planos, "vou pensar", cliente ativo, pergunta sobre horário/aparelhos. Verificar tom, tamanho de mensagem e se conduz ao fechamento sem repetir.
+- Simular um disparo de follow-up em horário válido e em domingo para confirmar bloqueio.

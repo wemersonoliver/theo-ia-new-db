@@ -21,7 +21,9 @@ export function getBrtNow(): { date: Date; tzOffsetMs: number; minutes: number }
 }
 
 export function isWithinWindow(config: WindowConfig): boolean {
-  const { minutes } = getBrtNow();
+  const { date, minutes } = getBrtNow();
+  // Bloquear envios automáticos aos domingos (BRT)
+  if (date.getDay() === 0) return false;
   const [mSH, mSM] = parseHM(config.morning_window_start, "08:00");
   const [mEH, mEM] = parseHM(config.morning_window_end, "12:00");
   const [eSH, eSM] = parseHM(config.evening_window_start, "13:00");
@@ -77,6 +79,12 @@ export function generateScheduleSequence(
     slot = "morning";
   }
 
+  // Se o cursor inicial cair em domingo, pula para segunda
+  while (cursor.getDay() === 0) {
+    cursor.setDate(cursor.getDate() + 1);
+    slot = "morning";
+  }
+
   for (let i = 0; i < count; i++) {
     let startMin: number;
     let endMin: number;
@@ -117,6 +125,10 @@ export function generateScheduleSequence(
     } else {
       slot = "morning";
       cursor.setDate(cursor.getDate() + 1);
+      // Pula domingo
+      while (cursor.getDay() === 0) {
+        cursor.setDate(cursor.getDate() + 1);
+      }
     }
   }
 
