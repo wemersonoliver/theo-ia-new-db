@@ -224,9 +224,13 @@ serve(async (req) => {
 
       if (lockError) {
         console.error("Error acquiring AI lock:", lockError);
+        // If the lock column is missing or PostgREST cache is stale, do NOT
+        // treat this as "AI busy" — that would freeze the AI forever.
+        // Proceed without the lock; the per-pending-row claim above already
+        // prevents double-processing for the same (user_id, phone) entry.
       }
 
-      if (!lockAcquired) {
+      if (!lockAcquired && !lockError) {
         // Another AI run is in progress. Re-queue this work so it runs
         // after the current one finishes, instead of running in parallel.
         const rescheduleAt = new Date(Date.now() + 30 * 1000).toISOString();
