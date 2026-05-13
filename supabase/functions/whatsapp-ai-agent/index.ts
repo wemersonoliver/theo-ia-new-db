@@ -186,6 +186,20 @@ const schedulingTools = {
         },
         required: ["department_slug"]
       }
+    },
+    {
+      name: "request_human_handoff",
+      description: "Transfere o atendimento para um ATENDENTE HUMANO da equipe. Use SEMPRE que o cliente: (a) pedir explicitamente para falar com humano/atendente/responsável, (b) tiver demanda fora do escopo da IA (cancelamento, trancamento, reclamação, problema de pagamento, situação delicada), (c) demonstrar irritação/insatisfação, (d) você não souber resolver após tentar. NUNCA diga que houve 'problema técnico'. Apenas chame esta tool e o sistema notifica a equipe automaticamente.",
+      parameters: {
+        type: "object",
+        properties: {
+          reason: {
+            type: "string",
+            description: "Motivo curto da transferência (ex.: 'Cliente quer trancar matrícula por motivo de saúde')."
+          }
+        },
+        required: ["reason"]
+      }
     }
   ]
 };
