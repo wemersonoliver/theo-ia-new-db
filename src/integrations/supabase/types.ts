@@ -2435,6 +2435,7 @@ export type Database = {
       system_whatsapp_conversations: {
         Row: {
           ai_active: boolean | null
+          ai_processing_until: string | null
           contact_name: string | null
           created_at: string | null
           finalized_at: string | null
@@ -2448,6 +2449,7 @@ export type Database = {
         }
         Insert: {
           ai_active?: boolean | null
+          ai_processing_until?: string | null
           contact_name?: string | null
           created_at?: string | null
           finalized_at?: string | null
@@ -2461,6 +2463,7 @@ export type Database = {
         }
         Update: {
           ai_active?: boolean | null
+          ai_processing_until?: string | null
           contact_name?: string | null
           created_at?: string | null
           finalized_at?: string | null
@@ -2781,6 +2784,7 @@ export type Database = {
         Row: {
           account_id: string | null
           ai_active: boolean | null
+          ai_processing_until: string | null
           assigned_to: string | null
           closed_at: string | null
           closed_by: string | null
@@ -2803,6 +2807,7 @@ export type Database = {
         Insert: {
           account_id?: string | null
           ai_active?: boolean | null
+          ai_processing_until?: string | null
           assigned_to?: string | null
           closed_at?: string | null
           closed_by?: string | null
@@ -2825,6 +2830,7 @@ export type Database = {
         Update: {
           account_id?: string | null
           ai_active?: boolean | null
+          ai_processing_until?: string | null
           assigned_to?: string | null
           closed_at?: string | null
           closed_by?: string | null

@@ -114,38 +114,49 @@ serve(async (req) => {
 
     if (pendingError) {
       console.error("Error fetching pending response:", pendingError);
-      return new Response(JSON.stringify({ error: pendingError.message }), { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      return new Response(JSON.stringify({ error: pendingError.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
     if (!pending) {
       console.log("No pending response found for:", phone);
-      return new Response(JSON.stringify({ skipped: true, reason: "No pending response" }), { 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      return new Response(JSON.stringify({ skipped: true, reason: "No pending response" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
-    // Check if the scheduled time has passed (with 500ms tolerance)
     const scheduledAt = new Date(pending.scheduled_at).getTime();
-    const now = Date.now();
-    
-    if (scheduledAt > now + 500) {
+    const nowMs = Date.now();
+
+    if (scheduledAt > nowMs + 500) {
       console.log("Pending response not yet due:", phone, "scheduled:", pending.scheduled_at);
-      return new Response(JSON.stringify({ skipped: true, reason: "Not yet due" }), { 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      return new Response(JSON.stringify({ skipped: true, reason: "Not yet due" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
-    // Mark as processed immediately to prevent duplicate processing
-    const { error: updateError } = await supabase
+    // ATOMIC CLAIM: only one worker can mark this row processed.
+    // If another worker already claimed it, exit immediately to prevent
+    // duplicate AI invocations producing parallel responses.
+    const { data: claimed, error: claimError } = await supabase
       .from("whatsapp_pending_responses")
       .update({ processed: true, updated_at: new Date().toISOString() })
-      .eq("id", pending.id);
+      .eq("id", pending.id)
+      .eq("processed", false)
+      .select("id")
+      .maybeSingle();
 
-    if (updateError) {
-      console.error("Error marking pending as processed:", updateError);
+    if (claimError) {
+      console.error("Error claiming pending response:", claimError);
+    }
+
+    if (!claimed) {
+      console.log("Pending response already claimed by another worker:", phone);
+      return new Response(JSON.stringify({ skipped: true, reason: "Already claimed" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
     }
 
     // Get the latest message content from the conversation
@@ -189,35 +200,95 @@ serve(async (req) => {
     // Get contact name from conversation
     const { data: convForName } = await supabase
       .from("whatsapp_conversations")
-      .select("contact_name")
+      .select("id, contact_name, ai_processing_until")
       .eq("user_id", userId)
       .eq("phone", phone)
       .maybeSingle();
 
     const contactName = convForName?.contact_name || null;
+    const conversationId = convForName?.id;
+
+    // CONVERSATION-LEVEL LOCK: only one AI run per conversation at a time.
+    // Prevents the AI from being invoked twice in parallel (which causes
+    // duplicated responses and "I received the image again" hallucinations
+    // when a new message arrives while the previous AI run is still in flight).
+    if (conversationId) {
+      const lockUntil = new Date(Date.now() + 90 * 1000).toISOString();
+      const { data: lockAcquired, error: lockError } = await supabase
+        .from("whatsapp_conversations")
+        .update({ ai_processing_until: lockUntil })
+        .eq("id", conversationId)
+        .or(`ai_processing_until.is.null,ai_processing_until.lt.${new Date().toISOString()}`)
+        .select("id")
+        .maybeSingle();
+
+      if (lockError) {
+        console.error("Error acquiring AI lock:", lockError);
+      }
+
+      if (!lockAcquired) {
+        // Another AI run is in progress. Re-queue this work so it runs
+        // after the current one finishes, instead of running in parallel.
+        const rescheduleAt = new Date(Date.now() + 30 * 1000).toISOString();
+        await supabase
+          .from("whatsapp_pending_responses")
+          .upsert({
+            user_id: userId,
+            account_id: pending.account_id ?? null,
+            phone,
+            scheduled_at: rescheduleAt,
+            processed: false,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "user_id,phone" });
+
+        fetch(`${supabaseUrl}/functions/v1/process-pending-ai`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${supabaseServiceKey}`,
+          },
+          body: JSON.stringify({ userId, phone, delayMs: 30000 }),
+        }).catch(err => console.error("Error re-queueing process-pending-ai:", err));
+
+        console.log("AI busy for conversation, re-queued in 30s:", phone);
+        return new Response(JSON.stringify({ skipped: true, reason: "AI busy, re-queued" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+    }
 
     // Now trigger the AI agent
     console.log("Triggering AI for:", phone, "with combined messages, contactName:", contactName);
-    
-    const aiResponse = await fetch(`${supabaseUrl}/functions/v1/whatsapp-ai-agent`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${supabaseServiceKey}`,
-      },
-      body: JSON.stringify({
-        userId,
-        phone,
-        messageContent: recentIncoming,
-        contactName,
-      }),
-    });
 
-    const aiResult = await aiResponse.json();
-    console.log("AI response result:", aiResult);
+    let aiResult: any = null;
+    try {
+      const aiResponse = await fetch(`${supabaseUrl}/functions/v1/whatsapp-ai-agent`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${supabaseServiceKey}`,
+        },
+        body: JSON.stringify({
+          userId,
+          phone,
+          messageContent: recentIncoming,
+          contactName,
+        }),
+      });
+      aiResult = await aiResponse.json();
+      console.log("AI response result:", aiResult);
+    } finally {
+      // ALWAYS release the conversation lock, even if the AI call failed.
+      if (conversationId) {
+        await supabase
+          .from("whatsapp_conversations")
+          .update({ ai_processing_until: null })
+          .eq("id", conversationId);
+      }
+    }
 
-    return new Response(JSON.stringify({ success: true, aiResult }), { 
-      headers: { ...corsHeaders, "Content-Type": "application/json" } 
+    return new Response(JSON.stringify({ success: true, aiResult }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
   } catch (error) {
