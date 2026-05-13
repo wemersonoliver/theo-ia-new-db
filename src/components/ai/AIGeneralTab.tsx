@@ -5,26 +5,30 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Timer } from "lucide-react";
 import { useAIConfig } from "@/hooks/useAIConfig";
+import { useAccountId } from "@/hooks/useAccount";
 import { useEffect, useState } from "react";
 
-const AI_GENERAL_DRAFT_KEY = "theo-ai-general-draft";
+const DRAFT_PREFIX = "theo-ai-general-draft";
+const draftKeyFor = (accountId: string | null) =>
+  accountId ? `${DRAFT_PREFIX}:${accountId}` : null;
 
-const getStoredDraft = () => {
-  const draft = sessionStorage.getItem(AI_GENERAL_DRAFT_KEY);
+const getStoredDraft = (key: string | null) => {
+  if (!key) return null;
+  const draft = sessionStorage.getItem(key);
   if (!draft) return null;
   try {
     return JSON.parse(draft);
   } catch {
-    sessionStorage.removeItem(AI_GENERAL_DRAFT_KEY);
+    sessionStorage.removeItem(key);
     return null;
   }
 };
 
 export function AIGeneralTab() {
   const { config, saveConfig } = useAIConfig();
+  const { accountId } = useAccountId();
+  const draftKey = draftKeyFor(accountId);
   const [formData, setFormData] = useState(() => {
-    const draft = getStoredDraft();
-    if (draft) return draft;
     return {
     agent_name: "Assistente Virtual",
     business_niche: "",
@@ -35,11 +39,20 @@ export function AIGeneralTab() {
     handoff_message: "Um momento, vou transferir você para um atendente.",
     };
   });
-  const [readyToPersist, setReadyToPersist] = useState(() => !!sessionStorage.getItem(AI_GENERAL_DRAFT_KEY));
+  const [readyToPersist, setReadyToPersist] = useState(false);
 
   useEffect(() => {
-    const draft = getStoredDraft();
-    if (draft) return;
+    // Reset persistence flag whenever the account changes (e.g. impersonation switch)
+    setReadyToPersist(false);
+  }, [accountId]);
+
+  useEffect(() => {
+    const draft = getStoredDraft(draftKey);
+    if (draft) {
+      setFormData(draft);
+      setReadyToPersist(true);
+      return;
+    }
     if (config) {
       setFormData({
         agent_name: config.agent_name || "Assistente Virtual",
@@ -52,15 +65,15 @@ export function AIGeneralTab() {
       });
       setReadyToPersist(true);
     }
-  }, [config]);
+  }, [config, draftKey]);
 
   useEffect(() => {
-    if (!readyToPersist) return;
-    sessionStorage.setItem(AI_GENERAL_DRAFT_KEY, JSON.stringify(formData));
-  }, [formData, readyToPersist]);
+    if (!readyToPersist || !draftKey) return;
+    sessionStorage.setItem(draftKey, JSON.stringify(formData));
+  }, [formData, readyToPersist, draftKey]);
 
   const handleSave = () => saveConfig.mutate(formData, {
-    onSuccess: () => sessionStorage.removeItem(AI_GENERAL_DRAFT_KEY),
+    onSuccess: () => { if (draftKey) sessionStorage.removeItem(draftKey); },
   });
 
   return (
