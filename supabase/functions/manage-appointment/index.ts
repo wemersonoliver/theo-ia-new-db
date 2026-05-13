@@ -664,7 +664,16 @@ function formatDate(dateStr: string): string {
   });
 }
 
-async function notifyAppointment(supabase: any, userId: string, contactName: string | null, clientPhone: string, date: string, time: string, title: string) {
+async function notifyAppointment(
+  supabase: any,
+  userId: string,
+  contactName: string | null,
+  clientPhone: string,
+  date: string,
+  time: string,
+  title: string,
+  options?: { kind?: "create" | "reschedule"; previousDate?: string; previousTime?: string },
+) {
   try {
     let displayName = contactName || null;
     if (!displayName) {
@@ -685,7 +694,13 @@ async function notifyAppointment(supabase: any, userId: string, contactName: str
 
     if (!notifContacts || notifContacts.length === 0) return;
 
-    const message = `📅 *Novo Agendamento*\n\n👤 *Cliente:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n📋 *Serviço:* ${title}\n🗓️ *Data:* ${formatDate(date)}\n⏰ *Horário:* ${time}`;
+    const isReschedule = options?.kind === "reschedule";
+    const previousBlock = isReschedule && options.previousDate && options.previousTime
+      ? `\n\n🔁 *Anterior:* ${formatDate(options.previousDate)} às ${options.previousTime}`
+      : "";
+    const message = isReschedule
+      ? `🔁 *Agendamento Reagendado*\n\n👤 *Cliente:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n📋 *Serviço:* ${title}${previousBlock}\n\n🗓️ *Nova data:* ${formatDate(date)}\n⏰ *Novo horário:* ${time}`
+      : `📅 *Novo Agendamento*\n\n👤 *Cliente:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n📋 *Serviço:* ${title}\n🗓️ *Data:* ${formatDate(date)}\n⏰ *Horário:* ${time}`;
 
     const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
