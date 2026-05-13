@@ -1,0 +1,1 @@
+UPDATE public.whatsapp_pending_responses SET scheduled_at = now() - interval '5 seconds', processed = false, updated_at = now() WHERE processed = false;
