@@ -17,7 +17,8 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { operation, userId, phone, contactName, date, time, title, description, appointmentId, status } = await req.json();
+    const body = await req.json();
+    const { operation, userId, phone, contactName, date, time, title, description, appointmentId, status, tags, action: tagAction } = body;
 
     if (!userId) {
       return new Response(JSON.stringify({ error: "Missing userId" }), { 
@@ -338,6 +339,126 @@ serve(async (req) => {
         });
       }
 
+      case "reschedule_appointment": {
+        if (!date || !time || (!appointmentId && !phone)) {
+          return new Response(JSON.stringify({ error: "Missing reschedule fields" }), { 
+            status: 400, 
+            headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          });
+        }
+
+        let findQuery = supabase
+          .from("appointments")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("status", "scheduled")
+          .order("appointment_date", { ascending: true })
+          .order("appointment_time", { ascending: true });
+
+        if (appointmentId) {
+          findQuery = findQuery.eq("id", appointmentId);
+        } else {
+          findQuery = findQuery.eq("phone", phone);
+        }
+
+        const { data: aptToReschedule } = await findQuery.limit(1).maybeSingle();
+
+        if (!aptToReschedule) {
+          return new Response(JSON.stringify({ 
+            success: false,
+            message: "Não encontrei um agendamento ativo para reagendar."
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const timeWithSeconds = time.includes(":") && time.split(":").length === 2 ? `${time}:00` : time;
+        const targetDate = new Date(date);
+        const dayOfWeek = targetDate.getDay();
+
+        let maxPerSlot = 1;
+        const { data: typeConfig } = await supabase
+          .from("appointment_types")
+          .select("max_appointments_per_slot")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .limit(1)
+          .maybeSingle();
+
+        if (typeConfig) {
+          maxPerSlot = typeConfig.max_appointments_per_slot || 1;
+        } else {
+          const { data: slotConfig } = await supabase
+            .from("appointment_slots")
+            .select("max_appointments_per_slot")
+            .eq("user_id", userId)
+            .eq("day_of_week", dayOfWeek)
+            .eq("is_active", true)
+            .limit(1)
+            .maybeSingle();
+          maxPerSlot = slotConfig?.max_appointments_per_slot || 1;
+        }
+
+        const { data: existingAtTime } = await supabase
+          .from("appointments")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("appointment_date", date)
+          .eq("appointment_time", timeWithSeconds)
+          .neq("status", "cancelled")
+          .neq("id", aptToReschedule.id);
+
+        if ((existingAtTime?.length || 0) >= maxPerSlot) {
+          return new Response(JSON.stringify({ 
+            success: false,
+            message: maxPerSlot > 1
+              ? `Todas as ${maxPerSlot} vagas para este horário já estão ocupadas. Por favor, escolha outro horário.`
+              : "Este horário já está ocupado. Por favor, escolha outro horário."
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const previousDate = aptToReschedule.appointment_date;
+        const previousTime = String(aptToReschedule.appointment_time).slice(0, 5);
+        const existingTags: string[] = aptToReschedule.tags || [];
+        const nextTags = existingTags.includes("reagendado") ? existingTags : [...existingTags, "reagendado"];
+
+        const { data: updatedAppointment, error: rescheduleError } = await supabase
+          .from("appointments")
+          .update({
+            appointment_date: date,
+            appointment_time: timeWithSeconds,
+            title: title || aptToReschedule.title,
+            description: description ?? aptToReschedule.description,
+            status: "scheduled",
+            reminder_sent: false,
+            reminder_sent_at: null,
+            confirmed_by_client: false,
+            tags: nextTags,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", aptToReschedule.id)
+          .select()
+          .single();
+
+        if (rescheduleError) {
+          console.error("Error rescheduling appointment:", rescheduleError);
+          return new Response(JSON.stringify({ 
+            success: false,
+            message: "Erro ao reagendar. Por favor, tente novamente."
+          }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        await notifyAppointment(supabase, userId, updatedAppointment.contact_name || contactName, updatedAppointment.phone || phone, date, time, updatedAppointment.title, {
+          kind: "reschedule",
+          previousDate,
+          previousTime,
+        });
+
+        return new Response(JSON.stringify({ 
+          success: true,
+          appointment: updatedAppointment,
+          message: `Agendamento reagendado com sucesso: de ${formatDate(previousDate)} às ${previousTime} para ${formatDate(date)} às ${time}.`
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       case "list_appointments": {
         let query = supabase
           .from("appointments")
@@ -463,8 +584,6 @@ serve(async (req) => {
       }
 
       case "update_appointment_tags": {
-        const { tags, action: tagAction } = await req.json().catch(() => ({ tags: [], action: "add" }));
-        
         if (!appointmentId) {
           return new Response(JSON.stringify({ error: "Missing appointmentId" }), { 
             status: 400, 
