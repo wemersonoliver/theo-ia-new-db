@@ -1481,6 +1481,67 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
       displayName = conv?.contact_name || "Desconhecido";
     }
 
+    // Buscar últimas mensagens para gerar resumo da conversa
+    let conversationSummary = "";
+    try {
+      const { data: convData } = await supabase
+        .from("whatsapp_conversations")
+        .select("messages")
+        .eq("user_id", userId)
+        .eq("phone", clientPhone)
+        .maybeSingle();
+      const msgs: any[] = Array.isArray(convData?.messages) ? convData!.messages : [];
+      const lastMsgs = msgs.slice(-12);
+      if (lastMsgs.length > 0) {
+        const transcript = lastMsgs
+          .map((m: any) => {
+            const who = m.sender === "ai" || m.role === "assistant" || m.from_me ? "Atendente" : "Cliente";
+            const text = String(m.content || m.text || m.message || "").trim();
+            return text ? `${who}: ${text}` : "";
+          })
+          .filter(Boolean)
+          .join("\n");
+        const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
+        if (apiKey && transcript) {
+          try {
+            const r = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [{
+                    role: "user",
+                    parts: [{
+                      text: `Resuma em 1 a 2 frases curtas (máx 240 caracteres) o que o CLIENTE precisa nesta conversa de WhatsApp. Seja direto, sem saudações, sem listas. Idioma: pt-BR.\n\nConversa:\n${transcript}`,
+                    }],
+                  }],
+                  generationConfig: { temperature: 0.3, maxOutputTokens: 120 },
+                }),
+              },
+            );
+            if (r.ok) {
+              const j = await r.json();
+              const txt = j?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("").trim();
+              if (txt) conversationSummary = txt.replace(/\s+/g, " ").trim();
+            }
+          } catch (e) {
+            console.error("Handoff summary gemini err:", e);
+          }
+        }
+        // Fallback: usa última mensagem do cliente
+        if (!conversationSummary) {
+          const lastClient = [...lastMsgs].reverse().find((m: any) =>
+            !(m.sender === "ai" || m.role === "assistant" || m.from_me)
+          );
+          const t = String(lastClient?.content || lastClient?.text || lastClient?.message || "").trim();
+          if (t) conversationSummary = t.length > 240 ? t.slice(0, 237) + "..." : t;
+        }
+      }
+    } catch (e) {
+      console.error("Handoff summary build err:", e);
+    }
+
     // Try by account_id first (works for accounts with team), fall back to user_id
     const accId = await resolveAccountId(supabase, userId);
     let notifContacts: any[] | null = null;
@@ -1531,7 +1592,15 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
 
     if (recipients.size === 0) return;
 
-    const message = `🔔 *Transferência de Atendimento*\n\nUm cliente precisa de atendimento humano.\n\n👤 *Nome:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n⏰ *Horário:* ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+    const horario = new Date().toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "America/Sao_Paulo",
+    });
+    const summaryBlock = conversationSummary
+      ? `\n📝 *Resumo:* ${conversationSummary}`
+      : "";
+    const message = `🔔 *Transferência de Atendimento*\n\nUm cliente precisa de atendimento humano.\n\n👤 *Nome:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n⏰ *Horário:* ${horario}${summaryBlock}`;
 
     // Enviar SEMPRE pela instância de suporte (system) diretamente via Evolution API
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
