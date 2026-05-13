@@ -970,6 +970,15 @@ Regras adicionais:
 
     if (!aiReply) {
       console.error("No AI reply generated");
+      // Fallback: se o cliente claramente pediu um humano, faz o handoff manualmente
+      // mesmo que o Gemini tenha falhado em chamar a tool.
+      if (isHumanHandoffRequest(messageContent)) {
+        console.log("[HANDOFF FALLBACK] Detectado pedido de atendimento humano por palavra-chave");
+        await performHandoff(supabase, userId, accountId, phone, contactName, aiConfig);
+        return new Response(JSON.stringify({ handoff: true, fallback: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       return new Response(JSON.stringify({ error: "No AI response" }), { 
         status: 500, 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
