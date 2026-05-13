@@ -697,6 +697,8 @@ ${productsCatalog}
 
 ${pendingConfirmationContext}
 
+${existingAppointmentsContext}
+
 ${aiConfig.business_latitude && aiConfig.business_longitude ? `LOCALIZAÇÃO DO NEGÓCIO:
 Você tem a ferramenta send_location para enviar a localização do negócio como um pin no mapa do WhatsApp.
 - Endereço: ${aiConfig.business_address || "Não informado"}
