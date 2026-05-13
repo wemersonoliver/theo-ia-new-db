@@ -20,6 +20,7 @@ function containsFunctionCallCode(text: string): boolean {
     /check_available_slots\s*\(/i,
     /create_appointment\s*\(/i,
     /cancel_appointment\s*\(/i,
+    /reschedule_appointment\s*\(/i,
     /list_appointments\s*\(/i,
     /confirm_appointment\s*\(/i,
     /update_appointment_tags\s*\(/i,
@@ -31,7 +32,7 @@ function containsFunctionCallCode(text: string): boolean {
 
 // Tenta extrair uma chamada de função do texto com código
 function extractFunctionCallFromText(text: string): { name: string; args: Record<string, string> } | null {
-  const pattern = /(check_available_slots|create_appointment|cancel_appointment|list_appointments|confirm_appointment|update_appointment_tags)\s*\(\s*([^)]*)\)/i;
+  const pattern = /(check_available_slots|create_appointment|cancel_appointment|reschedule_appointment|list_appointments|confirm_appointment|update_appointment_tags)\s*\(\s*([^)]*)\)/i;
   
   const match = text.match(pattern);
   if (match) {
@@ -109,6 +110,32 @@ const schedulingTools = {
           time: {
             type: "string",
             description: "Horário do agendamento a cancelar no formato HH:MM"
+          }
+        },
+        required: ["date", "time"]
+      }
+    },
+    {
+      name: "reschedule_appointment",
+      description: "Reagenda um agendamento existente do cliente, atualizando o agendamento atual para a nova data e horário. Use quando o cliente pedir para remarcar/reagendar e informar o novo horário.",
+      parameters: {
+        type: "object",
+        properties: {
+          appointmentId: {
+            type: "string",
+            description: "ID do agendamento existente a reagendar, se disponível no contexto"
+          },
+          date: {
+            type: "string",
+            description: "Nova data do agendamento no formato YYYY-MM-DD"
+          },
+          time: {
+            type: "string",
+            description: "Novo horário do agendamento no formato HH:MM"
+          },
+          title: {
+            type: "string",
+            description: "Tipo de serviço ou título do agendamento"
           }
         },
         required: ["date", "time"]
