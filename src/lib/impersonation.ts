@@ -4,6 +4,20 @@ import { clearAccountContextCache } from "@/lib/account-context";
 const BACKUP_KEY = "impersonation_admin_backup";
 const TARGET_KEY = "impersonation_target";
 
+/** Clears any per-account session drafts to avoid leaking data between users. */
+function clearSessionDrafts() {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith("theo-ai-")) keys.push(k);
+    }
+    keys.forEach((k) => sessionStorage.removeItem(k));
+  } catch {
+    /* noop */
+  }
+}
+
 export interface ImpersonationTarget {
   user_id: string;
   email: string;
@@ -75,6 +89,7 @@ export async function startImpersonation(targetUserId: string): Promise<void> {
   };
   localStorage.setItem(TARGET_KEY, JSON.stringify(target));
   clearAccountContextCache();
+  clearSessionDrafts();
 }
 
 /**
@@ -93,6 +108,7 @@ export async function stopImpersonation(): Promise<void> {
   localStorage.removeItem(TARGET_KEY);
   localStorage.removeItem(BACKUP_KEY);
   clearAccountContextCache();
+  clearSessionDrafts();
 
   const { error } = await supabase.auth.setSession({
     access_token: backup.access_token,
