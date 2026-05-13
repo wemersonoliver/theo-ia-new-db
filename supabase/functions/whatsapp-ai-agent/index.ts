@@ -767,6 +767,47 @@ Regras adicionais:
           continue;
         }
 
+        // Handle request_human_handoff (transfere para humano da equipe)
+        if (fc.name === "request_human_handoff") {
+          const handoffReason = String(fc.args?.reason || "Solicitação de atendimento humano");
+          console.log("[HANDOFF] Tool request_human_handoff acionada:", handoffReason);
+
+          // 1. Marca sessão como handed_off
+          await supabase
+            .from("whatsapp_ai_sessions")
+            .upsert({
+              user_id: userId,
+              account_id: accountId,
+              phone,
+              status: "handed_off",
+              handed_off_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }, { onConflict: "user_id,phone" });
+
+          // 2. Desativa IA na conversa
+          await supabase
+            .from("whatsapp_conversations")
+            .update({ ai_active: false, updated_at: new Date().toISOString() })
+            .eq("user_id", userId)
+            .eq("phone", phone);
+
+          // 3. Mensagem de transição ao cliente (se configurada)
+          const handoffMsg = aiConfig.handoff_message
+            || "Entendi! Já estou te transferindo para um atendente da nossa equipe. Em instantes alguém vai te responder por aqui. 🙌";
+          await sendWhatsAppMessage(supabase, userId, phone, handoffMsg);
+          await saveAIMessage(supabase, userId, phone, handoffMsg, "ai");
+
+          // 4. Notifica equipe
+          try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff err:", e); }
+          try { await applyRouletteOnHandoff(supabase, accountId, userId, phone, contactName); } catch (e) { console.error("roulette err:", e); }
+          try { await moveCRMDealToHumanStage(supabase, userId, phone); } catch (e) { console.error("crm move err:", e); }
+          try { await supabase.rpc("cancel_followup_sequence", { p_user_id: userId, p_phone: phone, p_reason: "handoff" }); } catch (e) { console.error("cancel followup err:", e); }
+
+          aiReply = "";
+          functionCallsProcessed = maxFunctionCalls;
+          break;
+        }
+
         // Handle transfer_to_department
         if (fc.name === "transfer_to_department") {
           const transferResult = await executeTransferToDepartment(
