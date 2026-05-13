@@ -220,6 +220,38 @@ serve(async (req) => {
           });
         }
 
+        // Auto-liberar agenda: cancela agendamentos futuros ativos do MESMO telefone
+        // (evita duplicatas no calendário quando a IA cria em vez de reagendar)
+        try {
+          const todayStr = new Date().toISOString().slice(0, 10);
+          const { data: existingFuture } = await supabase
+            .from("appointments")
+            .select("id, appointment_date, appointment_time")
+            .eq("user_id", userId)
+            .eq("phone", phone)
+            .eq("status", "scheduled")
+            .gte("appointment_date", todayStr);
+
+          const toCancel = (existingFuture || []).filter((a: any) => {
+            // não cancela se for exatamente o mesmo slot (não deveria ocorrer pois capacidade já foi checada)
+            return !(a.appointment_date === date && String(a.appointment_time).slice(0,5) === String(timeWithSeconds).slice(0,5));
+          });
+
+          if (toCancel.length > 0) {
+            const ids = toCancel.map((a: any) => a.id);
+            await supabase
+              .from("appointments")
+              .update({
+                status: "cancelled",
+                updated_at: new Date().toISOString(),
+              })
+              .in("id", ids);
+            console.log(`[create_appointment] Cancelados ${ids.length} agendamento(s) anterior(es) do telefone ${phone} para liberar agenda.`);
+          }
+        } catch (e) {
+          console.error("Erro ao liberar agendamentos anteriores:", e);
+        }
+
         // Create appointment
         // Resolve account_id (owner do user_id) para o agendamento aparecer no calendário
         let resolvedAccountId: string | null = null;
