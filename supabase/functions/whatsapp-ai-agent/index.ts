@@ -286,6 +286,87 @@ function isHumanHandoffRequest(text: string | null | undefined): boolean {
   return patterns.some((re) => re.test(t));
 }
 
+function normalizeTextForIntent(text: string | null | undefined): string {
+  return String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function isRescheduleIntent(text: string | null | undefined): boolean {
+  const t = normalizeTextForIntent(text);
+  return /\b(reagend|remarc|mudar|trocar|alterar)\b/.test(t);
+}
+
+function toDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function addDays(base: Date, days: number): Date {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function nextWeekday(base: Date, targetDay: number): Date {
+  const current = base.getDay();
+  let diff = (targetDay - current + 7) % 7;
+  if (diff === 0) diff = 7;
+  return addDays(base, diff);
+}
+
+function parseAppointmentDateTimeFromText(text: string | null | undefined, today: Date): { date: string; time: string } | null {
+  const raw = String(text || "");
+  const normalized = normalizeTextForIntent(raw);
+  const timeMatch = normalized.match(/\b(?:as|às|a|para)?\s*(\d{1,2})(?::|h)(\d{2})?\b/);
+  if (!timeMatch) return null;
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2] || "00");
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  const time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+
+  let date: Date | null = null;
+  const isoMatch = normalized.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
+  const brMatch = normalized.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if (isoMatch) {
+    date = new Date(`${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}T00:00:00`);
+  } else if (brMatch) {
+    const day = Number(brMatch[1]);
+    const month = Number(brMatch[2]) - 1;
+    const yearRaw = brMatch[3] ? Number(brMatch[3]) : today.getFullYear();
+    const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+    date = new Date(year, month, day);
+  } else if (/\bamanha\b/.test(normalized)) {
+    date = addDays(today, 1);
+  } else if (/\bdepois de amanha\b/.test(normalized)) {
+    date = addDays(today, 2);
+  } else {
+    const weekdays: Record<string, number> = {
+      domingo: 0,
+      segunda: 1,
+      "segunda-feira": 1,
+      terca: 2,
+      "terca-feira": 2,
+      quarta: 3,
+      "quarta-feira": 3,
+      quinta: 4,
+      "quinta-feira": 4,
+      sexta: 5,
+      "sexta-feira": 5,
+      sabado: 6,
+    };
+    for (const [word, day] of Object.entries(weekdays)) {
+      if (new RegExp(`\\b${word}\\b`).test(normalized)) {
+        date = nextWeekday(today, day);
+        break;
+      }
+    }
+  }
+
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return { date: toDateKey(date), time };
+}
+
 // Executa o handoff completo (mensagem ao cliente, notificação, roleta, CRM, follow-up).
 async function performHandoff(
   supabase: any,
