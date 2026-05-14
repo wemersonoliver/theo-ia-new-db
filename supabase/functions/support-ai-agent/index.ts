@@ -947,7 +947,7 @@ function repairKnownUrls(text: string): string {
   // Junta qualquer fragmento letra+espaços após "theoia.com.br/" se o resultado bater com um path conhecido.
   // Cobre casos como "regist e r", "regis ter", "reg ister", "register" puro.
   out = out.replace(
-    /(theoia\.com\.br\/)([A-Za-z][A-Za-z\s]{0,30}[A-Za-z])(?=[\s.,!?)\]]|$)/gi,
+    /(theoia\.com\.br\/)([A-Za-z][A-Za-z \t]{0,15}[A-Za-z])(?=[\s.,!?)\]]|$)/gi,
     (match, base, tail) => {
       const joined = (tail as string).replace(/\s+/g, "").toLowerCase();
       if (["register", "registrar", "login", "cadastro", "cadastrar"].includes(joined)) {
@@ -956,6 +956,24 @@ function repairKnownUrls(text: string): string {
       return match;
     },
   );
+  // Também trata o caso de espaços DENTRO da palavra-path em uma única linha
+  // (ex: "regist e r" antes de quebra de linha) — varre linha a linha.
+  out = out.split("\n").map((line) => {
+    return line.replace(
+      /(theoia\.com\.br\/)([A-Za-z][A-Za-z \t]{0,20}[A-Za-z])/gi,
+      (match, base, tail) => {
+        const joined = (tail as string).replace(/\s+/g, "").toLowerCase();
+        for (const known of ["register", "registrar", "cadastrar", "cadastro", "login"]) {
+          if (joined.startsWith(known)) {
+            // preserva o restante após o termo conhecido (sem espaços internos)
+            const rest = joined.slice(known.length);
+            return base + known + rest;
+          }
+        }
+        return match;
+      },
+    );
+  }).join("\n");
   // Normaliza variações comuns
   out = out.replace(/https?:\s*\/\/\s*theoia\s*\.\s*com\s*\.\s*br/gi, "https://theoia.com.br");
   return out;
