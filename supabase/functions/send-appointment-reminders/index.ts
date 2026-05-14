@@ -224,14 +224,14 @@ serve(async (req) => {
   }
 });
 
-async function sendWhatsAppMessage(supabase: any, userId: string, phone: string, message: string) {
+async function sendWhatsAppMessage(supabase: any, userId: string, phone: string, message: string): Promise<boolean> {
   try {
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
 
     if (!evolutionUrl || !evolutionKey) {
       console.error("Evolution API not configured");
-      return;
+      return false;
     }
 
     const { data: instance } = await supabase
@@ -242,7 +242,7 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
 
     if (!instance) {
       console.error("Instance not found for user:", userId);
-      return;
+      return false;
     }
 
     const response = await fetch(`${evolutionUrl}/message/sendText/${instance.instance_name}`, {
@@ -256,9 +256,12 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
 
     if (!response.ok) {
       console.error("Evolution send error:", await response.text());
+      return false;
     }
+    return true;
   } catch (error) {
     console.error("Send message error:", error);
+    return false;
   }
 }
 
