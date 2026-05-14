@@ -367,6 +367,43 @@ function parseAppointmentDateTimeFromText(text: string | null | undefined, today
   return { date: toDateKey(date), time };
 }
 
+async function claimHandoffNotification(
+  supabase: any,
+  userId: string,
+  accountId: string | null,
+  phone: string,
+): Promise<boolean> {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+  const payload = {
+    user_id: userId,
+    account_id: accountId,
+    phone,
+    handed_off_at: now.toISOString(),
+    updated_at: now.toISOString(),
+  };
+
+  const { data: updated, error: updateError } = await supabase
+    .from("whatsapp_ai_sessions")
+    .update({ handed_off_at: payload.handed_off_at, updated_at: payload.updated_at })
+    .eq("user_id", userId)
+    .eq("phone", phone)
+    .or(`handed_off_at.is.null,handed_off_at.lt.${cutoff}`)
+    .select("id")
+    .maybeSingle();
+
+  if (updateError) console.error("claimHandoffNotification update error:", updateError);
+  if (updated?.id) return true;
+
+  const { error: insertError } = await supabase
+    .from("whatsapp_ai_sessions")
+    .insert(payload);
+
+  if (!insertError) return true;
+  if (insertError.code !== "23505") console.error("claimHandoffNotification insert error:", insertError);
+  return false;
+}
+
 // Executa o handoff completo (mensagem ao cliente, notificação, roleta, CRM, follow-up).
 async function performHandoff(
   supabase: any,
@@ -377,15 +414,11 @@ async function performHandoff(
   aiConfig: any,
 ) {
   try {
-    await supabase
-      .from("whatsapp_ai_sessions")
-      .upsert({
-        user_id: userId,
-        account_id: accountId,
-        phone,
-        handed_off_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "user_id,phone" });
+    const claimed = await claimHandoffNotification(supabase, userId, accountId, phone);
+    if (!claimed) {
+      console.log("performHandoff skipped: recent handoff already notified for", phone);
+      return;
+    }
 
     const handoffMsg = aiConfig?.handoff_message
       || "Entendi! Já estou te transferindo para um atendente da nossa equipe. Em instantes alguém vai te responder por aqui. 🙌";
@@ -490,22 +523,18 @@ serve(async (req) => {
       ? (Date.now() - new Date(session.handed_off_at).getTime()) < 60 * 60 * 1000
       : false;
     if (messagesCount >= (aiConfig.max_messages_without_human || 10) && !recentlyHandedOff) {
+      const claimed = await claimHandoffNotification(supabase, userId, accountId, phone);
+      if (!claimed) {
+        console.log("Message-limit handoff skipped: recent handoff already notified for", phone);
+        return new Response(JSON.stringify({ skipped: true, reason: "Recent handoff already notified" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
       if (aiConfig.handoff_message) {
         await sendWhatsAppMessage(supabase, userId, phone, aiConfig.handoff_message);
         await saveAIMessage(supabase, userId, phone, aiConfig.handoff_message, "ai");
       }
-
-      // Marca a sessão para registro mas SEM desativar a IA — ela deve continuar
-      // até um humano efetivamente assumir.
-      await supabase
-        .from("whatsapp_ai_sessions")
-        .upsert({
-          user_id: userId,
-          account_id: accountId,
-          phone,
-          handed_off_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "user_id,phone" });
 
       // Notify registered contacts about handoff
       await notifyHandoff(supabase, userId, phone, contactName);
@@ -996,6 +1025,7 @@ Regras adicionais:
     };
 
     let aiReply = "";
+    let handoffHandled = false;
     let functionCallsProcessed = 0;
     let createAppointmentCalled = false;
     const maxFunctionCalls = 3;
@@ -1059,16 +1089,14 @@ Regras adicionais:
           const handoffReason = String(fc.args?.reason || "Solicitação de atendimento humano");
           console.log("[HANDOFF] Tool request_human_handoff acionada:", handoffReason);
 
-          // 1. Registra horário do handoff na sessão (sem desativar a IA)
-          await supabase
-            .from("whatsapp_ai_sessions")
-            .upsert({
-              user_id: userId,
-              account_id: accountId,
-              phone,
-              handed_off_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            }, { onConflict: "user_id,phone" });
+          const claimed = await claimHandoffNotification(supabase, userId, accountId, phone);
+          if (!claimed) {
+            console.log("[HANDOFF] Ignorado: notificação já enviada recentemente para", phone);
+            handoffHandled = true;
+            aiReply = "";
+            functionCallsProcessed = maxFunctionCalls;
+            break;
+          }
 
           // 2. IA continua ativa (ai_active permanece true) até um humano
           //    efetivamente assumir e enviar mensagem manual.
@@ -1085,6 +1113,7 @@ Regras adicionais:
           try { await moveCRMDealToHumanStage(supabase, userId, phone); } catch (e) { console.error("crm move err:", e); }
           try { await supabase.rpc("cancel_followup_sequence", { p_user_id: userId, p_phone: phone, p_reason: "handoff" }); } catch (e) { console.error("cancel followup err:", e); }
 
+          handoffHandled = true;
           aiReply = "";
           functionCallsProcessed = maxFunctionCalls;
           break;
@@ -1203,6 +1232,12 @@ Regras adicionais:
     }
 
     if (!aiReply) {
+      if (handoffHandled) {
+        return new Response(JSON.stringify({ handoff: true, handled: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       console.error("No AI reply generated");
       // Fallback: se o cliente claramente pediu um humano, faz o handoff manualmente
       // mesmo que o Gemini tenha falhado em chamar a tool.
