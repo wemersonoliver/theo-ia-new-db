@@ -90,7 +90,7 @@ function ChatMessages({ messages, className }: { messages: Message[]; className?
                 "mt-1 text-right text-xs",
                 msg.from_me ? "text-primary-foreground/70" : "text-muted-foreground"
               )}>
-                {new Date(msg.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                {new Date(msg.timestamp).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
               </p>
             </div>
           </div>

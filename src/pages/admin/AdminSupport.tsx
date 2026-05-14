@@ -102,7 +102,7 @@ function TicketDetail({ ticketId, onClose }: { ticketId: string; onClose: () => 
                 <p className="text-xs mb-1 text-slate-500">{msg.sender_type === "admin" ? "Admin" : "Usuário"}</p>
                 <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
                 <p className="mt-1 text-right text-xs text-slate-600">
-                  {new Date(msg.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  {new Date(msg.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                 </p>
               </div>
             </div>
