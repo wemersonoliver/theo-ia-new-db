@@ -996,6 +996,7 @@ Regras adicionais:
     };
 
     let aiReply = "";
+    let handoffHandled = false;
     let functionCallsProcessed = 0;
     let createAppointmentCalled = false;
     const maxFunctionCalls = 3;
@@ -1059,6 +1060,23 @@ Regras adicionais:
           const handoffReason = String(fc.args?.reason || "Solicitação de atendimento humano");
           console.log("[HANDOFF] Tool request_human_handoff acionada:", handoffReason);
 
+          const { data: currentSession } = await supabase
+            .from("whatsapp_ai_sessions")
+            .select("handed_off_at")
+            .eq("user_id", userId)
+            .eq("phone", phone)
+            .maybeSingle();
+          const alreadyNotifiedRecently = currentSession?.handed_off_at
+            ? (Date.now() - new Date(currentSession.handed_off_at).getTime()) < 60 * 60 * 1000
+            : false;
+          if (alreadyNotifiedRecently) {
+            console.log("[HANDOFF] Ignorado: notificação já enviada recentemente para", phone);
+            handoffHandled = true;
+            aiReply = "";
+            functionCallsProcessed = maxFunctionCalls;
+            break;
+          }
+
           // 1. Registra horário do handoff na sessão (sem desativar a IA)
           await supabase
             .from("whatsapp_ai_sessions")
@@ -1085,6 +1103,7 @@ Regras adicionais:
           try { await moveCRMDealToHumanStage(supabase, userId, phone); } catch (e) { console.error("crm move err:", e); }
           try { await supabase.rpc("cancel_followup_sequence", { p_user_id: userId, p_phone: phone, p_reason: "handoff" }); } catch (e) { console.error("cancel followup err:", e); }
 
+          handoffHandled = true;
           aiReply = "";
           functionCallsProcessed = maxFunctionCalls;
           break;
@@ -1203,6 +1222,12 @@ Regras adicionais:
     }
 
     if (!aiReply) {
+      if (handoffHandled) {
+        return new Response(JSON.stringify({ handoff: true, handled: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       console.error("No AI reply generated");
       // Fallback: se o cliente claramente pediu um humano, faz o handoff manualmente
       // mesmo que o Gemini tenha falhado em chamar a tool.
