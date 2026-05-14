@@ -523,22 +523,18 @@ serve(async (req) => {
       ? (Date.now() - new Date(session.handed_off_at).getTime()) < 60 * 60 * 1000
       : false;
     if (messagesCount >= (aiConfig.max_messages_without_human || 10) && !recentlyHandedOff) {
+      const claimed = await claimHandoffNotification(supabase, userId, accountId, phone);
+      if (!claimed) {
+        console.log("Message-limit handoff skipped: recent handoff already notified for", phone);
+        return new Response(JSON.stringify({ skipped: true, reason: "Recent handoff already notified" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
       if (aiConfig.handoff_message) {
         await sendWhatsAppMessage(supabase, userId, phone, aiConfig.handoff_message);
         await saveAIMessage(supabase, userId, phone, aiConfig.handoff_message, "ai");
       }
-
-      // Marca a sessão para registro mas SEM desativar a IA — ela deve continuar
-      // até um humano efetivamente assumir.
-      await supabase
-        .from("whatsapp_ai_sessions")
-        .upsert({
-          user_id: userId,
-          account_id: accountId,
-          phone,
-          handed_off_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "user_id,phone" });
 
       // Notify registered contacts about handoff
       await notifyHandoff(supabase, userId, phone, contactName);
