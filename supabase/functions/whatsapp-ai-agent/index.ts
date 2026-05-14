@@ -367,6 +367,43 @@ function parseAppointmentDateTimeFromText(text: string | null | undefined, today
   return { date: toDateKey(date), time };
 }
 
+async function claimHandoffNotification(
+  supabase: any,
+  userId: string,
+  accountId: string | null,
+  phone: string,
+): Promise<boolean> {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+  const payload = {
+    user_id: userId,
+    account_id: accountId,
+    phone,
+    handed_off_at: now.toISOString(),
+    updated_at: now.toISOString(),
+  };
+
+  const { data: updated, error: updateError } = await supabase
+    .from("whatsapp_ai_sessions")
+    .update({ handed_off_at: payload.handed_off_at, updated_at: payload.updated_at })
+    .eq("user_id", userId)
+    .eq("phone", phone)
+    .or(`handed_off_at.is.null,handed_off_at.lt.${cutoff}`)
+    .select("id")
+    .maybeSingle();
+
+  if (updateError) console.error("claimHandoffNotification update error:", updateError);
+  if (updated?.id) return true;
+
+  const { error: insertError } = await supabase
+    .from("whatsapp_ai_sessions")
+    .insert(payload);
+
+  if (!insertError) return true;
+  if (insertError.code !== "23505") console.error("claimHandoffNotification insert error:", insertError);
+  return false;
+}
+
 // Executa o handoff completo (mensagem ao cliente, notificação, roleta, CRM, follow-up).
 async function performHandoff(
   supabase: any,
