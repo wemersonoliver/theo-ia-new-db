@@ -1856,12 +1856,21 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
       notifContacts = data || null;
     }
 
+    // Normaliza qualquer número BR para o formato com DDI 55 (chave única do Map),
+    // evitando duplicar envios quando o mesmo número está cadastrado com e sem 55.
+    const normalizeBR = (raw: string): string => {
+      const d = String(raw || "").replace(/\D/g, "");
+      if (!d) return "";
+      if ((d.length === 10 || d.length === 11) ) return "55" + d;
+      return d;
+    };
+
     // Sempre incluir o telefone do dono da conta (cadastrado no profile)
     // como destinatário da notificação de handoff.
     const recipients = new Map<string, string>(); // phone -> name
     for (const c of notifContacts || []) {
-      const digits = String(c.phone || "").replace(/\D/g, "");
-      if (digits) recipients.set(digits, c.name || "");
+      const key = normalizeBR(c.phone);
+      if (key && !recipients.has(key)) recipients.set(key, c.name || "");
     }
 
     // Resolver o owner da account para pegar o telefone cadastrado
@@ -1879,9 +1888,9 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
       .select("phone, full_name")
       .eq("user_id", ownerUserId)
       .maybeSingle();
-    const ownerDigits = String(ownerProfile?.phone || "").replace(/\D/g, "");
-    if (ownerDigits) {
-      recipients.set(ownerDigits, ownerProfile?.full_name || "Dono da conta");
+    const ownerKey = normalizeBR(ownerProfile?.phone || "");
+    if (ownerKey && !recipients.has(ownerKey)) {
+      recipients.set(ownerKey, ownerProfile?.full_name || "Dono da conta");
     }
 
     if (recipients.size === 0) return;
@@ -1918,9 +1927,7 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
     const instanceName = sysInstance.instance_name;
     let sent = 0;
     for (const [phoneNum] of recipients) {
-      // Normaliza para formato BR com 55 quando aplicável
-      let target = phoneNum;
-      if (target.length === 10 || target.length === 11) target = "55" + target;
+      const target = phoneNum; // já normalizado com 55
       try {
         const resp = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
           method: "POST",
