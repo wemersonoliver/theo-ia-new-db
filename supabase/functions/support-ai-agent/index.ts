@@ -996,6 +996,14 @@ function normalizeUrlSpacing(text: string): string {
     .replace(/([A-Za-zÀ-ÿ])(?=https?:\/\/|www\.)/giu, "$1 ");
 }
 
+function forceCanonicalRegisterLink(text: string): string {
+  return repairKnownUrls(text)
+    .replace(/https?:\/\/theoia\.com\.br\/[\s\S]{0,30}?\b(?:register|registrar|cadastro|cadastrar|login)\b/gi, "https://theoia.com.br/register")
+    .replace(/https?:\/\/theoia\.com\.br\/r\s*e\s*g\s*i\s*s\s*t\s*e\s*r?/gi, "https://theoia.com.br/register")
+    .replace(/https?:\/\/theoia\.com\.br\/(?:registe|regist|regis|regi|reg)(?![A-Za-z])/gi, "https://theoia.com.br/register")
+    .replace(/https?:\/\/theoia\.com\.br\/(?!register\b)[A-Za-z\s]{1,30}/gi, "https://theoia.com.br/register");
+}
+
 function splitByWordLength(text: string, maxChars = MAX_SUPPORT_MESSAGE_CHARS): string[] {
   const words = normalizeUrlSpacing(text).trim().split(/\s+/).filter(Boolean);
   const chunks: string[] = [];
@@ -1408,7 +1416,7 @@ serve(async (req) => {
     // Split AI response into message blocks with hard fallback for long paragraphs
     const messageBlocks = repairChunkedUrls(
       splitSupportResponseIntoBlocks(aiResponse, respondWithAudio),
-    );
+    ).map((block) => forceCanonicalRegisterLink(block));
 
     // Save ALL blocks as individual messages in conversation
     // Use actual type that will be sent
