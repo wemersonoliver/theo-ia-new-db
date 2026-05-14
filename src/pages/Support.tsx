@@ -60,7 +60,7 @@ function TicketChat({ ticketId, fullHeight = false }: { ticketId: string; fullHe
                 <p className="text-xs mb-1 text-muted-foreground">{msg.sender_type === "admin" ? "Suporte" : "Você"}</p>
                 <p className="whitespace-pre-wrap break-words text-sm">{msg.content}</p>
                 <p className="mt-1 text-right text-xs opacity-60">
-                  {new Date(msg.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  {new Date(msg.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                 </p>
               </div>
             </div>
