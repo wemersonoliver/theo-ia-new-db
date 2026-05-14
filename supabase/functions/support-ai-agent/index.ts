@@ -1107,6 +1107,36 @@ function splitSupportResponseIntoBlocks(text: string, forAudio = false): string[
 }
 
 /**
+ * Pós-processamento final: garante que nenhum chunk termine com URL truncada
+ * (ex: ".../registe" sem o "r" final), mesclando com o próximo chunk se necessário.
+ */
+export function repairChunkedUrls(chunks: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < chunks.length; i++) {
+    let cur = chunks[i];
+    // Caso 1: chunk termina com path conhecido truncado e próximo chunk começa com a continuação
+    while (i + 1 < chunks.length) {
+      const next = chunks[i + 1];
+      const merged = repairKnownUrls(`${cur} ${next}`);
+      const repairedCur = repairKnownUrls(cur);
+      // Se o merge resolveu uma URL quebrada (mudou o conteúdo de forma útil), junta
+      const curHasBrokenUrl = /theoia\.com\.br\/(?:registe|regist|regis|regi|reg|cadastr|logi|log)$/i.test(repairedCur.trim());
+      const nextStartsWithUrlTail = /^(?:r|er|ter|ster|ister|gister|egister|register|ar|rar|rar|n|in|gin|ogin|login|o|ro|tro|stro|astro|dastro|adastro|cadastro)\b/i.test(next.trim());
+      if (curHasBrokenUrl && nextStartsWithUrlTail) {
+        cur = merged;
+        i++;
+        continue;
+      }
+      break;
+    }
+    // Substitui qualquer URL truncada remanescente pela URL canônica
+    cur = cur.replace(/https?:\/\/theoia\.com\.br\/(?:registe|regist|regis|regi|reg)(?![A-Za-z])/gi, "https://theoia.com.br/register");
+    out.push(cur);
+  }
+  return out;
+}
+
+/**
  * Split text into audio-friendly blocks of up to maxChars (~40s of speech).
  * Merges small paragraphs together and splits on sentence boundaries.
  */
