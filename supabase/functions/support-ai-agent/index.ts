@@ -956,24 +956,19 @@ function repairKnownUrls(text: string): string {
       return match;
     },
   );
-  // Também trata o caso de espaços DENTRO da palavra-path em uma única linha
-  // (ex: "regist e r" antes de quebra de linha) — varre linha a linha.
-  out = out.split("\n").map((line) => {
-    return line.replace(
-      /(theoia\.com\.br\/)([A-Za-z][A-Za-z \t]{0,20}[A-Za-z])/gi,
+  // Reforço por linha (evita greedy multilinha): trata "regist e r" no fim de linha
+  out = out.split("\n").map((line) =>
+    line.replace(
+      /(theoia\.com\.br\/)([A-Za-z][A-Za-z \t]{0,15}[A-Za-z])(?=[\s.,!?)\]]|$)/gi,
       (match, base, tail) => {
         const joined = (tail as string).replace(/\s+/g, "").toLowerCase();
-        for (const known of ["register", "registrar", "cadastrar", "cadastro", "login"]) {
-          if (joined.startsWith(known)) {
-            // preserva o restante após o termo conhecido (sem espaços internos)
-            const rest = joined.slice(known.length);
-            return base + known + rest;
-          }
+        if (["register", "registrar", "login", "cadastro", "cadastrar"].includes(joined)) {
+          return base + joined;
         }
         return match;
       },
-    );
-  }).join("\n");
+    )
+  ).join("\n");
   // Normaliza variações comuns
   out = out.replace(/https?:\s*\/\/\s*theoia\s*\.\s*com\s*\.\s*br/gi, "https://theoia.com.br");
   return out;
