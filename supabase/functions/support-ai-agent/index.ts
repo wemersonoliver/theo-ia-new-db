@@ -944,6 +944,17 @@ function repairKnownUrls(text: string): string {
   let out = text;
   // [texto](url) → url
   out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$2");
+  // Corrige variações truncadas/quebradas do path /register em qualquer posição.
+  // Cobre: "registe r", "regist er", "regis ter", "regi ster", "reg ister",
+  // "registe" (faltando o "r" final), "registerr" (duplicado), etc.
+  out = out.replace(
+    /(theoia\.com\.br\/)(?:r\s*e\s*g\s*i\s*s\s*t\s*e\s*r+|r\s*e\s*g\s*i\s*s\s*t\s*e|r\s*e\s*g\s*i\s*s\s*t\s*r\s*a\s*r)/gi,
+    "$1register",
+  );
+  out = out.replace(
+    /(theoia\.com\.br\/)(?:l\s*o\s*g\s*i\s*n|c\s*a\s*d\s*a\s*s\s*t\s*r\s*a?\s*r?o?)/gi,
+    (_m, base) => `${base}register`,
+  );
   // Junta qualquer fragmento letra+espaços após "theoia.com.br/" se o resultado bater com um path conhecido.
   // Cobre casos como "regist e r", "regis ter", "reg ister", "register" puro.
   out = out.replace(
