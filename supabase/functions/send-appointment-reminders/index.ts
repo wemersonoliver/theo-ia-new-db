@@ -145,18 +145,41 @@ serve(async (req) => {
           .replace("{titulo}", apt.title || "")
           .replace("{data}", apt.appointment_date);
 
-        // Send via Evolution API
-        await sendWhatsAppMessage(supabase, userId, apt.phone, message);
-
-        // Mark as sent
-        await supabase
+        // Atomic claim BEFORE sending. Multiple cron/function executions can overlap;
+        // only the first one that flips reminder_sent from false -> true may send.
+        const claimedAt = new Date().toISOString();
+        const { data: claimedAppointment, error: claimError } = await supabase
           .from("appointments")
           .update({
             reminder_sent: true,
-            reminder_sent_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            reminder_sent_at: claimedAt,
+            updated_at: claimedAt,
           })
-          .eq("id", apt.id);
+          .eq("id", apt.id)
+          .eq("reminder_sent", false)
+          .select("id")
+          .maybeSingle();
+
+        if (claimError || !claimedAppointment) {
+          console.log(`[skip] reminder already claimed or sent for appointment ${apt.id}`, claimError?.message || "");
+          continue;
+        }
+
+        // Send via Evolution API
+        const sent = await sendWhatsAppMessage(supabase, userId, apt.phone, message);
+        if (!sent) {
+          await supabase
+            .from("appointments")
+            .update({
+              reminder_sent: false,
+              reminder_sent_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", apt.id)
+            .eq("reminder_sent_at", claimedAt);
+          console.error(`Reminder send failed for appointment ${apt.id}; claim released.`);
+          continue;
+        }
 
         // Save message to conversation
         await saveMessageToConversation(supabase, userId, apt.phone, message);
@@ -201,14 +224,14 @@ serve(async (req) => {
   }
 });
 
-async function sendWhatsAppMessage(supabase: any, userId: string, phone: string, message: string) {
+async function sendWhatsAppMessage(supabase: any, userId: string, phone: string, message: string): Promise<boolean> {
   try {
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
 
     if (!evolutionUrl || !evolutionKey) {
       console.error("Evolution API not configured");
-      return;
+      return false;
     }
 
     const { data: instance } = await supabase
@@ -219,7 +242,7 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
 
     if (!instance) {
       console.error("Instance not found for user:", userId);
-      return;
+      return false;
     }
 
     const response = await fetch(`${evolutionUrl}/message/sendText/${instance.instance_name}`, {
@@ -233,9 +256,12 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
 
     if (!response.ok) {
       console.error("Evolution send error:", await response.text());
+      return false;
     }
+    return true;
   } catch (error) {
     console.error("Send message error:", error);
+    return false;
   }
 }
 
