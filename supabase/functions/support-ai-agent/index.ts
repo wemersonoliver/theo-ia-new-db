@@ -146,7 +146,12 @@ REGRA CRÍTICA SOBRE MULTI-USUÁRIOS E MULTI-NÚMERO:
 
 1. **O teste grátis é de 7 dias, NUNCA diga 15 dias.**
 2. **Para iniciar o teste grátis, o cliente NÃO precisa pagar.** Basta se cadastrar no link: https://theoia.com.br/register
-   - Sempre escreva o link EXATAMENTE como https://theoia.com.br/register em uma única palavra, sem espaços internos, sem quebras de linha no meio, sem markdown de link "[texto](url)" e sem colchetes. Nunca termine uma mensagem cortando o link no meio.
+   - **LINK OFICIAL E ÚNICO PARA CADASTRO**: https://theoia.com.br/register
+   - Copie e cole EXATAMENTE essa string. NUNCA escreva "registe", "regist", "regis", "regi" ou "reg" sozinhos — a palavra é sempre **register** (com R-E-G-I-S-T-E-R, terminando em "r").
+   - PROIBIDO: espaços internos, quebras de linha no meio, markdown de link com colchetes, colchetes, parênteses ao redor, emojis colados, ou qualquer caractere entre as letras.
+   - PROIBIDO terminar uma mensagem com o link no meio. Se o link não couber inteiro na mensagem atual, coloque-o sozinho na próxima mensagem.
+   - Sempre que mencionar o link, escreva-o em uma linha própria, isolado por espaços, assim:
+     https://theoia.com.br/register
 3. **NUNCA envie links de pagamento (Kiwify) a menos que o cliente PEÇA EXPLICITAMENTE para assinar/pagar.** Quando o cliente demonstrar interesse em testar, envie APENAS o link de cadastro.
 4. **O cadastro é rápido, simples e sem complicação.** Reforce isso sempre.
 
@@ -944,6 +949,17 @@ function repairKnownUrls(text: string): string {
   let out = text;
   // [texto](url) → url
   out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$2");
+  // Corrige variações truncadas/quebradas do path /register em qualquer posição.
+  // Cobre: "registe r", "regist er", "regis ter", "regi ster", "reg ister",
+  // "registe" (faltando o "r" final), "registerr" (duplicado), etc.
+  out = out.replace(
+    /(theoia\.com\.br\/)(?:r\s*e\s*g\s*i\s*s\s*t\s*e\s*r+|r\s*e\s*g\s*i\s*s\s*t\s*e|r\s*e\s*g\s*i\s*s\s*t\s*r\s*a\s*r)/gi,
+    "$1register",
+  );
+  out = out.replace(
+    /(theoia\.com\.br\/)(?:l\s*o\s*g\s*i\s*n|c\s*a\s*d\s*a\s*s\s*t\s*r\s*a?\s*r?o?)/gi,
+    (_m, base) => `${base}register`,
+  );
   // Junta qualquer fragmento letra+espaços após "theoia.com.br/" se o resultado bater com um path conhecido.
   // Cobre casos como "regist e r", "regis ter", "reg ister", "register" puro.
   out = out.replace(
@@ -1093,6 +1109,36 @@ function splitSupportResponseIntoBlocks(text: string, forAudio = false): string[
 
     return splitLongSupportBlock(block);
   });
+}
+
+/**
+ * Pós-processamento final: garante que nenhum chunk termine com URL truncada
+ * (ex: ".../registe" sem o "r" final), mesclando com o próximo chunk se necessário.
+ */
+export function repairChunkedUrls(chunks: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < chunks.length; i++) {
+    let cur = chunks[i];
+    // Caso 1: chunk termina com path conhecido truncado e próximo chunk começa com a continuação
+    while (i + 1 < chunks.length) {
+      const next = chunks[i + 1];
+      const merged = repairKnownUrls(`${cur} ${next}`);
+      const repairedCur = repairKnownUrls(cur);
+      // Se o merge resolveu uma URL quebrada (mudou o conteúdo de forma útil), junta
+      const curHasBrokenUrl = /theoia\.com\.br\/(?:registe|regist|regis|regi|reg|cadastr|logi|log)$/i.test(repairedCur.trim());
+      const nextStartsWithUrlTail = /^(?:r|er|ter|ster|ister|gister|egister|register|ar|rar|rar|n|in|gin|ogin|login|o|ro|tro|stro|astro|dastro|adastro|cadastro)\b/i.test(next.trim());
+      if (curHasBrokenUrl && nextStartsWithUrlTail) {
+        cur = merged;
+        i++;
+        continue;
+      }
+      break;
+    }
+    // Substitui qualquer URL truncada remanescente pela URL canônica
+    cur = cur.replace(/https?:\/\/theoia\.com\.br\/(?:registe|regist|regis|regi|reg)(?![A-Za-z])/gi, "https://theoia.com.br/register");
+    out.push(cur);
+  }
+  return out;
 }
 
 /**
@@ -1360,7 +1406,9 @@ serve(async (req) => {
     const respondWithAudio = voiceEnabled && inputType === "audio";
 
     // Split AI response into message blocks with hard fallback for long paragraphs
-    const messageBlocks = splitSupportResponseIntoBlocks(aiResponse, respondWithAudio);
+    const messageBlocks = repairChunkedUrls(
+      splitSupportResponseIntoBlocks(aiResponse, respondWithAudio),
+    );
 
     // Save ALL blocks as individual messages in conversation
     // Use actual type that will be sent
