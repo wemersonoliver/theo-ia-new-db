@@ -1089,33 +1089,14 @@ Regras adicionais:
           const handoffReason = String(fc.args?.reason || "Solicitação de atendimento humano");
           console.log("[HANDOFF] Tool request_human_handoff acionada:", handoffReason);
 
-          const { data: currentSession } = await supabase
-            .from("whatsapp_ai_sessions")
-            .select("handed_off_at")
-            .eq("user_id", userId)
-            .eq("phone", phone)
-            .maybeSingle();
-          const alreadyNotifiedRecently = currentSession?.handed_off_at
-            ? (Date.now() - new Date(currentSession.handed_off_at).getTime()) < 60 * 60 * 1000
-            : false;
-          if (alreadyNotifiedRecently) {
+          const claimed = await claimHandoffNotification(supabase, userId, accountId, phone);
+          if (!claimed) {
             console.log("[HANDOFF] Ignorado: notificação já enviada recentemente para", phone);
             handoffHandled = true;
             aiReply = "";
             functionCallsProcessed = maxFunctionCalls;
             break;
           }
-
-          // 1. Registra horário do handoff na sessão (sem desativar a IA)
-          await supabase
-            .from("whatsapp_ai_sessions")
-            .upsert({
-              user_id: userId,
-              account_id: accountId,
-              phone,
-              handed_off_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            }, { onConflict: "user_id,phone" });
 
           // 2. IA continua ativa (ai_active permanece true) até um humano
           //    efetivamente assumir e enviar mensagem manual.
