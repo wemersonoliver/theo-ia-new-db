@@ -377,6 +377,20 @@ async function performHandoff(
   aiConfig: any,
 ) {
   try {
+    const { data: currentSession } = await supabase
+      .from("whatsapp_ai_sessions")
+      .select("handed_off_at")
+      .eq("user_id", userId)
+      .eq("phone", phone)
+      .maybeSingle();
+    const alreadyNotifiedRecently = currentSession?.handed_off_at
+      ? (Date.now() - new Date(currentSession.handed_off_at).getTime()) < 60 * 60 * 1000
+      : false;
+    if (alreadyNotifiedRecently) {
+      console.log("performHandoff skipped: recent handoff already notified for", phone);
+      return;
+    }
+
     await supabase
       .from("whatsapp_ai_sessions")
       .upsert({
