@@ -999,9 +999,12 @@ function normalizeUrlSpacing(text: string): string {
 function forceCanonicalRegisterLink(text: string): string {
   return repairKnownUrls(text)
     .replace(/https?:\/\/theoia\.com\.br\/[\s\S]{0,30}?\b(?:register|registrar|cadastro|cadastrar|login)\b/gi, "https://theoia.com.br/register")
+    .replace(/https?:\/\/theoia\.com\.br\/register(?:\s+r\b)+/gi, "https://theoia.com.br/register")
+    .replace(/https?:\/\/theoia\.com\.br\/registerr+\b/gi, "https://theoia.com.br/register")
     .replace(/https?:\/\/theoia\.com\.br\/r\s*e\s*g\s*i\s*s\s*t\s*e\s*r?/gi, "https://theoia.com.br/register")
     .replace(/https?:\/\/theoia\.com\.br\/(?:registe|regist|regis|regi|reg)(?![A-Za-z])/gi, "https://theoia.com.br/register")
-    .replace(/https?:\/\/theoia\.com\.br\/(?!register\b)[A-Za-z\s]{1,30}/gi, "https://theoia.com.br/register");
+    .replace(/https?:\/\/theoia\.com\.br\/(?!register\b)[A-Za-z\s]{1,30}/gi, "https://theoia.com.br/register")
+    .replace(/https?:\/\/theoia\.com\.br\/register(?:\s+[A-Za-z])+(?=\s*$)/gim, "https://theoia.com.br/register");
 }
 
 function splitByWordLength(text: string, maxChars = MAX_SUPPORT_MESSAGE_CHARS): string[] {
