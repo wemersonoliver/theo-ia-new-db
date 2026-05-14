@@ -145,18 +145,41 @@ serve(async (req) => {
           .replace("{titulo}", apt.title || "")
           .replace("{data}", apt.appointment_date);
 
-        // Send via Evolution API
-        await sendWhatsAppMessage(supabase, userId, apt.phone, message);
-
-        // Mark as sent
-        await supabase
+        // Atomic claim BEFORE sending. Multiple cron/function executions can overlap;
+        // only the first one that flips reminder_sent from false -> true may send.
+        const claimedAt = new Date().toISOString();
+        const { data: claimedAppointment, error: claimError } = await supabase
           .from("appointments")
           .update({
             reminder_sent: true,
-            reminder_sent_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            reminder_sent_at: claimedAt,
+            updated_at: claimedAt,
           })
-          .eq("id", apt.id);
+          .eq("id", apt.id)
+          .eq("reminder_sent", false)
+          .select("id")
+          .maybeSingle();
+
+        if (claimError || !claimedAppointment) {
+          console.log(`[skip] reminder already claimed or sent for appointment ${apt.id}`, claimError?.message || "");
+          continue;
+        }
+
+        // Send via Evolution API
+        const sent = await sendWhatsAppMessage(supabase, userId, apt.phone, message);
+        if (!sent) {
+          await supabase
+            .from("appointments")
+            .update({
+              reminder_sent: false,
+              reminder_sent_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", apt.id)
+            .eq("reminder_sent_at", claimedAt);
+          console.error(`Reminder send failed for appointment ${apt.id}; claim released.`);
+          continue;
+        }
 
         // Save message to conversation
         await saveMessageToConversation(supabase, userId, apt.phone, message);
