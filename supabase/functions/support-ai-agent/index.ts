@@ -1401,7 +1401,9 @@ serve(async (req) => {
     const respondWithAudio = voiceEnabled && inputType === "audio";
 
     // Split AI response into message blocks with hard fallback for long paragraphs
-    const messageBlocks = splitSupportResponseIntoBlocks(aiResponse, respondWithAudio);
+    const messageBlocks = repairChunkedUrls(
+      splitSupportResponseIntoBlocks(aiResponse, respondWithAudio),
+    );
 
     // Save ALL blocks as individual messages in conversation
     // Use actual type that will be sent
