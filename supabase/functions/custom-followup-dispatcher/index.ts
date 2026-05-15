@@ -46,6 +46,42 @@ interface StepRow {
   media_filename: string | null;
   delay_value: number;
   delay_unit: string;
+  variants?: any;
+}
+
+interface Variant {
+  id?: string;
+  weight?: number;
+  type?: string;
+  content?: string | null;
+  caption?: string | null;
+  media_url?: string | null;
+  media_mime?: string | null;
+  media_filename?: string | null;
+}
+
+function pickVariant(step: StepRow): { type: string; content: string | null; caption: string | null; media_url: string | null; media_mime: string | null; media_filename: string | null; variant_id: string | null } {
+  const list = Array.isArray(step.variants) ? (step.variants as Variant[]) : [];
+  if (!list.length) {
+    return { type: step.type, content: step.content, caption: step.caption, media_url: step.media_url, media_mime: step.media_mime, media_filename: step.media_filename, variant_id: null };
+  }
+  const total = list.reduce((s, v) => s + (Number(v.weight) > 0 ? Number(v.weight) : 1), 0);
+  let r = Math.random() * total;
+  let chosen: Variant = list[0];
+  for (const v of list) {
+    const w = Number(v.weight) > 0 ? Number(v.weight) : 1;
+    if (r < w) { chosen = v; break; }
+    r -= w;
+  }
+  return {
+    type: chosen.type || step.type,
+    content: chosen.content ?? step.content,
+    caption: chosen.caption ?? step.caption,
+    media_url: chosen.media_url ?? step.media_url,
+    media_mime: chosen.media_mime ?? step.media_mime,
+    media_filename: chosen.media_filename ?? step.media_filename,
+    variant_id: chosen.id || null,
+  };
 }
 
 function isoNow() { return new Date().toISOString(); }
