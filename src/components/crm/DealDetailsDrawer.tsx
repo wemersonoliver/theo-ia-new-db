@@ -52,6 +52,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { EnrollInFlowDialog } from "@/components/followup/EnrollInFlowDialog";
+import { Workflow } from "lucide-react";
 
 interface DealDetailsDrawerProps {
   open: boolean;
@@ -114,6 +116,7 @@ export function DealDetailsDrawer({
 
   // Schedule dialog
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [enrollOpen, setEnrollOpen] = useState(false);
 
   const linkedContact = useMemo(
     () => contacts.find((contact) => contact.id === deal?.contact_id) || null,
@@ -349,6 +352,18 @@ export function DealDetailsDrawer({
               onMarkWon={handleMarkWon}
               onMarkLost={() => setLostOpen(true)}
             />
+
+            {phoneNormalized && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => setEnrollOpen(true)}
+              >
+                <Workflow className="h-4 w-4 mr-2" />
+                Inscrever em fluxo de follow-up
+              </Button>
+            )}
 
             {/* Value + priority + stage */}
             <div className="grid grid-cols-2 gap-3">
