@@ -241,6 +241,176 @@ export async function uploadFollowupMedia(accountId: string, flowId: string, fil
   return { url: data.signedUrl, mime: file.type, name: file.name };
 }
 
+export interface MediaLibraryItem {
+  id: string;
+  account_id: string;
+  user_id: string;
+  name: string;
+  type: "audio" | "video" | "image" | "document" | "sticker";
+  url: string;
+  mime: string | null;
+  filename: string | null;
+  size_bytes: number | null;
+  tags: string[] | null;
+  storage_path: string | null;
+  created_at: string;
+}
+
+export function useFollowupMediaLibrary() {
+  const { accountId } = useAccountId();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  const listQuery = useQuery({
+    queryKey: ["custom-followup-media-library", accountId],
+    queryFn: async () => {
+      if (!accountId) return [];
+      const { data, error } = await supabase
+        .from("custom_followup_media_library")
+        .select("*")
+        .eq("account_id", accountId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as MediaLibraryItem[];
+    },
+    enabled: !!accountId,
+  });
+
+  const addItem = useMutation({
+    mutationFn: async (input: { file: File; name?: string; tags?: string[]; type: MediaLibraryItem["type"] }) => {
+      if (!accountId || !user) throw new Error("Sem conta");
+      const safeName = input.file.name.replace(/[^\w.\-]/g, "_");
+      const path = `${accountId}/library/${Date.now()}_${safeName}`;
+      const up = await supabase.storage.from("followup-media").upload(path, input.file, {
+        contentType: input.file.type, upsert: false,
+      });
+      if (up.error) throw up.error;
+      const { data: signed } = await supabase.storage.from("followup-media").createSignedUrl(path, 60 * 60 * 24 * 365);
+      if (!signed?.signedUrl) throw new Error("Falha ao gerar URL");
+      const { data, error } = await supabase.from("custom_followup_media_library").insert({
+        account_id: accountId, user_id: user.id,
+        name: input.name || input.file.name,
+        type: input.type,
+        url: signed.signedUrl,
+        mime: input.file.type || null,
+        filename: input.file.name,
+        size_bytes: input.file.size,
+        tags: input.tags || [],
+        storage_path: path,
+      }).select("*").single();
+      if (error) throw error;
+      return data as MediaLibraryItem;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["custom-followup-media-library", accountId] });
+      toast.success("Mídia adicionada à biblioteca");
+    },
+    onError: (e: Error) => toast.error("Erro: " + e.message),
+  });
+
+  const updateItem = useMutation({
+    mutationFn: async ({ id, ...patch }: Partial<MediaLibraryItem> & { id: string }) => {
+      const { error } = await supabase.from("custom_followup_media_library").update(patch).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["custom-followup-media-library", accountId] }),
+  });
+
+  const deleteItem = useMutation({
+    mutationFn: async (item: MediaLibraryItem) => {
+      if (item.storage_path) {
+        await supabase.storage.from("followup-media").remove([item.storage_path]).catch(() => {});
+      }
+      const { error } = await supabase.from("custom_followup_media_library").delete().eq("id", item.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["custom-followup-media-library", accountId] });
+      toast.success("Mídia removida");
+    },
+  });
+
+  return { listQuery, addItem, updateItem, deleteItem };
+}
+
+/**
+ * Exports a flow as a JSON object including its steps.
+ */
+export async function exportFlowJson(flowId: string): Promise<any> {
+  const { data: flow, error: e1 } = await supabase
+    .from("custom_followup_flows").select("*").eq("id", flowId).single();
+  if (e1) throw e1;
+  const { data: steps, error: e2 } = await supabase
+    .from("custom_followup_steps").select("*").eq("flow_id", flowId).order("position");
+  if (e2) throw e2;
+  return {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    flow: {
+      name: flow.name,
+      description: flow.description,
+      trigger_type: flow.trigger_type,
+      trigger_config: flow.trigger_config,
+      filters: flow.filters,
+      window_config: flow.window_config,
+      exclude_handoff: flow.exclude_handoff,
+      stop_on_reply: flow.stop_on_reply,
+      throttle_seconds: flow.throttle_seconds,
+      max_per_hour: flow.max_per_hour,
+    },
+    steps: (steps || []).map((s: any) => ({
+      position: s.position, type: s.type, content: s.content, caption: s.caption,
+      media_url: s.media_url, media_mime: s.media_mime, media_filename: s.media_filename,
+      delay_value: s.delay_value, delay_unit: s.delay_unit,
+      variants: s.variants, conditions: s.conditions,
+    })),
+  };
+}
+
+/**
+ * Imports a flow from a JSON object. Creates a new flow + steps under the current account.
+ */
+export async function importFlowJson(accountId: string, userId: string, json: any): Promise<string> {
+  if (!json?.flow) throw new Error("JSON inválido (sem campo flow)");
+  const f = json.flow;
+  const { data: created, error } = await supabase.from("custom_followup_flows").insert({
+    account_id: accountId, user_id: userId,
+    name: (f.name || "Fluxo importado") + " (importado)",
+    description: f.description || null,
+    enabled: false,
+    trigger_type: f.trigger_type || "manual",
+    trigger_config: f.trigger_config || {},
+    filters: f.filters || {},
+    window_config: f.window_config || {},
+    exclude_handoff: f.exclude_handoff !== false,
+    stop_on_reply: f.stop_on_reply !== false,
+    throttle_seconds: f.throttle_seconds || 7,
+    max_per_hour: f.max_per_hour || 60,
+  }).select("id").single();
+  if (error) throw error;
+  const flowId = created.id as string;
+  const steps = Array.isArray(json.steps) ? json.steps : [];
+  if (steps.length) {
+    const rows = steps.map((s: any, i: number) => ({
+      flow_id: flowId, account_id: accountId,
+      position: typeof s.position === "number" ? s.position : i,
+      type: s.type || "text",
+      content: s.content ?? null,
+      caption: s.caption ?? null,
+      media_url: s.media_url ?? null,
+      media_mime: s.media_mime ?? null,
+      media_filename: s.media_filename ?? null,
+      delay_value: s.delay_value ?? 0,
+      delay_unit: s.delay_unit ?? "minutes",
+      variants: s.variants ?? [],
+      conditions: s.conditions ?? {},
+    }));
+    const { error: e2 } = await supabase.from("custom_followup_steps").insert(rows);
+    if (e2) throw e2;
+  }
+  return flowId;
+}
+
 export async function enrollPhones(input: { flow_id: string; phones?: string[]; contact_ids?: string[]; instance_id?: string | null; source?: string; }) {
   const { data, error } = await supabase.functions.invoke("custom-followup-enroll", { body: input });
   if (error) throw error;
