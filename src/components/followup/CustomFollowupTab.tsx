@@ -3,9 +3,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Workflow, Pencil, Trash2, Play, Loader2, Users } from "lucide-react";
+import { Plus, Workflow, Pencil, Trash2, Loader2, CalendarDays } from "lucide-react";
 import { useCustomFollowup, type CustomFlow } from "@/hooks/useCustomFollowup";
 import { FlowEditorDialog } from "./FlowEditorDialog";
+import { HolidaysManager } from "./HolidaysManager";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -23,7 +25,12 @@ export function CustomFollowupTab() {
   };
 
   return (
-    <div className="space-y-6">
+    <Tabs defaultValue="flows" className="space-y-4">
+      <TabsList>
+        <TabsTrigger value="flows" className="gap-1.5"><Workflow className="h-4 w-4" /> Fluxos</TabsTrigger>
+        <TabsTrigger value="holidays" className="gap-1.5"><CalendarDays className="h-4 w-4" /> Feriados</TabsTrigger>
+      </TabsList>
+      <TabsContent value="flows" className="space-y-6">
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
@@ -75,9 +82,10 @@ export function CustomFollowupTab() {
                   <Badge variant="outline">
                     {flow.trigger_type === "inactivity" && "Por inatividade"}
                     {flow.trigger_type === "manual" && "Manual"}
-                    {flow.trigger_type === "crm_stage" && "Por etapa do CRM"}
+                    {flow.trigger_type === "crm_stage_enter" && "Entrou em etapa do CRM"}
+                    {flow.trigger_type === "crm_stage_exit" && "Saiu de etapa do CRM"}
+                    {flow.trigger_type === "conversation_finalized" && "Pós-atendimento"}
                     {flow.trigger_type === "tag" && "Por tag"}
-                    {flow.trigger_type === "conversation_outcome" && "Pós-atendimento"}
                   </Badge>
                   <Badge variant="outline">⏱ {flow.throttle_seconds}s entre envios</Badge>
                   <Badge variant="outline">{flow.window_config?.morning_start || "08:00"} – {flow.window_config?.evening_end || "19:00"}</Badge>
@@ -122,6 +130,10 @@ export function CustomFollowupTab() {
           flow={editing}
         />
       )}
-    </div>
+      </TabsContent>
+      <TabsContent value="holidays">
+        <HolidaysManager />
+      </TabsContent>
+    </Tabs>
   );
 }

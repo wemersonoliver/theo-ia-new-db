@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -27,6 +28,9 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
   const [triggerType, setTriggerType] = useState(flow.trigger_type);
   const [inactValue, setInactValue] = useState(flow.trigger_config?.value ?? 24);
   const [inactUnit, setInactUnit] = useState(flow.trigger_config?.unit ?? "hours");
+  const [pipelineId, setPipelineId] = useState<string | null>(flow.trigger_config?.pipeline_id ?? null);
+  const [stageId, setStageId] = useState<string | null>(flow.trigger_config?.stage_id ?? null);
+  const [outcome, setOutcome] = useState<string>(flow.trigger_config?.outcome ?? "any");
   const [throttle, setThrottle] = useState(flow.throttle_seconds);
   const [maxPerHour, setMaxPerHour] = useState(flow.max_per_hour);
   const [stopOnReply, setStopOnReply] = useState(flow.stop_on_reply);
@@ -34,27 +38,55 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
   const [winStart, setWinStart] = useState(flow.window_config?.morning_start || "08:00");
   const [winEnd, setWinEnd] = useState(flow.window_config?.evening_end || "19:00");
   const [skipSundays, setSkipSundays] = useState(flow.window_config?.skip_sundays !== false);
+  const [skipHolidays, setSkipHolidays] = useState(flow.window_config?.skip_holidays !== false);
+
+  const [pipelines, setPipelines] = useState<{ id: string; name: string }[]>([]);
+  const [stages, setStages] = useState<{ id: string; name: string; pipeline_id: string }[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      const [{ data: ps }, { data: ss }] = await Promise.all([
+        supabase.from("crm_pipelines").select("id, name").eq("account_id", flow.account_id).order("created_at"),
+        supabase.from("crm_stages").select("id, name, pipeline_id").order("position"),
+      ]);
+      setPipelines((ps as any) || []);
+      setStages((ss as any) || []);
+    })();
+  }, [open, flow.account_id]);
 
   useEffect(() => {
     setName(flow.name); setDescription(flow.description || "");
     setTriggerType(flow.trigger_type);
     setInactValue(flow.trigger_config?.value ?? 24);
     setInactUnit(flow.trigger_config?.unit ?? "hours");
+    setPipelineId(flow.trigger_config?.pipeline_id ?? null);
+    setStageId(flow.trigger_config?.stage_id ?? null);
+    setOutcome(flow.trigger_config?.outcome ?? "any");
     setThrottle(flow.throttle_seconds); setMaxPerHour(flow.max_per_hour);
     setStopOnReply(flow.stop_on_reply); setExcludeHandoff(flow.exclude_handoff);
     setWinStart(flow.window_config?.morning_start || "08:00");
     setWinEnd(flow.window_config?.evening_end || "19:00");
     setSkipSundays(flow.window_config?.skip_sundays !== false);
+    setSkipHolidays(flow.window_config?.skip_holidays !== false);
   }, [flow.id]);
 
   const handleSave = async () => {
+    let triggerConfig: any = flow.trigger_config || {};
+    if (triggerType === "inactivity") {
+      triggerConfig = { value: Number(inactValue), unit: inactUnit };
+    } else if (triggerType === "crm_stage_enter" || triggerType === "crm_stage_exit") {
+      triggerConfig = { pipeline_id: pipelineId, stage_id: stageId };
+    } else if (triggerType === "conversation_finalized") {
+      triggerConfig = { outcome }; // 'any' | 'won' | 'lost' | 'abandoned'
+    } else {
+      triggerConfig = {};
+    }
     await updateFlow.mutateAsync({
       id: flow.id,
       name, description,
       trigger_type: triggerType,
-      trigger_config: triggerType === "inactivity"
-        ? { value: Number(inactValue), unit: inactUnit }
-        : flow.trigger_config,
+      trigger_config: triggerConfig,
       throttle_seconds: Math.max(3, Number(throttle) || 7),
       max_per_hour: Math.max(1, Number(maxPerHour) || 60),
       stop_on_reply: stopOnReply,
@@ -63,6 +95,7 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
         morning_start: winStart,
         evening_end: winEnd,
         skip_sundays: skipSundays,
+        skip_holidays: skipHolidays,
       },
     });
   };
@@ -102,6 +135,9 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
                   <SelectContent>
                     <SelectItem value="inactivity">Por inatividade do contato</SelectItem>
                     <SelectItem value="manual">Manual (disparo via botão)</SelectItem>
+                    <SelectItem value="crm_stage_enter">Quando entra em etapa do CRM</SelectItem>
+                    <SelectItem value="crm_stage_exit">Quando sai de etapa do CRM</SelectItem>
+                    <SelectItem value="conversation_finalized">Após finalização de atendimento</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -120,6 +156,46 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+              )}
+
+              {(triggerType === "crm_stage_enter" || triggerType === "crm_stage_exit") && (
+                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label>Funil</Label>
+                    <Select value={pipelineId || ""} onValueChange={(v) => { setPipelineId(v); setStageId(null); }}>
+                      <SelectTrigger><SelectValue placeholder="Escolha o funil" /></SelectTrigger>
+                      <SelectContent>
+                        {pipelines.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Etapa</Label>
+                    <Select value={stageId || ""} onValueChange={setStageId} disabled={!pipelineId}>
+                      <SelectTrigger><SelectValue placeholder="Escolha a etapa" /></SelectTrigger>
+                      <SelectContent>
+                        {stages.filter((s) => s.pipeline_id === pipelineId).map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              {triggerType === "conversation_finalized" && (
+                <div>
+                  <Label>Resultado do atendimento</Label>
+                  <Select value={outcome} onValueChange={setOutcome}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Qualquer resultado</SelectItem>
+                      <SelectItem value="won">Ganho</SelectItem>
+                      <SelectItem value="lost">Perdido</SelectItem>
+                      <SelectItem value="abandoned">Desistência</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 
@@ -148,6 +224,13 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
                   <p className="text-xs text-muted-foreground">Pula domingo automaticamente.</p>
                 </div>
                 <Switch checked={skipSundays} onCheckedChange={setSkipSundays} />
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <Label>Pausar em feriados</Label>
+                  <p className="text-xs text-muted-foreground">Reagenda para o próximo dia útil.</p>
+                </div>
+                <Switch checked={skipHolidays} onCheckedChange={setSkipHolidays} />
               </div>
               <div className="flex items-center justify-between rounded-md border p-3">
                 <div>
