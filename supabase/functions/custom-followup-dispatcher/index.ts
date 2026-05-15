@@ -167,6 +167,64 @@ function isWithinWindowNow(win: any, holidays: { date: string; recurring: boolea
   return minutes >= startMin && minutes <= endMin;
 }
 
+// ===== Events & Webhooks =====
+async function logEvent(supabase: any, payload: {
+  account_id: string; flow_id?: string | null; enrollment_id?: string | null;
+  step_id?: string | null; step_position?: number | null; variant_id?: string | null;
+  phone?: string | null; event_type: string; meta?: any;
+}) {
+  try {
+    await supabase.from("custom_followup_events").insert({
+      account_id: payload.account_id,
+      flow_id: payload.flow_id ?? null,
+      enrollment_id: payload.enrollment_id ?? null,
+      step_id: payload.step_id ?? null,
+      step_position: payload.step_position ?? null,
+      variant_id: payload.variant_id ?? null,
+      phone: payload.phone ?? null,
+      event_type: payload.event_type,
+      meta: payload.meta ?? {},
+    });
+    fireWebhooks(supabase, payload).catch((e) => console.warn("webhook fire error", e));
+  } catch (e) {
+    console.warn("logEvent failed", e);
+  }
+}
+
+async function fireWebhooks(supabase: any, payload: any) {
+  const { data: hooks } = await supabase
+    .from("custom_followup_webhooks")
+    .select("id, url, events, headers, secret, flow_id, enabled")
+    .eq("account_id", payload.account_id)
+    .eq("enabled", true);
+  if (!hooks?.length) return;
+  const body = JSON.stringify({ ...payload, fired_at: new Date().toISOString() });
+  await Promise.all(hooks.map(async (h: any) => {
+    if (h.flow_id && h.flow_id !== payload.flow_id) return;
+    if (Array.isArray(h.events) && h.events.length && !h.events.includes(payload.event_type)) return;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "x-followup-event": payload.event_type,
+      ...(h.headers && typeof h.headers === "object" ? h.headers : {}),
+    };
+    if (h.secret) headers["x-followup-secret"] = String(h.secret);
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 10_000);
+      const r = await fetch(h.url, { method: "POST", headers, body, signal: ctrl.signal });
+      clearTimeout(t);
+      await supabase.from("custom_followup_webhooks").update({
+        last_status: r.status, last_error: r.ok ? null : `HTTP ${r.status}`, last_fired_at: new Date().toISOString(),
+      }).eq("id", h.id);
+    } catch (e) {
+      await supabase.from("custom_followup_webhooks").update({
+        last_status: 0, last_error: (e instanceof Error ? e.message : String(e)).slice(0, 500),
+        last_fired_at: new Date().toISOString(),
+      }).eq("id", h.id);
+    }
+  }));
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -290,11 +348,19 @@ serve(async (req) => {
             await supabase.rpc("custom_followup_stop_for_phone", {
               _account_id: f.account_id, _phone: item.phone, _reason: "replied"
             });
+            await logEvent(supabase, {
+              account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+              phone: item.phone, event_type: "stopped", meta: { reason: "replied" },
+            });
             skipped++; continue;
           }
           if (f.exclude_handoff && conv.ai_active === false) {
             await supabase.rpc("custom_followup_stop_for_phone", {
               _account_id: f.account_id, _phone: item.phone, _reason: "handoff"
+            });
+            await logEvent(supabase, {
+              account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+              phone: item.phone, event_type: "stopped", meta: { reason: "handoff" },
             });
             skipped++; continue;
           }
@@ -428,12 +494,24 @@ serve(async (req) => {
           locked_at: null, locked_by: null,
           last_error: sendErr.slice(0, 500),
         }).eq("id", item.id);
+        if (giveUp) {
+          await logEvent(supabase, {
+            account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+            step_id: s.id, step_position: s.position, variant_id: chosen.variant_id,
+            phone: item.phone, event_type: "failed", meta: { error: sendErr.slice(0, 300) },
+          });
+        }
         failed++; continue;
       }
 
       // Mark sent
       await supabase.from("custom_followup_queue")
         .update({ status: "sent", sent_at: isoNow() }).eq("id", item.id);
+      await logEvent(supabase, {
+        account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+        step_id: s.id, step_position: s.position, variant_id: chosen.variant_id,
+        phone: item.phone, event_type: "sent", meta: { type: chosen.type },
+      });
 
       // Append message to whatsapp_conversations history
       try {
@@ -499,6 +577,10 @@ serve(async (req) => {
           status: "completed",
           updated_at: isoNow(),
         }).eq("id", item.enrollment_id);
+        await logEvent(supabase, {
+          account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+          phone: item.phone, event_type: "completed", meta: {},
+        });
       }
       sent++;
     } catch (e) {

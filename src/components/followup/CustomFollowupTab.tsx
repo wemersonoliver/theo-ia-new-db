@@ -3,11 +3,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Workflow, Pencil, Trash2, Loader2, CalendarDays, Library } from "lucide-react";
+import { Plus, Workflow, Pencil, Trash2, Loader2, CalendarDays, Library, BarChart3, Webhook } from "lucide-react";
 import { useCustomFollowup, type CustomFlow } from "@/hooks/useCustomFollowup";
 import { FlowEditorDialog } from "./FlowEditorDialog";
 import { HolidaysManager } from "./HolidaysManager";
 import { MediaLibraryManager } from "./MediaLibraryManager";
+import { MetricsPanel } from "./MetricsPanel";
+import { WebhooksManager } from "./WebhooksManager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -29,6 +31,8 @@ export function CustomFollowupTab() {
     <Tabs defaultValue="flows" className="space-y-4">
       <TabsList>
         <TabsTrigger value="flows" className="gap-1.5"><Workflow className="h-4 w-4" /> Fluxos</TabsTrigger>
+        <TabsTrigger value="metrics" className="gap-1.5"><BarChart3 className="h-4 w-4" /> Métricas</TabsTrigger>
+        <TabsTrigger value="webhooks" className="gap-1.5"><Webhook className="h-4 w-4" /> Webhooks</TabsTrigger>
         <TabsTrigger value="holidays" className="gap-1.5"><CalendarDays className="h-4 w-4" /> Feriados</TabsTrigger>
         <TabsTrigger value="library" className="gap-1.5"><Library className="h-4 w-4" /> Biblioteca</TabsTrigger>
       </TabsList>
@@ -132,6 +136,12 @@ export function CustomFollowupTab() {
           flow={editing}
         />
       )}
+      </TabsContent>
+      <TabsContent value="metrics">
+        <MetricsPanel />
+      </TabsContent>
+      <TabsContent value="webhooks">
+        <WebhooksManager />
       </TabsContent>
       <TabsContent value="holidays">
         <HolidaysManager />
