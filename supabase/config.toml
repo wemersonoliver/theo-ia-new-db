@@ -79,3 +79,12 @@ verify_jwt = false
 
 [functions.system-followup-dispatch]
 verify_jwt = false
+
+[functions.custom-followup-dispatcher]
+verify_jwt = false
+
+[functions.custom-followup-trigger]
+verify_jwt = false
+
+[functions.custom-followup-enroll]
+verify_jwt = true
