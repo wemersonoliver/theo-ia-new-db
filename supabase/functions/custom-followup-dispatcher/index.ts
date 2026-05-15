@@ -304,7 +304,7 @@ serve(async (req) => {
       // Load step
       const { data: step } = await supabase
         .from("custom_followup_steps")
-        .select("id, flow_id, position, type, content, caption, media_url, media_mime, media_filename, delay_value, delay_unit")
+        .select("id, flow_id, position, type, content, caption, media_url, media_mime, media_filename, delay_value, delay_unit, variants")
         .eq("id", item.step_id)
         .maybeSingle();
       const s = step as StepRow | null;
@@ -313,6 +313,9 @@ serve(async (req) => {
           .update({ status: "failed", last_error: "step missing" }).eq("id", item.id);
         failed++; continue;
       }
+
+      // Pick variant (A/B testing). If no variants, returns the step itself.
+      const chosen = pickVariant(s);
 
       // Resolve instance to use
       let instanceName: string | null = null;
@@ -349,14 +352,14 @@ serve(async (req) => {
 
       // Send
       const variables = await loadVariables(supabase, f.account_id, item.phone);
-      const renderedText = renderTemplate(s.content || "", variables);
-      const renderedCaption = renderTemplate(s.caption || "", variables);
+      const renderedText = renderTemplate(chosen.content || "", variables);
+      const renderedCaption = renderTemplate(chosen.caption || "", variables);
 
       let sendOk = false;
       let sendErr = "";
       try {
         // Presence indicator
-        const presence = s.type === "audio" ? "recording" : "composing";
+        const presence = chosen.type === "audio" ? "recording" : "composing";
         const delayMs = 1500 + Math.floor(Math.random() * 1500);
         fetch(`${evolutionUrl}/chat/presence/${instanceName}`, {
           method: "POST",
@@ -365,7 +368,7 @@ serve(async (req) => {
         }).catch(() => {});
         await new Promise((r) => setTimeout(r, Math.min(delayMs, 1500)));
 
-        if (s.type === "text") {
+        if (chosen.type === "text") {
           const r = await evolutionRequest({
             evolutionUrl, evolutionKey,
             path: `/message/sendText/${instanceName}`,
@@ -374,16 +377,16 @@ serve(async (req) => {
             body: JSON.stringify({ number: item.phone, text: renderedText }),
           });
           sendOk = r.ok; sendErr = r.ok ? "" : (r.text || "send failed");
-        } else if (s.type === "audio") {
+        } else if (chosen.type === "audio") {
           const r = await evolutionRequest({
             evolutionUrl, evolutionKey,
             path: `/message/sendWhatsAppAudio/${instanceName}`,
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ number: item.phone, audio: s.media_url }),
+            body: JSON.stringify({ number: item.phone, audio: chosen.media_url }),
           });
           sendOk = r.ok; sendErr = r.ok ? "" : (r.text || "send failed");
-        } else if (s.type === "image" || s.type === "video" || s.type === "document") {
+        } else if (chosen.type === "image" || chosen.type === "video" || chosen.type === "document") {
           const r = await evolutionRequest({
             evolutionUrl, evolutionKey,
             path: `/message/sendMedia/${instanceName}`,
@@ -391,25 +394,25 @@ serve(async (req) => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               number: item.phone,
-              mediatype: s.type,
-              mimetype: s.media_mime || undefined,
+              mediatype: chosen.type,
+              mimetype: chosen.media_mime || undefined,
               caption: renderedCaption || undefined,
-              media: s.media_url,
-              fileName: s.media_filename || undefined,
+              media: chosen.media_url,
+              fileName: chosen.media_filename || undefined,
             }),
           });
           sendOk = r.ok; sendErr = r.ok ? "" : (r.text || "send failed");
-        } else if (s.type === "sticker") {
+        } else if (chosen.type === "sticker") {
           const r = await evolutionRequest({
             evolutionUrl, evolutionKey,
             path: `/message/sendSticker/${instanceName}`,
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ number: item.phone, sticker: s.media_url }),
+            body: JSON.stringify({ number: item.phone, sticker: chosen.media_url }),
           });
           sendOk = r.ok; sendErr = r.ok ? "" : (r.text || "send failed");
         } else {
-          sendErr = `unsupported step type: ${s.type}`;
+          sendErr = `unsupported step type: ${chosen.type}`;
         }
       } catch (e) {
         sendErr = e instanceof Error ? e.message : String(e);
@@ -442,11 +445,12 @@ serve(async (req) => {
           id: crypto.randomUUID(),
           timestamp: isoNow(),
           from_me: true,
-          content: s.type === "text" ? renderedText : renderedCaption,
-          type: s.type,
+          content: chosen.type === "text" ? renderedText : renderedCaption,
+          type: chosen.type,
           sent_by: "custom_followup",
-          media_url: s.media_url || undefined,
-          media_mime: s.media_mime || undefined,
+          media_url: chosen.media_url || undefined,
+          media_mime: chosen.media_mime || undefined,
+          variant_id: chosen.variant_id || undefined,
         };
         if (conv) {
           const existing = (conv.messages as any[]) || [];
