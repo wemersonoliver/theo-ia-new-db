@@ -75,9 +75,10 @@ export function CustomFollowupTab() {
                   <Badge variant="outline">
                     {flow.trigger_type === "inactivity" && "Por inatividade"}
                     {flow.trigger_type === "manual" && "Manual"}
-                    {flow.trigger_type === "crm_stage" && "Por etapa do CRM"}
+                    {flow.trigger_type === "crm_stage_enter" && "Entrou em etapa do CRM"}
+                    {flow.trigger_type === "crm_stage_exit" && "Saiu de etapa do CRM"}
+                    {flow.trigger_type === "conversation_finalized" && "Pós-atendimento"}
                     {flow.trigger_type === "tag" && "Por tag"}
-                    {flow.trigger_type === "conversation_outcome" && "Pós-atendimento"}
                   </Badge>
                   <Badge variant="outline">⏱ {flow.throttle_seconds}s entre envios</Badge>
                   <Badge variant="outline">{flow.window_config?.morning_start || "08:00"} – {flow.window_config?.evening_end || "19:00"}</Badge>
