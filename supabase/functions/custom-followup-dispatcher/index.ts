@@ -486,12 +486,24 @@ serve(async (req) => {
           locked_at: null, locked_by: null,
           last_error: sendErr.slice(0, 500),
         }).eq("id", item.id);
+        if (giveUp) {
+          await logEvent(supabase, {
+            account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+            step_id: s.id, step_position: s.position, variant_id: chosen.variant_id,
+            phone: item.phone, event_type: "failed", meta: { error: sendErr.slice(0, 300) },
+          });
+        }
         failed++; continue;
       }
 
       // Mark sent
       await supabase.from("custom_followup_queue")
         .update({ status: "sent", sent_at: isoNow() }).eq("id", item.id);
+      await logEvent(supabase, {
+        account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+        step_id: s.id, step_position: s.position, variant_id: chosen.variant_id,
+        phone: item.phone, event_type: "sent", meta: { type: chosen.type },
+      });
 
       // Append message to whatsapp_conversations history
       try {
@@ -557,6 +569,10 @@ serve(async (req) => {
           status: "completed",
           updated_at: isoNow(),
         }).eq("id", item.enrollment_id);
+        await logEvent(supabase, {
+          account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+          phone: item.phone, event_type: "completed", meta: {},
+        });
       }
       sent++;
     } catch (e) {
