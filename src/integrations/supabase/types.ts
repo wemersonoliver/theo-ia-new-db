@@ -3452,6 +3452,10 @@ export type Database = {
         Args: { _account_id: string }
         Returns: boolean
       }
+      recalc_admin_deal_stage: {
+        Args: { _user_id: string }
+        Returns: undefined
+      }
       reopen_conversation: {
         Args: { _conversation_id: string }
         Returns: string
