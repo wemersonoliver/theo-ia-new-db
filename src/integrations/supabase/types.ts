@@ -1301,6 +1301,36 @@ export type Database = {
         }
         Relationships: []
       }
+      custom_followup_holidays: {
+        Row: {
+          account_id: string
+          created_at: string
+          date: string
+          id: string
+          name: string
+          recurring: boolean
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          date: string
+          id?: string
+          name: string
+          recurring?: boolean
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          date?: string
+          id?: string
+          name?: string
+          recurring?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       custom_followup_queue: {
         Row: {
           account_id: string
