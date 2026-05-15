@@ -1244,6 +1244,48 @@ export type Database = {
           },
         ]
       }
+      custom_followup_events: {
+        Row: {
+          account_id: string
+          created_at: string
+          enrollment_id: string | null
+          event_type: string
+          flow_id: string | null
+          id: string
+          meta: Json | null
+          phone: string | null
+          step_id: string | null
+          step_position: number | null
+          variant_id: string | null
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          enrollment_id?: string | null
+          event_type: string
+          flow_id?: string | null
+          id?: string
+          meta?: Json | null
+          phone?: string | null
+          step_id?: string | null
+          step_position?: number | null
+          variant_id?: string | null
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          enrollment_id?: string | null
+          event_type?: string
+          flow_id?: string | null
+          id?: string
+          meta?: Json | null
+          phone?: string | null
+          step_id?: string | null
+          step_position?: number | null
+          variant_id?: string | null
+        }
+        Relationships: []
+      }
       custom_followup_flows: {
         Row: {
           account_id: string
@@ -1522,6 +1564,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      custom_followup_webhooks: {
+        Row: {
+          account_id: string
+          created_at: string
+          enabled: boolean
+          events: string[]
+          flow_id: string | null
+          headers: Json | null
+          id: string
+          last_error: string | null
+          last_fired_at: string | null
+          last_status: number | null
+          name: string
+          secret: string | null
+          updated_at: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          enabled?: boolean
+          events?: string[]
+          flow_id?: string | null
+          headers?: Json | null
+          id?: string
+          last_error?: string | null
+          last_fired_at?: string | null
+          last_status?: number | null
+          name?: string
+          secret?: string | null
+          updated_at?: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          enabled?: boolean
+          events?: string[]
+          flow_id?: string | null
+          headers?: Json | null
+          id?: string
+          last_error?: string | null
+          last_fired_at?: string | null
+          last_status?: number | null
+          name?: string
+          secret?: string | null
+          updated_at?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       entrevistas_config: {
         Row: {
