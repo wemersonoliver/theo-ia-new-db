@@ -156,6 +156,17 @@ serve(async (req) => {
       await supabase.from("custom_followup_enrollments").update({
         next_scheduled_at: scheduled.toISOString(),
       }).eq("id", enrollment.id);
+      // Log enrollment event (best effort)
+      try {
+        await supabase.from("custom_followup_events").insert({
+          account_id: flow.account_id,
+          flow_id,
+          enrollment_id: enrollment.id,
+          phone,
+          event_type: "enrolled",
+          meta: { source: source || "manual" },
+        });
+      } catch (_) {}
       enrolled++;
     }
 
