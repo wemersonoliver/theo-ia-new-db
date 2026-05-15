@@ -348,11 +348,19 @@ serve(async (req) => {
             await supabase.rpc("custom_followup_stop_for_phone", {
               _account_id: f.account_id, _phone: item.phone, _reason: "replied"
             });
+            await logEvent(supabase, {
+              account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+              phone: item.phone, event_type: "stopped", meta: { reason: "replied" },
+            });
             skipped++; continue;
           }
           if (f.exclude_handoff && conv.ai_active === false) {
             await supabase.rpc("custom_followup_stop_for_phone", {
               _account_id: f.account_id, _phone: item.phone, _reason: "handoff"
+            });
+            await logEvent(supabase, {
+              account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+              phone: item.phone, event_type: "stopped", meta: { reason: "handoff" },
             });
             skipped++; continue;
           }
