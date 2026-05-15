@@ -7,8 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { type CustomStep, type StepType, type DelayUnit, uploadFollowupMedia } from "@/hooks/useCustomFollowup";
-import { Loader2, Upload, FileText, Mic, Video, Image as ImageIcon, FileType } from "lucide-react";
+import { type CustomStep, type StepType, type DelayUnit, uploadFollowupMedia, useFollowupMediaLibrary } from "@/hooks/useCustomFollowup";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, Upload, FileText, Mic, Video, Image as ImageIcon, FileType, Library, Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 interface Props {
@@ -38,13 +39,17 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
   const [delayUnit, setDelayUnit] = useState<DelayUnit>(step.delay_unit);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [variants, setVariants] = useState<any[]>(Array.isArray(step.variants) ? step.variants : []);
+  const [showLibrary, setShowLibrary] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { listQuery: libraryQuery } = useFollowupMediaLibrary();
 
   useEffect(() => {
     setType(step.type); setContent(step.content || ""); setCaption(step.caption || "");
     setMediaUrl(step.media_url || ""); setMediaMime(step.media_mime || "");
     setMediaName(step.media_filename || "");
     setDelayValue(step.delay_value); setDelayUnit(step.delay_unit);
+    setVariants(Array.isArray(step.variants) ? step.variants : []);
   }, [step.id]);
 
   const requiresMedia = type !== "text";
@@ -60,6 +65,14 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
     } finally { setUploading(false); }
   };
 
+  const pickFromLibrary = (item: { url: string; mime: string | null; filename: string | null; name: string }) => {
+    setMediaUrl(item.url);
+    setMediaMime(item.mime || "");
+    setMediaName(item.filename || item.name);
+    setShowLibrary(false);
+    toast.success("Mídia selecionada da biblioteca");
+  };
+
   const handleSave = async () => {
     if (requiresMedia && !mediaUrl) { toast.error("Anexe a mídia"); return; }
     if (type === "text" && !content.trim()) { toast.error("Digite o texto"); return; }
@@ -70,10 +83,24 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
         media_url: mediaUrl || null, media_mime: mediaMime || null, media_filename: mediaName || null,
         delay_value: Math.max(0, Number(delayValue) || 0),
         delay_unit: delayUnit,
+        variants: variants.length ? variants : [],
       });
       onOpenChange(false);
     } finally { setSaving(false); }
   };
+
+  const addVariant = () => {
+    setVariants([...variants, {
+      id: crypto.randomUUID(),
+      weight: 1,
+      type, content, caption,
+      media_url: mediaUrl, media_mime: mediaMime, media_filename: mediaName,
+    }]);
+  };
+  const updateVariant = (idx: number, patch: any) => {
+    setVariants(variants.map((v, i) => i === idx ? { ...v, ...patch } : v));
+  };
+  const removeVariant = (idx: number) => setVariants(variants.filter((_, i) => i !== idx));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -85,7 +112,12 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <Tabs defaultValue="content" className="w-full">
+          <TabsList>
+            <TabsTrigger value="content">Conteúdo</TabsTrigger>
+            <TabsTrigger value="variants">Variantes A/B {variants.length > 0 && <span className="ml-1 text-xs">({variants.length})</span>}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="content" className="space-y-4 pt-3">
           <div>
             <Label>Tipo</Label>
             <Select value={type} onValueChange={(v) => setType(v as StepType)}>
@@ -110,7 +142,12 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
           {requiresMedia && (
             <>
               <div>
-                <Label>Mídia</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Mídia</Label>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setShowLibrary((s) => !s)}>
+                    <Library className="h-4 w-4 mr-1" /> {showLibrary ? "Ocultar biblioteca" : "Escolher da biblioteca"}
+                  </Button>
+                </div>
                 <div className="flex items-center gap-2">
                   <Input
                     type="file"
@@ -128,6 +165,23 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
                   <p className="text-xs text-muted-foreground mt-1">
                     {mediaName || "arquivo enviado"} ({mediaMime})
                   </p>
+                )}
+                {showLibrary && (
+                  <div className="mt-2 max-h-60 overflow-y-auto border rounded-md p-2 space-y-1 bg-muted/30">
+                    {(libraryQuery.data || []).filter((i) => i.type === type).length === 0 ? (
+                      <p className="text-xs text-muted-foreground p-2">Nenhuma mídia desse tipo na biblioteca.</p>
+                    ) : (libraryQuery.data || []).filter((i) => i.type === type).map((i) => (
+                      <button
+                        key={i.id}
+                        type="button"
+                        onClick={() => pickFromLibrary(i)}
+                        className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted flex items-center justify-between gap-2"
+                      >
+                        <span className="truncate">{i.name}</span>
+                        <span className="text-xs text-muted-foreground">{i.mime || ""}</span>
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
               {type !== "audio" && (
@@ -161,7 +215,55 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
               ? "Atraso aplicado a partir do momento em que o contato é inscrito no fluxo."
               : "Atraso aplicado a partir do envio da mensagem anterior."}
           </p>
-        </div>
+          </TabsContent>
+
+          <TabsContent value="variants" className="space-y-3 pt-3">
+            <div className="text-xs text-muted-foreground">
+              Quando há variantes cadastradas, o sistema sorteia uma delas a cada envio (peso ponderado). Se vazio, usa o conteúdo principal.
+            </div>
+            {variants.length === 0 && (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Sem variantes. Adicione duas ou mais para começar um teste A/B.
+              </p>
+            )}
+            {variants.map((v, idx) => (
+              <div key={v.id || idx} className="border rounded-md p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs">Peso</Label>
+                    <Input
+                      type="number" min={1} className="h-8 w-20"
+                      value={v.weight ?? 1}
+                      onChange={(e) => updateVariant(idx, { weight: Number(e.target.value) || 1 })}
+                    />
+                  </div>
+                  <Button size="icon" variant="ghost" className="text-destructive h-8 w-8" onClick={() => removeVariant(idx)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                {(v.type || type) === "text" ? (
+                  <Textarea rows={3} value={v.content || ""} onChange={(e) => updateVariant(idx, { content: e.target.value })} />
+                ) : (
+                  <>
+                    <Input
+                      placeholder="URL da mídia"
+                      value={v.media_url || ""}
+                      onChange={(e) => updateVariant(idx, { media_url: e.target.value })}
+                    />
+                    <Input
+                      placeholder="Legenda (opcional)"
+                      value={v.caption || ""}
+                      onChange={(e) => updateVariant(idx, { caption: e.target.value })}
+                    />
+                  </>
+                )}
+              </div>
+            ))}
+            <Button type="button" variant="outline" size="sm" onClick={addVariant}>
+              <Plus className="h-4 w-4 mr-1" /> Adicionar variante (a partir do conteúdo atual)
+            </Button>
+          </TabsContent>
+        </Tabs>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>

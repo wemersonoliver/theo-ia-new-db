@@ -1331,6 +1331,54 @@ export type Database = {
         }
         Relationships: []
       }
+      custom_followup_media_library: {
+        Row: {
+          account_id: string
+          created_at: string
+          filename: string | null
+          id: string
+          mime: string | null
+          name: string
+          size_bytes: number | null
+          storage_path: string | null
+          tags: string[] | null
+          type: string
+          updated_at: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          filename?: string | null
+          id?: string
+          mime?: string | null
+          name: string
+          size_bytes?: number | null
+          storage_path?: string | null
+          tags?: string[] | null
+          type: string
+          updated_at?: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          filename?: string | null
+          id?: string
+          mime?: string | null
+          name?: string
+          size_bytes?: number | null
+          storage_path?: string | null
+          tags?: string[] | null
+          type?: string
+          updated_at?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       custom_followup_queue: {
         Row: {
           account_id: string

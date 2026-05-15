@@ -3,10 +3,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Workflow, Pencil, Trash2, Loader2, CalendarDays } from "lucide-react";
+import { Plus, Workflow, Pencil, Trash2, Loader2, CalendarDays, Library } from "lucide-react";
 import { useCustomFollowup, type CustomFlow } from "@/hooks/useCustomFollowup";
 import { FlowEditorDialog } from "./FlowEditorDialog";
 import { HolidaysManager } from "./HolidaysManager";
+import { MediaLibraryManager } from "./MediaLibraryManager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -29,6 +30,7 @@ export function CustomFollowupTab() {
       <TabsList>
         <TabsTrigger value="flows" className="gap-1.5"><Workflow className="h-4 w-4" /> Fluxos</TabsTrigger>
         <TabsTrigger value="holidays" className="gap-1.5"><CalendarDays className="h-4 w-4" /> Feriados</TabsTrigger>
+        <TabsTrigger value="library" className="gap-1.5"><Library className="h-4 w-4" /> Biblioteca</TabsTrigger>
       </TabsList>
       <TabsContent value="flows" className="space-y-6">
       <Card>
@@ -133,6 +135,9 @@ export function CustomFollowupTab() {
       </TabsContent>
       <TabsContent value="holidays">
         <HolidaysManager />
+      </TabsContent>
+      <TabsContent value="library">
+        <MediaLibraryManager />
       </TabsContent>
     </Tabs>
   );
