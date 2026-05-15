@@ -40,6 +40,13 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [variants, setVariants] = useState<any[]>(Array.isArray(step.variants) ? step.variants : []);
+  const [condInclude, setCondInclude] = useState<string>(
+    Array.isArray(step.conditions?.tags_include) ? step.conditions.tags_include.join(", ") : ""
+  );
+  const [condExclude, setCondExclude] = useState<string>(
+    Array.isArray(step.conditions?.tags_exclude) ? step.conditions.tags_exclude.join(", ") : ""
+  );
+  const [condOnFail, setCondOnFail] = useState<string>(step.conditions?.on_fail === "stop" ? "stop" : "skip");
   const [showLibrary, setShowLibrary] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const { listQuery: libraryQuery } = useFollowupMediaLibrary();
@@ -50,6 +57,9 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
     setMediaName(step.media_filename || "");
     setDelayValue(step.delay_value); setDelayUnit(step.delay_unit);
     setVariants(Array.isArray(step.variants) ? step.variants : []);
+    setCondInclude(Array.isArray(step.conditions?.tags_include) ? step.conditions.tags_include.join(", ") : "");
+    setCondExclude(Array.isArray(step.conditions?.tags_exclude) ? step.conditions.tags_exclude.join(", ") : "");
+    setCondOnFail(step.conditions?.on_fail === "stop" ? "stop" : "skip");
   }, [step.id]);
 
   const requiresMedia = type !== "text";
@@ -84,6 +94,11 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
         delay_value: Math.max(0, Number(delayValue) || 0),
         delay_unit: delayUnit,
         variants: variants.length ? variants : [],
+        conditions: {
+          tags_include: condInclude.split(",").map((t) => t.trim()).filter(Boolean),
+          tags_exclude: condExclude.split(",").map((t) => t.trim()).filter(Boolean),
+          on_fail: condOnFail,
+        },
       });
       onOpenChange(false);
     } finally { setSaving(false); }
@@ -116,6 +131,7 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
           <TabsList>
             <TabsTrigger value="content">Conteúdo</TabsTrigger>
             <TabsTrigger value="variants">Variantes A/B {variants.length > 0 && <span className="ml-1 text-xs">({variants.length})</span>}</TabsTrigger>
+            <TabsTrigger value="conditions">Condições</TabsTrigger>
           </TabsList>
           <TabsContent value="content" className="space-y-4 pt-3">
           <div>
@@ -262,6 +278,38 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
             <Button type="button" variant="outline" size="sm" onClick={addVariant}>
               <Plus className="h-4 w-4 mr-1" /> Adicionar variante (a partir do conteúdo atual)
             </Button>
+          </TabsContent>
+
+          <TabsContent value="conditions" className="space-y-3 pt-3">
+            <div className="text-xs text-muted-foreground">
+              Avaliado antes de enviar esta mensagem. Se as tags do contato não baterem, a etapa é pulada (ou o fluxo é encerrado).
+            </div>
+            <div>
+              <Label className="text-xs">Enviar SOMENTE se contato tiver alguma destas tags</Label>
+              <Input
+                value={condInclude}
+                onChange={(e) => setCondInclude(e.target.value)}
+                placeholder="ex: interessado, qualificado"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">NÃO enviar se contato tiver alguma destas tags</Label>
+              <Input
+                value={condExclude}
+                onChange={(e) => setCondExclude(e.target.value)}
+                placeholder="ex: opt-out, comprou"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Quando a condição falhar</Label>
+              <Select value={condOnFail} onValueChange={setCondOnFail}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="skip">Pular esta etapa e seguir para a próxima</SelectItem>
+                  <SelectItem value="stop">Encerrar o fluxo para esse contato</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </TabsContent>
         </Tabs>
 
