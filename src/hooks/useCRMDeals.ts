@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { resolveAccountContext } from "@/lib/account-context";
 import { logDealActivity } from "@/hooks/useCRMActivities";
+import { fireCustomFollowupTrigger } from "@/hooks/useCustomFollowup";
 
 export interface CRMDeal {
   id: string;
@@ -93,10 +94,36 @@ export function useCRMDeals(pipelineId: string | null, stageIds: string[]) {
   };
 
   const moveDeal = async (dealId: string, newStageId: string, newPosition: number) => {
+    const prev = deals.find((d) => d.id === dealId);
+    const oldStageId = prev?.stage_id;
     await supabase.from("crm_deals").update({ stage_id: newStageId, position: newPosition }).eq("id", dealId);
     setDeals((prev) =>
       prev.map((d) => (d.id === dealId ? { ...d, stage_id: newStageId, position: newPosition } : d))
     );
+    // Dispara fluxos custom: entrada/saída de etapa
+    try {
+      if (prev?.contact_phone) {
+        const ctx = await resolveAccountContext(user!.id);
+        if (ctx?.accountId) {
+          await fireCustomFollowupTrigger({
+            account_id: ctx.accountId,
+            trigger_type: "crm_stage_enter",
+            phone: prev.contact_phone,
+            match: { stage_id: newStageId },
+            source: "crm_move",
+          });
+          if (oldStageId) {
+            await fireCustomFollowupTrigger({
+              account_id: ctx.accountId,
+              trigger_type: "crm_stage_exit",
+              phone: prev.contact_phone,
+              match: { stage_id: oldStageId },
+              source: "crm_move",
+            });
+          }
+        }
+      }
+    } catch (e) { console.warn("custom followup CRM trigger failed", e); }
   };
 
   const deleteDeal = async (id: string) => {
