@@ -10,10 +10,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useCustomFollowup, type CustomFlow } from "@/hooks/useCustomFollowup";
+import { useCustomFollowup, type CustomFlow, exportFlowJson, importFlowJson } from "@/hooks/useCustomFollowup";
+import { useAuth } from "@/lib/auth";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { StepsEditor } from "./StepsEditor";
 import { EnrollmentsList } from "./EnrollmentsList";
-import { Loader2 } from "lucide-react";
+import { Loader2, Download, Upload } from "lucide-react";
+import { useRef } from "react";
 
 interface Props {
   open: boolean;
@@ -23,6 +27,9 @@ interface Props {
 
 export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
   const { updateFlow } = useCustomFollowup();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const importRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(flow.name);
   const [description, setDescription] = useState(flow.description || "");
   const [triggerType, setTriggerType] = useState(flow.trigger_type);
@@ -39,6 +46,37 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
   const [winEnd, setWinEnd] = useState(flow.window_config?.evening_end || "19:00");
   const [skipSundays, setSkipSundays] = useState(flow.window_config?.skip_sundays !== false);
   const [skipHolidays, setSkipHolidays] = useState(flow.window_config?.skip_holidays !== false);
+
+  const handleExport = async () => {
+    try {
+      const json = await exportFlowJson(flow.id);
+      const blob = new Blob([JSON.stringify(json, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${flow.name.replace(/[^\w]+/g, "_")}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Fluxo exportado");
+    } catch (e) {
+      toast.error("Falha: " + (e instanceof Error ? e.message : "erro"));
+    }
+  };
+
+  const handleImport = async (file: File) => {
+    if (!user) return;
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      await importFlowJson(flow.account_id, user.id, json);
+      qc.invalidateQueries({ queryKey: ["custom-followup-flows", flow.account_id] });
+      toast.success("Fluxo importado");
+    } catch (e) {
+      toast.error("Falha: " + (e instanceof Error ? e.message : "JSON inválido"));
+    } finally {
+      if (importRef.current) importRef.current.value = "";
+    }
+  };
 
   const [pipelines, setPipelines] = useState<{ id: string; name: string }[]>([]);
   const [stages, setStages] = useState<{ id: string; name: string; pipeline_id: string }[]>([]);
@@ -104,10 +142,26 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0">
         <DialogHeader className="p-6 pb-2 border-b">
-          <DialogTitle>Editar fluxo personalizado</DialogTitle>
-          <DialogDescription>
-            Configure gatilho, mensagens e janela de envio. Mensagens passam por uma fila com espaçamento mínimo entre envios.
-          </DialogDescription>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <DialogTitle>Editar fluxo personalizado</DialogTitle>
+              <DialogDescription>
+                Configure gatilho, mensagens e janela de envio. Mensagens passam por uma fila com espaçamento mínimo entre envios.
+              </DialogDescription>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button size="sm" variant="outline" onClick={handleExport}>
+                <Download className="h-4 w-4 mr-1" /> Exportar JSON
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => importRef.current?.click()}>
+                <Upload className="h-4 w-4 mr-1" /> Importar JSON
+              </Button>
+              <input
+                ref={importRef} type="file" accept="application/json" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImport(f); }}
+              />
+            </div>
+          </div>
         </DialogHeader>
 
         <Tabs defaultValue="config" className="flex-1 flex flex-col overflow-hidden">
