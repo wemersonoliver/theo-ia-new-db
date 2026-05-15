@@ -46,6 +46,12 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
   const [winEnd, setWinEnd] = useState(flow.window_config?.evening_end || "19:00");
   const [skipSundays, setSkipSundays] = useState(flow.window_config?.skip_sundays !== false);
   const [skipHolidays, setSkipHolidays] = useState(flow.window_config?.skip_holidays !== false);
+  const [tagsInclude, setTagsInclude] = useState<string>(
+    Array.isArray(flow.filters?.tags_include) ? flow.filters.tags_include.join(", ") : ""
+  );
+  const [tagsExclude, setTagsExclude] = useState<string>(
+    Array.isArray(flow.filters?.tags_exclude) ? flow.filters.tags_exclude.join(", ") : ""
+  );
 
   const handleExport = async () => {
     try {
@@ -107,6 +113,8 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
     setWinEnd(flow.window_config?.evening_end || "19:00");
     setSkipSundays(flow.window_config?.skip_sundays !== false);
     setSkipHolidays(flow.window_config?.skip_holidays !== false);
+    setTagsInclude(Array.isArray(flow.filters?.tags_include) ? flow.filters.tags_include.join(", ") : "");
+    setTagsExclude(Array.isArray(flow.filters?.tags_exclude) ? flow.filters.tags_exclude.join(", ") : "");
   }, [flow.id]);
 
   const handleSave = async () => {
@@ -134,6 +142,10 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
         evening_end: winEnd,
         skip_sundays: skipSundays,
         skip_holidays: skipHolidays,
+      },
+      filters: {
+        tags_include: tagsInclude.split(",").map((t) => t.trim()).filter(Boolean),
+        tags_exclude: tagsExclude.split(",").map((t) => t.trim()).filter(Boolean),
       },
     });
   };
@@ -299,6 +311,33 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
                   <p className="text-xs text-muted-foreground">Não envia se a IA estiver pausada (handoff).</p>
                 </div>
                 <Switch checked={excludeHandoff} onCheckedChange={setExcludeHandoff} />
+              </div>
+            </div>
+
+            <div className="rounded-md border p-4 space-y-3">
+              <div>
+                <Label className="text-base">Segmentação por tags do contato</Label>
+                <p className="text-xs text-muted-foreground">
+                  Aplica-se na inscrição. Separe por vírgula. Vazio = sem filtro.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Incluir contatos com QUALQUER destas tags</Label>
+                  <Input
+                    value={tagsInclude}
+                    onChange={(e) => setTagsInclude(e.target.value)}
+                    placeholder="ex: vip, lead-quente"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Excluir contatos com QUALQUER destas tags</Label>
+                  <Input
+                    value={tagsExclude}
+                    onChange={(e) => setTagsExclude(e.target.value)}
+                    placeholder="ex: cliente-ativo, opt-out"
+                  />
+                </div>
               </div>
             </div>
 

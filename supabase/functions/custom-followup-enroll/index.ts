@@ -88,7 +88,7 @@ serve(async (req) => {
 
     const { data: flow } = await supabase
       .from("custom_followup_flows")
-      .select("id, account_id, enabled, window_config")
+      .select("id, account_id, enabled, window_config, filters")
       .eq("id", flow_id).maybeSingle();
     if (!flow) return jsonResponse({ error: "flow not found" }, 404);
 
@@ -110,6 +110,30 @@ serve(async (req) => {
     }
     if (phoneSet.size === 0) return jsonResponse({ error: "no phones" }, 400);
 
+    // Segmentação por tags do fluxo (filtros)
+    const filters: any = flow.filters || {};
+    const tagsInc: string[] = Array.isArray(filters.tags_include) ? filters.tags_include.map((t: string) => String(t).toLowerCase()) : [];
+    const tagsExc: string[] = Array.isArray(filters.tags_exclude) ? filters.tags_exclude.map((t: string) => String(t).toLowerCase()) : [];
+    const hasTagFilter = tagsInc.length > 0 || tagsExc.length > 0;
+    let allowedPhones = new Set<string>(phoneSet);
+    if (hasTagFilter) {
+      const phonesArr = Array.from(phoneSet);
+      const { data: contactsRows } = await supabase
+        .from("contacts").select("phone, tags")
+        .eq("account_id", flow.account_id).in("phone", phonesArr);
+      const tagsByPhone = new Map<string, string[]>();
+      (contactsRows || []).forEach((c: any) => {
+        tagsByPhone.set(c.phone, (Array.isArray(c.tags) ? c.tags : []).map((t: string) => String(t).toLowerCase()));
+      });
+      allowedPhones = new Set<string>();
+      for (const p of phonesArr) {
+        const ctags = tagsByPhone.get(p) || [];
+        const incOk = tagsInc.length === 0 || tagsInc.some((t) => ctags.includes(t));
+        const excOk = !tagsExc.some((t) => ctags.includes(t));
+        if (incOk && excOk) allowedPhones.add(p);
+      }
+    }
+
     // get first step
     const { data: firstStep } = await supabase
       .from("custom_followup_steps")
@@ -120,7 +144,7 @@ serve(async (req) => {
     if (!firstStep) return jsonResponse({ error: "flow has no steps" }, 400);
 
     let enrolled = 0, skipped = 0;
-    for (const phone of phoneSet) {
+    for (const phone of allowedPhones) {
       // skip if already active
       const { data: existing } = await supabase
         .from("custom_followup_enrollments")

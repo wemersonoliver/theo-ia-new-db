@@ -47,6 +47,7 @@ interface StepRow {
   delay_value: number;
   delay_unit: string;
   variants?: any;
+  conditions?: any;
 }
 
 interface Variant {
@@ -370,7 +371,7 @@ serve(async (req) => {
       // Load step
       const { data: step } = await supabase
         .from("custom_followup_steps")
-        .select("id, flow_id, position, type, content, caption, media_url, media_mime, media_filename, delay_value, delay_unit, variants")
+        .select("id, flow_id, position, type, content, caption, media_url, media_mime, media_filename, delay_value, delay_unit, variants, conditions")
         .eq("id", item.step_id)
         .maybeSingle();
       const s = step as StepRow | null;
@@ -378,6 +379,75 @@ serve(async (req) => {
         await supabase.from("custom_followup_queue")
           .update({ status: "failed", last_error: "step missing" }).eq("id", item.id);
         failed++; continue;
+      }
+
+      // ===== Step-level conditions (tag based) =====
+      const cond: any = s.conditions || {};
+      const condInc: string[] = Array.isArray(cond.tags_include) ? cond.tags_include.map((t: string) => String(t).toLowerCase()) : [];
+      const condExc: string[] = Array.isArray(cond.tags_exclude) ? cond.tags_exclude.map((t: string) => String(t).toLowerCase()) : [];
+      const onFail: string = cond.on_fail === "stop" ? "stop" : "skip"; // skip step | stop enrollment
+      if (condInc.length || condExc.length) {
+        const { data: contactRow } = await supabase
+          .from("contacts").select("tags")
+          .eq("account_id", f.account_id).eq("phone", item.phone).maybeSingle();
+        const ctags = (Array.isArray(contactRow?.tags) ? contactRow!.tags : []).map((t: string) => String(t).toLowerCase());
+        const incOk = condInc.length === 0 || condInc.some((t) => ctags.includes(t));
+        const excOk = !condExc.some((t) => ctags.includes(t));
+        if (!incOk || !excOk) {
+          if (onFail === "stop") {
+            await supabase.from("custom_followup_queue")
+              .update({ status: "skipped", last_error: "step condition failed (stop)" }).eq("id", item.id);
+            await supabase.rpc("custom_followup_stop_for_phone", {
+              _account_id: f.account_id, _phone: item.phone, _reason: "condition_failed"
+            });
+            await logEvent(supabase, {
+              account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+              step_id: s.id, step_position: s.position,
+              phone: item.phone, event_type: "stopped", meta: { reason: "condition_failed" },
+            });
+            skipped++; continue;
+          }
+          // Skip step → schedule next step (if any) without "send"
+          await supabase.from("custom_followup_queue")
+            .update({ status: "skipped", last_error: "step condition failed (skipped)" }).eq("id", item.id);
+          await logEvent(supabase, {
+            account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+            step_id: s.id, step_position: s.position,
+            phone: item.phone, event_type: "skipped", meta: { reason: "condition_failed" },
+          });
+          const { data: nextStep } = await supabase
+            .from("custom_followup_steps")
+            .select("id, position, delay_value, delay_unit")
+            .eq("flow_id", f.id)
+            .gt("position", s.position)
+            .order("position", { ascending: true })
+            .limit(1).maybeSingle();
+          if (nextStep) {
+            const baseTime = addDelay(new Date(), nextStep.delay_value || 0, nextStep.delay_unit || "minutes");
+            const scheduled = nextWindowedUtc(baseTime, f.window_config, holidays);
+            await supabase.from("custom_followup_queue").insert({
+              account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+              step_id: nextStep.id, step_position: nextStep.position,
+              instance_id: item.instance_id, phone: item.phone,
+              scheduled_at: scheduled.toISOString(),
+            });
+            await supabase.from("custom_followup_enrollments").update({
+              current_step: s.position,
+              next_scheduled_at: scheduled.toISOString(),
+              updated_at: isoNow(),
+            }).eq("id", item.enrollment_id);
+          } else {
+            await supabase.from("custom_followup_enrollments").update({
+              current_step: s.position, next_scheduled_at: null,
+              status: "completed", updated_at: isoNow(),
+            }).eq("id", item.enrollment_id);
+            await logEvent(supabase, {
+              account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+              phone: item.phone, event_type: "completed", meta: {},
+            });
+          }
+          skipped++; continue;
+        }
       }
 
       // Pick variant (A/B testing). If no variants, returns the step itself.
