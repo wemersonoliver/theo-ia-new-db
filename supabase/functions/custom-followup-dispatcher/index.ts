@@ -65,9 +65,23 @@ function parseHM(s: string | undefined, fb: string): number {
   return (h || 0) * 60 + (m || 0);
 }
 
-/** Returns the next allowed UTC time inside window (08:00–19:00 BRT, no Sundays by default). */
-function nextWindowedUtc(from: Date, win: any): Date {
+function ymdBRT(d: Date): string {
+  const local = new Date(d.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  const y = local.getFullYear();
+  const m = String(local.getMonth() + 1).padStart(2, "0");
+  const day = String(local.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function isHoliday(dateYmd: string, holidays: { date: string; recurring: boolean }[]): boolean {
+  const md = dateYmd.slice(5);
+  return holidays.some((h) => h.date === dateYmd || (h.recurring && h.date.slice(5) === md));
+}
+
+/** Returns the next allowed UTC time inside window (08:00–19:00 BRT, skip Sundays/holidays by default). */
+function nextWindowedUtc(from: Date, win: any, holidays: { date: string; recurring: boolean }[] = []): Date {
   const skipSundays = win?.skip_sundays !== false;
+  const skipHolidays = win?.skip_holidays !== false;
   const startMin = parseHM(win?.morning_start, "08:00");
   const endMin = parseHM(win?.evening_end, "19:00");
   const { local, minutes, weekday, tzOffsetMs } = brtParts(from);
@@ -75,18 +89,23 @@ function nextWindowedUtc(from: Date, win: any): Date {
   let curMin = minutes;
   let curWd = weekday;
 
-  if (skipSundays && curWd === 0) {
-    cursor.setDate(cursor.getDate() + 1);
-    cursor.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
+  // helper: dia "atual do cursor" é inválido?
+  const cursorBlocked = () => {
+    const wd = cursor.getDay();
+    if (skipSundays && wd === 0) return true;
+    if (skipHolidays && isHoliday(ymdBRT(new Date(cursor.getTime() - tzOffsetMs)), holidays)) return true;
+    return false;
+  };
+
+  // Se hoje fora da janela ou bloqueado → pular
+  if (cursorBlocked() || curMin > endMin) {
+    do {
+      cursor.setDate(cursor.getDate() + 1);
+      cursor.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
+    } while (cursorBlocked());
     return new Date(cursor.getTime() - tzOffsetMs);
   }
   if (curMin < startMin) {
-    cursor.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
-    return new Date(cursor.getTime() - tzOffsetMs);
-  }
-  if (curMin > endMin) {
-    cursor.setDate(cursor.getDate() + 1);
-    if (skipSundays && cursor.getDay() === 0) cursor.setDate(cursor.getDate() + 1);
     cursor.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
     return new Date(cursor.getTime() - tzOffsetMs);
   }
@@ -101,10 +120,12 @@ function addDelay(from: Date, value: number, unit: string): Date {
   return new Date(from.getTime() + ms);
 }
 
-function isWithinWindowNow(win: any): boolean {
+function isWithinWindowNow(win: any, holidays: { date: string; recurring: boolean }[] = []): boolean {
   const skipSundays = win?.skip_sundays !== false;
+  const skipHolidays = win?.skip_holidays !== false;
   const { minutes, weekday } = brtParts();
   if (skipSundays && weekday === 0) return false;
+  if (skipHolidays && isHoliday(ymdBRT(new Date()), holidays)) return false;
   const startMin = parseHM(win?.morning_start, "08:00");
   const endMin = parseHM(win?.evening_end, "19:00");
   return minutes >= startMin && minutes <= endMin;
@@ -157,6 +178,18 @@ serve(async (req) => {
 
   // Track per-instance last send time within this run for throttle
   const instanceLastSent = new Map<string, number>();
+  // cache de feriados por conta
+  const holidaysByAccount = new Map<string, { date: string; recurring: boolean }[]>();
+  async function getHolidays(accountId: string) {
+    if (holidaysByAccount.has(accountId)) return holidaysByAccount.get(accountId)!;
+    const { data } = await supabase
+      .from("custom_followup_holidays")
+      .select("date, recurring")
+      .eq("account_id", accountId);
+    const list = (data || []) as any[];
+    holidaysByAccount.set(accountId, list);
+    return list;
+  }
 
   for (const item of candidates as QueueItem[]) {
     try {
@@ -184,9 +217,10 @@ serve(async (req) => {
         skipped++; continue;
       }
 
-      // Window check
-      if (!isWithinWindowNow(f.window_config)) {
-        const next = nextWindowedUtc(new Date(), f.window_config);
+      // Window check (com feriados)
+      const holidays = await getHolidays(f.account_id);
+      if (!isWithinWindowNow(f.window_config, holidays)) {
+        const next = nextWindowedUtc(new Date(), f.window_config, holidays);
         await supabase.from("custom_followup_queue")
           .update({ status: "pending", scheduled_at: next.toISOString(), locked_at: null, locked_by: null })
           .eq("id", item.id);
@@ -400,7 +434,7 @@ serve(async (req) => {
 
       if (nextStep) {
         const baseTime = addDelay(new Date(), nextStep.delay_value || 0, nextStep.delay_unit || "minutes");
-        const scheduled = nextWindowedUtc(baseTime, f.window_config);
+        const scheduled = nextWindowedUtc(baseTime, f.window_config, holidays);
         await supabase.from("custom_followup_queue").insert({
           account_id: f.account_id,
           flow_id: f.id,
