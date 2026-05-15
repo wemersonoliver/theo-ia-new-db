@@ -6,7 +6,13 @@ import { toast } from "sonner";
 
 export type StepType = "text" | "audio" | "video" | "image" | "document" | "sticker";
 export type DelayUnit = "minutes" | "hours" | "days";
-export type TriggerType = "inactivity" | "manual" | "crm_stage" | "tag" | "conversation_outcome";
+export type TriggerType =
+  | "inactivity"
+  | "manual"
+  | "crm_stage_enter"
+  | "crm_stage_exit"
+  | "conversation_finalized"
+  | "tag";
 
 export interface CustomFlow {
   id: string;
@@ -65,7 +71,7 @@ const DEFAULT_FLOW: Partial<CustomFlow> = {
   trigger_type: "inactivity",
   trigger_config: { value: 24, unit: "hours" },
   filters: {},
-  window_config: { morning_start: "08:00", evening_end: "19:00", skip_sundays: true },
+  window_config: { morning_start: "08:00", evening_end: "19:00", skip_sundays: true, skip_holidays: true },
   exclude_handoff: true,
   stop_on_reply: true,
   throttle_seconds: 7,
@@ -239,4 +245,44 @@ export async function enrollPhones(input: { flow_id: string; phones?: string[]; 
   const { data, error } = await supabase.functions.invoke("custom-followup-enroll", { body: input });
   if (error) throw error;
   return data as { enrolled: number; skipped: number };
+}
+
+/**
+ * Dispara fluxos personalizados que combinam com o evento.
+ * Chama do client após auth — RLS garante que só fluxos da conta retornam.
+ */
+export async function fireCustomFollowupTrigger(params: {
+  account_id: string;
+  trigger_type: TriggerType;
+  phone: string;
+  match?: Record<string, any>; // ex: { stage_id, pipeline_id, outcome }
+  source?: string;
+}) {
+  const { account_id, trigger_type, phone, match = {}, source } = params;
+  if (!phone) return { fired: 0 };
+  const { data: flows, error } = await supabase
+    .from("custom_followup_flows")
+    .select("id, trigger_config")
+    .eq("account_id", account_id)
+    .eq("trigger_type", trigger_type)
+    .eq("enabled", true);
+  if (error || !flows?.length) return { fired: 0 };
+
+  let fired = 0;
+  for (const f of flows) {
+    const cfg: any = f.trigger_config || {};
+    // Match opcional: se cfg tem chave, precisa bater
+    let ok = true;
+    for (const [k, v] of Object.entries(match)) {
+      if (cfg[k] != null && cfg[k] !== v) { ok = false; break; }
+    }
+    if (!ok) continue;
+    try {
+      await enrollPhones({ flow_id: f.id, phones: [phone], source: source || trigger_type });
+      fired++;
+    } catch (e) {
+      console.warn("fireCustomFollowupTrigger failed for flow", f.id, e);
+    }
+  }
+  return { fired };
 }
