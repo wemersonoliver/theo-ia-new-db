@@ -619,6 +619,15 @@ export function DealDetailsDrawer({
           </div>
         </SheetContent>
       </Sheet>
+      {phoneNormalized && (
+        <EnrollInFlowDialog
+          open={enrollOpen}
+          onOpenChange={setEnrollOpen}
+          phones={[phoneNormalized]}
+          source="crm_drawer"
+          contactLabel={contactName || phoneFormatted}
+        />
+      )}
 
       {/* Lost reason dialog */}
       <AlertDialog open={lostOpen} onOpenChange={setLostOpen}>
