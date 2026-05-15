@@ -1,70 +1,134 @@
-## Plano de melhorias — Academia Mexicomigo (consultoriafontoura@gmail.com)
+# Módulo de Follow-Up Personalizado
 
-Cliente identificado:
-- user_id: `744e33a8-3b85-4593-948e-bcaf81f8397b`
-- account_id: `9f9b5baf-17ab-45ae-b78b-7f12fa745567`
-
-### 1. Reescrever o prompt da Isa (não copiar literalmente o enviado)
-
-O prompt do cliente é longo, repetitivo e prescritivo demais — o que faz a IA "recitar" e perder naturalidade. Vou consolidar em um prompt **enxuto, persuasivo e com linguagem de academia**, mantendo TODAS as regras críticas e informações comerciais, mas reescritas para:
-
-- **Tom**: enérgico, direto, "treineiro", com gírias leves do mundo fitness ("bora", "treino forte", "shape", "consistência"), sem exagero de emoji.
-- **Tamanho**: mensagens curtas (1–3 frases). Nada de blocos longos. Cadência de conversa, não de catálogo.
-- **Persuasão (armas do Cialdini aplicadas com sutileza)**:
-  - *Autoridade*: citar Carlos Fontoura (43 anos, recordista, campeão) só quando faz sentido — nunca como abertura.
-  - *Prova social*: "milhares de alunos de todas as idades transformaram o shape aqui".
-  - *Escassez/urgência leve*: "essa condição do Clube+ tá rodando agora", "anual sai por menos da metade do mensal — vale travar".
-  - *Reciprocidade*: oferecer a semana experimental de R$22 abatível, mostrar que está "ajudando", não vendendo.
-  - *Compromisso e coerência*: pequenos "sins" antes do fechamento ("seu objetivo é ganhar massa, certo? então o ideal é treinar 4–5x"). 
-  - *Ancoragem*: sempre apresentar mensal R$169 antes do Clube+ R$79 médio (ancoragem de preço).
-- **Estrutura interna do prompt** (seções claras para a IA, não para o cliente):
-  1. Identidade (Isa, consultora da Mexicomigo).
-  2. Tom e estilo (curto, persuasivo, linguagem de academia, 1 emoji por mensagem no máx).
-  3. Regras invioláveis (não cumprimentar 2x, não repetir info, ler histórico, conduzir ao fechamento com sutileza, etc.).
-  4. Objetivo: visita / aula experimental paga / fechamento de plano.
-  5. Catálogo enxuto (planos, preços, condições, descontos) — entregue só quando perguntado.
-  6. Diferenciais e autoridade (usar de forma cirúrgica).
-  7. Estrutura/horários/exceções (13h, 22h, 11h sáb/feriado, chuveiros, estacionamento, kids, instrutores).
-  8. Oferta de contenção (FontouraConcept online — só quando o lead hesitar).
-  9. Cliente ativo: detectar, não oferecer planos, responder com tom motivacional curto.
-
-O prompt final terá ~1500–2000 caracteres (vs. 4480 atuais), mais fácil para o Gemini executar com fidelidade.
-
-### 2. Horários de atendimento da IA
-
-Manter 24/7 (`00:00–23:59`, todos os dias) no `whatsapp_ai_config`.
-
-Motivo: a regra do cliente diz "responder normalmente em qualquer horário; só não enviar **espontâneo** fora do comercial". Quem controla envios espontâneos é o follow-up, não o horário da IA.
-
-### 3. Janelas de follow-up
-
-Já estão corretas: 08:00–12:00 e 13:00–19:00. Sem alteração.
-
-### 4. Bloquear follow-ups aos domingos (mudança global de código)
-
-Hoje `_followup-window.ts` não exclui domingo. Vou:
-- Em `isWithinWindow`: retornar `false` quando o dia da semana BRT for 0 (domingo).
-- Em `generateScheduleSequence`: ao avançar o cursor para um novo dia, se cair em domingo, pular para segunda.
-
-Afeta todos os usuários do follow-up — é uma boa prática geral para WhatsApp e evita bloqueios por spam.
-
-### 5. Follow-up rotativo para clientes ativos
-
-**Adiado**, conforme sua orientação. Será tratado em uma próxima entrega.
+Adicionar uma nova aba dentro de `/followup` chamada **"Fluxos Personalizados"**, mantendo o módulo de IA atual intacto. O novo módulo permite criar fluxos próprios com mensagens em qualquer mídia, agendados por tempo relativo desde o início, com fila global anti-bloqueio.
 
 ---
 
-### Resumo das mudanças desta entrega
+## 1. O que o usuário poderá fazer
 
-| Item | Onde | Tipo |
-|---|---|---|
-| Novo prompt enxuto e persuasivo da Isa | `whatsapp_ai_config.custom_prompt` (account `9f9b5baf...`) | UPDATE de dado |
-| Horários da IA | sem alteração | — |
-| Janelas de follow-up | sem alteração | — |
-| Excluir domingos do follow-up (global) | `supabase/functions/_followup-window.ts` | edição de código |
+- Criar **múltiplos fluxos** (ex: "Boas-vindas", "Pós-venda", "Reativação 30 dias").
+- Para cada fluxo definir:
+  - **Nome, descrição, status (ativo/pausado)**
+  - **Gatilho de início**:
+    - Inatividade do contato (X minutos / horas / dias sem responder)
+    - Manual (disparar via botão na conversa ou no CRM)
+    - Por etapa do CRM (quando deal entra em determinada etapa)
+    - Por tag do contato
+    - Após finalização de atendimento (won/lost/abandoned)
+  - **Filtros**: aplicar só a contatos com tag X, segmento Y, etc.
+  - **Janela de envio**: padrão 08:00–19:00, sem domingos (configurável por fluxo).
+  - **Excluir contatos em atendimento humano** (handoff).
+  - **Encerrar fluxo se cliente responder** (toggle).
+- Adicionar **passos (steps)** ao fluxo, na ordem desejada:
+  - Tipo: **texto, áudio (PTT), vídeo, imagem, documento, sticker**
+  - **Delay**: "X minutos / horas / dias após o passo anterior" (ou após o início)
+  - Texto suporta **variáveis dinâmicas**: `{{nome}}`, `{{primeiro_nome}}`, `{{empresa}}`, `{{ultimo_produto}}`, etc.
+  - Upload de mídia para Storage (novo bucket `followup-media`)
+  - Pré-visualização do passo
+- **Reordenar passos** via drag-and-drop.
+- **Duplicar fluxo** e **importar/exportar** (JSON) — para reuso entre contas.
+- **Testar fluxo**: enviar para o próprio número antes de ativar.
 
-### Validação após implementar
+---
 
-- Conferir o prompt salvo no painel do cliente (Configurações → IA → Geral).
-- Testar 3–4 conversas no "Simular Atendimento": dúvida sobre planos, "vou pensar", cliente ativo, pergunta sobre horário/aparelhos. Verificar tom, tamanho de mensagem e se conduz ao fechamento sem repetir.
-- Simular um disparo de follow-up em horário válido e em domingo para confirmar bloqueio.
+## 2. Recursos avançados sugeridos (para deixar poderoso)
+
+1. **A/B Testing**: duas variantes de mensagem no mesmo passo, divisão %.
+2. **Condicionais simples**: "se cliente respondeu → pula para passo X / encerra".
+3. **Spintax** no texto: `{Oi|Olá|E aí} {{nome}}` para evitar mensagens idênticas.
+4. **Randomização de delays**: ±N% para parecer mais humano.
+5. **Presença "digitando..."** antes de cada texto e **"gravando áudio..."** antes de PTT (já existe no `system-followup-dispatch`, replicar).
+6. **Limite anti-spam**: máx N mensagens/hora por instância, máx 1 fluxo ativo por contato.
+7. **Blacklist de contatos** (não receber follow-up).
+8. **Métricas por fluxo**: enviados, lidos, respondidos, taxa de conversão, opt-out.
+9. **Webhook de saída**: notificar URL externa quando contato responde / converte.
+10. **Integração com CRM**: ao responder, mover deal para etapa X automaticamente.
+11. **Pausar fluxo em feriados** (calendário BR configurável).
+12. **Disparo em massa** a partir de uma lista de contatos / segmento / importação CSV.
+13. **Emoji picker e formatação WhatsApp** (negrito, itálico) no editor.
+14. **Biblioteca de mídia reutilizável** (galeria) para não reupload.
+
+---
+
+## 3. Arquitetura técnica
+
+### Banco de dados (novas tabelas)
+
+- `custom_followup_flows` — definição do fluxo (id, account_id, user_id, name, description, trigger_type, trigger_config jsonb, filters jsonb, window_config jsonb, exclude_handoff, stop_on_reply, enabled, created_at, updated_at).
+- `custom_followup_steps` — passos do fluxo (id, flow_id, position, type [text|audio|video|image|document|sticker], content text, media_url, media_mime, caption, delay_value int, delay_unit [minutes|hours|days], variants jsonb [A/B], conditions jsonb).
+- `custom_followup_enrollments` — contato inscrito num fluxo (id, flow_id, account_id, phone, contact_id, current_step, status [active|completed|stopped|paused], started_at, last_sent_at, next_scheduled_at, stop_reason, metadata jsonb). Unique parcial (flow_id, phone) onde status='active'.
+- `custom_followup_queue` — fila global de envio (id, account_id, instance_id, enrollment_id, step_id, phone, scheduled_at, status [pending|sending|sent|failed|skipped], attempts, last_error, locked_at, locked_by, sent_at). Índices em (account_id, status, scheduled_at) e (instance_id, status).
+- `custom_followup_blacklist` — (account_id, phone, reason).
+- Bucket Storage: `followup-media` (privado, RLS por account_id).
+
+### RLS
+- Todas as tabelas: ALL via `account_id = current_account_id()` ou `is_account_member(account_id)`.
+- Service role bypassa para o dispatcher.
+
+### Edge Functions
+
+1. **`custom-followup-trigger`** — chamada por:
+   - Cron a cada 5 min para varrer inatividade
+   - Trigger DB (NOTIFY) em mudança de stage CRM, finalize_conversation, etc.
+   - Endpoint manual (botão na UI)
+   Cria `enrollment` + agenda primeiro passo na `custom_followup_queue`.
+
+2. **`custom-followup-dispatcher`** — cron **a cada 1 minuto**.
+   - Para cada `instance_id` ativa: pega 1 mensagem `pending` com `scheduled_at <= now()` e dentro da janela.
+   - Lock pessimista (UPDATE ... WHERE status='pending' RETURNING) para evitar duplicidade.
+   - Envia via Evolution (`sendText`/`sendMedia`/`sendWhatsAppAudio`).
+   - **Throttle**: respeita **mínimo 7s** entre envios da mesma instância (consulta último `sent_at`). Se < 7s, reagenda para `last_sent + 7s`.
+   - Em sucesso: marca `sent`, agenda próximo passo do fluxo (calcula `scheduled_at` baseado no delay do próximo step + janela 08–19/sem domingo).
+   - Em falha: retry exponencial até 3x.
+   - Se `stop_on_reply` e contato respondeu desde o último envio → `status='stopped'`.
+
+3. **`custom-followup-stop`** — webhook chamado pelo `whatsapp-webhook` quando o contato responde, para parar enrollments ativos.
+
+### Fila e anti-bloqueio
+- 1 worker por instância (via SELECT FOR UPDATE SKIP LOCKED).
+- Janela 08:00–19:00 BRT, sem domingos (helper `_followup-window.ts` já existe — reaproveitar).
+- Espaçamento mínimo 7s configurável (default 7s, range 3–30s).
+- Pausa automática se Evolution retornar erro de bloqueio (status banido).
+
+### Frontend
+
+- Nova aba em `/followup`: **Fluxos Personalizados**.
+- Páginas:
+  - **Lista de fluxos** (cards com métricas: ativos, enviados hoje, taxa de resposta).
+  - **Editor de fluxo** (drawer/página): seções *Gatilho*, *Filtros*, *Janela*, *Passos* (canvas vertical drag-and-drop com cards por step), *Configurações*.
+  - **Editor de passo** (modal): tipo, conteúdo/mídia upload, delay, variantes A/B.
+  - **Inscrições** (tabela): contatos atualmente em fluxos, com ações pausar/parar/avançar.
+  - **Métricas** (gráficos por fluxo).
+- Hooks React Query: `useCustomFlows`, `useFlowSteps`, `useEnrollments`, `useFlowMetrics`.
+- Componentes shadcn já existentes; drag-and-drop com `@dnd-kit/sortable` (já presente).
+
+---
+
+## 4. Entregas em fases
+
+**Fase 1 — Núcleo (MVP)**
+- Tabelas + RLS + bucket
+- Editor de fluxo com gatilho por inatividade e passos texto/áudio/imagem/vídeo/documento
+- Dispatcher com fila, lock, throttle 7s, janela 08–19, sem domingo
+- Inscrição automática + parada ao responder
+- Lista de fluxos e inscrições
+
+**Fase 2 — Avançado**
+- Variáveis dinâmicas + Spintax
+- A/B testing + condicionais
+- Disparo manual / em massa por lista
+- Métricas e dashboard
+
+**Fase 3 — Integrações**
+- Gatilhos por etapa CRM, tag, finalização
+- Webhook de saída
+- Biblioteca de mídia, importar/exportar JSON, calendário de feriados
+
+---
+
+## 5. Perguntas antes de começar
+
+1. **Convivência com o módulo IA atual**: manter os dois lado a lado em abas separadas dentro de `/followup`, ou esse novo substitui o atual?
+2. **Escopo inicial**: posso entregar a **Fase 1 (MVP)** primeiro e depois iterar nas Fases 2 e 3? Ou você quer tudo de uma vez?
+3. **Gatilhos no MVP**: começar só com **inatividade + manual**, ou já incluir **etapa CRM e finalização de atendimento**?
+4. **Throttle**: 7s fixos, ou configurável por fluxo (ex.: 5–15s aleatório para parecer mais humano)?
