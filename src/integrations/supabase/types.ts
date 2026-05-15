@@ -1182,6 +1182,269 @@ export type Database = {
           },
         ]
       }
+      custom_followup_enrollments: {
+        Row: {
+          account_id: string
+          contact_id: string | null
+          created_at: string
+          current_step: number
+          flow_id: string
+          id: string
+          last_sent_at: string | null
+          metadata: Json
+          next_scheduled_at: string | null
+          phone: string
+          started_at: string
+          status: string
+          stop_reason: string | null
+          triggered_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          contact_id?: string | null
+          created_at?: string
+          current_step?: number
+          flow_id: string
+          id?: string
+          last_sent_at?: string | null
+          metadata?: Json
+          next_scheduled_at?: string | null
+          phone: string
+          started_at?: string
+          status?: string
+          stop_reason?: string | null
+          triggered_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          contact_id?: string | null
+          created_at?: string
+          current_step?: number
+          flow_id?: string
+          id?: string
+          last_sent_at?: string | null
+          metadata?: Json
+          next_scheduled_at?: string | null
+          phone?: string
+          started_at?: string
+          status?: string
+          stop_reason?: string | null
+          triggered_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_followup_enrollments_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "custom_followup_flows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custom_followup_flows: {
+        Row: {
+          account_id: string
+          created_at: string
+          description: string | null
+          enabled: boolean
+          exclude_handoff: boolean
+          filters: Json
+          id: string
+          max_per_hour: number
+          name: string
+          stop_on_reply: boolean
+          throttle_seconds: number
+          trigger_config: Json
+          trigger_type: string
+          updated_at: string
+          user_id: string
+          window_config: Json
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          exclude_handoff?: boolean
+          filters?: Json
+          id?: string
+          max_per_hour?: number
+          name: string
+          stop_on_reply?: boolean
+          throttle_seconds?: number
+          trigger_config?: Json
+          trigger_type?: string
+          updated_at?: string
+          user_id: string
+          window_config?: Json
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          exclude_handoff?: boolean
+          filters?: Json
+          id?: string
+          max_per_hour?: number
+          name?: string
+          stop_on_reply?: boolean
+          throttle_seconds?: number
+          trigger_config?: Json
+          trigger_type?: string
+          updated_at?: string
+          user_id?: string
+          window_config?: Json
+        }
+        Relationships: []
+      }
+      custom_followup_queue: {
+        Row: {
+          account_id: string
+          attempts: number
+          created_at: string
+          enrollment_id: string
+          flow_id: string
+          id: string
+          instance_id: string | null
+          last_error: string | null
+          locked_at: string | null
+          locked_by: string | null
+          phone: string
+          scheduled_at: string
+          sent_at: string | null
+          status: string
+          step_id: string
+          step_position: number
+        }
+        Insert: {
+          account_id: string
+          attempts?: number
+          created_at?: string
+          enrollment_id: string
+          flow_id: string
+          id?: string
+          instance_id?: string | null
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          phone: string
+          scheduled_at: string
+          sent_at?: string | null
+          status?: string
+          step_id: string
+          step_position: number
+        }
+        Update: {
+          account_id?: string
+          attempts?: number
+          created_at?: string
+          enrollment_id?: string
+          flow_id?: string
+          id?: string
+          instance_id?: string | null
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          phone?: string
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+          step_id?: string
+          step_position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_followup_queue_enrollment_id_fkey"
+            columns: ["enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "custom_followup_enrollments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custom_followup_queue_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "custom_followup_flows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custom_followup_queue_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "custom_followup_steps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custom_followup_steps: {
+        Row: {
+          account_id: string
+          caption: string | null
+          conditions: Json
+          content: string | null
+          created_at: string
+          delay_unit: string
+          delay_value: number
+          flow_id: string
+          id: string
+          media_filename: string | null
+          media_mime: string | null
+          media_url: string | null
+          position: number
+          type: string
+          updated_at: string
+          variants: Json
+        }
+        Insert: {
+          account_id: string
+          caption?: string | null
+          conditions?: Json
+          content?: string | null
+          created_at?: string
+          delay_unit?: string
+          delay_value?: number
+          flow_id: string
+          id?: string
+          media_filename?: string | null
+          media_mime?: string | null
+          media_url?: string | null
+          position: number
+          type?: string
+          updated_at?: string
+          variants?: Json
+        }
+        Update: {
+          account_id?: string
+          caption?: string | null
+          conditions?: Json
+          content?: string | null
+          created_at?: string
+          delay_unit?: string
+          delay_value?: number
+          flow_id?: string
+          id?: string
+          media_filename?: string | null
+          media_mime?: string | null
+          media_url?: string | null
+          position?: number
+          type?: string
+          updated_at?: string
+          variants?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_followup_steps_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "custom_followup_flows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entrevistas_config: {
         Row: {
           company_name: string
@@ -2970,6 +3233,10 @@ export type Database = {
         Returns: number
       }
       current_account_id: { Args: never; Returns: string }
+      custom_followup_stop_for_phone: {
+        Args: { _account_id: string; _phone: string; _reason: string }
+        Returns: number
+      }
       finalize_conversation:
         | {
             Args: {
