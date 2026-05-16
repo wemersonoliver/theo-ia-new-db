@@ -758,6 +758,32 @@ export default function AdminUsers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog Excluir em Massa */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={(o) => !actionLoading && setBulkDeleteOpen(o)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir {selectedIds.size} usuário(s) permanentemente</DialogTitle>
+            <DialogDescription>
+              Esta ação é irreversível. Todos os dados (conversas, agendamentos, contatos, CRM e assinaturas) dos usuários selecionados serão removidos.
+              {bulkProgress && (
+                <div className="mt-3 text-sm">
+                  Processando: {bulkProgress.done} / {bulkProgress.total}
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={actionLoading}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={actionLoading}>
+              {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Excluir Todos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
