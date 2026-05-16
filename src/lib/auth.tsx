@@ -37,12 +37,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    // Then check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      updateUserIfChanged(session?.user ?? null);
-      setLoading(false);
-    });
+    // Then check for existing session. Never leave the app stuck if storage/session restore fails.
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        updateUserIfChanged(session?.user ?? null);
+      })
+      .catch((error) => {
+        console.error("[Auth] session restore failed", error);
+        setSession(null);
+        updateUserIfChanged(null);
+      })
+      .finally(() => setLoading(false));
 
     return () => subscription.unsubscribe();
   }, []);
