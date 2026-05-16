@@ -41,6 +41,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         return;
       }
 
+      try {
       // Check if super_admin
       const { data: roles } = await supabase
         .from("user_roles")
@@ -141,12 +142,18 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
           setTrialDaysLeft(Math.max(daysLeft, 1));
         }
       }
-
-      setCheckingAccess(false);
+      } catch (err) {
+        console.error("[ProtectedRoute] checkAccess failed", err);
+      } finally {
+        setCheckingAccess(false);
+      }
     };
 
     if (!loading) {
-      checkAccess();
+      // Safety net: nunca deixa o usuário preso na tela de loading.
+      const watchdog = setTimeout(() => setCheckingAccess(false), 8000);
+      checkAccess().finally(() => clearTimeout(watchdog));
+      return () => clearTimeout(watchdog);
     }
   }, [user, loading]);
 
