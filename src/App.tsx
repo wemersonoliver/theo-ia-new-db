@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { Component, lazy, Suspense, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -14,13 +14,13 @@ import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import Dashboard from "./pages/Dashboard";
 
 // Restante: code-splitting via React.lazy (reduz bundle inicial — crítico em mobile/3G)
 const Register = lazy(() => import("./pages/Register"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ForceChangePassword = lazy(() => import("./pages/ForceChangePassword"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
 const WhatsApp = lazy(() => import("./pages/WhatsApp"));
 const AIAgent = lazy(() => import("./pages/AIAgent"));
 const SimulateAttendance = lazy(() => import("./pages/SimulateAttendance"));
@@ -71,6 +71,39 @@ const RouteFallback = () => (
   </div>
 );
 
+class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("[App] render failed", error);
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4 text-center">
+        <div className="max-w-sm space-y-4">
+          <h1 className="text-xl font-bold text-foreground">Não foi possível carregar a tela</h1>
+          <p className="text-sm text-muted-foreground">
+            Recarregue a página para atualizar os arquivos do Theo IA.
+          </p>
+          <button
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            onClick={() => window.location.reload()}
+          >
+            Recarregar
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -90,6 +123,7 @@ const App = () => (
           <BrowserRouter>
             <ImpersonationBanner />
             <InstallPrompt />
+            <AppErrorBoundary>
             <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/" element={<LandingPage />} />
@@ -148,6 +182,7 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
             </Suspense>
+            </AppErrorBoundary>
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>
