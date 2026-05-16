@@ -1,4 +1,5 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useEffect, useRef } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ExternalLink } from "lucide-react";
 
@@ -9,42 +10,41 @@ interface CheckoutDialogProps {
   planName?: string;
 }
 
-function buildEmbedUrl(url: string) {
-  try {
-    const u = new URL(url);
-    u.searchParams.set("embed", "true");
-    return u.toString();
-  } catch {
-    return url;
-  }
-}
-
+/**
+ * Kiwify bloqueia carregamento via iframe (X-Frame-Options).
+ * Por isso o checkout é aberto em uma nova aba e o dialog
+ * mostra apenas instruções + um botão de fallback.
+ */
 export function CheckoutDialog({ open, onOpenChange, checkoutUrl, planName }: CheckoutDialogProps) {
+  const openedRef = useRef(false);
+
+  useEffect(() => {
+    if (open && checkoutUrl && !openedRef.current) {
+      openedRef.current = true;
+      window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+    }
+    if (!open) openedRef.current = false;
+  }, [open, checkoutUrl]);
+
   if (!checkoutUrl) return null;
-  const embedUrl = buildEmbedUrl(checkoutUrl);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl p-0 overflow-hidden h-[90vh] flex flex-col gap-0">
-        <DialogHeader className="px-6 py-3 border-b flex-row items-center justify-between space-y-0">
-          <DialogTitle className="text-base">
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
             Finalizar assinatura{planName ? ` — ${planName}` : ""}
           </DialogTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mr-8"
-            onClick={() => window.open(checkoutUrl, "_blank")}
-          >
-            <ExternalLink className="h-3.5 w-3.5 mr-1" /> Abrir em nova aba
-          </Button>
+          <DialogDescription>
+            O checkout foi aberto em uma nova aba. Se o popup foi bloqueado pelo navegador, clique no botão abaixo.
+          </DialogDescription>
         </DialogHeader>
-        <iframe
-          src={embedUrl}
-          title="Checkout Kiwify"
-          className="flex-1 w-full border-0"
-          allow="payment *; clipboard-write"
-        />
+        <Button
+          className="w-full"
+          onClick={() => window.open(checkoutUrl, "_blank", "noopener,noreferrer")}
+        >
+          <ExternalLink className="h-4 w-4 mr-2" /> Abrir checkout
+        </Button>
       </DialogContent>
     </Dialog>
   );
