@@ -29,6 +29,7 @@ import { toast } from "@/hooks/use-toast";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { CheckoutDialog } from "@/components/checkout/CheckoutDialog";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -42,6 +43,8 @@ export default function Dashboard() {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [previewAdvanced, setPreviewAdvanced] = useState(false);
   const [activatingProTrial, setActivatingProTrial] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<{ url: string; name: string } | null>(null);
   const { tier, baseTier, proTrialActive, trialDaysLeft, accountId } = useAccountPlan();
   const { data: plans = [] } = usePlans();
   const queryClient = useQueryClient();
@@ -50,6 +53,12 @@ export default function Dashboard() {
   const canActivateProTrial = baseTier === "trial" && !proTrialActive && (trialDaysLeft ?? 0) > 0 && !!accountId;
   const proMonthly = plans.find((p) => p.tier === "pro" && p.billing_period === "monthly");
   const proAnnual = plans.find((p) => p.tier === "pro" && p.billing_period === "annual");
+
+  const openCheckout = (url: string, name: string) => {
+    setCheckoutPlan({ url, name });
+    setCheckoutOpen(true);
+    setUpgradeOpen(false);
+  };
 
   const handleActivateProTrial = async () => {
     if (!accountId) return;
@@ -231,7 +240,7 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   <Button className="w-full" disabled={!proMonthly.checkout_url}
-                    onClick={() => proMonthly.checkout_url && window.open(proMonthly.checkout_url, "_blank")}>
+                    onClick={() => proMonthly.checkout_url && openCheckout(proMonthly.checkout_url, "Pro Mensal")}>
                     Atualizar agora
                   </Button>
                 </CardContent>
@@ -249,7 +258,7 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   <Button className="w-full" disabled={!proAnnual.checkout_url}
-                    onClick={() => proAnnual.checkout_url && window.open(proAnnual.checkout_url, "_blank")}>
+                    onClick={() => proAnnual.checkout_url && openCheckout(proAnnual.checkout_url, "Pro Anual")}>
                     Atualizar agora
                   </Button>
                 </CardContent>
@@ -266,6 +275,13 @@ export default function Dashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CheckoutDialog
+        open={checkoutOpen}
+        onOpenChange={setCheckoutOpen}
+        checkoutUrl={checkoutPlan?.url ?? null}
+        planName={checkoutPlan?.name}
+      />
     </DashboardLayout>
   );
 }
