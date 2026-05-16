@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { usePlans } from "@/hooks/usePlans";
+import { CheckoutDialog } from "@/components/checkout/CheckoutDialog";
 
 const TRIAL_POLICY_CUTOFF = new Date("2026-05-06T00:00:00Z");
 const trialDaysFor = (createdAt: Date) => (createdAt >= TRIAL_POLICY_CUTOFF ? 7 : 15);
@@ -19,6 +20,8 @@ export function TrialBanner() {
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
   const [show, setShow] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<{ url: string; name: string } | null>(null);
   const { data: plans = [] } = usePlans();
 
   useEffect(() => {
@@ -82,6 +85,12 @@ export function TrialBanner() {
     check();
   }, [user]);
 
+  const openCheckout = (url: string, name: string) => {
+    setCheckoutPlan({ url, name });
+    setCheckoutOpen(true);
+    setDialogOpen(false);
+  };
+
   if (!show || daysLeft === null) return null;
 
   const urgent = daysLeft <= 3;
@@ -125,7 +134,7 @@ export function TrialBanner() {
                 className={`relative cursor-pointer transition-all duration-200 hover:border-primary/50 ${
                   plan.is_recommended ? "border-primary ring-2 ring-primary/20 shadow-lg" : "border-border"
                 }`}
-                onClick={() => plan.checkout_url && window.open(plan.checkout_url, "_blank")}
+                onClick={() => plan.checkout_url && openCheckout(plan.checkout_url, plan.name)}
               >
                 {plan.is_recommended && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -160,6 +169,10 @@ export function TrialBanner() {
                         : ""
                     }`}
                     variant={plan.is_recommended ? "default" : "outline"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (plan.checkout_url) openCheckout(plan.checkout_url, plan.name);
+                    }}
                   >
                     Assinar {plan.name} <ArrowRight className="ml-1 h-4 w-4" />
                   </Button>
@@ -169,6 +182,13 @@ export function TrialBanner() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <CheckoutDialog
+        open={checkoutOpen}
+        onOpenChange={setCheckoutOpen}
+        checkoutUrl={checkoutPlan?.url ?? null}
+        planName={checkoutPlan?.name}
+      />
     </>
   );
 }
