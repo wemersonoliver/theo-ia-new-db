@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -80,6 +81,9 @@ export default function AdminUsers() {
   const [deleteDialog, setDeleteDialog] = useState<AdminUser | null>(null);
   const [trialDialog, setTrialDialog] = useState<AdminUser | null>(null);
   const [trialDays, setTrialDays] = useState("7");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -301,6 +305,53 @@ export default function AdminUsers() {
     );
   });
 
+  const selectableUsers = filteredUsers.filter((u) => !u.roles.includes("super_admin") && u.id !== user?.id);
+  const allSelected = selectableUsers.length > 0 && selectableUsers.every((u) => selectedIds.has(u.id));
+  const someSelected = selectableUsers.some((u) => selectedIds.has(u.id));
+
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(selectableUsers.map((u) => u.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setActionLoading(true);
+    setBulkProgress({ done: 0, total: ids.length });
+    let ok = 0;
+    let fail = 0;
+    for (let i = 0; i < ids.length; i++) {
+      const { error } = await supabase.functions.invoke("admin-users", {
+        body: { action: "delete_user", userId: ids[i] },
+      });
+      if (error) fail++; else ok++;
+      setBulkProgress({ done: i + 1, total: ids.length });
+    }
+    toast({
+      title: "Exclusão em massa concluída",
+      description: `${ok} excluído(s)${fail ? ` • ${fail} falha(s)` : ""}`,
+      variant: fail ? "destructive" : "default",
+    });
+    setSelectedIds(new Set());
+    setBulkDeleteOpen(false);
+    setBulkProgress(null);
+    setActionLoading(false);
+    fetchUsers();
+  };
+
   const getSubBadge = (u: AdminUser) => {
     if (u.subscription) {
       const colors: Record<string, string> = {
@@ -328,6 +379,17 @@ export default function AdminUsers() {
               Usuários Cadastrados ({filteredUsers.length}{searchTerm ? ` de ${users.length}` : ""})
             </CardTitle>
             <div className="flex items-center gap-2">
+              {selectedIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                  disabled={actionLoading}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Excluir {selectedIds.size} selecionado(s)
+                </Button>
+              )}
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -353,6 +415,13 @@ export default function AdminUsers() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-slate-700/50 hover:bg-transparent">
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                          onCheckedChange={toggleAll}
+                          aria-label="Selecionar todos"
+                        />
+                      </TableHead>
                       <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">ID Negócio</TableHead>
                       <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Negócio</TableHead>
                       <TableHead className="text-amber-400/70 font-semibold text-xs uppercase tracking-wider">Nome</TableHead>
@@ -368,6 +437,15 @@ export default function AdminUsers() {
                   <TableBody>
                   {filteredUsers.map((u) => (
                       <TableRow key={u.id} className="border-slate-700/50 hover:bg-slate-800/50">
+                        <TableCell className="py-3">
+                          {!u.roles.includes("super_admin") && u.id !== user?.id && (
+                            <Checkbox
+                              checked={selectedIds.has(u.id)}
+                              onCheckedChange={() => toggleOne(u.id)}
+                              aria-label={`Selecionar ${u.email}`}
+                            />
+                          )}
+                        </TableCell>
                         <TableCell className="font-mono text-xs text-amber-400/80 py-3">#{u.business_code || "—"}</TableCell>
                         <TableCell className="text-slate-200 py-3">{u.business_name || "—"}</TableCell>
                         <TableCell className="font-medium text-slate-100 py-3">{u.full_name || "—"}</TableCell>
@@ -676,6 +754,32 @@ export default function AdminUsers() {
             <Button onClick={handleExtendTrial} disabled={actionLoading}>
               {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Aplicar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Excluir em Massa */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={(o) => !actionLoading && setBulkDeleteOpen(o)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir {selectedIds.size} usuário(s) permanentemente</DialogTitle>
+            <DialogDescription>
+              Esta ação é irreversível. Todos os dados (conversas, agendamentos, contatos, CRM e assinaturas) dos usuários selecionados serão removidos.
+              {bulkProgress && (
+                <div className="mt-3 text-sm">
+                  Processando: {bulkProgress.done} / {bulkProgress.total}
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={actionLoading}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={actionLoading}>
+              {actionLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Excluir Todos
             </Button>
           </DialogFooter>
         </DialogContent>
