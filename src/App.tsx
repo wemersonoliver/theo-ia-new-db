@@ -41,6 +41,8 @@ const HelpCategory = lazy(() => import("./pages/HelpCategory"));
 const HelpArticle = lazy(() => import("./pages/HelpArticle"));
 const Tasks = lazy(() => import("./pages/Tasks"));
 const Followup = lazy(() => import("./pages/Followup"));
+const Terms = lazy(() => import("./pages/Terms"));
+const Privacy = lazy(() => import("./pages/Privacy"));
 
 // Admin pages (lazy)
 const AdminLogin = lazy(() => import("./pages/admin/AdminLogin"));
@@ -129,6 +131,8 @@ const App = () => (
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/force-change-password" element={<ForceChangePassword />} />
