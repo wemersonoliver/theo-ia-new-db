@@ -211,7 +211,7 @@ export default function Register() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={loading || googleLoading || !acceptedTerms}>
+            <Button type="submit" className="w-full" disabled={loading || googleLoading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Criar conta
             </Button>
@@ -224,7 +224,7 @@ export default function Register() {
               type="button"
               variant="outline"
               className="w-full"
-              disabled={loading || googleLoading || !acceptedTerms}
+              disabled={loading || googleLoading}
               onClick={async () => {
                 if (!acceptedTerms) {
                   toast.error("Você precisa aceitar os Termos de Uso e a Política de Privacidade");
