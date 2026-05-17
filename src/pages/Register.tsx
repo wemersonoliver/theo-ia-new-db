@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, MessageSquare, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,12 +25,17 @@ export default function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
   useRecaptchaBadge();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!acceptedTerms) {
+      toast.error("Você precisa aceitar os Termos de Uso e a Política de Privacidade");
+      return;
+    }
     if (businessName.trim().length < 2) {
       toast.error("Informe o nome do seu negócio");
       return;
@@ -184,9 +190,28 @@ export default function Register() {
                 </button>
               </div>
             </div>
+            <div className="flex items-start gap-2 pt-2">
+              <Checkbox
+                id="acceptTerms"
+                checked={acceptedTerms}
+                onCheckedChange={(v) => setAcceptedTerms(v === true)}
+                className="mt-0.5"
+              />
+              <Label htmlFor="acceptTerms" className="text-sm font-normal text-muted-foreground leading-snug cursor-pointer">
+                Li e aceito os{" "}
+                <Link to="/terms" target="_blank" className="text-primary hover:underline">
+                  Termos de Uso
+                </Link>{" "}
+                e a{" "}
+                <Link to="/privacy" target="_blank" className="text-primary hover:underline">
+                  Política de Privacidade
+                </Link>
+                .
+              </Label>
+            </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={loading || googleLoading}>
+            <Button type="submit" className="w-full" disabled={loading || googleLoading || !acceptedTerms}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Criar conta
             </Button>
@@ -199,8 +224,12 @@ export default function Register() {
               type="button"
               variant="outline"
               className="w-full"
-              disabled={loading || googleLoading}
+              disabled={loading || googleLoading || !acceptedTerms}
               onClick={async () => {
+                if (!acceptedTerms) {
+                  toast.error("Você precisa aceitar os Termos de Uso e a Política de Privacidade");
+                  return;
+                }
                 setGoogleLoading(true);
                 if (typeof window !== 'undefined' && (window as any).fbq) {
                   (window as any).fbq('track', 'StartTrial');
