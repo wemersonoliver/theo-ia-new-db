@@ -3,7 +3,10 @@ import { CSS } from "@dnd-kit/utilities";
 import { AdminCRMDeal } from "@/hooks/useAdminCRMDeals";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Mail, Phone, CheckCircle2, XCircle, CreditCard, Bot, BotOff, Smartphone, Pencil } from "lucide-react";
+import { Mail, Phone, CheckCircle2, XCircle, CreditCard, Bot, BotOff, Smartphone, Pencil, LogIn } from "lucide-react";
+import { startImpersonation } from "@/lib/impersonation";
+import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 interface AdminDealCardProps {
   deal: AdminCRMDeal;
@@ -11,6 +14,8 @@ interface AdminDealCardProps {
 }
 
 export function AdminDealCard({ deal, onClick }: AdminDealCardProps) {
+  const { toast } = useToast();
+  const [impersonating, setImpersonating] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: deal.id,
     data: { type: "deal", deal },
@@ -50,6 +55,23 @@ export function AdminDealCard({ deal, onClick }: AdminDealCardProps) {
 
   const sub = deal.subscription_status ? subStatusLabel[deal.subscription_status] || subStatusLabel.inactive : null;
 
+  const handleImpersonate = async (e: React.MouseEvent | React.PointerEvent) => {
+    e.stopPropagation();
+    if (!deal.user_ref_id) return;
+    const label = deal.user_email || deal.title;
+    if (!confirm(`Entrar como ${label}?\n\nVocê terá acesso TOTAL à conta dele em modo suporte. Um banner amarelo no topo permite voltar ao admin a qualquer momento.`)) return;
+    setImpersonating(true);
+    try {
+      await startImpersonation(deal.user_ref_id);
+      window.dispatchEvent(new Event("impersonation-changed"));
+      toast({ title: "Modo suporte ativo", description: `Você agora está como ${label}` });
+    } catch (err: any) {
+      toast({ title: "Falha ao entrar como usuário", description: err?.message ?? "Erro", variant: "destructive" });
+    } finally {
+      setImpersonating(false);
+    }
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -63,18 +85,33 @@ export function AdminDealCard({ deal, onClick }: AdminDealCardProps) {
         isDragging && "opacity-50 shadow-lg rotate-2"
       )}
     >
-      <button
-        type="button"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onClick(deal);
-        }}
-        className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity rounded-md p-1 bg-slate-700/80 hover:bg-slate-600 text-slate-300 hover:text-white"
-        aria-label="Editar deal"
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </button>
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {deal.user_ref_id && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={handleImpersonate}
+            disabled={impersonating}
+            className="rounded-md p-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 border border-amber-500/30 disabled:opacity-50"
+            aria-label="Entrar como este usuário (modo suporte)"
+            title="Entrar como este usuário (modo suporte)"
+          >
+            <LogIn className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick(deal);
+          }}
+          className="rounded-md p-1 bg-slate-700/80 hover:bg-slate-600 text-slate-300 hover:text-white"
+          aria-label="Editar deal"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      </div>
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0 pr-6">
           <p className="font-medium text-sm text-slate-100 truncate">{deal.title}</p>
