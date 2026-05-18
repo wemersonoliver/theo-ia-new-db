@@ -360,9 +360,16 @@ export default function AdminUsers() {
         anual: "bg-purple-500/10 text-purple-400 border-purple-500/20",
         lifetime: "bg-amber-500/10 text-amber-400 border-amber-500/20",
       };
+      const label =
+        u.subscription.product_name ||
+        (u.subscription.plan_type
+          ? u.subscription.plan_type
+          : u.subscription.status === "active"
+            ? "Ativa"
+            : u.subscription.status);
       return (
-        <Badge variant="outline" className={colors[u.subscription.plan_type] || ""}>
-          {u.subscription.product_name || u.subscription.plan_type}
+        <Badge variant="outline" className={colors[u.subscription.plan_type as string] || "bg-green-500/10 text-green-400 border-green-500/20"}>
+          {label}
         </Badge>
       );
     }
