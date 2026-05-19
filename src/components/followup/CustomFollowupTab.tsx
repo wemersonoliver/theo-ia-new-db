@@ -141,7 +141,6 @@ export function CustomFollowupTab() {
                     {flow.trigger_type === "conversation_finalized" && "Pós-atendimento"}
                     {flow.trigger_type === "tag" && "Por tag"}
                   </Badge>
-                  <Badge variant="outline">⏱ {flow.throttle_seconds}s entre envios</Badge>
                   <Badge variant="outline">{flow.window_config?.morning_start || "08:00"} – {flow.window_config?.evening_end || "19:00"}</Badge>
                   {flow.window_config?.skip_sundays !== false && <Badge variant="outline">sem domingos</Badge>}
                   {flow.stop_on_reply && <Badge variant="outline">para se responder</Badge>}
