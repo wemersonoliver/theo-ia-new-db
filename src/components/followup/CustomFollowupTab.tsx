@@ -29,17 +29,19 @@ export function CustomFollowupTab() {
 
   return (
     <Tabs defaultValue="flows" className="space-y-4">
-      <TabsList>
-        <TabsTrigger value="flows" className="gap-1.5"><Workflow className="h-4 w-4" /> Fluxos</TabsTrigger>
-        <TabsTrigger value="metrics" className="gap-1.5"><BarChart3 className="h-4 w-4" /> Métricas</TabsTrigger>
-        <TabsTrigger value="webhooks" className="gap-1.5"><Webhook className="h-4 w-4" /> Webhooks</TabsTrigger>
-        <TabsTrigger value="holidays" className="gap-1.5"><CalendarDays className="h-4 w-4" /> Feriados</TabsTrigger>
-        <TabsTrigger value="library" className="gap-1.5"><Library className="h-4 w-4" /> Biblioteca</TabsTrigger>
-      </TabsList>
+      <div className="-mx-1 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <TabsList className="inline-flex w-max min-w-full">
+          <TabsTrigger value="flows" className="gap-1.5"><Workflow className="h-4 w-4" /> Fluxos</TabsTrigger>
+          <TabsTrigger value="metrics" className="gap-1.5"><BarChart3 className="h-4 w-4" /> Métricas</TabsTrigger>
+          <TabsTrigger value="webhooks" className="gap-1.5"><Webhook className="h-4 w-4" /> Webhooks</TabsTrigger>
+          <TabsTrigger value="holidays" className="gap-1.5"><CalendarDays className="h-4 w-4" /> Feriados</TabsTrigger>
+          <TabsTrigger value="library" className="gap-1.5"><Library className="h-4 w-4" /> Biblioteca</TabsTrigger>
+        </TabsList>
+      </div>
       <TabsContent value="flows" className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <div>
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:justify-between gap-4">
+          <div className="space-y-1.5">
             <CardTitle className="flex items-center gap-2">
               <Workflow className="h-5 w-5 text-primary" />
               Fluxos Personalizados
@@ -50,7 +52,7 @@ export function CustomFollowupTab() {
               com fila e espaçamento mínimo entre envios.
             </CardDescription>
           </div>
-          <Button onClick={handleCreate} disabled={createFlow.isPending}>
+          <Button onClick={handleCreate} disabled={createFlow.isPending} className="w-full sm:w-auto shrink-0">
             {createFlow.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
             Novo fluxo
           </Button>
