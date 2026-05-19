@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ExternalLink } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { buildCheckoutUrl } from "@/lib/kiwify";
 
 interface CheckoutDialogProps {
   open: boolean;
@@ -17,16 +19,18 @@ interface CheckoutDialogProps {
  */
 export function CheckoutDialog({ open, onOpenChange, checkoutUrl, planName }: CheckoutDialogProps) {
   const openedRef = useRef(false);
+  const { user } = useAuth();
+  const finalUrl = checkoutUrl ? buildCheckoutUrl(checkoutUrl, user) : null;
 
   useEffect(() => {
-    if (open && checkoutUrl && !openedRef.current) {
+    if (open && finalUrl && !openedRef.current) {
       openedRef.current = true;
-      window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+      window.open(finalUrl, "_blank", "noopener,noreferrer");
     }
     if (!open) openedRef.current = false;
-  }, [open, checkoutUrl]);
+  }, [open, finalUrl]);
 
-  if (!checkoutUrl) return null;
+  if (!finalUrl) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -41,7 +45,7 @@ export function CheckoutDialog({ open, onOpenChange, checkoutUrl, planName }: Ch
         </DialogHeader>
         <Button
           className="w-full"
-          onClick={() => window.open(checkoutUrl, "_blank", "noopener,noreferrer")}
+          onClick={() => window.open(finalUrl, "_blank", "noopener,noreferrer")}
         >
           <ExternalLink className="h-4 w-4 mr-2" /> Abrir checkout
         </Button>
