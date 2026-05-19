@@ -421,8 +421,13 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-[hsl(217,33%,17%)] px-4 py-8">
-        <div className="mx-auto max-w-6xl text-center text-sm text-white">
+        <div className="mx-auto max-w-6xl flex flex-col items-center gap-3 text-center text-sm text-white">
           <p>© {new Date().getFullYear()} Theo IA. Todos os direitos reservados.</p>
+          <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-white/70">
+            <a href="/terms" className="hover:text-white transition-colors">Termos de Uso</a>
+            <span className="text-white/30">•</span>
+            <a href="/privacy" className="hover:text-white transition-colors">Política de Privacidade</a>
+          </nav>
         </div>
       </footer>
 
