@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 const MAX_DISPATCH = 20;
+const DELAY_BETWEEN_SENDS_MS = 3000;
 
 function withinWindow(config: any, now: Date): boolean {
   // Hora local BR (UTC-3)
@@ -90,6 +91,7 @@ serve(async (req) => {
 
     let sent = 0;
     let skipped = 0;
+    let isFirst = true;
 
     // Plano recomendado para checkout (pro mensal)
     const { data: plan } = await supabase
@@ -103,6 +105,12 @@ serve(async (req) => {
 
     for (const msg of due) {
       try {
+        // Throttle: 3s entre envios para evitar bloqueio do WhatsApp
+        if (!isFirst) {
+          await new Promise((r) => setTimeout(r, DELAY_BETWEEN_SENDS_MS));
+        }
+        isFirst = false;
+
         const { data: tracking } = await supabase
           .from("trial_notification_tracking")
           .select("*")
