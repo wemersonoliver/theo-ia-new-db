@@ -153,6 +153,7 @@ function addDelay(from: Date, value: number, unit: string): Date {
   const ms =
     unit === "days" ? value * 86_400_000 :
     unit === "hours" ? value * 3_600_000 :
+    unit === "seconds" ? value * 1_000 :
     value * 60_000;
   return new Date(from.getTime() + ms);
 }

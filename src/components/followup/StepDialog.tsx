@@ -219,6 +219,7 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
               <Select value={delayUnit} onValueChange={(v) => setDelayUnit(v as DelayUnit)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="seconds">segundos</SelectItem>
                   <SelectItem value="minutes">minutos</SelectItem>
                   <SelectItem value="hours">horas</SelectItem>
                   <SelectItem value="days">dias</SelectItem>
