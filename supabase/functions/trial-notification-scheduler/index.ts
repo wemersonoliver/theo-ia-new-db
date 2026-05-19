@@ -17,10 +17,18 @@ function trialDaysFor(createdAt: Date): number {
 }
 
 function pickWindowSlot(config: any, base: Date): Date {
-  // Distribui dentro da janela da manhã (alvo 10h local) usando UTC offset BR -3
+  // Sorteia um horário aleatório dentro da janela da manhã (BR UTC-3) para
+  // diluir os envios ao longo do dia e evitar pico/bloqueio.
   const d = new Date(base);
-  const [h, m] = (config.morning_window_start || "09:00").split(":").map(Number);
-  d.setUTCHours(h + 3, m, 0, 0); // BR = UTC-3 → manhã ~12h UTC
+  const [sh, sm] = (config.morning_window_start || "09:00").split(":").map(Number);
+  const [eh, em] = (config.morning_window_end || "11:30").split(":").map(Number);
+  const startMin = sh * 60 + sm;
+  const endMin = Math.max(startMin + 1, eh * 60 + em);
+  const pick = startMin + Math.floor(Math.random() * (endMin - startMin));
+  const ph = Math.floor(pick / 60);
+  const pm = pick % 60;
+  // BR = UTC-3 → soma 3 para UTC
+  d.setUTCHours(ph + 3, pm, Math.floor(Math.random() * 60), 0);
   return d;
 }
 
