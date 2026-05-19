@@ -2965,6 +2965,170 @@ export type Database = {
         }
         Relationships: []
       }
+      trial_notification_config: {
+        Row: {
+          created_at: string
+          discount_coupon_code: string
+          discount_percent: number
+          enabled: boolean
+          evening_window_end: string
+          evening_window_start: string
+          id: string
+          morning_window_end: string
+          morning_window_start: string
+          step_1_template: string
+          step_2_template: string
+          step_3_template: string
+          step_4_template: string
+          step_5_template: string
+          step_6_template: string
+          step_7_template: string
+          step_8_template: string
+          step_9_template: string
+          step_offsets: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          discount_coupon_code?: string
+          discount_percent?: number
+          enabled?: boolean
+          evening_window_end?: string
+          evening_window_start?: string
+          id?: string
+          morning_window_end?: string
+          morning_window_start?: string
+          step_1_template?: string
+          step_2_template?: string
+          step_3_template?: string
+          step_4_template?: string
+          step_5_template?: string
+          step_6_template?: string
+          step_7_template?: string
+          step_8_template?: string
+          step_9_template?: string
+          step_offsets?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          discount_coupon_code?: string
+          discount_percent?: number
+          enabled?: boolean
+          evening_window_end?: string
+          evening_window_start?: string
+          id?: string
+          morning_window_end?: string
+          morning_window_start?: string
+          step_1_template?: string
+          step_2_template?: string
+          step_3_template?: string
+          step_4_template?: string
+          step_5_template?: string
+          step_6_template?: string
+          step_7_template?: string
+          step_8_template?: string
+          step_9_template?: string
+          step_offsets?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      trial_notification_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          phase: string
+          phone: string
+          scheduled_at: string
+          sent_at: string | null
+          status: string
+          step: number
+          tracking_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          phase: string
+          phone: string
+          scheduled_at: string
+          sent_at?: string | null
+          status?: string
+          step: number
+          tracking_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          phase?: string
+          phone?: string
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+          step?: number
+          tracking_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trial_notification_messages_tracking_id_fkey"
+            columns: ["tracking_id"]
+            isOneToOne: false
+            referencedRelation: "trial_notification_tracking"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trial_notification_tracking: {
+        Row: {
+          account_id: string
+          business_context: string | null
+          created_at: string
+          current_step: number
+          engagement_data: Json
+          id: string
+          last_sent_at: string | null
+          next_scheduled_at: string | null
+          owner_user_id: string
+          phone: string
+          status: string
+          trial_ends_at: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          business_context?: string | null
+          created_at?: string
+          current_step?: number
+          engagement_data?: Json
+          id?: string
+          last_sent_at?: string | null
+          next_scheduled_at?: string | null
+          owner_user_id: string
+          phone: string
+          status?: string
+          trial_ends_at: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          business_context?: string | null
+          created_at?: string
+          current_step?: number
+          engagement_data?: Json
+          id?: string
+          last_sent_at?: string | null
+          next_scheduled_at?: string | null
+          owner_user_id?: string
+          phone?: string
+          status?: string
+          trial_ends_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_goals: {
         Row: {
           account_id: string
@@ -3406,6 +3570,10 @@ export type Database = {
         Args: { p_phone: string; p_reason: string; p_user_id: string }
         Returns: number
       }
+      cancel_trial_notification: {
+        Args: { p_account_id: string; p_reason: string }
+        Returns: number
+      }
       current_account_id: { Args: never; Returns: string }
       custom_followup_stop_for_phone: {
         Args: { _account_id: string; _phone: string; _reason: string }
@@ -3451,6 +3619,10 @@ export type Database = {
       must_filter_by_assignment: {
         Args: { _account_id: string }
         Returns: boolean
+      }
+      pause_trial_notification_by_phone: {
+        Args: { p_phone: string }
+        Returns: number
       }
       recalc_admin_deal_stage: {
         Args: { _user_id: string }

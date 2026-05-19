@@ -186,6 +186,15 @@ Deno.serve(async (req) => {
         .update({ is_blocked: false })
         .eq("user_id", userId);
       console.log("User unblocked:", userId);
+
+      // Cancela fluxo de notificação de trial (cliente assinou)
+      if (accountId) {
+        await supabase
+          .rpc("cancel_trial_notification", { p_account_id: accountId, p_reason: "converted" })
+          .then(({ error }) => {
+            if (error) console.error("Error cancelling trial notification:", error);
+          });
+      }
     }
 
     return new Response(JSON.stringify({ success: true, status }), {

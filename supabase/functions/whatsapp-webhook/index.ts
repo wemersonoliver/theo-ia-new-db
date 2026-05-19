@@ -395,6 +395,12 @@ serve(async (req) => {
                 .then(({ error }) => {
                   if (error) console.error("Error cancelling system follow-up sequence:", error);
                 });
+              // Pausa notificações de trial quando o lead responde (IA assume)
+              supabase
+                .rpc("pause_trial_notification_by_phone", { p_phone: phone })
+                .then(({ error }) => {
+                  if (error) console.error("Error pausing trial notification:", error);
+                });
             }
 
             // Human took over (outgoing human msg) → cancel sequence + AI off

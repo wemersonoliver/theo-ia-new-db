@@ -88,3 +88,9 @@ verify_jwt = false
 
 [functions.custom-followup-enroll]
 verify_jwt = true
+
+[functions.trial-notification-scheduler]
+verify_jwt = false
+
+[functions.trial-notification-dispatch]
+verify_jwt = false

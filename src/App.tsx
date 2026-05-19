@@ -66,6 +66,7 @@ const AdminAICosts = lazy(() => import("./pages/admin/AdminAICosts"));
 const AdminSimulateSupport = lazy(() => import("./pages/admin/AdminSimulateSupport"));
 const AdminFlows = lazy(() => import("./pages/admin/AdminFlows"));
 const AdminFlowEditor = lazy(() => import("./pages/admin/AdminFlowEditor"));
+const AdminTrialFollowup = lazy(() => import("./pages/admin/AdminTrialFollowup"));
 
 const RouteFallback = () => (
   <div className="flex min-h-screen items-center justify-center bg-background">
@@ -181,6 +182,7 @@ const App = () => (
               <Route path="/admin/ai-costs" element={<AdminAICosts />} />
               <Route path="/admin/flows" element={<AdminFlows />} />
               <Route path="/admin/flows/:id" element={<AdminFlowEditor />} />
+              <Route path="/admin/trial-followup" element={<AdminTrialFollowup />} />
               <Route path="/admin" element={<AdminLogin />} />
 
               <Route path="*" element={<NotFound />} />
