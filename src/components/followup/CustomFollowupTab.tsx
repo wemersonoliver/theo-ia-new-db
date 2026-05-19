@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Workflow, Pencil, Trash2, Loader2, CalendarDays, Library, BarChart3, Webhook } from "lucide-react";
+import { Plus, Workflow, Pencil, Trash2, Loader2, CalendarDays, Library, BarChart3, Webhook, Menu } from "lucide-react";
 import { useCustomFollowup, type CustomFlow } from "@/hooks/useCustomFollowup";
 import { FlowEditorDialog } from "./FlowEditorDialog";
 import { HolidaysManager } from "./HolidaysManager";
@@ -11,6 +11,10 @@ import { MediaLibraryManager } from "./MediaLibraryManager";
 import { MetricsPanel } from "./MetricsPanel";
 import { WebhooksManager } from "./WebhooksManager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuLabel, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -20,6 +24,17 @@ export function CustomFollowupTab() {
   const { flowsQuery, createFlow, updateFlow, deleteFlow } = useCustomFollowup();
   const [editing, setEditing] = useState<CustomFlow | null>(null);
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<string>("flows");
+
+  const TABS: { value: string; label: string; icon: any }[] = [
+    { value: "flows", label: "Fluxos", icon: Workflow },
+    { value: "metrics", label: "Métricas", icon: BarChart3 },
+    { value: "webhooks", label: "Webhooks", icon: Webhook },
+    { value: "holidays", label: "Feriados", icon: CalendarDays },
+    { value: "library", label: "Biblioteca", icon: Library },
+  ];
+  const currentTab = TABS.find((t) => t.value === tab) ?? TABS[0];
+  const CurrentIcon = currentTab.icon;
 
   const handleCreate = async () => {
     const flow = await createFlow.mutateAsync({});
@@ -28,14 +43,45 @@ export function CustomFollowupTab() {
   };
 
   return (
-    <Tabs defaultValue="flows" className="space-y-4">
-      <div className="-mx-1 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+    <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+      {/* Mobile: hamburger dropdown with current tab label */}
+      <div className="sm:hidden">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-full justify-between">
+              <span className="flex items-center gap-2">
+                <CurrentIcon className="h-4 w-4 text-primary" />
+                {currentTab.label}
+              </span>
+              <Menu className="h-4 w-4 opacity-60" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-[calc(100vw-2rem)]">
+            <DropdownMenuLabel>Seções</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {TABS.map((t) => {
+              const Icon = t.icon;
+              return (
+                <DropdownMenuItem key={t.value} onSelect={() => setTab(t.value)} className="gap-2">
+                  <Icon className="h-4 w-4" /> {t.label}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Desktop/tablet: regular tabs */}
+      <div className="hidden sm:block -mx-1 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <TabsList className="inline-flex w-max min-w-full">
-          <TabsTrigger value="flows" className="gap-1.5"><Workflow className="h-4 w-4" /> Fluxos</TabsTrigger>
-          <TabsTrigger value="metrics" className="gap-1.5"><BarChart3 className="h-4 w-4" /> Métricas</TabsTrigger>
-          <TabsTrigger value="webhooks" className="gap-1.5"><Webhook className="h-4 w-4" /> Webhooks</TabsTrigger>
-          <TabsTrigger value="holidays" className="gap-1.5"><CalendarDays className="h-4 w-4" /> Feriados</TabsTrigger>
-          <TabsTrigger value="library" className="gap-1.5"><Library className="h-4 w-4" /> Biblioteca</TabsTrigger>
+          {TABS.map((t) => {
+            const Icon = t.icon;
+            return (
+              <TabsTrigger key={t.value} value={t.value} className="gap-1.5">
+                <Icon className="h-4 w-4" /> {t.label}
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
       </div>
       <TabsContent value="flows" className="space-y-6">
