@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 
 export type StepType = "text" | "audio" | "video" | "image" | "document" | "sticker";
-export type DelayUnit = "minutes" | "hours" | "days";
+export type DelayUnit = "seconds" | "minutes" | "hours" | "days";
 export type TriggerType =
   | "inactivity"
   | "manual"
