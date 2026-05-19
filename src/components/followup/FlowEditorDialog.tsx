@@ -152,21 +152,21 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="p-6 pb-2 border-b">
-          <div className="flex items-start justify-between gap-3">
-            <div>
+      <DialogContent className="max-w-4xl w-[calc(100vw-1rem)] sm:w-full h-[95vh] sm:h-[90vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="p-4 sm:p-6 pb-2 border-b">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div className="pr-8 sm:pr-0">
               <DialogTitle>Editar fluxo personalizado</DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="hidden sm:block">
                 Configure gatilho, mensagens e janela de envio. Mensagens passam por uma fila com espaçamento mínimo entre envios.
               </DialogDescription>
             </div>
             <div className="flex gap-2 shrink-0">
-              <Button size="sm" variant="outline" onClick={handleExport}>
-                <Download className="h-4 w-4 mr-1" /> Exportar JSON
+              <Button size="sm" variant="outline" onClick={handleExport} className="flex-1 sm:flex-none">
+                <Download className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Exportar JSON</span><span className="sm:hidden ml-1">Exportar</span>
               </Button>
-              <Button size="sm" variant="outline" onClick={() => importRef.current?.click()}>
-                <Upload className="h-4 w-4 mr-1" /> Importar JSON
+              <Button size="sm" variant="outline" onClick={() => importRef.current?.click()} className="flex-1 sm:flex-none">
+                <Upload className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Importar JSON</span><span className="sm:hidden ml-1">Importar</span>
               </Button>
               <input
                 ref={importRef} type="file" accept="application/json" className="hidden"
@@ -177,13 +177,15 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
         </DialogHeader>
 
         <Tabs defaultValue="config" className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="mx-6 mt-3 self-start">
-            <TabsTrigger value="config">Configuração</TabsTrigger>
-            <TabsTrigger value="steps">Mensagens</TabsTrigger>
-            <TabsTrigger value="enrollments">Inscrições</TabsTrigger>
-          </TabsList>
+          <div className="mx-4 sm:mx-6 mt-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <TabsList className="inline-flex w-max">
+              <TabsTrigger value="config">Configuração</TabsTrigger>
+              <TabsTrigger value="steps">Mensagens</TabsTrigger>
+              <TabsTrigger value="enrollments">Inscrições</TabsTrigger>
+            </TabsList>
+          </div>
 
-          <TabsContent value="config" className="flex-1 overflow-y-auto p-6 space-y-6 mt-2">
+          <TabsContent value="config" className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 mt-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
                 <Label>Nome do fluxo</Label>
@@ -349,11 +351,11 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
             </div>
           </TabsContent>
 
-          <TabsContent value="steps" className="flex-1 overflow-y-auto p-6 mt-2">
+          <TabsContent value="steps" className="flex-1 overflow-y-auto p-4 sm:p-6 mt-2">
             <StepsEditor flowId={flow.id} accountId={flow.account_id} />
           </TabsContent>
 
-          <TabsContent value="enrollments" className="flex-1 overflow-y-auto p-6 mt-2">
+          <TabsContent value="enrollments" className="flex-1 overflow-y-auto p-4 sm:p-6 mt-2">
             <EnrollmentsList flowId={flow.id} />
           </TabsContent>
         </Tabs>
