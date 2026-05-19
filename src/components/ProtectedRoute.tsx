@@ -300,7 +300,7 @@ function CheckoutScreen({ isBlocked, signOut }: { isBlocked: boolean; signOut: (
             disabled={!selectedPlan}
             onClick={() => {
               if (selectedPlan?.checkout_url) {
-                window.open(selectedPlan.checkout_url, "_blank");
+                window.open(buildCheckoutUrl(selectedPlan.checkout_url, user), "_blank");
               }
             }}
           >
