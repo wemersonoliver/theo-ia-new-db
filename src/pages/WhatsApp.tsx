@@ -14,8 +14,11 @@ import { DepartmentConnectCard } from "@/components/whatsapp/DepartmentConnectCa
 import { Loader2, Lock, Plus, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
+import { buildCheckoutUrl } from "@/lib/kiwify";
 
 export default function WhatsApp() {
+  const { user } = useAuth();
   const {
     instances, isLoading,
     createInstance, disconnectInstance, refreshQRCode, updateInstance,
@@ -195,7 +198,7 @@ export default function WhatsApp() {
                 </CardHeader>
                 <CardContent>
                   <Button className="w-full" disabled={!proMonthly.checkout_url}
-                    onClick={() => proMonthly.checkout_url && window.open(proMonthly.checkout_url, "_blank")}>
+                    onClick={() => proMonthly.checkout_url && window.open(buildCheckoutUrl(proMonthly.checkout_url, user), "_blank")}>
                     Atualizar agora
                   </Button>
                 </CardContent>
@@ -213,7 +216,7 @@ export default function WhatsApp() {
                 </CardHeader>
                 <CardContent>
                   <Button className="w-full" disabled={!proAnnual.checkout_url}
-                    onClick={() => proAnnual.checkout_url && window.open(proAnnual.checkout_url, "_blank")}>
+                    onClick={() => proAnnual.checkout_url && window.open(buildCheckoutUrl(proAnnual.checkout_url, user), "_blank")}>
                     Atualizar agora
                   </Button>
                 </CardContent>

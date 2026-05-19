@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { buildCheckoutUrl } from "@/lib/kiwify";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, AlertTriangle, Crown, Clock, CheckCircle2, ArrowRight, RefreshCw, MessageCircle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -299,7 +300,7 @@ function CheckoutScreen({ isBlocked, signOut }: { isBlocked: boolean; signOut: (
             disabled={!selectedPlan}
             onClick={() => {
               if (selectedPlan?.checkout_url) {
-                window.open(selectedPlan.checkout_url, "_blank");
+                window.open(buildCheckoutUrl(selectedPlan.checkout_url, user), "_blank");
               }
             }}
           >
