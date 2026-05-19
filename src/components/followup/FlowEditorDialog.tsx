@@ -38,8 +38,6 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
   const [pipelineId, setPipelineId] = useState<string | null>(flow.trigger_config?.pipeline_id ?? null);
   const [stageId, setStageId] = useState<string | null>(flow.trigger_config?.stage_id ?? null);
   const [outcome, setOutcome] = useState<string>(flow.trigger_config?.outcome ?? "any");
-  const [throttle, setThrottle] = useState(flow.throttle_seconds);
-  const [maxPerHour, setMaxPerHour] = useState(flow.max_per_hour);
   const [stopOnReply, setStopOnReply] = useState(flow.stop_on_reply);
   const [excludeHandoff, setExcludeHandoff] = useState(flow.exclude_handoff);
   const [winStart, setWinStart] = useState(flow.window_config?.morning_start || "08:00");
@@ -107,7 +105,6 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
     setPipelineId(flow.trigger_config?.pipeline_id ?? null);
     setStageId(flow.trigger_config?.stage_id ?? null);
     setOutcome(flow.trigger_config?.outcome ?? "any");
-    setThrottle(flow.throttle_seconds); setMaxPerHour(flow.max_per_hour);
     setStopOnReply(flow.stop_on_reply); setExcludeHandoff(flow.exclude_handoff);
     setWinStart(flow.window_config?.morning_start || "08:00");
     setWinEnd(flow.window_config?.evening_end || "19:00");
@@ -133,8 +130,8 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
       name, description,
       trigger_type: triggerType,
       trigger_config: triggerConfig,
-      throttle_seconds: Math.max(3, Number(throttle) || 7),
-      max_per_hour: Math.max(1, Number(maxPerHour) || 60),
+      throttle_seconds: 7,
+      max_per_hour: 60,
       stop_on_reply: stopOnReply,
       exclude_handoff: excludeHandoff,
       window_config: {
@@ -266,16 +263,6 @@ export function FlowEditorDialog({ open, onOpenChange, flow }: Props) {
                   </Select>
                 </div>
               )}
-
-              <div>
-                <Label>Espaçamento entre envios (segundos)</Label>
-                <Input type="number" min={3} value={throttle} onChange={(e) => setThrottle(Number(e.target.value))} />
-                <p className="text-xs text-muted-foreground mt-1">Recomendado: 7s. Mínimo: 3s.</p>
-              </div>
-              <div>
-                <Label>Máx. mensagens por hora (instância)</Label>
-                <Input type="number" min={1} value={maxPerHour} onChange={(e) => setMaxPerHour(Number(e.target.value))} />
-              </div>
 
               <div>
                 <Label>Janela — início</Label>
