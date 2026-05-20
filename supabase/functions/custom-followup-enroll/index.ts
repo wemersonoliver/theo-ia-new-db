@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { normalizeBrazilianPhone } from "../_phone.ts";
+import { extractPersonName } from "../_person-name.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -145,6 +146,37 @@ serve(async (req) => {
 
     let enrolled = 0, skipped = 0;
     for (const phone of allowedPhones) {
+      // ===== Gate: valida/atualiza person_name antes de enrolar =====
+      try {
+        const { data: cRow } = await supabase
+          .from("contacts")
+          .select("id, name, person_name, person_name_checked_at")
+          .eq("account_id", flow.account_id).eq("phone", phone).maybeSingle();
+        const checkedAt = cRow?.person_name_checked_at ? new Date(cRow.person_name_checked_at).getTime() : 0;
+        const staleMs = 7 * 86_400_000;
+        if (cRow && (Date.now() - checkedAt) > staleMs) {
+          // tenta contacts.name primeiro
+          let validated = extractPersonName(cRow.name);
+          if (!validated) {
+            // fallback: contact_name salvo na conversa do whatsapp
+            const { data: conv } = await supabase
+              .from("whatsapp_conversations")
+              .select("contact_name")
+              .eq("account_id", flow.account_id).eq("phone", phone).maybeSingle();
+            if (conv?.contact_name) validated = extractPersonName(conv.contact_name);
+          }
+          await supabase
+            .from("contacts")
+            .update({
+              person_name: validated ? validated.fullName : "",
+              person_name_checked_at: new Date().toISOString(),
+            })
+            .eq("id", cRow.id);
+        }
+      } catch (e) {
+        console.warn("person_name gate failed for", phone, e);
+      }
+
       // skip if already active
       const { data: existing } = await supabase
         .from("custom_followup_enrollments")
