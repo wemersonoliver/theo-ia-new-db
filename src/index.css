@@ -273,37 +273,62 @@ body.show-recaptcha .grecaptcha-badge {
    Cores extraídas do material da Igreen Energy (verde + degradê + accent laranja).
    ============================================================ */
 .theme-igreen {
-  --primary: 142 70% 32%;
-  --primary-foreground: 0 0% 100%;
-  --primary-glow: 138 65% 50%;
+  /* Brand palette: #02CA03, #045A4C, #4CC348, #028F7F */
+  --background: 170 90% 5%;
+  --foreground: 0 0% 100%;
 
-  --accent: 28 95% 55%;
+  --card: 172 80% 9%;
+  --card-foreground: 0 0% 100%;
+
+  --popover: 172 80% 9%;
+  --popover-foreground: 0 0% 100%;
+
+  --primary: 120 97% 40%;
+  --primary-foreground: 0 0% 100%;
+  --primary-glow: 118 52% 53%;
+
+  --secondary: 172 92% 14%;
+  --secondary-foreground: 0 0% 100%;
+
+  --muted: 172 70% 12%;
+  --muted-foreground: 150 25% 80%;
+
+  --accent: 173 96% 28%;
   --accent-foreground: 0 0% 100%;
 
-  --ring: 142 70% 32%;
+  --border: 172 60% 18%;
+  --input: 172 60% 16%;
+  --ring: 120 97% 40%;
 
-  --neon-green: 142 75% 45%;
+  --neon-green: 120 97% 45%;
+  --neon-cyan: 173 96% 38%;
 
-  --sidebar-background: 150 55% 8%;
-  --sidebar-foreground: 120 25% 92%;
-  --sidebar-primary: 138 70% 45%;
+  --sidebar-background: 172 92% 7%;
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-primary: 120 97% 40%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 145 50% 14%;
-  --sidebar-accent-foreground: 120 25% 96%;
-  --sidebar-border: 145 50% 16%;
-  --sidebar-ring: 138 70% 45%;
+  --sidebar-accent: 172 80% 13%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-border: 172 70% 16%;
+  --sidebar-ring: 120 97% 40%;
 
   --gradient-aurora:
-    radial-gradient(ellipse 80% 60% at 20% 0%, hsl(142 70% 32% / 0.22), transparent 60%),
-    radial-gradient(ellipse 70% 50% at 90% 20%, hsl(138 65% 50% / 0.18), transparent 60%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, hsl(28 95% 55% / 0.12), transparent 60%);
-  --gradient-primary: linear-gradient(135deg, hsl(142 70% 28%), hsl(138 65% 50%));
-  --gradient-glow: linear-gradient(135deg, hsl(138 65% 50% / 0.9), hsl(28 95% 55% / 0.85));
+    radial-gradient(ellipse 80% 60% at 20% 0%, hsl(120 97% 40% / 0.22), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 90% 20%, hsl(173 96% 28% / 0.22), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, hsl(118 52% 53% / 0.18), transparent 60%);
+  --gradient-primary: linear-gradient(135deg, hsl(120 97% 40%), hsl(118 52% 53%));
+  --gradient-glow: linear-gradient(135deg, hsl(120 97% 40% / 0.9), hsl(173 96% 28% / 0.9));
 
-  --glow-primary: 0 0 40px hsl(142 70% 32% / 0.4);
+  --glow-primary: 0 0 40px hsl(120 97% 40% / 0.45);
+  --glow-cyan: 0 0 40px hsl(173 96% 28% / 0.45);
 }
 .theme-igreen.dark,
 .theme-igreen .dark {
-  --primary: 138 65% 48%;
-  --primary-glow: 138 70% 60%;
+  --background: 172 92% 4%;
+  --card: 172 85% 8%;
+  --popover: 172 85% 8%;
+  --primary: 120 97% 45%;
+  --primary-glow: 118 60% 58%;
+  --accent: 173 96% 32%;
+  --sidebar-background: 172 95% 5%;
 }
