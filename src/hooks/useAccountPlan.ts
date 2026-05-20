@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 
-export type PlanTier = "trial" | "basic" | "pro" | "tester";
+export type PlanTier = "trial" | "basic" | "pro" | "tester" | "igreen";
 
 const TRIAL_POLICY_CUTOFF = new Date("2026-05-06T00:00:00Z");
 const trialDaysFor = (createdAt: Date) => (createdAt >= TRIAL_POLICY_CUTOFF ? 7 : 15);
@@ -58,6 +58,8 @@ export function useAccountPlan() {
     ? "tester"
     : planType.includes("tester")
     ? "tester"
+    : planType.includes("igreen")
+    ? "igreen"
     : planType.includes("pro")
       ? "pro"
       : planType.includes("basic")
@@ -81,8 +83,9 @@ export function useAccountPlan() {
   // Tier efetivo: se trial ativou Pro Trial e ainda dentro do período, comporta-se como pro
   const tier: PlanTier = proTrialActive ? "pro" : baseTier;
 
-  // Tester tem acesso completo (equivalente ao Pro ou superior)
-  const maxInstances = tier === "pro" || tier === "tester" ? 3 : 1;
+  // Tester tem acesso completo (equivalente ao Pro ou superior). Igreen permite 2.
+  const maxInstances =
+    tier === "pro" || tier === "tester" ? 3 : tier === "igreen" ? 2 : 1;
 
   return {
     tier,
