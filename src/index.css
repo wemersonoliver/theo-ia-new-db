@@ -273,65 +273,69 @@ body.show-recaptcha .grecaptcha-badge {
    Cores extraídas do material da Igreen Energy (verde + degradê + accent laranja).
    ============================================================ */
 .theme-igreen {
-  /* Brand palette: #02CA03, #045A4C, #4CC348, #028F7F */
-  --background: 130 55% 22%;
+  /* Brand palette — neon #04CA04 + gradient left (#045B4E→#029080) / right (#2F782C→#4CC348) */
+  --background: 165 60% 22%;
   --foreground: 0 0% 100%;
 
-  --card: 125 55% 26%;
+  --card: 150 45% 18%;
   --card-foreground: 0 0% 100%;
 
-  --popover: 125 55% 26%;
+  --popover: 150 45% 18%;
   --popover-foreground: 0 0% 100%;
 
   --primary: 120 96% 41%;
   --primary-foreground: 0 0% 100%;
-  --primary-glow: 118 70% 55%;
+  --primary-glow: 120 96% 55%;
 
-  --secondary: 130 50% 32%;
+  --secondary: 150 45% 24%;
   --secondary-foreground: 0 0% 100%;
 
-  --muted: 130 40% 30%;
-  --muted-foreground: 120 30% 92%;
+  --muted: 150 35% 22%;
+  --muted-foreground: 0 0% 92%;
 
   --accent: 120 96% 41%;
   --accent-foreground: 0 0% 100%;
 
-  --border: 125 45% 36%;
-  --input: 125 45% 32%;
+  --border: 150 40% 32%;
+  --input: 150 40% 26%;
   --ring: 120 96% 41%;
 
-  --neon-green: 120 96% 45%;
+  --neon-green: 120 96% 41%;
   --neon-cyan: 120 96% 41%;
-  --neon-purple: 120 60% 50%;
+  --neon-purple: 120 96% 41%;
 
-  --sidebar-background: 145 70% 12%;
+  --sidebar-background: 172 92% 14%;
   --sidebar-foreground: 0 0% 100%;
   --sidebar-primary: 120 96% 41%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 140 55% 20%;
+  --sidebar-accent: 173 80% 20%;
   --sidebar-accent-foreground: 0 0% 100%;
-  --sidebar-border: 140 50% 24%;
+  --sidebar-border: 172 60% 24%;
   --sidebar-ring: 120 96% 41%;
 
-  --gradient-aurora:
-    radial-gradient(ellipse 80% 60% at 20% 0%, hsl(120 96% 41% / 0.28), transparent 60%),
-    radial-gradient(ellipse 70% 50% at 90% 20%, hsl(118 70% 55% / 0.22), transparent 60%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, hsl(145 70% 35% / 0.20), transparent 60%);
+  /* Fundo: degradê horizontal — esquerda teal (#045B4E→#029080) / direita verde (#2F782C→#4CC348) */
+  --gradient-aurora: linear-gradient(
+    90deg,
+    #045B4E 0%,
+    #029080 40%,
+    #2F782C 60%,
+    #4CC348 100%
+  );
   --gradient-primary: linear-gradient(135deg, hsl(120 96% 41%), hsl(118 70% 55%));
-  --gradient-glow: linear-gradient(135deg, hsl(120 96% 41% / 0.9), hsl(118 70% 55% / 0.9));
+  --gradient-glow: linear-gradient(135deg, hsl(120 96% 41% / 0.95), hsl(120 96% 55% / 0.9));
 
   --glow-primary: 0 0 40px hsl(120 96% 41% / 0.5);
   --glow-cyan: 0 0 40px hsl(120 96% 41% / 0.5);
-  --glow-purple: 0 0 40px hsl(145 70% 40% / 0.45);
-  --shadow-elevated: 0 25px 80px -25px hsl(120 96% 41% / 0.35);
+  --glow-purple: 0 0 40px hsl(120 96% 41% / 0.45);
+  --shadow-elevated: 0 25px 80px -25px hsl(120 96% 41% / 0.4);
 }
 .theme-igreen.dark,
 .theme-igreen .dark {
-  --background: 130 55% 20%;
-  --card: 125 55% 24%;
-  --popover: 125 55% 24%;
+  --background: 165 60% 18%;
+  --card: 150 50% 14%;
+  --popover: 150 50% 14%;
   --primary: 120 96% 45%;
-  --primary-glow: 118 75% 60%;
+  --primary-glow: 120 96% 60%;
   --accent: 120 96% 45%;
-  --sidebar-background: 145 70% 11%;
+  --sidebar-background: 172 92% 12%;
 }
