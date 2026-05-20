@@ -1979,6 +1979,7 @@ export type Database = {
           contact_phone: string
           created_at: string
           current_day: number
+          current_item_position: number
           current_period: string
           id: string
           last_sent_at: string | null
@@ -1996,6 +1997,7 @@ export type Database = {
           contact_phone: string
           created_at?: string
           current_day?: number
+          current_item_position?: number
           current_period?: string
           id?: string
           last_sent_at?: string | null
@@ -2013,6 +2015,7 @@ export type Database = {
           contact_phone?: string
           created_at?: string
           current_day?: number
+          current_item_position?: number
           current_period?: string
           id?: string
           last_sent_at?: string | null
