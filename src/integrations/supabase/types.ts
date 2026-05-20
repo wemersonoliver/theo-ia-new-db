@@ -1937,6 +1937,42 @@ export type Database = {
         }
         Relationships: []
       }
+      igreen_default_ai_config: {
+        Row: {
+          agent_name: string
+          business_description: string | null
+          business_niche: string | null
+          created_at: string
+          custom_prompt: string
+          id: string
+          singleton: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          agent_name?: string
+          business_description?: string | null
+          business_niche?: string | null
+          created_at?: string
+          custom_prompt: string
+          id?: string
+          singleton?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          agent_name?: string
+          business_description?: string | null
+          business_niche?: string | null
+          created_at?: string
+          custom_prompt?: string
+          id?: string
+          singleton?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       igreen_scenario_days: {
         Row: {
           created_at: string
