@@ -274,42 +274,42 @@ body.show-recaptcha .grecaptcha-badge {
    ============================================================ */
 .theme-igreen {
   /* Brand palette: #02CA03, #045A4C, #4CC348, #028F7F */
-  --background: 170 90% 5%;
+  --background: 170 60% 18%;
   --foreground: 0 0% 100%;
 
-  --card: 172 80% 9%;
+  --card: 172 55% 22%;
   --card-foreground: 0 0% 100%;
 
-  --popover: 172 80% 9%;
+  --popover: 172 55% 22%;
   --popover-foreground: 0 0% 100%;
 
   --primary: 120 97% 40%;
   --primary-foreground: 0 0% 100%;
   --primary-glow: 118 52% 53%;
 
-  --secondary: 172 92% 14%;
+  --secondary: 172 55% 28%;
   --secondary-foreground: 0 0% 100%;
 
-  --muted: 172 70% 12%;
-  --muted-foreground: 150 25% 80%;
+  --muted: 172 45% 26%;
+  --muted-foreground: 150 30% 88%;
 
   --accent: 173 96% 28%;
   --accent-foreground: 0 0% 100%;
 
-  --border: 172 60% 18%;
-  --input: 172 60% 16%;
+  --border: 172 45% 32%;
+  --input: 172 45% 28%;
   --ring: 120 97% 40%;
 
   --neon-green: 120 97% 45%;
   --neon-cyan: 173 96% 38%;
 
-  --sidebar-background: 172 92% 7%;
+  --sidebar-background: 172 80% 12%;
   --sidebar-foreground: 0 0% 100%;
   --sidebar-primary: 120 97% 40%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 172 80% 13%;
+  --sidebar-accent: 172 60% 20%;
   --sidebar-accent-foreground: 0 0% 100%;
-  --sidebar-border: 172 70% 16%;
+  --sidebar-border: 172 55% 22%;
   --sidebar-ring: 120 97% 40%;
 
   --gradient-aurora:
@@ -324,11 +324,11 @@ body.show-recaptcha .grecaptcha-badge {
 }
 .theme-igreen.dark,
 .theme-igreen .dark {
-  --background: 172 92% 4%;
-  --card: 172 85% 8%;
-  --popover: 172 85% 8%;
+  --background: 172 60% 16%;
+  --card: 172 55% 21%;
+  --popover: 172 55% 21%;
   --primary: 120 97% 45%;
   --primary-glow: 118 60% 58%;
   --accent: 173 96% 32%;
-  --sidebar-background: 172 95% 5%;
+  --sidebar-background: 172 80% 11%;
 }
