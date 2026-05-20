@@ -94,3 +94,15 @@ verify_jwt = false
 
 [functions.trial-notification-dispatch]
 verify_jwt = false
+
+[functions.igreen-scenario-dispatcher]
+verify_jwt = false
+
+[functions.igreen-scenario-enroll]
+verify_jwt = false
+
+[functions.provision-igreen-template]
+verify_jwt = false
+
+[functions.igreen-trial-register]
+verify_jwt = false
