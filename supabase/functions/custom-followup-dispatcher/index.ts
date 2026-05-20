@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import { extractPersonName, cleanRenderedTemplate } from "../_person-name.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
