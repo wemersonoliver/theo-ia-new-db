@@ -1,10 +1,11 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { Menu, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { WhatsAppDisconnectedBanner } from "@/components/WhatsAppDisconnectedBanner";
 import { AuroraBackground } from "@/components/fx/AuroraBackground";
+import { useAccountPlan } from "@/hooks/useAccountPlan";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -14,6 +15,14 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children, title, description }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { tier } = useAccountPlan();
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (tier === "igreen") root.classList.add("theme-igreen");
+    else root.classList.remove("theme-igreen");
+    return () => root.classList.remove("theme-igreen");
+  }, [tier]);
 
   return (
     <div className="relative flex min-h-screen w-full">
