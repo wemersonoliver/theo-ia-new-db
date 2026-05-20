@@ -54,7 +54,7 @@ const DEFAULTS: { key: ScenarioKey; name: string }[] = [
 ];
 
 export function useIgreenScenarios() {
-  const accountId = useAccountId();
+  const { accountId } = useAccountId();
   const qc = useQueryClient();
 
   const scenariosQ = useQuery({
