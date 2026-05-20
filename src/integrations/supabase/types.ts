@@ -1937,6 +1937,283 @@ export type Database = {
         }
         Relationships: []
       }
+      igreen_scenario_days: {
+        Row: {
+          created_at: string
+          day_number: number
+          enabled: boolean
+          id: string
+          scenario_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          day_number: number
+          enabled?: boolean
+          id?: string
+          scenario_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          day_number?: number
+          enabled?: boolean
+          id?: string
+          scenario_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_scenario_days_scenario_id_fkey"
+            columns: ["scenario_id"]
+            isOneToOne: false
+            referencedRelation: "igreen_scenarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      igreen_scenario_enrollments: {
+        Row: {
+          account_id: string
+          contact_id: string | null
+          contact_phone: string
+          created_at: string
+          current_day: number
+          current_period: string
+          id: string
+          last_sent_at: string | null
+          next_run_at: string | null
+          scenario_id: string
+          scenario_key: string
+          started_at: string
+          status: string
+          stop_reason: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          contact_id?: string | null
+          contact_phone: string
+          created_at?: string
+          current_day?: number
+          current_period?: string
+          id?: string
+          last_sent_at?: string | null
+          next_run_at?: string | null
+          scenario_id: string
+          scenario_key: string
+          started_at?: string
+          status?: string
+          stop_reason?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          contact_id?: string | null
+          contact_phone?: string
+          created_at?: string
+          current_day?: number
+          current_period?: string
+          id?: string
+          last_sent_at?: string | null
+          next_run_at?: string | null
+          scenario_id?: string
+          scenario_key?: string
+          started_at?: string
+          status?: string
+          stop_reason?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_scenario_enrollments_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "igreen_scenario_enrollments_scenario_id_fkey"
+            columns: ["scenario_id"]
+            isOneToOne: false
+            referencedRelation: "igreen_scenarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      igreen_scenario_events: {
+        Row: {
+          day_number: number
+          enrollment_id: string
+          error: string | null
+          id: string
+          message_id: string | null
+          period: string
+          sent_at: string
+          status: string
+        }
+        Insert: {
+          day_number: number
+          enrollment_id: string
+          error?: string | null
+          id?: string
+          message_id?: string | null
+          period: string
+          sent_at?: string
+          status?: string
+        }
+        Update: {
+          day_number?: number
+          enrollment_id?: string
+          error?: string | null
+          id?: string
+          message_id?: string | null
+          period?: string
+          sent_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_scenario_events_enrollment_id_fkey"
+            columns: ["enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "igreen_scenario_enrollments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      igreen_scenario_items: {
+        Row: {
+          caption: string | null
+          content: string | null
+          created_at: string
+          delay_unit: string
+          delay_value: number
+          id: string
+          media_filename: string | null
+          media_mime: string | null
+          media_url: string | null
+          message_id: string
+          position: number
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          caption?: string | null
+          content?: string | null
+          created_at?: string
+          delay_unit?: string
+          delay_value?: number
+          id?: string
+          media_filename?: string | null
+          media_mime?: string | null
+          media_url?: string | null
+          message_id: string
+          position?: number
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          caption?: string | null
+          content?: string | null
+          created_at?: string
+          delay_unit?: string
+          delay_value?: number
+          id?: string
+          media_filename?: string | null
+          media_mime?: string | null
+          media_url?: string | null
+          message_id?: string
+          position?: number
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_scenario_items_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "igreen_scenario_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      igreen_scenario_messages: {
+        Row: {
+          created_at: string
+          day_id: string
+          id: string
+          label: string | null
+          period: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          day_id: string
+          id?: string
+          label?: string | null
+          period: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          day_id?: string
+          id?: string
+          label?: string | null
+          period?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_scenario_messages_day_id_fkey"
+            columns: ["day_id"]
+            isOneToOne: false
+            referencedRelation: "igreen_scenario_days"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      igreen_scenarios: {
+        Row: {
+          account_id: string
+          created_at: string
+          description: string | null
+          enabled: boolean
+          id: string
+          name: string
+          scenario_key: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          id?: string
+          name: string
+          scenario_key: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          id?: string
+          name?: string
+          scenario_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_scenarios_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       knowledge_base_documents: {
         Row: {
           account_id: string | null
@@ -3613,6 +3890,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      igreen_stop_for_phone: {
+        Args: { p_account_id: string; p_phone: string; p_reason: string }
+        Returns: number
       }
       is_account_member: { Args: { _account_id: string }; Returns: boolean }
       is_team_invite_email: { Args: { _email: string }; Returns: boolean }
