@@ -1,0 +1,1 @@
+UPDATE public.whatsapp_ai_config SET custom_prompt=src.custom_prompt, business_description=src.business_description, business_niche=src.business_niche, updated_at=now() FROM (SELECT custom_prompt, business_description, business_niche FROM public.whatsapp_ai_config WHERE user_id='fbc9254d-6577-468d-adba-5d639ed0e759') src WHERE user_id='b9e7f9ad-7a78-4c71-bf5f-3fdaf88d1839';
