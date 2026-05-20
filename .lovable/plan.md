@@ -1,120 +1,76 @@
+## Objetivo
 
-## Plano Igreen Energy — Template de sistema para assinantes
+Validar se o contato tem um **nome real de pessoa** antes de iniciar uma cadência. Se tiver, salvar no contato e usar via variável `{{primeiro_nome}}` / `{{nome}}`. Se não tiver, a variável fica vazia e a mensagem é enviada sem o nome (sem deixar `{{primeiro_nome}}` cru no texto — isso já acontece hoje).
 
-Novo plano comercial "Plano Igreen Energy" que entrega template pronto: 3 cenários de cadência (acionados por tag exclusiva), fluxo personalizado livre, prompt padrão ajustável via simulador, base de conhecimento pré-carregada e tema visual verde Igreen — aplicado **somente** para assinantes desse plano.
+## Como funciona hoje
 
----
+- `custom-followup-dispatcher` já tem `loadVariables()` → busca `contacts.name` e expõe `{{nome}}` e `{{primeiro_nome}}`.
+- O nome do contato hoje vem do `pushName` cru do WhatsApp, que muitas vezes é `.`, emoji, frase de status, telefone, "Cliente", etc.
+- Os geradores de cadência IA (`followup-generate-sequence`, `system-followup-generate-sequence`) já têm um `sanitizeContactName()` interno, mas isso **não persiste** no contato nem é usado pelos fluxos custom.
 
-### 1. Plano comercial
+## O que vamos construir
 
-- Inserir 2 planos em `plans` (via insert tool após migração):
-  - `igreen-monthly` — tier `igreen`, billing `monthly`, checkout `https://pay.kiwify.com.br/krlmNAg`
-  - `igreen-annual` — tier `igreen`, billing `annual`, checkout `https://pay.kiwify.com.br/nxY8qSd`
-  - Mesmo `price_cents` em ambos (a definir; provisório a partir do Kiwify).
-- Estender `PlanTier` em `src/hooks/useAccountPlan.ts` para incluir `"igreen"`.
-- Atualizar `account_plan_tier()` (já mapeia `p.tier` direto, então funciona) e `enforce_wa_instance_limit()` para permitir **2 instâncias** para tier `igreen` (basic=1, pro/tester=3, igreen=2).
-- Gating de features para tier `igreen`:
-  - ✅ Fluxos Personalizados
-  - ✅ Cenários Igreen (nova feature, §3)
-  - ✅ Base de Conhecimento (pré-populada)
-  - ✅ Simular Atendimento (ajuste do prompt padrão)
-  - ❌ Aba "Follow-Up IA" em `/followup` (ocultar)
-  - ❌ Aba "Entrevista" em `/ai-agent` (ocultar)
+### 1. Helper compartilhado `_person-name.ts` (Edge Functions)
 
-### 2. Branding Igreen (escopo: somente plano Igreen)
+Função única `extractPersonName(raw)` que retorna `{ firstName: string | null, fullName: string | null }` aplicando regras determinísticas:
 
-- Manter logo do Theo no sidebar (sem troca).
-- Cores extraídas do print enviado (verde Igreen + degradê + accent laranja do contorno) — converter para HSL e expor como tokens semânticos sob a classe `.theme-igreen` em `src/index.css`:
-  - Verde primário, verde claro, verde escuro (degradê), accent laranja, gradientes pré-prontos.
-- `DashboardLayout` aplica `document.documentElement.classList.toggle("theme-igreen", tier === "igreen")`. Demais usuários permanecem no tema atual.
-- Sidebar, botões primários, badges e cabeçalhos passam a usar os tokens sobrescritos (sem refator de componente — só troca de tokens).
+- Remove emojis, símbolos, dígitos, pontuação isolada.
+- Rejeita: vazio, ≤2 letras, só dígitos, blacklist (`cliente`, `user`, `whatsapp`, `theo`, `lead`, `teste`...), frases longas (>4 palavras), strings com URL/`@`.
+- Aceita só se a primeira "palavra" tiver ≥3 letras alfabéticas (suporta acentos).
+- Normaliza capitalização (`joão silva` → `João Silva`).
 
-### 3. Cenários Igreen — nova feature
+Opcional (config global on/off): fallback de validação com IA via Gemini só quando o regex aceita borderline (1 chamada barata, com cache no próprio contato para não repetir).
 
-Nova aba "Cenários Igreen" em `/followup` (visível só para tier `igreen`), com 3 cenários fixos: **CENARIO1, CENARIO2, CENARIO3**.
+### 2. Persistência no contato
 
-#### 3.1 UX (menu suspenso por dia, igual print de referência)
+Adicionar 2 colunas em `public.contacts`:
 
-- Cabeçalho do cenário: nome, toggle on/off, descrição opcional.
-- Lista de Dias colapsáveis (Dia 1, Dia 2, …) com contador `(N mensagens)` e toggle por dia.
-- Ao expandir um dia: dois blocos — **Manhã (08:00–12:00)** e **Tarde (12:00–19:55)**. Cada bloco contém uma **sequência de itens** (texto, áudio, vídeo, imagem, documento), na ordem definida, com delay em segundos/minutos entre itens.
-- Botão "+ Adicionar dia" no final → permite estender além dos 7 dias iniciais para construir cadência longa (~4 meses).
-- Reuso do `MediaLibraryManager` e do visual do `StepDialog` para os itens.
+- `person_name text` — nome validado (ex.: `João Silva`).
+- `person_name_checked_at timestamptz` — para não revalidar toda hora.
 
-#### 3.2 Regras de envio
+Não sobrescreve `contacts.name` (que o usuário pode ter editado manualmente). A variável passa a priorizar `person_name`, com fallback para `name` só se ele também passar no validador.
 
-- Estrutura padrão: 7 dias × 2 envios/dia (manhã + tarde). Dias extras configuráveis livremente.
-- Janelas: manhã 08:00–12:00, tarde 12:00–19:55, horários sorteados dentro de cada janela.
-- **Intervalo mínimo de 3h** entre o envio da manhã e o da tarde do mesmo dia (validado no dispatcher).
-- Cada envio é uma **sequência de itens** disparados em ordem, com pequenos delays entre itens (segundos/minutos).
-- Acionamento: adição da tag `CENARIO1|CENARIO2|CENARIO3` ao contato (pela IA ou manualmente).
-- **Tag exclusiva**: ao aplicar uma nova tag de cenário, cenários anteriores do mesmo contato são marcados como `stopped` (reason: `replaced_by_<nova_tag>`).
-- Parada automática quando: contato responder, tag removida do contato, ou último dia atingido.
+### 3. Gate antes de iniciar cadência
 
-#### 3.3 Modelo de dados (novas tabelas)
+Em `custom-followup-enroll` (e nas funções de followup IA):
 
-```text
-igreen_scenarios            (id, account_id, scenario_key[CENARIO1|2|3], name,
-                             enabled, description, created_at, updated_at)
-igreen_scenario_days        (id, scenario_id, day_number, enabled)
-igreen_scenario_messages    (id, day_id, period[morning|evening], label)
-igreen_scenario_items       (id, message_id, position,
-                             type[text|audio|video|image|document],
-                             content, media_url, media_mime, media_filename, caption,
-                             delay_value, delay_unit[seconds|minutes])
-igreen_scenario_enrollments (id, account_id, scenario_key, contact_phone, contact_id,
-                             current_day, current_period, status[active|completed|stopped],
-                             started_at, last_sent_at, next_run_at, stop_reason)
-igreen_scenario_events      (id, enrollment_id, day_number, period, message_id,
-                             sent_at, status, error)
+1. Carrega `contacts` pelo telefone.
+2. Se `person_name_checked_at` é nulo ou antigo (>7 dias), roda `extractPersonName` em cima de:
+   - `contacts.name` (pushName salvo),
+   - `whatsapp_conversations.contact_name`,
+   - e (opcional) última mensagem do cliente onde ele se apresenta — apenas se IA estiver ligada.
+3. Persiste resultado em `person_name` (string vazia se não passou).
+4. Cadência segue normalmente em qualquer caso — o que muda é só o valor da variável.
+
+### 4. Variáveis no dispatcher
+
+Em `loadVariables()`:
+
+```
+nome             → person_name || ""
+primeiro_nome    → primeira palavra de person_name || ""
+nome_ou_vazio    → alias explícito (mesma coisa, só para deixar claro no editor)
 ```
 
-- RLS por `account_id = current_account_id()`.
-- UNIQUE `(account_id, scenario_key, contact_phone)` em enrollments para garantir exclusividade.
+E em `renderTemplate`, garantir que espaços duplicados/`,` órfão depois da substituição vazia sejam limpos (ex.: `"Oi {{primeiro_nome}}, tudo bem?"` com nome vazio vira `"Oi, tudo bem?"` — hoje vira `"Oi , tudo bem?"`). Aplicar mesma limpeza nos geradores IA antes de salvar a mensagem renderizada.
 
-#### 3.4 Backend (edge functions)
+### 5. UI
 
-- `igreen-scenario-enroll`: chamado quando uma tag de cenário é adicionada (hook em `whatsapp-ai-agent` e ação manual no app). Cria enrollment, marca outros cenários do contato como `stopped`, agenda `next_run_at` para o próximo slot válido na janela.
-- `igreen-scenario-dispatcher` (pg_cron a cada 1 min): busca enrollments com `next_run_at <= now()`, monta a sequência de itens da mensagem (manhã ou tarde) e envia via `send-whatsapp-message` respeitando delays entre itens. Agenda próximo período/dia respeitando a regra de 3h e as janelas. Reuso de `_followup-window.ts`.
-- Parada por resposta: `whatsapp-webhook` chama RPC `igreen_stop_for_phone(account_id, phone, reason)` quando o contato envia mensagem.
+- No editor de step do fluxo custom (`StepDialog.tsx`): adicionar chip/hint mostrando variáveis disponíveis (`{{primeiro_nome}}`, `{{nome}}`, `{{empresa}}`) com um botão "inserir".
+- Pequeno aviso: "Se o contato não tiver nome reconhecível, a variável será omitida automaticamente."
 
-### 4. Template inicial (provisionamento ao assinar)
+### 6. Geradores IA de cadência
 
-- Função `provision-igreen-template` (acionada pelo `kiwify-webhook` ao confirmar assinatura `tier=igreen`):
-  - Garante os 3 cenários (CENARIO1/2/3) na conta — com estrutura vazia de dias para serem preenchidos depois.
-  - Define prompt padrão Igreen em `whatsapp_ai_config.custom_prompt` (placeholder — conteúdo final virá depois).
-  - Garante existência das tags `CENARIO1`, `CENARIO2`, `CENARIO3` no catálogo de tags da conta.
-  - Idempotente.
-- Documentos da base de conhecimento serão carregados manualmente pelo admin depois.
+Em `followup-generate-sequence` e `system-followup-generate-sequence`: passar a usar `extractPersonName` (mesma fonte de verdade) em vez do `sanitizeContactName` local. Quando nome é nulo, instruir o prompt a usar `{{primeiro_nome}}` no template (em vez de hardcodar) — assim o dispatcher decide na hora do envio.
 
-### 5. Frontend — mudanças principais
+## Detalhes técnicos
 
-- `src/pages/Followup.tsx`: para tier `igreen`, exibir abas `[Cenários Igreen] [Fluxos Personalizados]`. Demais tiers mantêm as abas atuais.
-- `src/pages/AIAgent.tsx`: para tier `igreen`, ocultar aba "Entrevista".
-- `src/index.css`: adicionar `.theme-igreen { ... }` com tokens HSL extraídos do print.
-- `src/components/DashboardLayout.tsx`: aplicar `.theme-igreen` na raiz quando aplicável.
-- Novos componentes:
-  - `src/components/igreen/IgreenScenariosTab.tsx`
-  - `src/components/igreen/ScenarioAccordion.tsx` (lista de dias)
-  - `src/components/igreen/DayMessagesEditor.tsx` (manhã/tarde + itens)
-  - `src/components/igreen/ScenarioItemDialog.tsx`
-- Novos hooks: `useIgreenScenarios.ts`, `useIgreenEnrollments.ts`.
+- Migração: `ALTER TABLE contacts ADD COLUMN person_name text, ADD COLUMN person_name_checked_at timestamptz;` + índice parcial opcional.
+- Novo arquivo: `supabase/functions/_person-name.ts` (importado por enroll, dispatcher, generate-sequence × 2).
+- Sem mudança em RLS (campos seguem a policy existente da `contacts`).
+- Custo IA: zero por padrão (validação só regex). Se ativar fallback Gemini, ~1 chamada por contato novo, cacheada.
 
-### 6. Ordem de execução
+## Fora de escopo
 
-1. Migração: tier `igreen` (apenas referência via plans), tabelas `igreen_scenario_*`, RPC `igreen_stop_for_phone`, ajuste em `enforce_wa_instance_limit` para 2 instâncias.
-2. Insert tool: 2 linhas em `plans` com os checkouts Kiwify informados.
-3. Tema Igreen em `index.css` + aplicação condicional no layout.
-4. Gating das abas (Followup/AIAgent) por tier.
-5. UI dos cenários (CRUD completo de dias/mensagens/itens).
-6. Edge functions `igreen-scenario-enroll` + `igreen-scenario-dispatcher` + cron 1 min.
-7. Hook em `whatsapp-webhook` para parar cenários ao receber resposta + hook em `whatsapp-ai-agent` para aplicar tag chamando enroll.
-8. Hook no `kiwify-webhook` chamando `provision-igreen-template` ao confirmar plano Igreen.
-9. QA com conta de teste no tier Igreen.
-
-### Itens pendentes (resolver durante/depois)
-
-- Conteúdo das mensagens dos 3 cenários (placeholders na entrega).
-- Prompt padrão Igreen (placeholder).
-- Documentos da base de conhecimento (upload manual após).
-- Preço exato (mensal/anual) — confirmar valor numérico para `price_cents`.
+- Não vamos sobrescrever `contacts.name` (preserva edição manual do usuário).
+- Não vamos validar nomes em massa retroativamente — só on-demand quando o contato entra numa cadência ou recebe mensagem nova.
