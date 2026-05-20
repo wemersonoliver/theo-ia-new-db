@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateScheduleSequence } from "../_followup-window.ts";
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
+import { extractPersonName } from "../_person-name.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,19 +13,8 @@ const MAX_LEADS_PER_RUN = 4;
 const TOTAL_STEPS = 12; // 6 dias × 2 mensagens/dia
 
 function sanitizeContactName(rawName: string | null | undefined): string | null {
-  if (!rawName) return null;
-  const name = rawName.trim();
-  if (name.length < 3) return null;
-  if (/^\d+$/.test(name)) return null;
-  const letterCount = (name.match(/[A-Za-zÀ-ÿ]/g) || []).length;
-  if (letterCount < 3) return null;
-  const lower = name.toLowerCase();
-  const blacklist = ["user", "usuario", "usuário", "cliente", "client", "whatsapp", "wpp", "test", "teste", "lead", "contato", "contact"];
-  if (blacklist.includes(lower)) return null;
-  if (/^[^A-Za-zÀ-ÿ]+$/.test(name)) return null;
-  const firstWord = name.split(/\s+/)[0];
-  if (firstWord.length < 3) return null;
-  return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+  const v = extractPersonName(rawName);
+  return v ? v.firstName : null;
 }
 
 interface SequenceMessage {

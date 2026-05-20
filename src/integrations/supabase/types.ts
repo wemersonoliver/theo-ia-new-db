@@ -849,6 +849,8 @@ export type Database = {
           id: string
           name: string | null
           notes: string | null
+          person_name: string | null
+          person_name_checked_at: string | null
           phone: string
           profile_picture_updated_at: string | null
           profile_picture_url: string | null
@@ -865,6 +867,8 @@ export type Database = {
           id?: string
           name?: string | null
           notes?: string | null
+          person_name?: string | null
+          person_name_checked_at?: string | null
           phone: string
           profile_picture_updated_at?: string | null
           profile_picture_url?: string | null
@@ -881,6 +885,8 @@ export type Database = {
           id?: string
           name?: string | null
           notes?: string | null
+          person_name?: string | null
+          person_name_checked_at?: string | null
           phone?: string
           profile_picture_updated_at?: string | null
           profile_picture_url?: string | null

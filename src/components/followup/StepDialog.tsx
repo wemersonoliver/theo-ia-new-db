@@ -124,6 +124,10 @@ export function StepDialog({ open, onOpenChange, step, accountId, onSave }: Prop
           <DialogTitle>Editar mensagem #{step.position + 1}</DialogTitle>
           <DialogDescription>
             Use <code className="text-xs">{`{{nome}}`}</code>, <code className="text-xs">{`{{primeiro_nome}}`}</code>, <code className="text-xs">{`{{empresa}}`}</code> ou Spintax: <code className="text-xs">{`{Oi|Olá}`}</code>.
+            <br />
+            <span className="text-[11px] text-muted-foreground">
+              Se o contato não tiver um nome de pessoa reconhecível (ex.: emoji, ponto, frase), a variável é substituída por vazio automaticamente e a pontuação é ajustada.
+            </span>
           </DialogDescription>
         </DialogHeader>
 

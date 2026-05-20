@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateScheduleSequence } from "../_followup-window.ts";
+import { extractPersonName } from "../_person-name.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,14 +12,8 @@ const MAX_LEADS_PER_RUN = 4;
 const TOTAL_STEPS = 12;
 
 function sanitizeContactName(rawName: string | null | undefined): string | null {
-  if (!rawName) return null;
-  const name = rawName.trim();
-  if (name.length < 3 || /^\d+$/.test(name)) return null;
-  const blacklist = ["user", "usuario", "cliente", "whatsapp", "test", "teste", "lead"];
-  if (blacklist.includes(name.toLowerCase())) return null;
-  const firstWord = name.split(/\s+/)[0];
-  if (firstWord.length < 3) return null;
-  return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+  const v = extractPersonName(rawName);
+  return v ? v.firstName : null;
 }
 
 interface SequenceMessage { step: number; hook: string; content: string; }

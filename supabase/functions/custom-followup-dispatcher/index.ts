@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import { extractPersonName, cleanRenderedTemplate } from "../_person-name.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -676,11 +677,17 @@ async function loadVariables(supabase: any, accountId: string, phone: string): P
   try {
     const { data: contact } = await supabase
       .from("contacts")
-      .select("name, email, business_name, tags, custom_fields")
+      .select("name, person_name, email, business_name, tags, custom_fields")
       .eq("account_id", accountId).eq("phone", phone).maybeSingle();
     if (contact) {
-      vars.nome = contact.name || "";
-      vars.primeiro_nome = (contact.name || "").split(" ")[0] || "";
+      // Prioriza person_name (validado). Cai para name só se name passar no validador.
+      let chosen = (contact.person_name || "").trim();
+      if (!chosen && contact.name) {
+        const v = extractPersonName(contact.name);
+        if (v) chosen = v.fullName;
+      }
+      vars.nome = chosen;
+      vars.primeiro_nome = chosen ? chosen.split(" ")[0] : "";
       vars.email = contact.email || "";
       vars.empresa = contact.business_name || "";
     }
@@ -698,5 +705,5 @@ function renderTemplate(text: string, vars: Record<string, string>): string {
     const opts = body.split("|");
     return opts[Math.floor(Math.random() * opts.length)];
   });
-  return out;
+  return cleanRenderedTemplate(out);
 }
