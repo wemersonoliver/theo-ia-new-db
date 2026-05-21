@@ -163,30 +163,48 @@ async function extractPdfText(blob: Blob): Promise<string> {
 }
 
 async function extractDocxText(blob: Blob): Promise<string> {
-  // Basic DOCX text extraction
-  // DOCX is a ZIP file with XML content
+  // DOCX é um ZIP. Precisamos descompactar word/document.xml para extrair texto.
   try {
     const buffer = await blob.arrayBuffer();
     const bytes = new Uint8Array(buffer);
-    const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
-    
-    // Try to find text between XML tags
-    const textMatches = text.match(/<w:t[^>]*>([^<]+)<\/w:t>/g) || [];
-    const extracted = textMatches
-      .map(m => m.replace(/<[^>]+>/g, ""))
-      .join(" ");
 
-    if (extracted.length > 50) {
-      return extracted.replace(/\s+/g, " ").trim();
+    // Usa fflate (mantido, suporta Deno) para descompactar
+    const { unzipSync, strFromU8 } = await import("https://esm.sh/fflate@0.8.2");
+    const entries = unzipSync(bytes);
+
+    // Junta document.xml + headers/footers para pegar todo o texto
+    const xmlPaths = Object.keys(entries).filter(
+      (k) => k === "word/document.xml" || /^word\/(header|footer)\d*\.xml$/.test(k),
+    );
+
+    let combined = "";
+    for (const path of xmlPaths) {
+      const xml = strFromU8(entries[path]);
+
+      // <w:p> = parágrafo (vira quebra de linha)
+      // <w:t> = texto
+      // <w:br/> = quebra de linha dentro do parágrafo
+      const paragraphs = xml.split(/<\/w:p>/);
+      for (const p of paragraphs) {
+        const withBreaks = p.replace(/<w:br\s*\/>/g, "\n");
+        const matches = withBreaks.match(/<w:t[^>]*>([^<]*)<\/w:t>/g) || [];
+        const line = matches.map((m) => m.replace(/<[^>]+>/g, "")).join("");
+        if (line.trim()) combined += line + "\n";
+      }
     }
 
-    // Fallback
-    return text
-      .replace(/<[^>]+>/g, " ")
-      .replace(/[^\x20-\x7E\xA0-\xFF\n]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 10000) || "[Não foi possível extrair texto do documento]";
+    const cleaned = combined
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+
+    if (cleaned.length > 20) return cleaned;
+    return "[Não foi possível extrair texto do documento]";
   } catch (e) {
     console.error("DOCX extraction error:", e);
     return "[Erro ao processar documento]";
