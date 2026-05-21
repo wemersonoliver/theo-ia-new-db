@@ -23,6 +23,165 @@ export interface IgreenProductForPrompt {
   has_video?: boolean;
 }
 
+type GreenSimulationMessage = {
+  role?: string;
+  from_me?: boolean;
+  content?: string | null;
+  ai_content?: string | null;
+};
+
+const BRAZIL_STATES = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
+  "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+];
+
+const DISTRIBUTOR_ALIASES = [
+  "CELESC", "CEMIG", "COPEL", "ENEL", "CPFL", "EDP", "ENERGISA", "EQUATORIAL",
+  "ELEKTRO", "LIGHT", "RGE", "CEEE", "NEOENERGIA", "COELBA", "COSERN", "CELPE",
+  "AMPLA", "ESCELSA", "BANDEIRANTE", "PIRATININGA", "SANTA CRUZ",
+];
+
+function normalizeFlowText(text: string | null | undefined): string {
+  return String(text || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function titleCaseFlowName(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function extractGreenFirstName(messages: GreenSimulationMessage[], fallbackName?: string | null): string {
+  if (fallbackName && /[a-zA-ZÀ-ÿ]{2,}/.test(fallbackName)) {
+    return titleCaseFlowName(fallbackName).split(/\s+/)[0];
+  }
+
+  for (let i = 0; i < messages.length; i++) {
+    const current = String(messages[i]?.ai_content || messages[i]?.content || "");
+    const currentNorm = normalizeFlowText(current);
+    const isAssistant = messages[i]?.from_me === true || messages[i]?.role === "assistant";
+    if (!isAssistant || !currentNorm.includes("COMO POSSO TE CHAMAR")) continue;
+
+    const nextUser = messages.slice(i + 1).find((m) => {
+      const isUser = m?.from_me === false || m?.role === "user";
+      const raw = String(m?.ai_content || m?.content || "").trim();
+      const norm = normalizeFlowText(raw);
+      return isUser
+        && raw.length <= 60
+        && /[a-zA-ZÀ-ÿ]{2,}/.test(raw)
+        && !/(CONEXAO GREEN|ENERGIA|DESCONTO|FATURA|CONTA|CELESC|CEMIG|COPEL)/.test(norm);
+    });
+
+    if (nextUser) return titleCaseFlowName(String(nextUser.content || nextUser.ai_content || "")).split(/\s+/)[0];
+  }
+
+  return "";
+}
+
+function extractBillAmount(text: string): number | null {
+  const normalized = String(text || "").replace(/\./g, "").replace(/,/g, ".");
+  const moneyMatch = normalized.match(/(?:R\$\s*)?(\d{2,5}(?:\.\d{1,2})?)\s*(?:REAIS|RS|POR MES|MENSAIS|MENSAL)?/i);
+  if (!moneyMatch) return null;
+  const amount = Number(moneyMatch[1]);
+  if (!Number.isFinite(amount) || amount < 50 || amount > 50000) return null;
+  return Math.round(amount);
+}
+
+function extractDistributorState(text: string): { distributor: string; state: string } | null {
+  const norm = normalizeFlowText(text);
+  const state = BRAZIL_STATES.find(uf => new RegExp(`\\b${uf}\\b`).test(norm));
+  if (!state) return null;
+
+  const distributor = DISTRIBUTOR_ALIASES.find(alias => norm.includes(alias));
+  if (distributor) return { distributor, state };
+
+  const beforeState = norm.match(new RegExp(`([A-Z0-9 ]{3,40})\\s*[,/\\- ]+${state}\\b`));
+  if (!beforeState) return null;
+
+  const cleaned = beforeState[1]
+    .replace(/\b(MINHA|DISTRIBUIDORA|E|ESTADO|EH|E|DE|DA|DO|A|O)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned ? { distributor: cleaned, state } : null;
+}
+
+function findDiscountPercentage(knowledgeText: string, distributor: string, state: string): number | null {
+  const lines = String(knowledgeText || "").split(/\n+/).map(line => line.trim()).filter(Boolean);
+  const normDistributor = normalizeFlowText(distributor);
+  const candidateIndexes: number[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const window = lines.slice(Math.max(0, i - 3), Math.min(lines.length, i + 4)).join(" ");
+    const normWindow = normalizeFlowText(window);
+    if (normWindow.includes(normDistributor) && new RegExp(`\\b${state}\\b`).test(normWindow)) {
+      candidateIndexes.push(i);
+    }
+  }
+
+  let best: number | null = null;
+  for (const idx of candidateIndexes) {
+    const window = lines.slice(Math.max(0, idx - 4), Math.min(lines.length, idx + 45)).join("\n");
+    const normWindow = normalizeFlowText(window);
+    if (!normWindow.includes("DESCONTO")) continue;
+
+    const percentages = [...window.matchAll(/(\d{1,2}(?:[,.]\d+)?)\s*%/g)]
+      .map(match => Number(match[1].replace(",", ".")))
+      .filter(value => Number.isFinite(value) && value > 0 && value <= 40);
+
+    if (percentages.length > 0) {
+      const max = Math.max(...percentages);
+      best = best === null ? max : Math.max(best, max);
+    }
+  }
+
+  return best;
+}
+
+export function buildGreenSimulationReply(opts: {
+  messages: GreenSimulationMessage[];
+  currentUserMessage: string | null | undefined;
+  knowledgeText: string;
+  fallbackName?: string | null;
+}): string | null {
+  const current = String(opts.currentUserMessage || "");
+  const amount = extractBillAmount(current);
+  if (!amount) return null;
+
+  const accountTypeMentioned = /\b(residencial|residencia|comercial|empresa|empresarial)\b/i.test(current);
+  const previousAssistantAskedBill = opts.messages.some((m) => {
+    const isAssistant = m?.from_me === true || m?.role === "assistant";
+    const norm = normalizeFlowText(m?.ai_content || m?.content || "");
+    return isAssistant && norm.includes("RESIDENCIAL OU COMERCIAL") && norm.includes("VALOR MEDIO");
+  });
+  if (!accountTypeMentioned && !previousAssistantAskedBill) return null;
+
+  const conversationText = [
+    ...opts.messages.map(m => String(m?.ai_content || m?.content || "")),
+    current,
+  ].join("\n");
+  const location = extractDistributorState(conversationText);
+  if (!location) return null;
+
+  const percentage = findDiscountPercentage(opts.knowledgeText, location.distributor, location.state);
+  if (percentage === null) return null;
+
+  const monthlySavings = Math.round(amount * (percentage / 100));
+  const yearlySavings = monthlySavings * 12;
+  const newBill = Math.max(0, amount - monthlySavings);
+  const firstName = extractGreenFirstName(opts.messages, opts.fallbackName);
+  const namePrefix = firstName ? `${firstName}, ` : "";
+  const percentLabel = Number.isInteger(percentage) ? String(percentage) : String(percentage).replace(".", ",");
+
+  return `Show, ${namePrefix}para a ${location.distributor}/${location.state}, o desconto médio é de ${percentLabel}%. Na sua conta de R$ ${amount}, você economizaria cerca de R$ ${monthlySavings} por mês — quase R$ ${yearlySavings} por ano — e sua fatura ficaria perto de R$ ${newBill}. Bora fazer seu cadastro? Só preciso da sua fatura de energia para iniciar.`;
+}
+
 /**
  * Monta o bloco de regras do prompt para os produtos Igreen do account.
  * Se houver produto "Conexão Green" habilitado, injeta o fluxo guiado completo.

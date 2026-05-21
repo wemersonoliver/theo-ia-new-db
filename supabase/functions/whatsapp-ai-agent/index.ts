@@ -7,7 +7,7 @@ import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { reportApiFailure, reportApiSuccess } from "../_health.ts";
 import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
-import { getBrtNowParts, buildIgreenProductsPromptBlock } from "../_igreen_flow.ts";
+import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply } from "../_igreen_flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -758,6 +758,35 @@ serve(async (req) => {
           : `[GERAL]`;
         return `${header}\n${d.content_text}`;
       });
+
+    const deterministicGreenSimulation = buildGreenSimulationReply({
+      messages: recentMessages,
+      currentUserMessage: messageContent,
+      knowledgeText: docTexts.join("\n\n---\n\n"),
+      fallbackName: contactName,
+    });
+    if (deterministicGreenSimulation) {
+      const parts = splitMessage(deterministicGreenSimulation);
+      for (let i = 0; i < parts.length; i++) {
+        if (i > 0) await delay(1000 + Math.random() * 500);
+        const wid = await sendWhatsAppMessage(supabase, userId, phone, parts[i]);
+        await saveAIMessage(supabase, userId, phone, parts[i], "ai", wid);
+      }
+      await supabase
+        .from("whatsapp_ai_sessions")
+        .upsert({
+          user_id: userId,
+          account_id: accountId,
+          phone,
+          status: "active",
+          messages_without_human: messagesCount + 1,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,phone" });
+
+      return new Response(JSON.stringify({ success: true, response: deterministicGreenSimulation, deterministic_green_simulation: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Combina as últimas mensagens do cliente como query do RAG, para que
     // contextos cumulativos (ex.: distribuidora informada 2 turnos atrás +
