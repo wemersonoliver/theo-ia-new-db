@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { resolveAccountId } from "../_account.ts";
+import { getBrtNowParts, buildIgreenProductsPromptBlock } from "../_igreen_flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -118,6 +119,17 @@ const schedulingTools = {
           action: { type: "string", description: "'add' ou 'remove'" }
         },
         required: ["tags"]
+      }
+    },
+    {
+      name: "send_product_video",
+      description: "Envia o vídeo institucional de um produto Igreen e agenda follow-up de 2min ('Conseguiu ver, {nome}?'). No simulador o envio é mockado, mas a IA deve continuar o fluxo exatamente como em produção. Após chamar esta tool, NÃO escreva texto extra no mesmo turno.",
+      parameters: {
+        type: "object",
+        properties: {
+          product_key: { type: "string", description: "Chave do produto: 'green', 'telecom' ou 'expansao'." }
+        },
+        required: ["product_key"]
       }
     }
   ]
