@@ -194,14 +194,41 @@ serve(async (req) => {
       .eq("user_id", userId)
       .maybeSingle();
 
-    // Get knowledge base
+    // Get knowledge base (rotulada por produto, igual whatsapp-ai-agent)
     const { data: documents } = await supabase
       .from("knowledge_base_documents")
-      .select("content_text")
+      .select("content_text, igreen_product_id, file_name")
       .eq("user_id", userId)
       .eq("status", "ready");
 
-    const knowledgeBase = documents?.map((d) => d.content_text).filter(Boolean).join("\n\n---\n\n") || "";
+    // Mapa de produtos do account para rotular os trechos
+    const productMap = new Map<string, string>();
+    try {
+      const { data: member } = await supabase
+        .from("account_members")
+        .select("account_id")
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+      const accountId = (member as any)?.account_id;
+      if (accountId) {
+        const { data: accProducts } = await supabase
+          .from("igreen_account_products")
+          .select("id, name")
+          .eq("account_id", accountId);
+        (accProducts || []).forEach((p: any) => productMap.set(p.id, p.name));
+      }
+    } catch (_) { /* opcional */ }
+
+    const knowledgeBase = (documents || [])
+      .filter((d: any) => typeof d.content_text === "string" && d.content_text.length > 0)
+      .map((d: any) => {
+        const productName = d.igreen_product_id ? productMap.get(d.igreen_product_id) : null;
+        const header = productName ? `[PRODUTO: ${productName}]` : `[GERAL]`;
+        return `${header}\n${d.content_text}`;
+      })
+      .join("\n\n---\n\n");
 
     const today = new Date();
     const todayStr = today.toISOString().split("T")[0];
@@ -214,7 +241,7 @@ serve(async (req) => {
 
 ${aiConfig?.custom_prompt || "Seja cordial, profissional e prestativo."}
 
-${knowledgeBase ? `Use a seguinte base de conhecimento para responder:\n\n${knowledgeBase.slice(0, 6000)}` : ""}
+${knowledgeBase ? `BASE DE CONHECIMENTO (cada trecho é rotulado com [PRODUTO: nome] ou [GERAL]):\n\n${knowledgeBase.slice(0, 8000)}\n\nREGRAS OBRIGATÓRIAS sobre a base de conhecimento:\n- Quando o cliente perguntar sobre um produto específico (ex.: "Conexão Green", "Conexão Telecom"), use APENAS os trechos marcados com [PRODUTO: <nome do produto>] correspondente.\n- NUNCA invente percentuais de desconto, valores de economia, regras por estado/distribuidora ou condições comerciais. Use somente o que está escrito na base.\n- Se a base não tiver a informação necessária para responder com precisão (ex.: percentual exato para a distribuidora/estado do cliente), diga que vai confirmar com a equipe e NÃO chute valores.` : ""}
 
 IMPORTANTE - AGENDAMENTOS:
 Você tem acesso a ferramentas para gerenciar agendamentos. Quando o cliente:
