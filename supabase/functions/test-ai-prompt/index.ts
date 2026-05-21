@@ -1,5 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
+import { retrieveRelevantContext } from "../_shared/rag.ts";
+import { resolveAccountId } from "../_account.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -187,33 +190,32 @@ serve(async (req) => {
     const userId = authData.user.id;
     const { messages, userMessage } = await req.json();
 
-    // Get AI config
-    const { data: aiConfig } = await supabase
+    // Cliente com service role para ler dados consistentes (igual whatsapp-ai-agent)
+    const serviceClient = createClient(
+      supabaseUrl,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // AI config
+    const { data: aiConfig } = await serviceClient
       .from("whatsapp_ai_config")
       .select("*")
       .eq("user_id", userId)
       .maybeSingle();
 
-    // Get knowledge base (rotulada por produto, igual whatsapp-ai-agent)
-    const { data: documents } = await supabase
+    const accountId = await resolveAccountId(serviceClient, userId);
+
+    // Knowledge base rotulada por produto + RAG (idêntico ao whatsapp-ai-agent)
+    const { data: documents } = await serviceClient
       .from("knowledge_base_documents")
       .select("content_text, igreen_product_id, file_name")
       .eq("user_id", userId)
       .eq("status", "ready");
 
-    // Mapa de produtos do account para rotular os trechos
     const productMap = new Map<string, string>();
     try {
-      const { data: member } = await supabase
-        .from("account_members")
-        .select("account_id")
-        .eq("user_id", userId)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
-      const accountId = (member as any)?.account_id;
       if (accountId) {
-        const { data: accProducts } = await supabase
+        const { data: accProducts } = await serviceClient
           .from("igreen_account_products")
           .select("id, name")
           .eq("account_id", accountId);
@@ -221,14 +223,46 @@ serve(async (req) => {
       }
     } catch (_) { /* opcional */ }
 
-    const knowledgeBase = (documents || [])
+    const docTexts = (documents || [])
       .filter((d: any) => typeof d.content_text === "string" && d.content_text.length > 0)
       .map((d: any) => {
         const productName = d.igreen_product_id ? productMap.get(d.igreen_product_id) : null;
         const header = productName ? `[PRODUTO: ${productName}]` : `[GERAL]`;
         return `${header}\n${d.content_text}`;
-      })
-      .join("\n\n---\n\n");
+      });
+
+    const lastUserMessage = userMessage
+      || ([...(messages || [])].reverse().find((m: any) => m.role === "user")?.content ?? "");
+
+    const knowledgeBase = docTexts.length > 0
+      ? retrieveRelevantContext(lastUserMessage || "", docTexts, {
+          topK: 3,
+          maxChars: 2400,
+          chunkSize: 800,
+        })
+      : "";
+
+    // Catálogo de produtos (idêntico ao whatsapp-ai-agent)
+    let productsCatalog = "";
+    try {
+      const { data: userProducts } = await serviceClient
+        .from("products")
+        .select("name, description, price_cents, quantity, sku, active")
+        .eq("user_id", userId)
+        .eq("active", true)
+        .order("name")
+        .limit(100);
+
+      if (userProducts && userProducts.length > 0) {
+        const productsList = userProducts.map((p: any) => {
+          const price = (p.price_cents / 100).toFixed(2);
+          return `- ${p.name}: R$ ${price}${p.description ? ` | ${p.description}` : ""}${p.quantity > 0 ? ` | Estoque: ${p.quantity}` : " | Sem estoque"}${p.sku ? ` | SKU: ${p.sku}` : ""}`;
+        }).join("\n");
+        productsCatalog = `\nCATÁLOGO DE PRODUTOS/SERVIÇOS:\n${productsList}\n\nQuando o cliente perguntar sobre produtos, preços ou disponibilidade, use estas informações para responder. Se um produto está sem estoque (quantidade 0), informe que está indisponível no momento.`;
+      }
+    } catch (e) {
+      console.error("Error fetching products:", e);
+    }
 
     const today = new Date();
     const todayStr = today.toISOString().split("T")[0];
@@ -236,44 +270,20 @@ serve(async (req) => {
       weekday: "long", day: "2-digit", month: "long", year: "numeric",
     });
 
-    // Build the SAME system prompt as whatsapp-ai-agent
-    const systemPrompt = `Você é ${aiConfig?.agent_name || "um assistente virtual"} de atendimento via WhatsApp.
-
-${aiConfig?.custom_prompt || "Seja cordial, profissional e prestativo."}
-
-${knowledgeBase ? `BASE DE CONHECIMENTO (cada trecho é rotulado com [PRODUTO: nome] ou [GERAL]):\n\n${knowledgeBase.slice(0, 8000)}\n\nREGRAS OBRIGATÓRIAS sobre a base de conhecimento:\n- Quando o cliente perguntar sobre um produto específico (ex.: "Conexão Green", "Conexão Telecom"), use APENAS os trechos marcados com [PRODUTO: <nome do produto>] correspondente.\n- NUNCA invente percentuais de desconto, valores de economia, regras por estado/distribuidora ou condições comerciais. Use somente o que está escrito na base.\n- Se a base não tiver a informação necessária para responder com precisão (ex.: percentual exato para a distribuidora/estado do cliente), diga que vai confirmar com a equipe e NÃO chute valores.` : ""}
-
-IMPORTANTE - AGENDAMENTOS:
-Você tem acesso a ferramentas para gerenciar agendamentos. Quando o cliente:
-- Perguntar sobre disponibilidade ou horários: Use check_available_slots
-- Quiser marcar/agendar algo: Primeiro verifique disponibilidade, depois use create_appointment
-- Quiser cancelar um agendamento: Use cancel_appointment
-- Quiser ver seus agendamentos: Use list_appointments
-- Confirmar presença: Use confirm_appointment
-
-Hoje é ${todayFormatted} (${todayStr}).
-Ao mencionar datas, converta para o formato YYYY-MM-DD para as funções.
-Exemplos: "amanhã" = dia seguinte, "segunda" = próxima segunda-feira.
-
-REGRAS CRÍTICAS - NUNCA VIOLE:
-- NUNCA escreva código Python, JavaScript ou qualquer linguagem de programação
-- NUNCA use print(), default_api, ou sintaxe de função no texto
-- NUNCA envie comandos técnicos para o cliente
-- Use APENAS as ferramentas (tools) disponibilizadas pelo sistema através de function calling
-- Responda SEMPRE em linguagem natural e conversacional
-- Quando precisar verificar disponibilidade ou criar agendamento, use as tools, NÃO escreva código
-
-Regras adicionais:
-- Responda de forma natural e conversacional
-- Seja objetivo e direto
-- Use emojis com moderação
-- Se não souber a resposta, diga que vai verificar com a equipe
-- Nunca invente informações
-- Responda sempre em português brasileiro
-- Ao agendar, sempre confirme data, horário e serviço antes de finalizar
-- FORMATAÇÃO HUMANIZADA: Separe sua resposta em parágrafos curtos (2-3 frases cada). Use quebras de linha duplas entre os parágrafos.
-
-CONTEXTO: Esta é uma SIMULAÇÃO DE TESTE. Responda como se fosse um atendimento real via WhatsApp. O usuário está testando a qualidade das respostas.`;
+    // EXATAMENTE o mesmo prompt do whatsapp-ai-agent (módulo compartilhado).
+    // Contextos dinâmicos de conversa real (cliente retornando, departamentos,
+    // agendamentos existentes, confirmações pendentes) ficam vazios no simulador.
+    const systemPrompt = buildAgentSystemPrompt({
+      aiConfig: aiConfig || {},
+      knowledgeBase,
+      productsCatalog,
+      returningClientContext: "",
+      departmentsBlock: "",
+      existingAppointmentsContext: "",
+      pendingConfirmationContext: "",
+      todayStr,
+      todayFormatted,
+    });
 
     // Build conversation for Gemini.
     // IMPORTANTE: usamos systemInstruction (campo nativo) em vez de empilhar o prompt
