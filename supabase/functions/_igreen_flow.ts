@@ -114,35 +114,60 @@ function extractDistributorState(text: string): { distributor: string; state: st
 }
 
 function findDiscountPercentage(knowledgeText: string, distributor: string, state: string): number | null {
-  const lines = String(knowledgeText || "").split(/\n+/).map(line => line.trim()).filter(Boolean);
+  const lines = String(knowledgeText || "").split(/\n+/).map(line => line.trim());
   const normDistributor = normalizeFlowText(distributor);
-  const candidateIndexes: number[] = [];
-
+  // Procura cabeçalho da seção tipo "Celesc (SC)" ou "ENEL RJ" — linha curta
+  // contendo distribuidora E estado, que marca início do bloco específico.
+  let headerIdx = -1;
   for (let i = 0; i < lines.length; i++) {
-    const window = lines.slice(Math.max(0, i - 3), Math.min(lines.length, i + 4)).join(" ");
-    const normWindow = normalizeFlowText(window);
-    if (normWindow.includes(normDistributor) && new RegExp(`\\b${state}\\b`).test(normWindow)) {
-      candidateIndexes.push(i);
+    const line = lines[i];
+    if (!line || line.length > 80) continue;
+    const norm = normalizeFlowText(line);
+    if (!norm.includes(normDistributor)) continue;
+    if (!new RegExp(`\\b${state}\\b`).test(norm)) continue;
+    // Evita linhas de prosa (ex.: "...Celesc SC, energisa...")
+    if (/[,.;:]/.test(line) && line.length > 40) continue;
+    headerIdx = i;
+    break;
+  }
+  if (headerIdx === -1) return null;
+
+  // Bloco vai até o próximo cabeçalho de distribuidora/estado em CAPS ou
+  // até linha de UF em caixa alta (próxima seção tipo "SANTA CATARINA").
+  let endIdx = lines.length;
+  for (let i = headerIdx + 1; i < lines.length && i < headerIdx + 60; i++) {
+    const line = lines[i];
+    if (!line) continue;
+    // Próximo cabeçalho de estado (todo em CAIXA ALTA, sem dígitos)
+    if (/^[A-ZÁÉÍÓÚÂÊÔÃÕÇ\s]{4,}$/.test(line) && !/\d/.test(line) && line.length < 40) {
+      endIdx = i; break;
+    }
+    // Próxima distribuidora com (UF)
+    const otherUf = line.match(/\(([A-Z]{2})\)/);
+    if (otherUf && otherUf[1] !== state && line.length < 60) {
+      endIdx = i; break;
     }
   }
 
-  let best: number | null = null;
-  for (const idx of candidateIndexes) {
-    const window = lines.slice(Math.max(0, idx - 4), Math.min(lines.length, idx + 45)).join("\n");
-    const normWindow = normalizeFlowText(window);
-    if (!normWindow.includes("DESCONTO")) continue;
+  const block = lines.slice(headerIdx, endIdx).join("\n");
+  if (!/desconto/i.test(block)) return null;
 
-    const percentages = [...window.matchAll(/(\d{1,2}(?:[,.]\d+)?)\s*%/g)]
-      .map(match => Number(match[1].replace(",", ".")))
-      .filter(value => Number.isFinite(value) && value > 0 && value <= 40);
+  // Pega só o trecho a partir de "Descontos" para ignorar prazos/dias.
+  const descIdx = block.search(/Descontos?\s*:/i);
+  const target = descIdx >= 0 ? block.slice(descIdx) : block;
 
-    if (percentages.length > 0) {
-      const max = Math.max(...percentages);
-      best = best === null ? max : Math.max(best, max);
-    }
-  }
+  const percentages = [...target.matchAll(/(\d{1,2}(?:[,.]\d+)?)\s*%/g)]
+    .map(m => Number(m[1].replace(",", ".")))
+    .filter(v => Number.isFinite(v) && v > 0 && v <= 40);
 
-  return best;
+  if (percentages.length === 0) return null;
+
+  // Usa a faixa típica residencial: maior % da menor faixa de consumo (bônus B
+  // costuma ser o oferecido). Heurística: pega a mediana, que evita o extremo
+  // de bônus C/D (acima de 1.000 kWh) e o piso A.
+  const sorted = [...percentages].sort((a, b) => a - b);
+  const mid = sorted[Math.floor(sorted.length / 2)];
+  return mid;
 }
 
 export function buildGreenSimulationReply(opts: {
@@ -252,11 +277,18 @@ ETAPA 3 — QUALIFICAR APÓS O VÍDEO
   "Perfeito, {nome}! Posso te mostrar quanto você economizaria por mês?
    Para isso, preciso saber qual a sua distribuidora de energia e em qual
    estado você mora."
-• Depois descubra se a conta é residencial ou comercial e o valor médio.
-• Pode juntar 2 perguntas em uma mesma mensagem quando soar natural.
+• Quando o cliente responder a distribuidora e o estado, confirme que
+  atendemos a região ANTES de pedir o valor. Exemplo:
+  "Ótimo! Atendemos sua região.
+   E a sua conta é residencial ou comercial, {nome}? Qual o valor médio
+   da sua fatura mensal?"
+  (não cite o nome da distribuidora nessa frase para não soar mecânico.)
 • Use APENAS o percentual real da base [PRODUTO: ${green.name}] para a
-  distribuidora/estado informados. NUNCA invente número. Se não tiver,
-  diga "deixa eu confirmar essa informação com a equipe e já te retorno".
+  distribuidora/estado informados. NUNCA invente número, NUNCA chute
+  "média de 20%" ou similar. Se não encontrar o percentual exato da
+  distribuidora do cliente na base, responda com transparência:
+  "Deixa eu confirmar o desconto exato da sua distribuidora com a equipe
+  e já te retorno, tudo bem?" e siga pedindo a fatura para o cadastro.
 • Apresente a simulação de forma clara e agradável de ler, sem tabela.
 
 ETAPA 4 — PEDIR OS DOCUMENTOS
