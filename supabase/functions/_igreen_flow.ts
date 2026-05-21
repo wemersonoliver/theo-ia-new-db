@@ -66,7 +66,14 @@ ETAPA 3 — Quando o cliente responder após o vídeo (qualquer resposta):
 "Qual sua distribuidora e estado para eu verificar se você pode economizar com a gente?"
 
 ETAPA 4 — Após receber distribuidora/estado:
-"Sua conta é residencial ou comercial e qual o valor médio mensal dela?"
+Responda em 1 mensagem só, de forma humanizada, confirmando que atendemos a
+região do cliente ANTES de fazer a próxima pergunta. Use o primeiro nome dele.
+Formato (adapte naturalmente, não copie literal):
+"Show, {nome}, atendemos a sua região! Agora me conta, sua conta é residencial
+ou comercial e qual o valor médio mensal dela?"
+(Se por algum motivo não atendermos a distribuidora/estado informado conforme
+a base [PRODUTO: ${green.name}], diga isso com gentileza e ofereça avisar
+quando expandirmos — NÃO siga para a Etapa 5.)
 
 ETAPA 5 — Após receber tipo de conta + valor:
 Calcule a economia usando APENAS o maior desconto válido cadastrado na base de
