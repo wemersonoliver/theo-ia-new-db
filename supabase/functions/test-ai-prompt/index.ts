@@ -48,6 +48,39 @@ function extractFunctionCallFromText(text: string): { name: string; args: Record
   return null;
 }
 
+function normalizeForFlow(text: string | null | undefined): string {
+  return String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function titleCaseName(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function getGreenNameStepFirstName(messages: any[] | null | undefined, userMessage: string | null | undefined): string | null {
+  const raw = String(userMessage || "").replace(/["“”]/g, "").trim();
+  if (!raw || raw.length > 60 || !/[a-zA-ZÀ-ÿ]{2,}/.test(raw)) return null;
+  const normalized = normalizeForFlow(raw);
+  if (/(conexao green|conexão green|energia|desconto|fatura|conta|celesc|cemig|copel)/i.test(normalized)) return null;
+
+  const lastAssistant = [...(messages || [])]
+    .reverse()
+    .find((m: any) => m?.role === "assistant" && typeof m?.content === "string")?.content || "";
+  const lastAssistantNorm = normalizeForFlow(lastAssistant);
+  if (!lastAssistantNorm.includes("como posso te chamar")) return null;
+  if (!lastAssistantNorm.includes("conexao green")) return null;
+
+  return titleCaseName(raw).split(/\s+/)[0] || null;
+}
+
+function buildGreenIntroMessage(firstName: string): string {
+  return `Prazer em te conhecer, ${firstName}! A Conexão Green é o nosso serviço de energia por assinatura que te dá desconto na sua conta de luz. Vou te mandar uma reportagem que explica exatamente o que é o serviço e como funciona.`;
+}
+
 // Tool definitions for function calling (same as whatsapp-ai-agent)
 const schedulingTools = {
   function_declarations: [
@@ -246,6 +279,16 @@ serve(async (req) => {
 
     const lastUserMessage = userMessage
       || ([...(messages || [])].reverse().find((m: any) => m.role === "user")?.content ?? "");
+
+    const greenNameStepFirstName = getGreenNameStepFirstName(messages, userMessage);
+    if (greenNameStepFirstName) {
+      const intro = buildGreenIntroMessage(greenNameStepFirstName);
+      return new Response(JSON.stringify({
+        message: `${intro}\n\n🎥 [Simulação] Vídeo do produto 'green' enviado. Follow-up automático em 2min ("Conseguiu ver?").`,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const knowledgeBase = docTexts.length > 0
       ? retrieveRelevantContext(lastUserMessage || "", docTexts, {

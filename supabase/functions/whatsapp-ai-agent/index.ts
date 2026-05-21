@@ -310,6 +310,35 @@ function normalizeTextForIntent(text: string | null | undefined): string {
   return String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+function titleCaseName(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function getGreenNameStepFirstName(recentMessages: any[] | null | undefined, messageContent: string | null | undefined): string | null {
+  const raw = String(messageContent || "").replace(/["“”]/g, "").trim();
+  if (!raw || raw.length > 60 || !/[a-zA-ZÀ-ÿ]{2,}/.test(raw)) return null;
+  const normalized = normalizeTextForIntent(raw);
+  if (/(conexao green|energia|desconto|fatura|conta|celesc|cemig|copel)/i.test(normalized)) return null;
+
+  const lastAssistant = [...(recentMessages || [])]
+    .reverse()
+    .find((m: any) => m?.from_me && typeof (m?.ai_content || m?.content) === "string");
+  const lastAssistantNorm = normalizeTextForIntent(lastAssistant?.ai_content || lastAssistant?.content || "");
+  if (!lastAssistantNorm.includes("como posso te chamar")) return null;
+  if (!lastAssistantNorm.includes("conexao green")) return null;
+
+  return titleCaseName(raw).split(/\s+/)[0] || null;
+}
+
+function buildGreenIntroMessage(firstName: string): string {
+  return `Prazer em te conhecer, ${firstName}! A Conexão Green é o nosso serviço de energia por assinatura que te dá desconto na sua conta de luz. Vou te mandar uma reportagem que explica exatamente o que é o serviço e como funciona.`;
+}
+
 function isRescheduleIntent(text: string | null | undefined): boolean {
   const t = normalizeTextForIntent(text);
   return /(reagend|remarc|mudar|trocar|alterar)/.test(t);
@@ -601,6 +630,39 @@ serve(async (req) => {
         }
         return m;
       });
+
+    const greenNameStepFirstName = getGreenNameStepFirstName(recentMessages, messageContent);
+    if (greenNameStepFirstName) {
+      const intro = buildGreenIntroMessage(greenNameStepFirstName);
+      const videoResult = await executeSendProductVideo(
+        supabase,
+        userId,
+        accountId,
+        phone,
+        greenNameStepFirstName,
+        "green",
+        intro,
+      );
+
+      if (videoResult?.success) {
+        await supabase
+          .from("whatsapp_ai_sessions")
+          .upsert({
+            user_id: userId,
+            account_id: accountId,
+            phone,
+            status: "active",
+            messages_without_human: messagesCount + 1,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "user_id,phone" });
+
+        return new Response(JSON.stringify({ success: true, response: intro, product_video_sent: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      console.warn("[GREEN FLOW FALLBACK] deterministic video step failed, falling back to Gemini:", videoResult?.error);
+    }
 
     // Check if the last incoming message has media for vision analysis
     let mediaBase64: string | null = null;
