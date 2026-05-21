@@ -631,6 +631,39 @@ serve(async (req) => {
         return m;
       });
 
+    const greenNameStepFirstName = getGreenNameStepFirstName(recentMessages, messageContent);
+    if (greenNameStepFirstName) {
+      const intro = buildGreenIntroMessage(greenNameStepFirstName);
+      const videoResult = await executeSendProductVideo(
+        supabase,
+        userId,
+        accountId,
+        phone,
+        greenNameStepFirstName,
+        "green",
+        intro,
+      );
+
+      if (videoResult?.success) {
+        await supabase
+          .from("whatsapp_ai_sessions")
+          .upsert({
+            user_id: userId,
+            account_id: accountId,
+            phone,
+            status: "active",
+            messages_without_human: messagesCount + 1,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "user_id,phone" });
+
+        return new Response(JSON.stringify({ success: true, response: intro, product_video_sent: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      console.warn("[GREEN FLOW FALLBACK] deterministic video step failed, falling back to Gemini:", videoResult?.error);
+    }
+
     // Check if the last incoming message has media for vision analysis
     let mediaBase64: string | null = null;
     let mediaMimeType: string | null = null;
