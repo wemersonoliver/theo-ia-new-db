@@ -2023,6 +2023,7 @@ export type Database = {
           current_day: number
           current_item_position: number
           current_period: string
+          final_tag_applied_at: string | null
           id: string
           last_sent_at: string | null
           next_run_at: string | null
@@ -2041,6 +2042,7 @@ export type Database = {
           current_day?: number
           current_item_position?: number
           current_period?: string
+          final_tag_applied_at?: string | null
           id?: string
           last_sent_at?: string | null
           next_run_at?: string | null
@@ -2059,6 +2061,7 @@ export type Database = {
           current_day?: number
           current_item_position?: number
           current_period?: string
+          final_tag_applied_at?: string | null
           id?: string
           last_sent_at?: string | null
           next_run_at?: string | null
@@ -2224,6 +2227,8 @@ export type Database = {
           created_at: string
           description: string | null
           enabled: boolean
+          final_tag: string | null
+          final_tag_delay_hours: number
           id: string
           name: string
           scenario_key: string
@@ -2234,6 +2239,8 @@ export type Database = {
           created_at?: string
           description?: string | null
           enabled?: boolean
+          final_tag?: string | null
+          final_tag_delay_hours?: number
           id?: string
           name: string
           scenario_key: string
@@ -2244,6 +2251,8 @@ export type Database = {
           created_at?: string
           description?: string | null
           enabled?: boolean
+          final_tag?: string | null
+          final_tag_delay_hours?: number
           id?: string
           name?: string
           scenario_key?: string
