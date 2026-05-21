@@ -100,7 +100,7 @@ function ProductPanel({
 }: {
   product: IgreenProduct;
   scenarios: IgreenScenario[];
-  onCreate: (name: string, trigger_tag: string | null) => void;
+  onCreate: (name: string, trigger_tag: string | null, description: string | null) => void;
   onToggle: (id: string, enabled: boolean) => void;
   onUpdate: (id: string, patch: Partial<IgreenScenario>) => void;
   onDelete: (id: string) => void;
@@ -108,13 +108,15 @@ function ProductPanel({
 }) {
   const [newName, setNewName] = useState("");
   const [newTag, setNewTag] = useState("");
+  const [newDesc, setNewDesc] = useState("");
 
   const handleCreate = () => {
     const name = newName.trim();
     if (!name) return;
-    onCreate(name, newTag.trim() || null);
+    onCreate(name, newTag.trim() || null, newDesc.trim() || null);
     setNewName("");
     setNewTag("");
+    setNewDesc("");
   };
 
   return (
@@ -125,7 +127,7 @@ function ProductPanel({
             <Plus className="h-4 w-4" /> Novo cenário em {product.name}
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-[1fr,1fr,auto] gap-2 items-end">
             <div className="space-y-1">
               <Label className="text-xs">Nome do cenário</Label>
@@ -146,6 +148,15 @@ function ProductPanel({
             <Button onClick={handleCreate} disabled={!newName.trim() || saving} className="gap-2">
               <Plus className="h-4 w-4" /> Criar
             </Button>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Descrição do cenário</Label>
+            <Textarea
+              value={newDesc}
+              onChange={(e) => setNewDesc(e.target.value)}
+              placeholder="Para que serve este cenário? Quando usar?"
+              className="min-h-[60px]"
+            />
           </div>
         </CardContent>
       </Card>
