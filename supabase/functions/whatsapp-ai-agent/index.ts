@@ -1381,6 +1381,121 @@ async function executeSendLocation(supabase: any, userId: string, phone: string,
   }
 }
 
+async function executeSendProductVideo(
+  supabase: any,
+  userId: string,
+  accountId: string | null,
+  phone: string,
+  contactName: string | null,
+  productKey: string,
+): Promise<any> {
+  if (!accountId) return { success: false, error: "Account não encontrada para envio do vídeo." };
+
+  // Busca o produto e seu vídeo
+  const { data: product } = await supabase
+    .from("igreen_account_products")
+    .select("id, key, name, video_url, followup_after_video_seconds, followup_after_video_message, enabled")
+    .eq("account_id", accountId)
+    .eq("key", productKey)
+    .maybeSingle();
+
+  if (!product || product.enabled === false) {
+    return { success: false, error: `Produto '${productKey}' não está habilitado nesta conta.` };
+  }
+  if (!product.video_url) {
+    return { success: false, error: `Produto '${product.name}' não possui vídeo cadastrado. Siga o fluxo sem envio de vídeo.` };
+  }
+
+  const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+  const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+  if (!evolutionUrl || !evolutionKey) {
+    return { success: false, error: "Evolution API não configurada." };
+  }
+
+  // Resolve instance vinculada à conversa
+  const { data: conv } = await supabase
+    .from("whatsapp_conversations")
+    .select("instance_id")
+    .eq("user_id", userId)
+    .eq("phone", phone)
+    .maybeSingle();
+
+  let instance: { instance_name: string } | null = null;
+  if ((conv as any)?.instance_id) {
+    const { data } = await supabase
+      .from("whatsapp_instances")
+      .select("instance_name")
+      .eq("id", (conv as any).instance_id)
+      .maybeSingle();
+    instance = data as any;
+  }
+  if (!instance) {
+    const { data } = await supabase
+      .from("whatsapp_instances")
+      .select("instance_name, is_primary")
+      .eq("user_id", userId)
+      .order("is_primary", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    instance = data as any;
+  }
+  if (!instance) return { success: false, error: "Instância WhatsApp não encontrada." };
+
+  try {
+    const response = await fetch(`${evolutionUrl}/message/sendMedia/${instance.instance_name}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: evolutionKey },
+      body: JSON.stringify({
+        number: phone,
+        mediatype: "video",
+        mimetype: "video/mp4",
+        media: product.video_url,
+        fileName: `${product.name}.mp4`,
+        caption: "",
+      }),
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Evolution sendMedia (video) error:", errText);
+      return { success: false, error: "Erro ao enviar vídeo." };
+    }
+
+    // Registra a mensagem no histórico
+    await saveAIMessage(supabase, userId, phone, `🎥 Vídeo institucional enviado: ${product.name}`, "ai");
+
+    // Agenda o follow-up automático
+    const delaySec = Number(product.followup_after_video_seconds || 120);
+    const scheduledAt = new Date(Date.now() + delaySec * 1000).toISOString();
+    const firstName = (contactName || "").split(/\s+/)[0] || "";
+    const msgTemplate = product.followup_after_video_message || "Conseguiu ver, {nome}?";
+    const followupMessage = msgTemplate.replace(/\{nome\}/gi, firstName).replace(/, \?/g, "?").replace(/\s+\?/g, "?");
+
+    // Cancela qualquer follow-up anterior pendente para este telefone+produto
+    await supabase
+      .from("igreen_product_video_followups")
+      .update({ cancelled_at: new Date().toISOString(), cancel_reason: "superseded" })
+      .eq("account_id", accountId)
+      .eq("phone", phone)
+      .is("sent_at", null)
+      .is("cancelled_at", null);
+
+    await supabase.from("igreen_product_video_followups").insert({
+      account_id: accountId,
+      user_id: userId,
+      phone,
+      product_id: product.id,
+      message: followupMessage,
+      scheduled_at: scheduledAt,
+    });
+
+    console.log(`[send_product_video] Vídeo de ${product.name} enviado para ${phone}; follow-up agendado para ${scheduledAt}`);
+    return { success: true, message: `Vídeo do produto ${product.name} enviado. Follow-up agendado.` };
+  } catch (error) {
+    console.error("executeSendProductVideo error:", error);
+    return { success: false, error: "Falha ao enviar vídeo do produto." };
+  }
+}
+
 async function executeFunction(supabase: any, supabaseUrl: string, name: string, args: any): Promise<any> {
   const operation = name === "check_available_slots" ? "check_availability" : name;
   console.log(`[executeFunction] Calling manage-appointment: operation=${operation}, args=`, JSON.stringify(args));
