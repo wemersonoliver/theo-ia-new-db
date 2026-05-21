@@ -55,7 +55,7 @@ serve(async (req) => {
   const { data: due, error: dueErr } = await supabase
     .from("igreen_scenario_enrollments")
     .select("*")
-    .eq("status", "active")
+    .in("status", ["active", "pending_tag"])
     .lte("next_run_at", nowIso)
     .order("next_run_at", { ascending: true })
     .limit(MAX_ENROLLMENTS);
@@ -66,10 +66,18 @@ serve(async (req) => {
     });
   }
 
-  let sent = 0, skipped = 0, failed = 0, advanced = 0, completed = 0;
+  let sent = 0, skipped = 0, failed = 0, advanced = 0, completed = 0, tagged = 0;
 
   for (const enrollment of due ?? []) {
     try {
+      // ===== Handle pending final-tag application =====
+      if (enrollment.status === "pending_tag") {
+        const res = await applyFinalTag(supabase, enrollment);
+        if (res.ok) { tagged++; completed++; }
+        else { failed++; }
+        continue;
+      }
+
       // Stop on reply
       const { data: conv } = await supabase
         .from("whatsapp_conversations")
@@ -240,6 +248,47 @@ serve(async (req) => {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 });
+
+async function applyFinalTag(supabase: any, enrollment: any): Promise<{ ok: boolean }> {
+  try {
+    const { data: sc } = await supabase
+      .from("igreen_scenarios")
+      .select("final_tag")
+      .eq("id", enrollment.scenario_id)
+      .maybeSingle();
+    const tag = (sc?.final_tag || "").trim();
+    if (tag) {
+      const { data: contact } = await supabase
+        .from("contacts")
+        .select("id, tags")
+        .eq("account_id", enrollment.account_id)
+        .eq("phone", enrollment.contact_phone)
+        .maybeSingle();
+      if (contact) {
+        const current: string[] = Array.isArray(contact.tags) ? contact.tags : [];
+        if (!current.includes(tag)) {
+          await supabase.from("contacts")
+            .update({ tags: [...current, tag], updated_at: isoNow() })
+            .eq("id", contact.id);
+        }
+      }
+    }
+    await supabase.from("igreen_scenario_enrollments").update({
+      status: "completed",
+      next_run_at: null,
+      final_tag_applied_at: isoNow(),
+      updated_at: isoNow(),
+    }).eq("id", enrollment.id);
+    return { ok: true };
+  } catch (e) {
+    console.error("applyFinalTag error", e);
+    await supabase.from("igreen_scenario_enrollments").update({
+      next_run_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+      updated_at: isoNow(),
+    }).eq("id", enrollment.id);
+    return { ok: false };
+  }
+}
 
 async function sendItem(
   evolutionUrl: string,
