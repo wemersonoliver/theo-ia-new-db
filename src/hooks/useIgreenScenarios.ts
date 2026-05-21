@@ -15,6 +15,8 @@ export interface IgreenScenario {
   name: string;
   description: string | null;
   enabled: boolean;
+  final_tag: string | null;
+  final_tag_delay_hours: number;
   created_at: string;
   updated_at: string;
 }
