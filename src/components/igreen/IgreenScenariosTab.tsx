@@ -74,8 +74,8 @@ export function IgreenScenariosTab() {
             <ProductPanel
               product={p}
               scenarios={scenarios.filter((s) => s.product_key === p.key)}
-              onCreate={(name, trigger_tag) =>
-                createScenario.mutate({ product_key: p.key, name, trigger_tag })
+              onCreate={(name, trigger_tag, description) =>
+                createScenario.mutate({ product_key: p.key, name, trigger_tag, description })
               }
               onToggle={(id, enabled) => updateScenario.mutate({ id, patch: { enabled } })}
               onUpdate={(id, patch) => updateScenario.mutate({ id, patch })}
