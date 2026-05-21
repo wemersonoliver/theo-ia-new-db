@@ -180,7 +180,7 @@ export function buildGreenSimulationReply(opts: {
   const namePrefix = firstName ? `${firstName}, ` : "";
   const percentLabel = Number.isInteger(percentage) ? String(percentage) : String(percentage).replace(".", ",");
 
-  return `Show, ${namePrefix}para a ${location.distributor}/${location.state}, o desconto médio é de ${percentLabel}%. Na sua conta de R$ ${amount}, você economizaria cerca de R$ ${monthlySavings} por mês — quase R$ ${yearlySavings} por ano — e sua fatura ficaria perto de R$ ${newBill}. Bora fazer seu cadastro? Só preciso da sua fatura de energia para iniciar.`;
+  return `Perfeito, ${namePrefix}para a ${location.distributor}/${location.state}, o desconto médio é de ${percentLabel}%. Na sua conta de R$ ${amount}, você economizaria cerca de R$ ${monthlySavings} por mês, quase R$ ${yearlySavings} por ano, e sua fatura ficaria perto de R$ ${newBill}. Para iniciar seu cadastro, pode me enviar uma foto ou PDF da sua fatura de energia?`;
 }
 
 /**
