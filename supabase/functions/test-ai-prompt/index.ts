@@ -280,6 +280,16 @@ serve(async (req) => {
     const lastUserMessage = userMessage
       || ([...(messages || [])].reverse().find((m: any) => m.role === "user")?.content ?? "");
 
+    const greenNameStepFirstName = getGreenNameStepFirstName(messages, userMessage);
+    if (greenNameStepFirstName) {
+      const intro = buildGreenIntroMessage(greenNameStepFirstName);
+      return new Response(JSON.stringify({
+        message: `${intro}\n\n🎥 [Simulação] Vídeo do produto 'green' enviado. Follow-up automático em 2min ("Conseguiu ver?").`,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const knowledgeBase = docTexts.length > 0
       ? retrieveRelevantContext(lastUserMessage || "", docTexts, {
           topK: 3,
