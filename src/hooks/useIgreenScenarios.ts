@@ -104,7 +104,7 @@ export function useIgreenScenarios() {
   });
 
   const createScenario = useMutation({
-    mutationFn: async (vars: { product_key: ProductKey; name: string; trigger_tag?: string | null }) => {
+    mutationFn: async (vars: { product_key: ProductKey; name: string; trigger_tag?: string | null; description?: string | null }) => {
       if (!accountId) throw new Error("account não disponível");
       const { data, error } = await supabase
         .from("igreen_scenarios")
@@ -113,6 +113,7 @@ export function useIgreenScenarios() {
           product_key: vars.product_key,
           name: vars.name,
           trigger_tag: vars.trigger_tag ?? null,
+          description: vars.description ?? null,
           enabled: true,
         })
         .select()

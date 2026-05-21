@@ -8,6 +8,7 @@ import { Loader2, Sparkles, Tag, Save, Plus, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,8 +74,8 @@ export function IgreenScenariosTab() {
             <ProductPanel
               product={p}
               scenarios={scenarios.filter((s) => s.product_key === p.key)}
-              onCreate={(name, trigger_tag) =>
-                createScenario.mutate({ product_key: p.key, name, trigger_tag })
+              onCreate={(name, trigger_tag, description) =>
+                createScenario.mutate({ product_key: p.key, name, trigger_tag, description })
               }
               onToggle={(id, enabled) => updateScenario.mutate({ id, patch: { enabled } })}
               onUpdate={(id, patch) => updateScenario.mutate({ id, patch })}
@@ -99,7 +100,7 @@ function ProductPanel({
 }: {
   product: IgreenProduct;
   scenarios: IgreenScenario[];
-  onCreate: (name: string, trigger_tag: string | null) => void;
+  onCreate: (name: string, trigger_tag: string | null, description: string | null) => void;
   onToggle: (id: string, enabled: boolean) => void;
   onUpdate: (id: string, patch: Partial<IgreenScenario>) => void;
   onDelete: (id: string) => void;
@@ -107,13 +108,15 @@ function ProductPanel({
 }) {
   const [newName, setNewName] = useState("");
   const [newTag, setNewTag] = useState("");
+  const [newDesc, setNewDesc] = useState("");
 
   const handleCreate = () => {
     const name = newName.trim();
     if (!name) return;
-    onCreate(name, newTag.trim() || null);
+    onCreate(name, newTag.trim() || null, newDesc.trim() || null);
     setNewName("");
     setNewTag("");
+    setNewDesc("");
   };
 
   return (
@@ -124,7 +127,7 @@ function ProductPanel({
             <Plus className="h-4 w-4" /> Novo cenário em {product.name}
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-[1fr,1fr,auto] gap-2 items-end">
             <div className="space-y-1">
               <Label className="text-xs">Nome do cenário</Label>
@@ -145,6 +148,15 @@ function ProductPanel({
             <Button onClick={handleCreate} disabled={!newName.trim() || saving} className="gap-2">
               <Plus className="h-4 w-4" /> Criar
             </Button>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Descrição do cenário</Label>
+            <Textarea
+              value={newDesc}
+              onChange={(e) => setNewDesc(e.target.value)}
+              placeholder="Para que serve este cenário? Quando usar?"
+              className="min-h-[60px]"
+            />
           </div>
         </CardContent>
       </Card>
@@ -186,36 +198,45 @@ function ScenarioRow({
 }) {
   const [name, setName] = useState(scenario.name);
   const [triggerTag, setTriggerTag] = useState(scenario.trigger_tag ?? "");
+  const [description, setDescription] = useState(scenario.description ?? "");
   const [tag, setTag] = useState(scenario.final_tag ?? "");
   const [hours, setHours] = useState<number>(scenario.final_tag_delay_hours ?? 24);
 
   useEffect(() => {
     setName(scenario.name);
     setTriggerTag(scenario.trigger_tag ?? "");
+    setDescription(scenario.description ?? "");
     setTag(scenario.final_tag ?? "");
     setHours(scenario.final_tag_delay_hours ?? 24);
-  }, [scenario.name, scenario.trigger_tag, scenario.final_tag, scenario.final_tag_delay_hours]);
+  }, [scenario.name, scenario.trigger_tag, scenario.description, scenario.final_tag, scenario.final_tag_delay_hours]);
 
   return (
     <AccordionItem value={scenario.id} className="rounded-lg border bg-card">
       <div className="flex items-center justify-between gap-3 px-4">
-        <AccordionTrigger className="flex-1 hover:no-underline">
-          <div className="flex items-center gap-3">
-            <span className="font-medium">{scenario.name}</span>
-            {scenario.trigger_tag ? (
-              <Badge variant="outline" className="font-mono text-xs gap-1">
-                <Tag className="h-3 w-3" /> {scenario.trigger_tag}
-              </Badge>
-            ) : (
-              <Badge variant="secondary" className="text-xs">sem tag de gatilho</Badge>
-            )}
-            {!scenario.enabled && (
-              <Badge variant="secondary" className="text-xs">Desativado</Badge>
-            )}
-            {scenario.final_tag && (
-              <Badge variant="outline" className="text-xs gap-1">
-                → {scenario.final_tag} · {scenario.final_tag_delay_hours}h
-              </Badge>
+        <AccordionTrigger className="flex-1 hover:no-underline py-3">
+          <div className="flex flex-col items-start gap-1 w-full">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="font-medium">{scenario.name}</span>
+              {scenario.trigger_tag ? (
+                <Badge variant="outline" className="font-mono text-xs gap-1">
+                  <Tag className="h-3 w-3" /> {scenario.trigger_tag}
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="text-xs">sem tag de gatilho</Badge>
+              )}
+              {!scenario.enabled && (
+                <Badge variant="secondary" className="text-xs">Desativado</Badge>
+              )}
+              {scenario.final_tag && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  → {scenario.final_tag} · {scenario.final_tag_delay_hours}h
+                </Badge>
+              )}
+            </div>
+            {scenario.description && (
+              <p className="text-xs text-muted-foreground line-clamp-2 max-w-full pr-4">
+                {scenario.description}
+              </p>
             )}
           </div>
         </AccordionTrigger>
@@ -244,6 +265,15 @@ function ScenarioRow({
                   placeholder="ex: LEAD_FRIO_GREEN"
                 />
               </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Descrição</Label>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Para que serve este cenário? Quando usar?"
+                className="min-h-[60px]"
+              />
             </div>
             <div className="flex justify-between gap-2">
               <AlertDialog>
@@ -274,6 +304,7 @@ function ScenarioRow({
                   onSave({
                     name: name.trim() || scenario.name,
                     trigger_tag: triggerTag.trim() ? triggerTag.trim() : null,
+                    description: description.trim() ? description.trim() : null,
                   })
                 }
               >
