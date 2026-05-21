@@ -290,10 +290,19 @@ serve(async (req) => {
       });
     }
 
+    // Combina últimas mensagens do cliente para que o RAG recupere também
+    // contextos cumulativos (distribuidora + valor da conta etc.)
+    const recentUserText = [
+      ...(messages || [])
+        .filter((m: any) => m.role === "user" && typeof m.content === "string")
+        .slice(-4)
+        .map((m: any) => m.content),
+      lastUserMessage || "",
+    ].join(" \n ");
     const knowledgeBase = docTexts.length > 0
-      ? retrieveRelevantContext(lastUserMessage || "", docTexts, {
-          topK: 3,
-          maxChars: 2400,
+      ? retrieveRelevantContext(recentUserText, docTexts, {
+          topK: 6,
+          maxChars: 4500,
           chunkSize: 800,
         })
       : "";
