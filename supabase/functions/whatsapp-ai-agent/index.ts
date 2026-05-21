@@ -723,10 +723,39 @@ serve(async (req) => {
       console.error("Error fetching products:", e);
     }
 
-    // Get today's date for context
-    const today = new Date();
+    // Get today's date for context (em BRT — fuso de Brasília)
+    const brt = getBrtNowParts();
+    const today = brt.date;
     const todayStr = today.toISOString().split("T")[0];
-    const todayFormatted = today.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+    const todayFormatted = today.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric", timeZone: "America/Sao_Paulo" });
+
+    // Carrega produtos Igreen do account (para listar no prompt + flag de vídeo)
+    let igreenProductsBlock = "";
+    try {
+      if (accountId) {
+        const { data: igreenProds } = await supabase
+          .from("igreen_account_products")
+          .select("id, key, name, description, enabled, video_url")
+          .eq("account_id", accountId)
+          .order("position", { ascending: true });
+        if (igreenProds && igreenProds.length > 0) {
+          igreenProductsBlock = buildIgreenProductsPromptBlock({
+            agentName: aiConfig.agent_name || "seu assistente",
+            greeting: brt.greeting,
+            products: (igreenProds as any[]).map(p => ({
+              id: p.id,
+              key: p.key,
+              name: p.name,
+              description: p.description,
+              enabled: p.enabled,
+              has_video: !!p.video_url,
+            })),
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Error loading igreen products:", e);
+    }
 
     // Salvaguarda determinística para reagendamento: quando o cliente já está
     // em fluxo de remarcar e envia nova data/horário, não dependemos do Gemini.
