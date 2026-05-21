@@ -799,6 +799,19 @@ serve(async (req) => {
             p_reason: "engaged",
           });
           if (cancelErr) console.error("Error cancelling followup sequence:", cancelErr);
+
+          // Cancela também follow-ups pendentes de vídeo de produto Igreen
+          try {
+            await supabase
+              .from("igreen_product_video_followups")
+              .update({ cancelled_at: new Date().toISOString(), cancel_reason: "client_replied" })
+              .eq("account_id", accountId)
+              .eq("phone", phone)
+              .is("sent_at", null)
+              .is("cancelled_at", null);
+          } catch (e) {
+            console.error("Error cancelling igreen video followup:", e);
+          }
         }
 
         // Handle incoming messages

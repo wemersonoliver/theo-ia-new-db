@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { resolveAccountId } from "../_account.ts";
+import { getBrtNowParts, buildIgreenProductsPromptBlock } from "../_igreen_flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -118,6 +119,17 @@ const schedulingTools = {
           action: { type: "string", description: "'add' ou 'remove'" }
         },
         required: ["tags"]
+      }
+    },
+    {
+      name: "send_product_video",
+      description: "Envia o vídeo institucional de um produto Igreen e agenda follow-up de 2min ('Conseguiu ver, {nome}?'). No simulador o envio é mockado, mas a IA deve continuar o fluxo exatamente como em produção. Após chamar esta tool, NÃO escreva texto extra no mesmo turno.",
+      parameters: {
+        type: "object",
+        properties: {
+          product_key: { type: "string", description: "Chave do produto: 'green', 'telecom' ou 'expansao'." }
+        },
+        required: ["product_key"]
       }
     }
   ]
@@ -264,11 +276,40 @@ serve(async (req) => {
       console.error("Error fetching products:", e);
     }
 
-    const today = new Date();
+    const brt = getBrtNowParts();
+    const today = brt.date;
     const todayStr = today.toISOString().split("T")[0];
     const todayFormatted = today.toLocaleDateString("pt-BR", {
-      weekday: "long", day: "2-digit", month: "long", year: "numeric",
+      weekday: "long", day: "2-digit", month: "long", year: "numeric", timeZone: "America/Sao_Paulo",
     });
+
+    // Igreen products block (mesma lógica do agente real)
+    let igreenProductsBlock = "";
+    try {
+      if (accountId) {
+        const { data: igreenProds } = await serviceClient
+          .from("igreen_account_products")
+          .select("id, key, name, description, enabled, video_url")
+          .eq("account_id", accountId)
+          .order("position", { ascending: true });
+        if (igreenProds && igreenProds.length > 0) {
+          igreenProductsBlock = buildIgreenProductsPromptBlock({
+            agentName: aiConfig?.agent_name || "seu assistente",
+            greeting: brt.greeting,
+            products: (igreenProds as any[]).map(p => ({
+              id: p.id,
+              key: p.key,
+              name: p.name,
+              description: p.description,
+              enabled: p.enabled,
+              has_video: !!p.video_url,
+            })),
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Error loading igreen products (simulator):", e);
+    }
 
     // EXATAMENTE o mesmo prompt do whatsapp-ai-agent (módulo compartilhado).
     // Contextos dinâmicos de conversa real (cliente retornando, departamentos,
@@ -283,6 +324,9 @@ serve(async (req) => {
       pendingConfirmationContext: "",
       todayStr,
       todayFormatted,
+      brtTime: brt.brtTime,
+      brtGreeting: brt.greeting,
+      igreenProductsBlock,
     });
 
     // Build conversation for Gemini.
@@ -333,13 +377,22 @@ serve(async (req) => {
         const fc = functionCall.functionCall;
         console.log("Test - Function call:", fc.name, fc.args);
 
-        // Execute the function using manage-appointment (real execution for testing)
-        const functionResult = await executeFunction(supabaseUrl, fc.name, {
-          ...fc.args,
-          userId,
-          phone: "test-simulation",
-          contactName: "Simulação de Teste",
-        });
+        // No simulador, send_product_video é apenas mockada (não envia vídeo real)
+        let functionResult: any;
+        if (fc.name === "send_product_video") {
+          functionResult = {
+            success: true,
+            simulated: true,
+            message: `[SIMULAÇÃO] Vídeo do produto '${fc.args?.product_key || "green"}' seria enviado agora, e um follow-up automático seria agendado para 2 minutos depois. Continue o fluxo normalmente.`,
+          };
+        } else {
+          functionResult = await executeFunction(supabaseUrl, fc.name, {
+            ...fc.args,
+            userId,
+            phone: "test-simulation",
+            contactName: "Simulação de Teste",
+          });
+        }
 
         console.log("Test - Function result:", functionResult);
 

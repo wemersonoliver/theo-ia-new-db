@@ -12,6 +12,12 @@ export interface AgentPromptParts {
   pendingConfirmationContext: string;
   todayStr: string;
   todayFormatted: string;
+  /** Hora atual em BRT no formato HH:mm (ex.: "14:32"). Opcional para retrocompat. */
+  brtTime?: string;
+  /** Nome da saudação adequada à hora BRT: "Bom dia" | "Boa tarde" | "Boa noite". */
+  brtGreeting?: string;
+  /** Bloco extra com regras específicas dos produtos Igreen (ex.: fluxo Conexão Green). */
+  igreenProductsBlock?: string;
 }
 
 export function buildAgentSystemPrompt(p: AgentPromptParts): string {
@@ -39,8 +45,16 @@ Você tem a ferramenta send_location para enviar a localização do negócio com
 - SEMPRE use send_location quando o cliente pedir localização ou endereço, além de responder com o endereço por texto.`
     : "";
 
+  const timeBlock = (p.brtTime || p.brtGreeting)
+    ? `\nHORÁRIO ATUAL (Brasília): ${p.brtTime || ""}${p.brtGreeting ? ` — saudação correta: "${p.brtGreeting}".` : ""}\n- Ao abrir a conversa, SEMPRE use exatamente "${p.brtGreeting || "Olá"}" (nunca chute outra saudação).\n`
+    : "";
+
+  const igreenBlock = p.igreenProductsBlock ? `\n${p.igreenProductsBlock}\n` : "";
+
   return `${nicheLine}
 ${businessDescriptionBlock}
+${timeBlock}
+${igreenBlock}
 
 ${aiConfig.custom_prompt || "Seja cordial, profissional e prestativo."}
 
