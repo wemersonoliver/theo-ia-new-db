@@ -58,10 +58,6 @@ function titleCaseFlowName(name: string): string {
 }
 
 function extractGreenFirstName(messages: GreenSimulationMessage[], fallbackName?: string | null): string {
-  if (fallbackName && /[a-zA-ZÀ-ÿ]{2,}/.test(fallbackName)) {
-    return titleCaseFlowName(fallbackName).split(/\s+/)[0];
-  }
-
   for (let i = 0; i < messages.length; i++) {
     const current = String(messages[i]?.ai_content || messages[i]?.content || "");
     const currentNorm = normalizeFlowText(current);
@@ -79,6 +75,10 @@ function extractGreenFirstName(messages: GreenSimulationMessage[], fallbackName?
     });
 
     if (nextUser) return titleCaseFlowName(String(nextUser.content || nextUser.ai_content || "")).split(/\s+/)[0];
+  }
+
+  if (fallbackName && /[a-zA-ZÀ-ÿ]{2,}/.test(fallbackName)) {
+    return titleCaseFlowName(fallbackName).split(/\s+/)[0];
   }
 
   return "";

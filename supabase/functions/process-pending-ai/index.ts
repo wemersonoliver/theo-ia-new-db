@@ -182,15 +182,17 @@ serve(async (req) => {
       });
     }
 
-    // Get the last few incoming messages to provide context
+    // Get the latest incoming message. The AI agent already loads full
+    // conversation history from the database; sending the last 5 user messages
+    // as one text makes the Green flow confuse "Oi" with the client's name.
     const messages = conversation.messages || [];
-    const recentIncoming = messages
+    const latestIncoming = [...messages]
       .filter((m: any) => !m.from_me)
-      .slice(-5)
-      .map((m: any) => m.content)
-      .join("\n");
+      .reverse()
+      .find((m: any) => typeof (m.ai_content || m.content) === "string");
+    const latestIncomingText = String(latestIncoming?.ai_content || latestIncoming?.content || "").trim();
 
-    if (!recentIncoming) {
+    if (!latestIncomingText) {
       console.log("No incoming messages to respond to:", phone);
       return new Response(JSON.stringify({ skipped: true, reason: "No incoming messages" }), { 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
@@ -262,7 +264,7 @@ serve(async (req) => {
     }
 
     // Now trigger the AI agent
-    console.log("Triggering AI for:", phone, "with combined messages, contactName:", contactName);
+    console.log("Triggering AI for:", phone, "with latest message, contactName:", contactName);
 
     let aiResult: any = null;
     try {
@@ -275,7 +277,7 @@ serve(async (req) => {
         body: JSON.stringify({
           userId,
           phone,
-          messageContent: recentIncoming,
+          messageContent: latestIncomingText,
           contactName,
         }),
       });
