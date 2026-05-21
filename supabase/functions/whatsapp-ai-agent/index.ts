@@ -1394,6 +1394,7 @@ async function executeSendProductVideo(
   phone: string,
   contactName: string | null,
   productKey: string,
+  introMessage: string = "",
 ): Promise<any> {
   if (!accountId) return { success: false, error: "Account não encontrada para envio do vídeo." };
 
@@ -1448,6 +1449,16 @@ async function executeSendProductVideo(
   if (!instance) return { success: false, error: "Instância WhatsApp não encontrada." };
 
   try {
+    // Envia a mensagem de introdução ANTES do vídeo (se houver)
+    if (introMessage) {
+      try {
+        await sendWhatsAppMessage(supabase, userId, phone, introMessage);
+        await saveAIMessage(supabase, userId, phone, introMessage, "ai");
+      } catch (e) {
+        console.error("send intro_message error:", e);
+      }
+    }
+
     const response = await fetch(`${evolutionUrl}/message/sendMedia/${instance.instance_name}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: evolutionKey },
