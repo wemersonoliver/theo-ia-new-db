@@ -7,6 +7,7 @@ import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { reportApiFailure, reportApiSuccess } from "../_health.ts";
 import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
+import { getBrtNowParts, buildIgreenProductsPromptBlock } from "../_igreen_flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -227,6 +228,20 @@ const schedulingTools = {
           }
         },
         required: ["reason"]
+      }
+    },
+    {
+      name: "send_product_video",
+      description: "Envia o vídeo institucional de um produto Igreen (Conexão Green, Conexão Telecom, Conexão Expansão) para o cliente via WhatsApp e agenda automaticamente um follow-up 2 minutos depois ('Conseguiu ver, {nome}?'). Use EXATAMENTE como descrito no fluxo Conexão Green. Após chamar esta tool, NÃO escreva nenhuma mensagem adicional — o sistema cuida do envio e do follow-up.",
+      parameters: {
+        type: "object",
+        properties: {
+          product_key: {
+            type: "string",
+            description: "Chave do produto: 'green' (Conexão Green), 'telecom' (Conexão Telecom) ou 'expansao' (Conexão Expansão)."
+          }
+        },
+        required: ["product_key"]
       }
     }
   ]
