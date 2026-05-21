@@ -911,7 +911,7 @@ ${returningClientContext}
 
 ${departmentsBlock}
 
-${knowledgeBase ? `Trechos relevantes da base de conhecimento (use para responder; se não houver informação suficiente, peça ao cliente para esperar a equipe):\n\n${knowledgeBase}` : ""}
+${knowledgeBase ? `Trechos relevantes da base de conhecimento (cada trecho é rotulado com [PRODUTO: nome] ou [GERAL]):\n\n${knowledgeBase}\n\nREGRAS OBRIGATÓRIAS sobre a base de conhecimento:\n- Quando o cliente perguntar sobre um produto específico (ex.: Conexão Green, Conexão Telecom, Conexão Expansão), use APENAS os trechos rotulados com [PRODUTO: <nome>] correspondente.\n- NUNCA invente percentuais de desconto, valores de economia, regras por estado/distribuidora, prazos ou condições comerciais. Use somente o que está escrito na base.\n- Se a base não tiver a informação exata para a situação do cliente (ex.: percentual para a distribuidora/estado dele), diga que vai confirmar com a equipe e NÃO chute valores. Não use números de exemplo como se fossem reais.` : ""}
 
 ${productsCatalog}
 
