@@ -1979,6 +1979,36 @@ export type Database = {
         }
         Relationships: []
       }
+      igreen_products: {
+        Row: {
+          created_at: string
+          description: string | null
+          enabled: boolean
+          key: string
+          name: string
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          key: string
+          name: string
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          key?: string
+          name?: string
+          position?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       igreen_scenario_days: {
         Row: {
           created_at: string
@@ -2231,7 +2261,9 @@ export type Database = {
           final_tag_delay_hours: number
           id: string
           name: string
-          scenario_key: string
+          product_key: string
+          scenario_key: string | null
+          trigger_tag: string | null
           updated_at: string
         }
         Insert: {
@@ -2243,7 +2275,9 @@ export type Database = {
           final_tag_delay_hours?: number
           id?: string
           name: string
-          scenario_key: string
+          product_key?: string
+          scenario_key?: string | null
+          trigger_tag?: string | null
           updated_at?: string
         }
         Update: {
@@ -2255,7 +2289,9 @@ export type Database = {
           final_tag_delay_hours?: number
           id?: string
           name?: string
-          scenario_key?: string
+          product_key?: string
+          scenario_key?: string | null
+          trigger_tag?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2265,6 +2301,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "accounts"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "igreen_scenarios_product_key_fkey"
+            columns: ["product_key"]
+            isOneToOne: false
+            referencedRelation: "igreen_products"
+            referencedColumns: ["key"]
           },
         ]
       }

@@ -28,10 +28,12 @@ serve(async (req) => {
       });
     }
 
-    // Cria os 3 cenários (idempotente via UNIQUE account_id+scenario_key)
+    // Cria os 3 cenários padrão do produto "Conexão Green" (idempotente)
     const rows = DEFAULTS.map((d) => ({
       account_id,
       scenario_key: d.key,
+      product_key: "green",
+      trigger_tag: d.key,
       name: d.name,
       enabled: true,
     }));

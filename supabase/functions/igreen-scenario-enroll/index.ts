@@ -45,14 +45,14 @@ serve(async (req) => {
   );
 
   try {
-    const { account_id, phone, scenario_key, contact_id } = await req.json();
-    if (!account_id || !phone || !scenario_key) {
-      return new Response(JSON.stringify({ error: "account_id, phone, scenario_key required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (!["CENARIO1", "CENARIO2", "CENARIO3"].includes(scenario_key)) {
-      return new Response(JSON.stringify({ error: "invalid scenario_key" }), {
+    const body = await req.json();
+    const { account_id, phone, contact_id } = body;
+    // Aceita trigger_tag (novo) ou scenario_key (legado)
+    const triggerTag: string | undefined = body.trigger_tag ?? body.tag;
+    const legacyKey: string | undefined = body.scenario_key;
+
+    if (!account_id || !phone || (!triggerTag && !legacyKey)) {
+      return new Response(JSON.stringify({ error: "account_id, phone e trigger_tag (ou scenario_key) são obrigatórios" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -61,16 +61,22 @@ serve(async (req) => {
     await supabase.rpc("igreen_stop_for_phone", {
       p_account_id: account_id,
       p_phone: phone,
-      p_reason: `replaced_by_${scenario_key}`,
+      p_reason: `replaced_by_${triggerTag ?? legacyKey}`,
     });
 
-    // 2. Localiza o cenário
-    const { data: scenario } = await supabase
+    // 2. Localiza o cenário pela trigger_tag (case-insensitive) ou scenario_key (legado)
+    let scenarioQ = supabase
       .from("igreen_scenarios")
-      .select("id, enabled")
-      .eq("account_id", account_id)
-      .eq("scenario_key", scenario_key)
-      .maybeSingle();
+      .select("id, enabled, product_key, scenario_key, trigger_tag")
+      .eq("account_id", account_id);
+
+    if (triggerTag) {
+      scenarioQ = scenarioQ.ilike("trigger_tag", triggerTag);
+    } else {
+      scenarioQ = scenarioQ.eq("scenario_key", legacyKey!);
+    }
+
+    const { data: scenario } = await scenarioQ.maybeSingle();
 
     if (!scenario || !scenario.enabled) {
       return new Response(JSON.stringify({ error: "scenario not found or disabled" }), {
@@ -85,7 +91,7 @@ serve(async (req) => {
       .insert({
         account_id,
         scenario_id: scenario.id,
-        scenario_key,
+        scenario_key: scenario.scenario_key ?? scenario.trigger_tag ?? triggerTag ?? legacyKey,
         contact_phone: phone,
         contact_id: contact_id ?? null,
         current_day: 1,
