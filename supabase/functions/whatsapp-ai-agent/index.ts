@@ -759,10 +759,20 @@ serve(async (req) => {
         return `${header}\n${d.content_text}`;
       });
 
+    // Combina as últimas mensagens do cliente como query do RAG, para que
+    // contextos cumulativos (ex.: distribuidora informada 2 turnos atrás +
+    // valor da conta agora) sejam recuperados juntos da base de conhecimento.
+    const recentUserText = [
+      ...recentMessages
+        .filter((m: any) => !m.from_me && typeof m.content === "string")
+        .slice(-4)
+        .map((m: any) => m.content),
+      messageContent || "",
+    ].join(" \n ");
     const knowledgeBase = docTexts.length > 0
-      ? retrieveRelevantContext(messageContent || "", docTexts, {
-          topK: 3,
-          maxChars: 2400,
+      ? retrieveRelevantContext(recentUserText, docTexts, {
+          topK: 6,
+          maxChars: 4500,
           chunkSize: 800,
         })
       : "";
