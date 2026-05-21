@@ -14,22 +14,27 @@ export interface KnowledgeDocument {
   content_text: string | null;
   status: "processing" | "ready" | "error";
   created_at: string;
+  igreen_product_id?: string | null;
 }
 
-export function useKnowledgeBase() {
+export function useKnowledgeBase(opts?: { productId?: string | null }) {
+  const productId = opts?.productId ?? null;
   const { user } = useAuth();
   const { accountId } = useAccountId();
   const queryClient = useQueryClient();
 
   const { data: documents, isLoading } = useQuery({
-    queryKey: ["knowledge-documents", accountId],
+    queryKey: ["knowledge-documents", accountId, productId ?? "all"],
     queryFn: async () => {
       if (!user || !accountId) return [];
-      const { data, error } = await supabase
+      let query = supabase
         .from("knowledge_base_documents")
         .select("*")
-        .eq("account_id", accountId)
-        .order("created_at", { ascending: false });
+        .eq("account_id", accountId);
+      if (productId) {
+        query = query.eq("igreen_product_id", productId);
+      }
+      const { data, error } = await query.order("created_at", { ascending: false });
       
       if (error) throw error;
       return (data || []) as KnowledgeDocument[];
@@ -69,6 +74,7 @@ export function useKnowledgeBase() {
           file_path: filePath,
           file_size: file.size,
           status: "processing",
+          igreen_product_id: productId,
         });
 
       if (insertError) throw insertError;
@@ -79,7 +85,7 @@ export function useKnowledgeBase() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["knowledge-documents", accountId] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-documents", accountId, productId ?? "all"] });
       toast.success("Documento enviado! Processando...");
     },
     onError: (error: Error) => {
