@@ -10,6 +10,15 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -109,6 +118,7 @@ function ProductPanel({
   const [newName, setNewName] = useState("");
   const [newTag, setNewTag] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [open, setOpen] = useState(false);
 
   const handleCreate = () => {
     const name = newName.trim();
@@ -117,53 +127,67 @@ function ProductPanel({
     setNewName("");
     setNewTag("");
     setNewDesc("");
+    setOpen(false);
   };
 
   return (
     <div className="space-y-3">
-      <Card className="border-dashed">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Plus className="h-4 w-4" /> Novo cenário em {product.name}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-[1fr,1fr,auto] gap-2 items-end">
-            <div className="space-y-1">
-              <Label className="text-xs">Nome do cenário</Label>
-              <Input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="ex: Lead frio – Green"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Tag de gatilho (opcional)</Label>
-              <Input
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                placeholder="ex: LEAD_FRIO_GREEN"
-              />
-            </div>
-            <Button onClick={handleCreate} disabled={!newName.trim() || saving} className="gap-2">
-              <Plus className="h-4 w-4" /> Criar
+      <div className="flex justify-end">
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" /> Novo cenário
             </Button>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Descrição do cenário</Label>
-            <Textarea
-              value={newDesc}
-              onChange={(e) => setNewDesc(e.target.value)}
-              placeholder="Para que serve este cenário? Quando usar?"
-              className="min-h-[60px]"
-            />
-          </div>
-        </CardContent>
-      </Card>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Novo cenário em {product.name}</DialogTitle>
+              <DialogDescription>
+                Preencha as informações abaixo para criar um novo cenário.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Nome do cenário</Label>
+                <Input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="ex: Lead frio – Green"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Tag de gatilho (opcional)</Label>
+                <Input
+                  value={newTag}
+                  onChange={(e) => setNewTag(e.target.value)}
+                  placeholder="ex: LEAD_FRIO_GREEN"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Descrição do cenário</Label>
+                <Textarea
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  placeholder="Para que serve este cenário? Quando usar?"
+                  className="min-h-[80px]"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleCreate} disabled={!newName.trim() || saving} className="gap-2">
+                <Plus className="h-4 w-4" /> Criar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
 
       {scenarios.length === 0 ? (
         <div className="text-sm text-muted-foreground text-center py-6 border rounded-lg">
-          Nenhum cenário em {product.name} ainda. Crie o primeiro acima.
+          Nenhum cenário em {product.name} ainda. Clique em "Novo cenário" para criar o primeiro.
         </div>
       ) : (
         <Accordion type="single" collapsible className="space-y-3">
