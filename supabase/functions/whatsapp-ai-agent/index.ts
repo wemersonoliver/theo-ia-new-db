@@ -6,6 +6,7 @@ import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts"
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { reportApiFailure, reportApiSuccess } from "../_health.ts";
+import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
