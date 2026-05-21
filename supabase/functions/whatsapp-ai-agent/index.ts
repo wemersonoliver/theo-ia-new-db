@@ -232,13 +232,17 @@ const schedulingTools = {
     },
     {
       name: "send_product_video",
-      description: "Envia o vídeo institucional de um produto Igreen (Conexão Green, Conexão Telecom, Conexão Expansão) para o cliente via WhatsApp e agenda automaticamente um follow-up 2 minutos depois ('Conseguiu ver, {nome}?'). Use EXATAMENTE como descrito no fluxo Conexão Green. Após chamar esta tool, NÃO escreva nenhuma mensagem adicional — o sistema cuida do envio e do follow-up.",
+      description: "Envia o vídeo institucional de um produto Igreen (Conexão Green, Conexão Telecom, Conexão Expansão) para o cliente via WhatsApp. Opcionalmente envia uma mensagem de texto (intro_message) ANTES do vídeo. Em seguida agenda automaticamente um follow-up 2 minutos depois ('Conseguiu ver, {nome}?'). Após chamar esta tool, NÃO escreva nenhuma mensagem adicional fora dela.",
       parameters: {
         type: "object",
         properties: {
           product_key: {
             type: "string",
             description: "Chave do produto: 'green' (Conexão Green), 'telecom' (Conexão Telecom) ou 'expansao' (Conexão Expansão)."
+          },
+          intro_message: {
+            type: "string",
+            description: "Mensagem de texto enviada ANTES do vídeo (ex.: 'Prazer em te conhecer, João! ...'). Use o primeiro nome real do cliente. Opcional."
           }
         },
         required: ["product_key"]
@@ -1055,6 +1059,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
         // Handle send_product_video (envia vídeo institucional + agenda follow-up 2min)
         if (fc.name === "send_product_video") {
           const productKey = String(fc.args?.product_key || "green").toLowerCase();
+          const introMessage = typeof fc.args?.intro_message === "string" ? fc.args.intro_message.trim() : "";
           const videoResult = await executeSendProductVideo(
             supabase,
             userId,
@@ -1062,6 +1067,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
             phone,
             contactName,
             productKey,
+            introMessage,
           );
           geminiPayload.contents.push(content);
           geminiPayload.contents.push({
@@ -1388,6 +1394,7 @@ async function executeSendProductVideo(
   phone: string,
   contactName: string | null,
   productKey: string,
+  introMessage: string = "",
 ): Promise<any> {
   if (!accountId) return { success: false, error: "Account não encontrada para envio do vídeo." };
 
@@ -1442,6 +1449,16 @@ async function executeSendProductVideo(
   if (!instance) return { success: false, error: "Instância WhatsApp não encontrada." };
 
   try {
+    // Envia a mensagem de introdução ANTES do vídeo (se houver)
+    if (introMessage) {
+      try {
+        await sendWhatsAppMessage(supabase, userId, phone, introMessage);
+        await saveAIMessage(supabase, userId, phone, introMessage, "ai");
+      } catch (e) {
+        console.error("send intro_message error:", e);
+      }
+    }
+
     const response = await fetch(`${evolutionUrl}/message/sendMedia/${instance.instance_name}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: evolutionKey },
