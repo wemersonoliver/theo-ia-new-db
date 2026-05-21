@@ -198,36 +198,45 @@ function ScenarioRow({
 }) {
   const [name, setName] = useState(scenario.name);
   const [triggerTag, setTriggerTag] = useState(scenario.trigger_tag ?? "");
+  const [description, setDescription] = useState(scenario.description ?? "");
   const [tag, setTag] = useState(scenario.final_tag ?? "");
   const [hours, setHours] = useState<number>(scenario.final_tag_delay_hours ?? 24);
 
   useEffect(() => {
     setName(scenario.name);
     setTriggerTag(scenario.trigger_tag ?? "");
+    setDescription(scenario.description ?? "");
     setTag(scenario.final_tag ?? "");
     setHours(scenario.final_tag_delay_hours ?? 24);
-  }, [scenario.name, scenario.trigger_tag, scenario.final_tag, scenario.final_tag_delay_hours]);
+  }, [scenario.name, scenario.trigger_tag, scenario.description, scenario.final_tag, scenario.final_tag_delay_hours]);
 
   return (
     <AccordionItem value={scenario.id} className="rounded-lg border bg-card">
       <div className="flex items-center justify-between gap-3 px-4">
-        <AccordionTrigger className="flex-1 hover:no-underline">
-          <div className="flex items-center gap-3">
-            <span className="font-medium">{scenario.name}</span>
-            {scenario.trigger_tag ? (
-              <Badge variant="outline" className="font-mono text-xs gap-1">
-                <Tag className="h-3 w-3" /> {scenario.trigger_tag}
-              </Badge>
-            ) : (
-              <Badge variant="secondary" className="text-xs">sem tag de gatilho</Badge>
-            )}
-            {!scenario.enabled && (
-              <Badge variant="secondary" className="text-xs">Desativado</Badge>
-            )}
-            {scenario.final_tag && (
-              <Badge variant="outline" className="text-xs gap-1">
-                → {scenario.final_tag} · {scenario.final_tag_delay_hours}h
-              </Badge>
+        <AccordionTrigger className="flex-1 hover:no-underline py-3">
+          <div className="flex flex-col items-start gap-1 w-full">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="font-medium">{scenario.name}</span>
+              {scenario.trigger_tag ? (
+                <Badge variant="outline" className="font-mono text-xs gap-1">
+                  <Tag className="h-3 w-3" /> {scenario.trigger_tag}
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="text-xs">sem tag de gatilho</Badge>
+              )}
+              {!scenario.enabled && (
+                <Badge variant="secondary" className="text-xs">Desativado</Badge>
+              )}
+              {scenario.final_tag && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  → {scenario.final_tag} · {scenario.final_tag_delay_hours}h
+                </Badge>
+              )}
+            </div>
+            {scenario.description && (
+              <p className="text-xs text-muted-foreground line-clamp-2 max-w-full pr-4">
+                {scenario.description}
+              </p>
             )}
           </div>
         </AccordionTrigger>
@@ -256,6 +265,15 @@ function ScenarioRow({
                   placeholder="ex: LEAD_FRIO_GREEN"
                 />
               </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Descrição</Label>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Para que serve este cenário? Quando usar?"
+                className="min-h-[60px]"
+              />
             </div>
             <div className="flex justify-between gap-2">
               <AlertDialog>
@@ -286,6 +304,7 @@ function ScenarioRow({
                   onSave({
                     name: name.trim() || scenario.name,
                     trigger_tag: triggerTag.trim() ? triggerTag.trim() : null,
+                    description: description.trim() ? description.trim() : null,
                   })
                 }
               >
