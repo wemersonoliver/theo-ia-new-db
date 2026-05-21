@@ -339,6 +339,14 @@ function buildGreenIntroMessage(firstName: string): string {
   return `Prazer em te conhecer, ${firstName}! A Conexão Green é o nosso serviço de energia por assinatura que te dá desconto na sua conta de luz. Vou te mandar uma reportagem que explica exatamente o que é o serviço e como funciona.`;
 }
 
+function resolveGreenVideoUrl(videoUrl: string | null | undefined): string {
+  const raw = String(videoUrl || "").trim();
+  if (raw.includes("/igreen/conexao-green-reportagem.mp4")) {
+    return "https://gljsifkjwkubxaqgxxul.supabase.co/storage/v1/object/public/whatsapp-media/fbc9254d-6577-468d-adba-5d639ed0e759/5551997540734/1779235885889_A5CABCBE53621853AE15FCB7DEC08C28.mp4";
+  }
+  return raw;
+}
+
 function isRescheduleIntent(text: string | null | undefined): boolean {
   const t = normalizeTextForIntent(text);
   return /(reagend|remarc|mudar|trocar|alterar)/.test(t);
@@ -1510,7 +1518,8 @@ async function executeSendProductVideo(
   if (!product || product.enabled === false) {
     return { success: false, error: `Produto '${productKey}' não está habilitado nesta conta.` };
   }
-  if (!product.video_url) {
+  const videoUrl = resolveGreenVideoUrl(product.video_url);
+  if (!videoUrl) {
     return { success: false, error: `Produto '${product.name}' não possui vídeo cadastrado. Siga o fluxo sem envio de vídeo.` };
   }
 
@@ -1560,21 +1569,37 @@ async function executeSendProductVideo(
       }
     }
 
-    const response = await fetch(`${evolutionUrl}/message/sendMedia/${instance.instance_name}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: evolutionKey },
-      body: JSON.stringify({
-        number: phone,
-        mediatype: "video",
-        mimetype: "video/mp4",
-        media: product.video_url,
-        fileName: `${product.name}.mp4`,
-        caption: "",
-      }),
-    });
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Evolution sendMedia (video) error:", errText);
+    const resolvedChatNumber = await resolvePreferredChatNumber(instance.instance_name, phone, evolutionUrl, evolutionKey);
+    const tryNumbers = [resolvedChatNumber, phone];
+    const variant = getBrazilianPhoneVariant(phone);
+    if (variant && variant !== phone) tryNumbers.push(variant);
+
+    let sentVideo = false;
+    let lastVideoError = "";
+    for (const candidate of [...new Set(tryNumbers.filter(Boolean) as string[])]) {
+      const response = await fetch(`${evolutionUrl}/message/sendMedia/${instance.instance_name}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: evolutionKey },
+        body: JSON.stringify({
+          number: candidate,
+          mediatype: "video",
+          mimetype: "video/mp4",
+          media: videoUrl,
+          fileName: `${product.name}.mp4`,
+          caption: "",
+        }),
+      });
+      const responseText = await response.text();
+      if (response.ok) {
+        sentVideo = true;
+        break;
+      }
+      lastVideoError = responseText;
+      const isInvalidNumber = response.status === 400 || response.status === 404 || /not.?exists|invalid.?number|number.?does.?not|not.?in.?whatsapp|jid/i.test(responseText);
+      if (!isInvalidNumber) break;
+    }
+    if (!sentVideo) {
+      console.error("Evolution sendMedia (video) error:", lastVideoError);
       return { success: false, error: "Erro ao enviar vídeo." };
     }
 
