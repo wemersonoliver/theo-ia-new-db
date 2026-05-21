@@ -310,6 +310,35 @@ function normalizeTextForIntent(text: string | null | undefined): string {
   return String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+function titleCaseName(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function getGreenNameStepFirstName(recentMessages: any[] | null | undefined, messageContent: string | null | undefined): string | null {
+  const raw = String(messageContent || "").replace(/["“”]/g, "").trim();
+  if (!raw || raw.length > 60 || !/[a-zA-ZÀ-ÿ]{2,}/.test(raw)) return null;
+  const normalized = normalizeTextForIntent(raw);
+  if (/(conexao green|energia|desconto|fatura|conta|celesc|cemig|copel)/i.test(normalized)) return null;
+
+  const lastAssistant = [...(recentMessages || [])]
+    .reverse()
+    .find((m: any) => m?.from_me && typeof (m?.ai_content || m?.content) === "string");
+  const lastAssistantNorm = normalizeTextForIntent(lastAssistant?.ai_content || lastAssistant?.content || "");
+  if (!lastAssistantNorm.includes("como posso te chamar")) return null;
+  if (!lastAssistantNorm.includes("conexao green")) return null;
+
+  return titleCaseName(raw).split(/\s+/)[0] || null;
+}
+
+function buildGreenIntroMessage(firstName: string): string {
+  return `Prazer em te conhecer, ${firstName}! A Conexão Green é o nosso serviço de energia por assinatura que te dá desconto na sua conta de luz. Vou te mandar uma reportagem que explica exatamente o que é o serviço e como funciona.`;
+}
+
 function isRescheduleIntent(text: string | null | undefined): boolean {
   const t = normalizeTextForIntent(text);
   return /(reagend|remarc|mudar|trocar|alterar)/.test(t);
