@@ -1384,6 +1384,7 @@ async function executeSendLocation(supabase: any, userId: string, phone: string,
 async function executeFunction(supabase: any, supabaseUrl: string, name: string, args: any): Promise<any> {
   const operation = name === "check_available_slots" ? "check_availability" : name;
   console.log(`[executeFunction] Calling manage-appointment: operation=${operation}, args=`, JSON.stringify(args));
+  // (placeholder marker — executeSendProductVideo lives above this function)
   
   // Use client_name from function args (provided by AI) if available, fallback to contactName from webhook
   const resolvedContactName = args.client_name || args.contactName || null;
