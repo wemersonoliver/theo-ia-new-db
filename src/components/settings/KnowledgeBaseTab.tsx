@@ -7,8 +7,8 @@ import { FileText, Upload, Trash2, Loader2, File, CheckCircle2, AlertCircle } fr
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-export function KnowledgeBaseTab() {
-  const { documents, isLoading, uploadDocument, deleteDocument } = useKnowledgeBase();
+export function KnowledgeBaseTab({ productId, title, description }: { productId?: string | null; title?: string; description?: string } = {}) {
+  const { documents, isLoading, uploadDocument, deleteDocument } = useKnowledgeBase({ productId });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
