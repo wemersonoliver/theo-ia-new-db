@@ -741,11 +741,27 @@ serve(async (req) => {
     // Isso reduz tokens de input em até 90% sem perder qualidade.
     // Cada trecho é prefixado com o produto correspondente (quando houver),
     // para que a IA saiba a qual produto a informação pertence.
-    const { data: documents } = await supabase
+    let documents: any[] = [];
+    let documentsQuery = supabase
       .from("knowledge_base_documents")
       .select("content_text, igreen_product_id, file_name")
-      .eq("user_id", userId)
       .eq("status", "ready");
+    documentsQuery = accountId
+      ? documentsQuery.eq("account_id", accountId)
+      : documentsQuery.eq("user_id", userId);
+    const { data: scopedDocuments, error: documentsError } = await documentsQuery;
+    if (documentsError) console.error("Error loading knowledge docs by account/user:", documentsError);
+    documents = scopedDocuments || [];
+
+    if (documents.length === 0 && accountId) {
+      const { data: fallbackDocuments, error: fallbackDocumentsError } = await supabase
+        .from("knowledge_base_documents")
+        .select("content_text, igreen_product_id, file_name")
+        .eq("user_id", userId)
+        .eq("status", "ready");
+      if (fallbackDocumentsError) console.error("Error loading fallback knowledge docs by user:", fallbackDocumentsError);
+      documents = fallbackDocuments || [];
+    }
 
     // Mapa de produtos do account (id -> nome) para rotular os trechos
     const productMap = new Map<string, string>();

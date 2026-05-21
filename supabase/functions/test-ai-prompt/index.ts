@@ -252,11 +252,27 @@ serve(async (req) => {
     const accountId = await resolveAccountId(serviceClient, userId);
 
     // Knowledge base rotulada por produto + RAG (idêntico ao whatsapp-ai-agent)
-    const { data: documents } = await serviceClient
+    let documents: any[] = [];
+    let documentsQuery = serviceClient
       .from("knowledge_base_documents")
       .select("content_text, igreen_product_id, file_name")
-      .eq("user_id", userId)
       .eq("status", "ready");
+    documentsQuery = accountId
+      ? documentsQuery.eq("account_id", accountId)
+      : documentsQuery.eq("user_id", userId);
+    const { data: scopedDocuments, error: documentsError } = await documentsQuery;
+    if (documentsError) console.error("Error loading knowledge docs by account/user:", documentsError);
+    documents = scopedDocuments || [];
+
+    if (documents.length === 0 && accountId) {
+      const { data: fallbackDocuments, error: fallbackDocumentsError } = await serviceClient
+        .from("knowledge_base_documents")
+        .select("content_text, igreen_product_id, file_name")
+        .eq("user_id", userId)
+        .eq("status", "ready");
+      if (fallbackDocumentsError) console.error("Error loading fallback knowledge docs by user:", fallbackDocumentsError);
+      documents = fallbackDocuments || [];
+    }
 
     const productMap = new Map<string, string>();
     try {
