@@ -232,13 +232,17 @@ const schedulingTools = {
     },
     {
       name: "send_product_video",
-      description: "Envia o vídeo institucional de um produto Igreen (Conexão Green, Conexão Telecom, Conexão Expansão) para o cliente via WhatsApp e agenda automaticamente um follow-up 2 minutos depois ('Conseguiu ver, {nome}?'). Use EXATAMENTE como descrito no fluxo Conexão Green. Após chamar esta tool, NÃO escreva nenhuma mensagem adicional — o sistema cuida do envio e do follow-up.",
+      description: "Envia o vídeo institucional de um produto Igreen (Conexão Green, Conexão Telecom, Conexão Expansão) para o cliente via WhatsApp. Opcionalmente envia uma mensagem de texto (intro_message) ANTES do vídeo. Em seguida agenda automaticamente um follow-up 2 minutos depois ('Conseguiu ver, {nome}?'). Após chamar esta tool, NÃO escreva nenhuma mensagem adicional fora dela.",
       parameters: {
         type: "object",
         properties: {
           product_key: {
             type: "string",
             description: "Chave do produto: 'green' (Conexão Green), 'telecom' (Conexão Telecom) ou 'expansao' (Conexão Expansão)."
+          },
+          intro_message: {
+            type: "string",
+            description: "Mensagem de texto enviada ANTES do vídeo (ex.: 'Prazer em te conhecer, João! ...'). Use o primeiro nome real do cliente. Opcional."
           }
         },
         required: ["product_key"]
