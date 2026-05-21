@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { resolveAccountId } from "../_account.ts";
-import { getBrtNowParts, buildIgreenProductsPromptBlock } from "../_igreen_flow.ts";
+import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply } from "../_igreen_flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -279,6 +279,17 @@ serve(async (req) => {
 
     const lastUserMessage = userMessage
       || ([...(messages || [])].reverse().find((m: any) => m.role === "user")?.content ?? "");
+
+    const deterministicGreenSimulation = buildGreenSimulationReply({
+      messages: messages || [],
+      currentUserMessage: lastUserMessage,
+      knowledgeText: docTexts.join("\n\n---\n\n"),
+    });
+    if (deterministicGreenSimulation) {
+      return new Response(JSON.stringify({ message: deterministicGreenSimulation }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const greenNameStepFirstName = getGreenNameStepFirstName(messages, userMessage);
     if (greenNameStepFirstName) {
