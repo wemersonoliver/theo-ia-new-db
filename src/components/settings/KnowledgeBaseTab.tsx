@@ -7,8 +7,8 @@ import { FileText, Upload, Trash2, Loader2, File, CheckCircle2, AlertCircle } fr
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-export function KnowledgeBaseTab() {
-  const { documents, isLoading, uploadDocument, deleteDocument } = useKnowledgeBase();
+export function KnowledgeBaseTab({ productId, title, description }: { productId?: string | null; title?: string; description?: string } = {}) {
+  const { documents, isLoading, uploadDocument, deleteDocument } = useKnowledgeBase({ productId });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,10 +44,10 @@ export function KnowledgeBaseTab() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileText className="h-5 w-5" />
-          Documentos
+          {title ?? "Documentos"}
         </CardTitle>
         <CardDescription>
-          Faça upload de PDFs, documentos Word ou arquivos de texto com informações sobre sua empresa
+          {description ?? "Faça upload de PDFs, documentos Word ou arquivos de texto com informações sobre sua empresa"}
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -18,6 +18,8 @@ import { SubscriptionsTab } from "@/components/settings/SubscriptionsTab";
 import { KnowledgeBaseTab } from "@/components/settings/KnowledgeBaseTab";
 import { AISettingsTab } from "@/components/settings/AISettingsTab";
 import { RemindersTab } from "@/components/settings/RemindersTab";
+import { IgreenProductsTab } from "@/components/settings/IgreenProductsTab";
+import { useAccountPlan } from "@/hooks/useAccountPlan";
 import { useAccount } from "@/hooks/useAccount";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -31,6 +33,8 @@ export default function Settings() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const { isOwner, membership } = useAccount();
+  const { tier } = useAccountPlan();
+  const isIgreen = tier === "igreen";
   const qc = useQueryClient();
   
   const [fullName, setFullName] = useState("");
@@ -138,6 +142,7 @@ export default function Settings() {
     { value: "reminders", label: "Lembretes" },
     { value: "subscriptions", label: "Assinatura" },
     { value: "knowledge-base", label: "Base de Conhecimento" },
+    { value: "igreen-products", label: "Produtos Igreen", show: isIgreen },
     { value: "team", label: "Equipe", show: !!isOwner },
     { value: "roulette", label: "Roleta" },
     { value: "notifications", label: "Notificações" },
@@ -276,6 +281,12 @@ export default function Settings() {
         <TabsContent value="knowledge-base">
           <KnowledgeBaseTab />
         </TabsContent>
+
+        {isIgreen && (
+          <TabsContent value="igreen-products">
+            <IgreenProductsTab />
+          </TabsContent>
+        )}
 
         <TabsContent value="notifications">
           <NotificationsTab />
