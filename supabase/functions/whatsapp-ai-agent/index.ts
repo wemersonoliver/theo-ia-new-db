@@ -948,6 +948,9 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
       pendingConfirmationContext,
       todayStr,
       todayFormatted,
+      brtTime: brt.brtTime,
+      brtGreeting: brt.greeting,
+      igreenProductsBlock,
     });
 
     // Build conversation messages
