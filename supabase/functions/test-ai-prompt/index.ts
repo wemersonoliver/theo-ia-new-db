@@ -78,7 +78,7 @@ function getGreenNameStepFirstName(messages: any[] | null | undefined, userMessa
 }
 
 function buildGreenIntroMessage(firstName: string): string {
-  return `Prazer em falar com você, ${firstName}. Aqui na iGreen Energy nós temos a Conexão Green, um serviço de energia por assinatura que garante desconto na sua conta de luz. Vou te enviar uma reportagem curta que explica exatamente o que é o serviço e como ele funciona.`;
+  return `Prazer em falar com você, ${firstName}. Aqui na iGreen Energy nós temos a Conexão Green, um serviço de energia por assinatura que garante desconto na sua conta de luz. Vou te enviar um vídeo rápido explicando exatamente como a Conexão Green funciona.`;
 }
 
 // Tool definitions for function calling (same as whatsapp-ai-agent)
