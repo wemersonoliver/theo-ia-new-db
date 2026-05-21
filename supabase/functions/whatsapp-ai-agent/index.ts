@@ -336,7 +336,7 @@ function getGreenNameStepFirstName(recentMessages: any[] | null | undefined, mes
 }
 
 function buildGreenIntroMessage(firstName: string): string {
-  return `Prazer em te conhecer, ${firstName}! A Conexão Green é o nosso serviço de energia por assinatura que te dá desconto na sua conta de luz. Vou te mandar uma reportagem que explica exatamente o que é o serviço e como funciona.`;
+  return `Prazer em falar com você, ${firstName}. A Conexão Green é o nosso serviço de energia por assinatura que garante desconto na sua conta de luz. Vou te enviar um vídeo rápido explicando exatamente como a Conexão Green funciona.`;
 }
 
 function resolveGreenVideoUrl(videoUrl: string | null | undefined): string {

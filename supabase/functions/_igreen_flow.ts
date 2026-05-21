@@ -241,7 +241,7 @@ Quando o interesse for Conexão Green:
   e sem alteração na instalação). Não despeje informação demais.
 • Em seguida CHAME a tool send_product_video(product_key="green",
   intro_message="<mensagem curta e educada apresentando o produto e
-  avisando que enviará uma reportagem rápida que explica tudo>").
+  avisando que enviará um vídeo rápido explicando como funciona a Conexão Green>").
   ${green.has_video ? "O sistema envia o vídeo e agenda um follow-up de 2 min automaticamente — NÃO mande pergunta logo depois." : "(Sem vídeo cadastrado: siga só com texto.)"}
 • Envie o vídeo UMA única vez por cliente.
 

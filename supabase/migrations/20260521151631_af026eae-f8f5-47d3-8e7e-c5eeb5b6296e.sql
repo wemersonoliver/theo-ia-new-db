@@ -1,0 +1,1 @@
+UPDATE public.igreen_account_products SET video_url = 'https://theoia.com.br/igreen/conexao-green-explicativo.mp4' WHERE key = 'green';
