@@ -1059,6 +1059,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
         // Handle send_product_video (envia vídeo institucional + agenda follow-up 2min)
         if (fc.name === "send_product_video") {
           const productKey = String(fc.args?.product_key || "green").toLowerCase();
+          const introMessage = typeof fc.args?.intro_message === "string" ? fc.args.intro_message.trim() : "";
           const videoResult = await executeSendProductVideo(
             supabase,
             userId,
@@ -1066,6 +1067,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
             phone,
             contactName,
             productKey,
+            introMessage,
           );
           geminiPayload.contents.push(content);
           geminiPayload.contents.push({
