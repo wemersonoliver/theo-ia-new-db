@@ -381,11 +381,21 @@ serve(async (req) => {
         // No simulador, send_product_video é apenas mockada (não envia vídeo real)
         let functionResult: any;
         if (fc.name === "send_product_video") {
+          const intro = typeof fc.args?.intro_message === "string" ? fc.args.intro_message.trim() : "";
+          // No simulador, exibimos a intro_message como mensagem real do assistente
+          // (para o usuário ver o texto que iria antes do vídeo em produção).
+          if (intro) {
+            aiReply = aiReply ? `${aiReply}\n\n${intro}` : intro;
+          }
+          aiReply = (aiReply ? `${aiReply}\n\n` : "") + `🎥 [Simulação] Vídeo do produto '${fc.args?.product_key || "green"}' enviado. Follow-up automático em 2min ("Conseguiu ver?").`;
           functionResult = {
             success: true,
             simulated: true,
-            message: `[SIMULAÇÃO] Vídeo do produto '${fc.args?.product_key || "green"}' seria enviado agora, e um follow-up automático seria agendado para 2 minutos depois. Continue o fluxo normalmente.`,
+            message: `[SIMULAÇÃO] intro_message${intro ? " enviada" : " ausente"} e vídeo do produto '${fc.args?.product_key || "green"}' enviado. Follow-up agendado para 2 minutos depois. Encerre o turno — não escreva nada agora.`,
           };
+          // Encerramos o turno aqui: em produção a IA não escreve mais nada após a tool.
+          functionCallsProcessed = maxFunctionCalls;
+          break;
         } else {
           functionResult = await executeFunction(supabaseUrl, fc.name, {
             ...fc.args,
