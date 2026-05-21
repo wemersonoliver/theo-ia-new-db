@@ -71,7 +71,8 @@ function extractGreenFirstName(messages: GreenSimulationMessage[], fallbackName?
       return isUser
         && raw.length <= 60
         && /[a-zA-ZÀ-ÿ]{2,}/.test(raw)
-        && !/(CONEXAO GREEN|ENERGIA|DESCONTO|FATURA|CONTA|CELESC|CEMIG|COPEL)/.test(norm);
+        && !/(CONEXAO GREEN|ENERGIA|DESCONTO|FATURA|CONTA|CELESC|CEMIG|COPEL|EQUATORIAL|ENEL|CPFL|COELBA)/.test(norm)
+        && !/^(BOM DIA|BOA TARDE|BOA NOITE|OI|OLA|OII|EAE|E AI|TUDO BEM|TB|OK|BELEZA|BLZ|SIM|NAO|NÃO|CLARO|VAI MANDANDO|MANDA|PODE MANDAR|UHUM|HUM|AHAM|VI|VI AGORA|JA VI|JÁ VI|OK OBRIGADO|OBRIGADO|OBRIGADA|VLW|VALEU|👍|👍🏼|✅|TA|TÁ)$/i.test(raw);
     });
 
     if (nextUser) return titleCaseFlowName(String(nextUser.content || nextUser.ai_content || "")).split(/\s+/)[0];
