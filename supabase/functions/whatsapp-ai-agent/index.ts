@@ -1052,6 +1052,33 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           continue;
         }
 
+        // Handle send_product_video (envia vídeo institucional + agenda follow-up 2min)
+        if (fc.name === "send_product_video") {
+          const productKey = String(fc.args?.product_key || "green").toLowerCase();
+          const videoResult = await executeSendProductVideo(
+            supabase,
+            userId,
+            accountId,
+            phone,
+            contactName,
+            productKey,
+          );
+          geminiPayload.contents.push(content);
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{ functionResponse: { name: fc.name, response: videoResult } }],
+          });
+          // Após enviar o vídeo, encerramos o turno: o follow-up de 2min é
+          // automático e a IA NÃO deve mandar texto extra agora.
+          if ((videoResult as any)?.success) {
+            aiReply = "";
+            functionCallsProcessed = maxFunctionCalls;
+            break;
+          }
+          functionCallsProcessed++;
+          continue;
+        }
+
         // Handle request_human_handoff (transfere para humano da equipe)
         if (fc.name === "request_human_handoff") {
           const handoffReason = String(fc.args?.reason || "Solicitação de atendimento humano");
