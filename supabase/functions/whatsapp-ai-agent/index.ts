@@ -649,20 +649,38 @@ serve(async (req) => {
     // Get knowledge base documents — usa RAG por palavras-chave para enviar
     // apenas trechos relevantes à pergunta atual (em vez do documento inteiro).
     // Isso reduz tokens de input em até 90% sem perder qualidade.
+    // Cada trecho é prefixado com o produto correspondente (quando houver),
+    // para que a IA saiba a qual produto a informação pertence.
     const { data: documents } = await supabase
       .from("knowledge_base_documents")
-      .select("content_text")
+      .select("content_text, igreen_product_id, file_name")
       .eq("user_id", userId)
       .eq("status", "ready");
 
+    // Mapa de produtos do account (id -> nome) para rotular os trechos
+    const productMap = new Map<string, string>();
+    try {
+      const { data: accProducts } = await supabase
+        .from("igreen_account_products")
+        .select("id, name, enabled")
+        .eq("account_id", accountId);
+      (accProducts || []).forEach((p: any) => productMap.set(p.id, p.name));
+    } catch (_) { /* opcional */ }
+
     const docTexts = (documents || [])
-      .map((d: any) => d.content_text)
-      .filter((t: any) => typeof t === "string" && t.length > 0);
+      .filter((d: any) => typeof d.content_text === "string" && d.content_text.length > 0)
+      .map((d: any) => {
+        const productName = d.igreen_product_id ? productMap.get(d.igreen_product_id) : null;
+        const header = productName
+          ? `[PRODUTO: ${productName}]`
+          : `[GERAL]`;
+        return `${header}\n${d.content_text}`;
+      });
 
     const knowledgeBase = docTexts.length > 0
       ? retrieveRelevantContext(messageContent || "", docTexts, {
           topK: 3,
-          maxChars: 1800,
+          maxChars: 2400,
           chunkSize: 800,
         })
       : "";
