@@ -123,11 +123,12 @@ const schedulingTools = {
     },
     {
       name: "send_product_video",
-      description: "Envia o vídeo institucional de um produto Igreen e agenda follow-up de 2min ('Conseguiu ver, {nome}?'). No simulador o envio é mockado, mas a IA deve continuar o fluxo exatamente como em produção. Após chamar esta tool, NÃO escreva texto extra no mesmo turno.",
+      description: "Envia o vídeo institucional de um produto Igreen e, opcionalmente, uma intro_message ANTES do vídeo. Agenda follow-up de 2min ('Conseguiu ver, {nome}?'). No simulador o envio do vídeo é mockado, mas a IA deve usar a tool exatamente como em produção. Após chamar a tool, NÃO escreva texto extra fora dela.",
       parameters: {
         type: "object",
         properties: {
-          product_key: { type: "string", description: "Chave do produto: 'green', 'telecom' ou 'expansao'." }
+          product_key: { type: "string", description: "Chave do produto: 'green', 'telecom' ou 'expansao'." },
+          intro_message: { type: "string", description: "Mensagem de texto enviada ANTES do vídeo (use o primeiro nome real do cliente). Opcional." }
         },
         required: ["product_key"]
       }
