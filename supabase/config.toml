@@ -106,3 +106,6 @@ verify_jwt = false
 
 [functions.igreen-trial-register]
 verify_jwt = false
+
+[functions.process-igreen-video-followups]
+verify_jwt = false
