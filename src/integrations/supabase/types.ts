@@ -1943,6 +1943,50 @@ export type Database = {
         }
         Relationships: []
       }
+      igreen_account_products: {
+        Row: {
+          account_id: string
+          created_at: string
+          description: string | null
+          enabled: boolean
+          id: string
+          key: string
+          name: string
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          id?: string
+          key: string
+          name: string
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          id?: string
+          key?: string
+          name?: string
+          position?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_account_products_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       igreen_default_ai_config: {
         Row: {
           agent_name: string
@@ -2303,11 +2347,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "igreen_scenarios_product_key_fkey"
-            columns: ["product_key"]
+            foreignKeyName: "igreen_scenarios_account_product_fkey"
+            columns: ["account_id", "product_key"]
             isOneToOne: false
-            referencedRelation: "igreen_products"
-            referencedColumns: ["key"]
+            referencedRelation: "igreen_account_products"
+            referencedColumns: ["account_id", "key"]
           },
         ]
       }
@@ -2320,6 +2364,7 @@ export type Database = {
           file_path: string
           file_size: number | null
           id: string
+          igreen_product_id: string | null
           status: string | null
           user_id: string
         }
@@ -2331,6 +2376,7 @@ export type Database = {
           file_path: string
           file_size?: number | null
           id?: string
+          igreen_product_id?: string | null
           status?: string | null
           user_id: string
         }
@@ -2342,10 +2388,19 @@ export type Database = {
           file_path?: string
           file_size?: number | null
           id?: string
+          igreen_product_id?: string | null
           status?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_base_documents_igreen_product_id_fkey"
+            columns: ["igreen_product_id"]
+            isOneToOne: false
+            referencedRelation: "igreen_account_products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notification_contacts: {
         Row: {
