@@ -65,11 +65,13 @@ export function useIgreenScenarios() {
   const qc = useQueryClient();
 
   const productsQ = useQuery({
-    queryKey: ["igreen-products"],
+    queryKey: ["igreen-products", accountId],
+    enabled: !!accountId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("igreen_products")
-        .select("*")
+        .from("igreen_account_products")
+        .select("key, name, description, enabled, position")
+        .eq("account_id", accountId!)
         .eq("enabled", true)
         .order("position");
       if (error) throw error;
