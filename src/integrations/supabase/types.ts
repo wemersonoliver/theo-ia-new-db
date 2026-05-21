@@ -1949,33 +1949,42 @@ export type Database = {
           created_at: string
           description: string | null
           enabled: boolean
+          followup_after_video_message: string
+          followup_after_video_seconds: number
           id: string
           key: string
           name: string
           position: number
           updated_at: string
+          video_url: string | null
         }
         Insert: {
           account_id: string
           created_at?: string
           description?: string | null
           enabled?: boolean
+          followup_after_video_message?: string
+          followup_after_video_seconds?: number
           id?: string
           key: string
           name: string
           position?: number
           updated_at?: string
+          video_url?: string | null
         }
         Update: {
           account_id?: string
           created_at?: string
           description?: string | null
           enabled?: boolean
+          followup_after_video_message?: string
+          followup_after_video_seconds?: number
           id?: string
           key?: string
           name?: string
           position?: number
           updated_at?: string
+          video_url?: string | null
         }
         Relationships: [
           {
@@ -2022,6 +2031,59 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: []
+      }
+      igreen_product_video_followups: {
+        Row: {
+          account_id: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          created_at: string
+          id: string
+          message: string
+          phone: string
+          product_id: string | null
+          scheduled_at: string
+          sent_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          id?: string
+          message: string
+          phone: string
+          product_id?: string | null
+          scheduled_at: string
+          sent_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          id?: string
+          message?: string
+          phone?: string
+          product_id?: string | null
+          scheduled_at?: string
+          sent_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_product_video_followups_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "igreen_account_products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       igreen_products: {
         Row: {
