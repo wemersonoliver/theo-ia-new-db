@@ -321,6 +321,18 @@ serve(async (req) => {
         // Move CRM deal to "Agendamento Realizado"
         await moveCRMDealByPhone(supabase, userId, phone, "Agendamento Realizado");
 
+        // Tag automática: adiciona "agendamento" ao contato e cancela follow-up
+        if (resolvedAccountId && phone) {
+          try {
+            await supabase.rpc("tag_contact_reserved", {
+              _account_id: resolvedAccountId,
+              _phone: phone,
+              _tag: "agendamento",
+              _add: true,
+            });
+          } catch (e) { console.error("tag_contact_reserved (create) err:", e); }
+        }
+
         return new Response(JSON.stringify({ 
           success: true,
           appointment,
