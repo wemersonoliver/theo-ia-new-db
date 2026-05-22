@@ -1609,19 +1609,19 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
         });
       }
 
-      // Fallback humanizado: o Gemini pode ter bloqueado a resposta por safety
-      // (acontece com CNH/RG que contêm CPF, MRZ, etc.). Em vez de ficar mudo,
-      // mandamos uma mensagem de espera e disparamos handoff para o time
-      // assumir manualmente. Isso evita o problema "IA parou de responder".
+      // Fallback humanizado: quando o Gemini retorna vazio, não podemos assumir
+      // que o cliente enviou material/documento. A mensagem antiga dizia
+      // "Recebi seu material" mesmo em texto comum (ex.: cliente informou nome),
+      // causando o bug relatado. Agora usamos uma recuperação neutra e mantemos
+      // o atendimento com a IA ativa.
       try {
-        const waitingMessage = "Recebi seu material! 😊\n\nDeixa eu validar com a equipe e já te confirmo aqui mesmo, tudo bem?";
+        const waitingMessage = "Perfeito, obrigado! 😊\n\nPode me mandar sua próxima dúvida ou informação para eu continuar te ajudando por aqui.";
         await sendAndSaveAIMessageParts(supabase, userId, phone, waitingMessage);
-        console.log("[EMPTY-RESPONSE FALLBACK] Sent waiting message and triggering handoff");
-        await performHandoff(supabase, userId, accountId, phone, contactName, aiConfig);
+        console.log("[EMPTY-RESPONSE FALLBACK] Sent neutral recovery message");
       } catch (e) {
         console.error("[EMPTY-RESPONSE FALLBACK] Failed:", e);
       }
-      return new Response(JSON.stringify({ handoff: true, fallback: "empty_ai_response" }), {
+      return new Response(JSON.stringify({ success: true, fallback: "empty_ai_response" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
