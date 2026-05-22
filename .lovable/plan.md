@@ -1,104 +1,95 @@
-## Diagnóstico da conversa testada (Wemerson → 5547989118695)
+## Diagnóstico do atendimento 5547991293662
 
-Fluxo atual funcionou bem até a fatura, MAS:
-- A fatura veio em nome de **Neide de Carvalho Bueno Marques** e o cliente se apresentou como **Wemerson**. A IA não percebeu e passou a chamar o cliente de "Neide".
-- A CNH enviada era do **Wemerson Leite Oliveira** (nome diferente do titular da fatura). A IA também não comparou.
-- Nenhuma tag foi adicionada e nenhum card de CRM foi movimentado nas etapas do funil ao longo do atendimento.
-- Não houve notificação ao usuário (vendedor) quando o lead completou o envio dos documentos.
+Conversa de 22/05 03:49–03:55:
 
-## O que vai ser implementado
+1. **Tempo pós-vídeo muito longo:** vídeo enviado às 03:50:01, próxima mensagem ("O que achou…") só às 03:53:03 — 3 min. Hoje `igreen_account_products.followup_after_video_seconds = 120` (padrão) e nessa account está em 120s+atrasos. Você quer **50s**.
 
-### 1. Novas etapas no pipeline padrão (CRM do cliente)
-Para todo account novo e como migração para os existentes:
-- "Iniciou atendimento"
-- "Enviou fatura"
-- "Enviou documento"
-- "Aguardando humano" (etapa final do fluxo automatizado)
+2. **Cliente perguntou "o que precisa?" e a IA respondeu com outra pergunta** ("Posso te mostrar quanto você economizaria?"). O prompt manda perguntar antes da simulação. Falta regra: quando o cliente faz uma pergunta direta ("o que precisa", "como funciona", "como faço"), responder diretamente o próximo passo (qualificação curta) sem devolver outra pergunta retórica.
 
-A ordem ficará: IA → Iniciou atendimento → Enviou fatura → Enviou documento → Aguardando humano → (etapas de venda existentes).
+3. **"Equatorial / Pará / Residencial / R$ 500" → IA respondeu "vou verificar com a equipe".** Causa raiz: o helper determinístico `buildGreenSimulationReply` (`_igreen_flow.ts`) busca o desconto fazendo regex em cima do texto bruto da base de conhecimento (`findDiscountPercentage`). Se o documento da KB não tem o cabeçalho "Equatorial (PA)" no formato esperado, retorna `null` e o modelo cai no fallback "confirmar com a equipe". É frágil por design — depende do PDF estar formatado certo e do RAG por palavra-chave devolver o trecho.
 
-### 2. Sistema de automações por tag
-Nova tabela `crm_tag_automations` ligando uma tag a uma etapa de destino dentro de um pipeline. Quando uma tag é adicionada ao deal/contato, um trigger move o card para a etapa configurada (se ainda não estiver à frente dela).
+## Solução definitiva: tabela estruturada de descontos
 
-Automações pré-criadas para todo account:
-- tag `em atendimento` → etapa "Iniciou atendimento"
-- tag `enviou fatura` → etapa "Enviou fatura"
-- tag `enviou documento` → etapa "Enviou documento"
+Parar de depender de regex sobre PDF. Criar fonte de verdade estruturada.
 
-### 3. Novos campos estruturados por lead (Conexão Green)
-Nova tabela `igreen_lead_data` (1 por contato + account) para a IA não se perder:
-- estado
-- distribuidora
-- tipo_conta (residencial/comercial)
-- nome_cliente (como o cliente se apresentou)
-- nome_titular_fatura (extraído do PDF)
-- cpf_titular_fatura (mascarado)
-- valor_fatura
-- nome_documento_identificacao (extraído do RG/CNH)
-- cpf_documento (mascarado)
-- fatura_url, documento_url
-- titular_confirmado (bool — cliente confirmou que titular faz o cadastro)
-- nomes_conferem (bool — nome do documento bate com titular da fatura)
+### 1. Tempo do follow-up pós-vídeo → 50s
 
-A IA passa a ler/escrever esses campos via novas tools (`save_green_lead_field`, `get_green_lead_data`).
+- Migração: `UPDATE igreen_account_products SET followup_after_video_seconds = 50 WHERE key = 'green' AND followup_after_video_seconds = 120;`
+- Mudar o default da coluna para 50.
+- (Opcional) Mostrar campo já existente na UI de produtos Igreen.
 
-### 4. Novas tools no agente WhatsApp (`whatsapp-ai-agent` + simulador `test-ai-prompt`)
-- `add_contact_tag(tag)` — adiciona tag no contato e dispara automação de etapa.
-- `save_green_lead_field(field, value)` — preenche `igreen_lead_data`.
-- `validate_green_invoice(extracted_name, extracted_cpf)` — chamada após receber fatura: salva os dados e compara com `nome_cliente`. Retorna `match: true|false`.
-- `validate_green_identity(extracted_name)` — chamada após receber documento: compara com `nome_titular_fatura`. Retorna `match: true|false`.
+### 2. Nova tabela `igreen_distributor_discounts` (global, sem account_id)
 
-### 5. Regras de comportamento da IA (atualização do `_igreen_flow.ts`)
+Colunas:
+- `state` (UF, ex: "PA")
+- `state_name` (ex: "Pará")
+- `distributor` (ex: "Equatorial")
+- `distributor_aliases` (text[], ex: `{equatorial pa, equatorial para}`)
+- `discount_residencial_percent` numeric
+- `discount_comercial_percent` numeric
+- `min_bill_brl` numeric (faixa mínima atendida, ex: 200)
+- `notes` text (prazos, observações)
+- `enabled` bool
 
-ETAPA 3 (resposta ao vídeo):
-- Ao receber a 1ª resposta do cliente após o vídeo, ANTES de qualquer outra coisa, chamar `add_contact_tag("em atendimento")`.
+RLS: leitura pública autenticada (todos accounts usam a mesma tabela), escrita só super_admin. Painel `/admin/igreen-discounts` para super_admin manter (CRUD simples).
 
-ETAPA QUALIFICAÇÃO:
-- Conforme o cliente vai respondendo, chamar `save_green_lead_field` para estado/distribuidora/tipo_conta/valor.
+Seed inicial com todas as distribuidoras hoje cobertas pela iGreen (Celesc, CPFL, Enel SP/RJ/CE, Equatorial PA/MA/PI/AL, Energisa MT/MS/TO, Coelba, Cemig, Light, Neoenergia, Copel, etc).
 
-ETAPA FATURA:
-- Ao receber a fatura, chamar `validate_green_invoice(...)` com o nome do titular extraído.
-- Se `match === true` → chamar `add_contact_tag("enviou fatura")` e seguir para pedido de documento.
-- Se `match === false` → NÃO adicionar tag ainda. Responder educadamente:
-  "{nome}, percebi que a conta está no nome de {titular}. Apenas o titular da fatura pode fazer o cadastro. Essa pessoa vai conseguir concluir o cadastro com a gente?"
-  - Se cliente confirmar → seguir, salvar `titular_confirmado=true`, adicionar tag `enviou fatura`.
-  - Se cliente negar → handoff humano com motivo "Titular da fatura indisponível".
+### 3. Substituir `findDiscountPercentage` por consulta à tabela
 
-ETAPA DOCUMENTO:
-- Ao receber RG/CNH, chamar `validate_green_identity(...)`.
-- Se nome do documento bater com o titular da fatura → `add_contact_tag("enviou documento")` E chamar `request_human_handoff` com motivo "Lead Conexão Green completou o fluxo, assumir atendimento".
-- Se NÃO bater → responder: "Vi que o documento está em nome de {X} e a fatura está em nome de {Y}. Para concluir o cadastro preciso do documento do titular da fatura. Pode me enviar?"
+- Em `_igreen_flow.ts`, `buildGreenSimulationReply` passa a receber uma função `lookupDiscount(state, distributor, accountType)` injetada pelo edge function (que faz `select` na tabela com `ilike` em distributor + aliases).
+- Determinístico, instantâneo, sem dependência de KB.
+- Mantém o fallback de prompt: se a tabela não cobrir a distribuidora, IA admite que vai confirmar com a equipe (aí faz sentido).
 
-### 6. Notificação ao usuário (vendedor) quando o lead completa o fluxo
-Quando a tag `enviou documento` for adicionada, além de mover o card, dispara mensagem pela instância **system_whatsapp_instance** (mesmo canal das transferências para humano) para o WhatsApp do dono da account (e team members marcados em `notification_contacts.notify_handoffs`):
+### 4. Nova tool `get_distributor_discount(state, distributor, account_type)` no `whatsapp-ai-agent` e `test-ai-prompt`
 
-> "🚨 Lead pronto para fechamento — {nome} ({telefone}) completou o fluxo da Conexão Green e enviou fatura + documento. Assuma o atendimento."
+- Antes de responder qualquer coisa sobre desconto/simulação, o prompt obriga a IA a chamar essa tool.
+- Retorna `{ found, discount_percent, min_bill, notes }`.
+- Se `found=false` → resposta padrão honesta ("essa distribuidora não está na minha lista, vou pedir confirmação ao time").
+- Se `found=true` → IA pode fazer a simulação de economia direto, sem "verificar com a equipe".
 
-Reaproveita o caminho de notificação de handoff já existente.
+### 5. Injeção compacta no prompt (defensivo)
 
-### 7. Varredura inicial
-Migração roda uma única vez para:
-- Criar as 4 novas etapas em todos os pipelines existentes (na posição correta, antes das etapas de venda).
-- Criar as 3 automações de tag em todas as accounts.
+Quando o `_igreen_flow.ts` detectar que a conversa já tem `estado` e/ou `distribuidora` salvos em `igreen_lead_data`, injeta no system prompt um bloco curto tipo:
 
----
+```
+DESCONTO CONFIRMADO DA DISTRIBUIDORA DO CLIENTE:
+- Equatorial / PA / Residencial: 15%
+- Faixa mínima: R$ 200
+```
 
-## Arquivos / mudanças técnicas
+Assim, mesmo se a IA não chamar a tool, o número correto já está no contexto e o fallback "vou verificar com a equipe" some.
 
-**Migração SQL:**
-- Cria tabelas `crm_tag_automations`, `igreen_lead_data` com RLS por account.
-- Insere 4 etapas + 3 automações em todo pipeline/account existente.
-- Trigger `trg_apply_tag_automation` em `contacts` (AFTER UPDATE of tags) e em `crm_deals` (AFTER UPDATE of tags) que move o deal ativo do contato para a etapa configurada.
-- Ajuste no `seed` de pipelines para incluir as novas etapas em accounts futuras.
+### 6. Regra de fluxo: não responder pergunta com pergunta
 
-**Edge functions:**
-- `supabase/functions/whatsapp-ai-agent/index.ts` — registra novas tools, handlers, e a chamada de notificação ao dono.
-- `supabase/functions/test-ai-prompt/index.ts` — versão simulada das mesmas tools (sem efeitos colaterais).
-- `supabase/functions/_igreen_flow.ts` — bloco de prompt atualizado com as regras de validação de titularidade e uso obrigatório das tools de tag/lead-data.
+Adicionar no bloco de regras do `_igreen_flow.ts` (etapa pós-vídeo):
 
-**Frontend:**
-- Sem mudança de UI obrigatória; as tags/etapas novas já aparecem nos componentes existentes de CRM e contatos. (Opcional num próximo passo: tela de gerenciamento das automações de tag em Settings → CRM.)
+> Se o cliente fizer pergunta direta ("o que precisa?", "como funciona?", "como faço?"), NÃO devolva outra pergunta. Responda em 1 frase curta o próximo passo objetivo (ex.: "Só preciso da sua distribuidora de energia e do estado pra te mostrar quanto você economiza.") e só então peça a informação.
 
----
+## Arquivos/mudanças técnicas
+
+- **Migração SQL:**
+  - Criar `igreen_distributor_discounts` + RLS + seed inicial.
+  - `UPDATE` em `igreen_account_products` zerando 120→50s e alterando default.
+- **`supabase/functions/_igreen_flow.ts`:**
+  - Remover/depreciar `findDiscountPercentage`.
+  - `buildGreenSimulationReply` passa a aceitar `lookupDiscount` injetado.
+  - Bloco de prompt ganha:
+    - regra "não responda pergunta com pergunta",
+    - instrução para chamar `get_distributor_discount` antes de simular,
+    - placeholder de injeção do desconto confirmado quando lead_data já tem estado+distribuidora.
+- **`supabase/functions/whatsapp-ai-agent/index.ts` e `test-ai-prompt/index.ts`:**
+  - Registrar tool `get_distributor_discount` (handler faz SELECT na nova tabela).
+  - Antes de montar o prompt, fazer lookup com `igreen_lead_data.estado/distribuidora` e injetar bloco "DESCONTO CONFIRMADO".
+  - Passar `lookupDiscount` para `buildGreenSimulationReply`.
+- **Frontend (opcional, sem bloquear):**
+  - Tela super_admin `/admin/igreen-discounts` (lista + edição inline). Pode ficar para um próximo passo se você preferir só popular via seed agora.
+
+## Resultado esperado
+
+- Pós-vídeo: 50s exatos.
+- Pergunta direta do cliente → resposta direta + próximo passo, sem pergunta retórica no meio.
+- Desconto por distribuidora/estado vem de tabela estruturada, não de PDF. Acaba o "vou verificar com a equipe" para distribuidoras já mapeadas.
+- Atualizar desconto = editar 1 linha na tabela, sem mexer em KB nem em prompt.
 
 ## Posso seguir com essa implementação?
