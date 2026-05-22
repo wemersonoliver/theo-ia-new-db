@@ -72,6 +72,7 @@ export type Database = {
           business_code: number
           created_at: string
           id: string
+          is_igreen: boolean
           name: string
           owner_user_id: string
           pro_trial_activated: boolean
@@ -83,6 +84,7 @@ export type Database = {
           business_code?: number
           created_at?: string
           id?: string
+          is_igreen?: boolean
           name?: string
           owner_user_id: string
           pro_trial_activated?: boolean
@@ -94,6 +96,7 @@ export type Database = {
           business_code?: number
           created_at?: string
           id?: string
+          is_igreen?: boolean
           name?: string
           owner_user_id?: string
           pro_trial_activated?: boolean
