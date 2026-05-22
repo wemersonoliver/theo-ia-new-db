@@ -10,7 +10,7 @@ const corsHeaders = {
 };
 
 const MAX_LEADS_PER_RUN = 4;
-const TOTAL_STEPS = 12; // 6 dias × 2 mensagens/dia
+const TOTAL_STEPS = 6; // 1 mensagem por dia × 6 dias
 
 function sanitizeContactName(rawName: string | null | undefined): string | null {
   const v = extractPersonName(rawName);
@@ -32,7 +32,7 @@ async function generateSequence(
   businessDescription: string | null,
   bargainingTools: string,
 ): Promise<{ messages: SequenceMessage[]; tokens: { input: number; output: number } } | null> {
-  const prompt = `Você é um especialista em vendas e copywriting. Gere uma SEQUÊNCIA NARRATIVA de ${TOTAL_STEPS} mensagens de follow-up que devem ser enviadas em ordem (manhã/tarde × 6 dias) para reativar um lead inativo no WhatsApp.
+  const prompt = `Você é um especialista em vendas e copywriting. Gere uma SEQUÊNCIA NARRATIVA de ${TOTAL_STEPS} mensagens de follow-up que devem ser enviadas em ordem (UMA mensagem por dia, durante 6 dias) para reativar um lead inativo no WhatsApp.
 
 CONTEXTO DA CONVERSA ANTERIOR:
 ${contextText || "(sem histórico relevante — cliente nunca respondeu)"}
@@ -45,13 +45,12 @@ ${businessDescription ? `- Negócio: ${businessDescription}` : ""}
 ${bargainingTools ? `- Ferramentas de negociação disponíveis: ${bargainingTools}` : ""}
 
 REGRAS OBRIGATÓRIAS DO ARCO NARRATIVO:
-- Step 1-2 (Dia 1): leveza, pergunta calibrada ou confirmação de leitura. Reabra a conversa.
-- Step 3-4 (Dia 2): rótulo Voss + coerência (relembre o que o cliente já disse).
-- Step 5-6 (Dia 3): dor real + prova social (sem nomes).
-- Step 7-8 (Dia 4): solução concreta + reciprocidade (oferecer algo de valor).
-- Step 9-10 (Dia 5): escassez REAL com prazo/condição.
-- Step 11 (Dia 6 manhã): última tentativa com pergunta forte.
-- Step 12 (Dia 6 tarde): pergunta de saída elegante (encerramento).
+- Step 1 (Dia 1): leveza, pergunta calibrada ou confirmação de leitura. Reabra a conversa.
+- Step 2 (Dia 2): rótulo Voss + coerência (relembre o que o cliente já disse).
+- Step 3 (Dia 3): dor real + prova social (sem nomes).
+- Step 4 (Dia 4): solução concreta + reciprocidade (oferecer algo de valor).
+- Step 5 (Dia 5): escassez REAL com prazo/condição.
+- Step 6 (Dia 6): pergunta de saída elegante (última tentativa + encerramento).
 
 REGRAS DE ESTILO:
 - Cada mensagem com no máximo 220 caracteres.
@@ -76,7 +75,7 @@ Retorne via tool call um array com EXATAMENTE ${TOTAL_STEPS} mensagens em ordem.
             items: {
               type: "object",
               properties: {
-                step: { type: "integer", description: "Número do step (1-12)" },
+                step: { type: "integer", description: `Número do step (1-${TOTAL_STEPS})` },
                 hook: { type: "string", description: "Nome do gancho usado" },
                 content: { type: "string", description: "Texto da mensagem (máx 220 chars)" },
               },

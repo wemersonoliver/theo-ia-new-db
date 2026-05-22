@@ -182,16 +182,16 @@ export function FollowupTab() {
                     max={15}
                   />
                   <p className="text-xs text-muted-foreground">
-                    2 disparos por dia × {formData.max_days} dias = {formData.max_days * 2} tentativas
+                    1 mensagem por dia × {formData.max_days} dias = {formData.max_days} tentativas
                   </p>
                 </div>
               </div>
 
-              {/* Janelas de Horário */}
+              {/* Janela única de horário */}
               <div className="rounded-lg border p-4 space-y-4">
                 <h4 className="font-medium text-sm flex items-center gap-2">
                   <Sun className="h-4 w-4 text-amber-500" />
-                  Janela da Manhã
+                  Janela de Envio (única)
                 </h4>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1">
@@ -208,33 +208,6 @@ export function FollowupTab() {
                     <Label className="text-xs">Fim</Label>
                     <Input
                       type="time"
-                      value={formData.morning_window_end}
-                      onChange={(e) =>
-                        setFormData({ ...formData, morning_window_end: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-
-                <h4 className="font-medium text-sm flex items-center gap-2 pt-2">
-                  <Moon className="h-4 w-4 text-indigo-400" />
-                  Janela da Tarde
-                </h4>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Início</Label>
-                    <Input
-                      type="time"
-                      value={formData.evening_window_start}
-                      onChange={(e) =>
-                        setFormData({ ...formData, evening_window_start: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Fim</Label>
-                    <Input
-                      type="time"
                       value={formData.evening_window_end}
                       onChange={(e) =>
                         setFormData({ ...formData, evening_window_end: e.target.value })
@@ -243,7 +216,7 @@ export function FollowupTab() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  💡 Os horários de disparo são aleatórios dentro dessas janelas para simular comportamento humano
+                  💡 1 mensagem por dia em horário aleatório dentro dessa janela (padrão 08:00–19:00). Domingos são pulados.
                 </p>
               </div>
 

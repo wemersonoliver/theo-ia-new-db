@@ -309,6 +309,17 @@ const schedulingTools = {
         },
         required: ["state", "distributor"]
       }
+    },
+    {
+      name: "mark_lead_uninterested",
+      description: "Marca o lead como SEM INTERESSE quando o cliente disser explicitamente que não tem interesse, não quer mais receber mensagens, pediu para parar, encerrou o contato ou recusou a oferta de forma clara. Adiciona a tag 'sem-interesse' no contato e BLOQUEIA QUALQUER follow-up futuro automaticamente. NÃO use por inatividade ou silêncio — use apenas com declaração explícita do cliente.",
+      parameters: {
+        type: "object",
+        properties: {
+          reason: { type: "string", description: "Motivo curto informado ou inferido (ex.: 'não tem interesse', 'pediu para parar', 'já contratou outro')." }
+        },
+        required: []
+      }
     }
   ]
 };
@@ -1533,6 +1544,38 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           geminiPayload.contents.push({
             role: "user",
             parts: [{ functionResponse: { name: fc.name, response } }],
+          });
+          functionCallsProcessed++;
+          continue;
+        }
+
+        // ====== MARK LEAD UNINTERESTED — bloqueia follow-up ======
+        if (fc.name === "mark_lead_uninterested") {
+          const reason = String(fc.args?.reason || "sem interesse declarado").slice(0, 200);
+          let tagResult: any = { success: false };
+          try {
+            if (accountId) {
+              const { error } = await supabase.rpc("tag_contact_reserved", {
+                _account_id: accountId,
+                _phone: phone,
+                _tag: "sem-interesse",
+                _add: true,
+              });
+              if (!error) tagResult = { success: true, tag: "sem-interesse", reason };
+              else tagResult = { success: false, error: error.message };
+            }
+            // Garante cancelamento mesmo se RPC tiver falhado parcialmente
+            await supabase.rpc("cancel_followup_sequence", {
+              p_user_id: userId, p_phone: phone, p_reason: "declined",
+            });
+          } catch (e) {
+            console.error("mark_lead_uninterested err:", e);
+            tagResult = { success: false, error: e instanceof Error ? e.message : "unknown" };
+          }
+          geminiPayload.contents.push(content);
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{ functionResponse: { name: fc.name, response: { ...tagResult, instruction: "Encerre a conversa com elegância e respeito. NÃO insista. Agradeça e deixe o canal aberto caso ele mude de ideia." } } }],
           });
           functionCallsProcessed++;
           continue;

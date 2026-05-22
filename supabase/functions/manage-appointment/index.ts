@@ -321,6 +321,18 @@ serve(async (req) => {
         // Move CRM deal to "Agendamento Realizado"
         await moveCRMDealByPhone(supabase, userId, phone, "Agendamento Realizado");
 
+        // Tag automática: adiciona "agendamento" ao contato e cancela follow-up
+        if (resolvedAccountId && phone) {
+          try {
+            await supabase.rpc("tag_contact_reserved", {
+              _account_id: resolvedAccountId,
+              _phone: phone,
+              _tag: "agendamento",
+              _add: true,
+            });
+          } catch (e) { console.error("tag_contact_reserved (create) err:", e); }
+        }
+
         return new Response(JSON.stringify({ 
           success: true,
           appointment,
@@ -362,6 +374,29 @@ serve(async (req) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" } 
           });
         }
+
+        // Verifica se ainda restam agendamentos ativos do contato; se não, remove a tag "agendamento"
+        try {
+          const cancelledApt = data[0];
+          const aptPhone = cancelledApt?.phone;
+          const aptAccount = cancelledApt?.account_id;
+          if (aptAccount && aptPhone) {
+            const { count: remaining } = await supabase
+              .from("appointments")
+              .select("id", { count: "exact", head: true })
+              .eq("user_id", userId)
+              .eq("phone", aptPhone)
+              .in("status", ["scheduled", "confirmed"]);
+            if (!remaining || remaining === 0) {
+              await supabase.rpc("tag_contact_reserved", {
+                _account_id: aptAccount,
+                _phone: aptPhone,
+                _tag: "agendamento",
+                _add: false,
+              });
+            }
+          }
+        } catch (e) { console.error("tag_contact_reserved (cancel) err:", e); }
 
         return new Response(JSON.stringify({ 
           success: true,
@@ -606,6 +641,19 @@ serve(async (req) => {
 
         // Move CRM deal to "Agendamento Confirmado"
         await moveCRMDealByPhone(supabase, userId, aptToConfirm.phone, "Agendamento Confirmado");
+
+        // Garante tag "agendamento" no contato e cancela follow-up
+        try {
+          const acc = aptToConfirm.account_id;
+          if (acc && aptToConfirm.phone) {
+            await supabase.rpc("tag_contact_reserved", {
+              _account_id: acc,
+              _phone: aptToConfirm.phone,
+              _tag: "agendamento",
+              _add: true,
+            });
+          }
+        } catch (e) { console.error("tag_contact_reserved (confirm) err:", e); }
 
         return new Response(JSON.stringify({ 
           success: true,

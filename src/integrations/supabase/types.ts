@@ -4319,6 +4319,15 @@ export type Database = {
         Args: { p_phone: string; p_reason: string }
         Returns: number
       }
+      tag_contact_reserved: {
+        Args: {
+          _account_id: string
+          _add: boolean
+          _phone: string
+          _tag: string
+        }
+        Returns: number
+      }
     }
     Enums: {
       account_member_status: "active" | "invited" | "suspended" | "removed"
