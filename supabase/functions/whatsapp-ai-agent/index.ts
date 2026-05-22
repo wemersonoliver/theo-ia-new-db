@@ -1764,63 +1764,50 @@ async function executeFunction(supabase: any, supabaseUrl: string, name: string,
 
 function splitMessage(text: string): string[] {
   const trimmed = text.trim();
-  const HARD_MAX = 220;
-  const softLimit = 150;
-  const splitByLimit = (value: string, limit = softLimit): string[] => {
+  const MAX = 500;
+  if (!trimmed) return [];
+
+  // 1. Quebra por parágrafos (\n\n+) primeiro
+  const paragraphs = trimmed.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+
+  const splitParagraph = (paragraph: string): string[] => {
+    if (paragraph.length <= MAX) return [paragraph];
+    // 2. Se passa do limite, quebra por sentenças (. ! ?) e agrupa
+    const sentences = paragraph.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
     const out: string[] = [];
-    let remaining = value.trim();
-    while (remaining.length > limit) {
-      const window = remaining.slice(0, Math.min(HARD_MAX, limit) + 1);
-      const cut = Math.max(
-        window.lastIndexOf(". "),
-        window.lastIndexOf("! "),
-        window.lastIndexOf("? "),
-        window.lastIndexOf(", "),
-        window.lastIndexOf("; "),
-        window.lastIndexOf(" "),
-      );
-      const splitAt = cut > 70 ? cut + 1 : Math.min(HARD_MAX, limit);
-      out.push(remaining.slice(0, splitAt).trim());
-      remaining = remaining.slice(splitAt).trim();
+    let current = "";
+    for (const sentence of sentences) {
+      if (!current) {
+        current = sentence;
+        continue;
+      }
+      const next = current + " " + sentence;
+      if (next.length > MAX) {
+        out.push(current);
+        current = sentence;
+      } else {
+        current = next;
+      }
     }
-    if (remaining) out.push(remaining);
-    return out.filter(Boolean);
+    if (current) out.push(current);
+    // 3. Fallback: se uma sentença sozinha ainda passa do limite, força corte por palavra
+    return out.flatMap(chunk => {
+      if (chunk.length <= MAX) return [chunk];
+      const pieces: string[] = [];
+      let remaining = chunk;
+      while (remaining.length > MAX) {
+        const window = remaining.slice(0, MAX + 1);
+        const cut = Math.max(window.lastIndexOf(", "), window.lastIndexOf("; "), window.lastIndexOf(" "));
+        const at = cut > 100 ? cut + 1 : MAX;
+        pieces.push(remaining.slice(0, at).trim());
+        remaining = remaining.slice(at).trim();
+      }
+      if (remaining) pieces.push(remaining);
+      return pieces;
+    });
   };
 
-  // Mensagens muito curtas não precisam ser divididas
-  if (trimmed.length <= softLimit) return [trimmed];
-
-  // 1. Se a IA já marcou parágrafos com \n\n, respeita
-  const paragraphs = trimmed.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
-  if (paragraphs.length > 1) {
-    return paragraphs.flatMap(part => splitByLimit(part)).filter(Boolean);
-  }
-
-  // 2. Sem parágrafos: força divisão por sentenças sempre que passa de ~140 chars
-  //    Isso garante humanização mesmo quando a IA esquece o \n\n.
-  const sentences = trimmed.split(/(?<=[.!?…])\s+/).map(s => s.trim()).filter(Boolean);
-  if (sentences.length <= 1) return splitByLimit(trimmed);
-
-  const TARGET = 150; // alvo por bloco
-  const MAX = HARD_MAX;    // limite duro por bloco
-  const chunks: string[] = [];
-  let current = "";
-  for (const sentence of sentences) {
-    if (!current) {
-      current = sentence;
-      continue;
-    }
-    const next = current + " " + sentence;
-    if (next.length > MAX || current.length >= TARGET) {
-      chunks.push(current);
-      current = sentence;
-    } else {
-      current = next;
-    }
-  }
-  if (current) chunks.push(current);
-
-  return chunks.flatMap(part => splitByLimit(part, HARD_MAX)).filter(Boolean);
+  return paragraphs.flatMap(splitParagraph).filter(Boolean);
 }
 
 function delay(ms: number): Promise<void> {
