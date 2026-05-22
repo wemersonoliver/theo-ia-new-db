@@ -2087,6 +2087,51 @@ export type Database = {
         }
         Relationships: []
       }
+      igreen_distributor_discounts: {
+        Row: {
+          created_at: string
+          discount_comercial_percent: number | null
+          discount_residencial_percent: number | null
+          distributor: string
+          distributor_aliases: string[]
+          enabled: boolean
+          id: string
+          min_bill_brl: number | null
+          notes: string | null
+          state: string
+          state_name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          discount_comercial_percent?: number | null
+          discount_residencial_percent?: number | null
+          distributor: string
+          distributor_aliases?: string[]
+          enabled?: boolean
+          id?: string
+          min_bill_brl?: number | null
+          notes?: string | null
+          state: string
+          state_name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          discount_comercial_percent?: number | null
+          discount_residencial_percent?: number | null
+          distributor?: string
+          distributor_aliases?: string[]
+          enabled?: boolean
+          id?: string
+          min_bill_brl?: number | null
+          notes?: string | null
+          state?: string
+          state_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       igreen_lead_data: {
         Row: {
           account_id: string
