@@ -1451,9 +1451,22 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      return new Response(JSON.stringify({ error: "No AI response" }), { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+
+      // Fallback humanizado: o Gemini pode ter bloqueado a resposta por safety
+      // (acontece com CNH/RG que contêm CPF, MRZ, etc.). Em vez de ficar mudo,
+      // mandamos uma mensagem de espera e disparamos handoff para o time
+      // assumir manualmente. Isso evita o problema "IA parou de responder".
+      try {
+        const waitingMessage = "Recebi seu material! 😊\n\nDeixa eu validar com a equipe e já te confirmo aqui mesmo, tudo bem?";
+        const wid = await sendWhatsAppMessage(supabase, userId, phone, waitingMessage);
+        await saveAIMessage(supabase, userId, phone, waitingMessage, "ai", wid);
+        console.log("[EMPTY-RESPONSE FALLBACK] Sent waiting message and triggering handoff");
+        await performHandoff(supabase, userId, accountId, phone, contactName, aiConfig);
+      } catch (e) {
+        console.error("[EMPTY-RESPONSE FALLBACK] Failed:", e);
+      }
+      return new Response(JSON.stringify({ handoff: true, fallback: "empty_ai_response" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
