@@ -28,6 +28,20 @@ serve(async (req) => {
       });
     }
 
+    // Marca a conta como Igreen — isso libera a injeção do contexto Igreen
+    // (Jhulia, Conexão Green/Telecom/Expansão, descontos) no agente IA.
+    await supabase.from("accounts").update({ is_igreen: true }).eq("id", account_id);
+
+    // Garante que os 3 produtos Igreen padrão existam para a conta.
+    await supabase.from("igreen_account_products").upsert(
+      [
+        { account_id, key: "green",    name: "Conexão Green",    description: "Energia por assinatura", position: 1 },
+        { account_id, key: "telecom",  name: "Conexão Telecom",  description: "Telecomunicações",       position: 2 },
+        { account_id, key: "expansao", name: "Conexão Expansão", description: "Expansão de negócios",   position: 3 },
+      ],
+      { onConflict: "account_id,key", ignoreDuplicates: true },
+    );
+
     // Cria os 3 cenários padrão do produto "Conexão Green" (idempotente)
     const rows = DEFAULTS.map((d) => ({
       account_id,
