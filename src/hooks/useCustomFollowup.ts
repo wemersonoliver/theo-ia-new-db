@@ -229,6 +229,30 @@ export function useFlowEnrollments(flowId?: string) {
   });
 }
 
+export function useStopEnrollment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (enrollmentId: string) => {
+      const { error: upErr } = await supabase
+        .from("custom_followup_enrollments")
+        .update({ status: "stopped", stop_reason: "manual", updated_at: new Date().toISOString() })
+        .eq("id", enrollmentId);
+      if (upErr) throw upErr;
+      const { error: delErr } = await supabase
+        .from("custom_followup_queue")
+        .delete()
+        .eq("enrollment_id", enrollmentId)
+        .eq("status", "pending");
+      if (delErr) throw delErr;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["custom-followup-enrollments"] });
+      toast.success("Contato desinscrito do fluxo");
+    },
+    onError: (e: Error) => toast.error(`Erro ao desinscrever: ${e.message}`),
+  });
+}
+
 export async function uploadFollowupMedia(accountId: string, flowId: string, file: File): Promise<{ url: string; mime: string; name: string }> {
   const safeName = file.name.replace(/[^\w.\-]/g, "_");
   const path = `${accountId}/${flowId}/${Date.now()}_${safeName}`;
