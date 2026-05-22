@@ -839,12 +839,7 @@ serve(async (req) => {
       fallbackName: contactName,
     });
     if (deterministicGreenSimulation) {
-      const parts = splitMessage(deterministicGreenSimulation);
-      for (let i = 0; i < parts.length; i++) {
-        if (i > 0) await delay(1000 + Math.random() * 500);
-        const wid = await sendWhatsAppMessage(supabase, userId, phone, parts[i]);
-        await saveAIMessage(supabase, userId, phone, parts[i], "ai", wid);
-      }
+      await sendAndSaveAIMessageParts(supabase, userId, phone, deterministicGreenSimulation);
       await supabase
         .from("whatsapp_ai_sessions")
         .upsert({
@@ -981,8 +976,7 @@ serve(async (req) => {
           ? `Perfeito! Reagendei seu ${aptToReschedule.title || "agendamento"} para ${parsedRescheduleTarget.date} às ${parsedRescheduleTarget.time}. Te esperamos! 💪`
           : String(rescheduleResult?.message || "Não consegui reagendar nesse horário. Pode me passar outra opção?");
 
-        const wid = await sendWhatsAppMessage(supabase, userId, phone, reply);
-        await saveAIMessage(supabase, userId, phone, reply, "ai", wid);
+        await sendAndSaveAIMessageParts(supabase, userId, phone, reply);
         await supabase
           .from("whatsapp_ai_sessions")
           .upsert({
@@ -1461,8 +1455,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
       // assumir manualmente. Isso evita o problema "IA parou de responder".
       try {
         const waitingMessage = "Recebi seu material! 😊\n\nDeixa eu validar com a equipe e já te confirmo aqui mesmo, tudo bem?";
-        const wid = await sendWhatsAppMessage(supabase, userId, phone, waitingMessage);
-        await saveAIMessage(supabase, userId, phone, waitingMessage, "ai", wid);
+        await sendAndSaveAIMessageParts(supabase, userId, phone, waitingMessage);
         console.log("[EMPTY-RESPONSE FALLBACK] Sent waiting message and triggering handoff");
         await performHandoff(supabase, userId, accountId, phone, contactName, aiConfig);
       } catch (e) {
@@ -1501,21 +1494,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
     }
 
     // Split response into parts for more human-like delivery
-    const parts = splitMessage(aiReply);
-
-    // Send each part with typing simulation delay AND persist each one with the
-    // real WhatsApp message id returned by Evolution. The webhook will then
-    // dedupe by id when the fromMe=true echo arrives — no more duplicate
-    // messages in the conversation history and the AI no longer "disables
-    // itself" right after replying.
-    for (let i = 0; i < parts.length; i++) {
-      if (i > 0) {
-        // Delay fixo de ~2s entre blocos para simular digitação humana
-        await delay(2000 + Math.random() * 400);
-      }
-      const wid = await sendWhatsAppMessage(supabase, userId, phone, parts[i]);
-      await saveAIMessage(supabase, userId, phone, parts[i], "ai", wid);
-    }
+    await sendAndSaveAIMessageParts(supabase, userId, phone, aiReply);
 
     // Update session
     await supabase
