@@ -20,17 +20,35 @@ serve(async (req) => {
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")!;
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY")!;
 
-    const { data: due, error } = await supabase
+    // Buscamos mais que o limite e deduplicamos em memória para garantir:
+    //  - no máximo 1 mensagem por tracking_id por ciclo
+    //  - no máximo 1 mensagem por (user_id, phone) por ciclo
+    // Isso impede que passos 1 e 2 do mesmo lead disparem juntos quando há
+    // backlog (ex.: acumulado fora da janela horária ou cron atrasado).
+    const { data: dueRaw, error } = await supabase
       .from("followup_messages")
       .select("*")
       .is("sent_at", null)
       .eq("status", "scheduled")
       .lte("scheduled_at", new Date().toISOString())
       .order("scheduled_at", { ascending: true })
-      .limit(MAX_DISPATCH_PER_RUN);
+      .limit(MAX_DISPATCH_PER_RUN * 4);
 
     if (error) throw error;
-    if (!due || due.length === 0) {
+
+    const seenTracking = new Set<string>();
+    const seenPair = new Set<string>();
+    const due: any[] = [];
+    for (const m of dueRaw || []) {
+      const pairKey = `${m.user_id}::${m.phone}`;
+      if (seenTracking.has(m.tracking_id) || seenPair.has(pairKey)) continue;
+      seenTracking.add(m.tracking_id);
+      seenPair.add(pairKey);
+      due.push(m);
+      if (due.length >= MAX_DISPATCH_PER_RUN) break;
+    }
+
+    if (due.length === 0) {
       return new Response(JSON.stringify({ sent: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -41,10 +59,10 @@ serve(async (req) => {
 
     for (const msg of due) {
       try {
-        // Re-check tracking (pode ter sido cancelado)
+        // Re-check tracking (pode ter sido cancelado) + espaçamento
         const { data: tracking } = await supabase
           .from("followup_tracking")
-          .select("status, ai_active:user_id")
+          .select("status, last_sent_at")
           .eq("id", msg.tracking_id)
           .maybeSingle();
 
@@ -53,6 +71,25 @@ serve(async (req) => {
           await supabase.from("followup_messages").delete().eq("id", msg.id);
           skipped++;
           continue;
+        }
+
+        // Espaçamento mínimo: não disparar se o passo anterior do mesmo
+        // tracking foi enviado há menos de 60s. Evita rajada de 2 mensagens
+        // quando o cron acumulou backlog para o mesmo lead.
+        if (tracking.last_sent_at) {
+          const diffMs = Date.now() - new Date(tracking.last_sent_at).getTime();
+          if (diffMs < 60_000) {
+            console.log(
+              `[followup-dispatch] spacing guard: tracking ${msg.tracking_id} last sent ${Math.round(diffMs / 1000)}s ago, postponing msg ${msg.id}`,
+            );
+            // Adia 60s e segue
+            await supabase
+              .from("followup_messages")
+              .update({ scheduled_at: new Date(Date.now() + 60_000).toISOString() })
+              .eq("id", msg.id);
+            skipped++;
+            continue;
+          }
         }
 
         // Carrega config para validar janela e ai_active
