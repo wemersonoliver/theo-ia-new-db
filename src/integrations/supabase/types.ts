@@ -1188,6 +1188,61 @@ export type Database = {
           },
         ]
       }
+      crm_tag_automations: {
+        Row: {
+          account_id: string
+          created_at: string
+          enabled: boolean
+          id: string
+          pipeline_id: string
+          tag: string
+          target_stage_id: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          pipeline_id: string
+          tag: string
+          target_stage_id: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          pipeline_id?: string
+          tag?: string
+          target_stage_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_tag_automations_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_tag_automations_pipeline_id_fkey"
+            columns: ["pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "crm_pipelines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_tag_automations_target_stage_id_fkey"
+            columns: ["target_stage_id"]
+            isOneToOne: false
+            referencedRelation: "crm_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       custom_followup_enrollments: {
         Row: {
           account_id: string
@@ -2031,6 +2086,77 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: []
+      }
+      igreen_lead_data: {
+        Row: {
+          account_id: string
+          cpf_documento_masked: string | null
+          cpf_titular_fatura_masked: string | null
+          created_at: string
+          distribuidora: string | null
+          documento_url: string | null
+          estado: string | null
+          fatura_url: string | null
+          id: string
+          nome_cliente: string | null
+          nome_documento: string | null
+          nome_titular_fatura: string | null
+          nomes_conferem: boolean | null
+          phone: string
+          tipo_conta: string | null
+          titular_confirmado: boolean | null
+          updated_at: string
+          valor_fatura_cents: number | null
+        }
+        Insert: {
+          account_id: string
+          cpf_documento_masked?: string | null
+          cpf_titular_fatura_masked?: string | null
+          created_at?: string
+          distribuidora?: string | null
+          documento_url?: string | null
+          estado?: string | null
+          fatura_url?: string | null
+          id?: string
+          nome_cliente?: string | null
+          nome_documento?: string | null
+          nome_titular_fatura?: string | null
+          nomes_conferem?: boolean | null
+          phone: string
+          tipo_conta?: string | null
+          titular_confirmado?: boolean | null
+          updated_at?: string
+          valor_fatura_cents?: number | null
+        }
+        Update: {
+          account_id?: string
+          cpf_documento_masked?: string | null
+          cpf_titular_fatura_masked?: string | null
+          created_at?: string
+          distribuidora?: string | null
+          documento_url?: string | null
+          estado?: string | null
+          fatura_url?: string | null
+          id?: string
+          nome_cliente?: string | null
+          nome_documento?: string | null
+          nome_titular_fatura?: string | null
+          nomes_conferem?: boolean | null
+          phone?: string
+          tipo_conta?: string | null
+          titular_confirmado?: boolean | null
+          updated_at?: string
+          valor_fatura_cents?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_lead_data_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       igreen_product_video_followups: {
         Row: {
@@ -4053,6 +4179,10 @@ export type Database = {
         Returns: string
       }
       account_plan_tier: { Args: { _account_id: string }; Returns: string }
+      apply_tag_automation_for_contact: {
+        Args: { _account_id: string; _contact_id: string; _new_tags: string[] }
+        Returns: undefined
+      }
       auto_advance_admin_deal_to_trial: {
         Args: { _user_id: string }
         Returns: undefined
