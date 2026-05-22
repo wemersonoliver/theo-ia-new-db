@@ -247,6 +247,55 @@ const schedulingTools = {
         },
         required: ["product_key"]
       }
+    },
+    {
+      name: "add_contact_tag",
+      description: "Adiciona uma TAG ao contato atual no CRM. Use APENAS as tags previstas no fluxo Conexão Green: 'em atendimento' (após cliente reagir ao vídeo), 'enviou fatura' (depois que validar a fatura com validate_green_invoice retornando match=true) e 'enviou documento' (depois que validar o documento de identificação com validate_green_identity retornando match=true). Nunca repita uma tag já existente. Ao adicionar uma tag o sistema move o card automaticamente para a etapa configurada.",
+      parameters: {
+        type: "object",
+        properties: {
+          tag: { type: "string", description: "Nome exato da tag a adicionar (lowercase). Ex.: 'em atendimento', 'enviou fatura', 'enviou documento'." }
+        },
+        required: ["tag"]
+      }
+    },
+    {
+      name: "save_green_lead_field",
+      description: "Salva um campo estruturado do lead Conexão Green para não se perder no meio da conversa. Use sempre que o cliente informar um dado relevante.",
+      parameters: {
+        type: "object",
+        properties: {
+          field: {
+            type: "string",
+            description: "Campo a salvar. Valores aceitos: 'estado', 'distribuidora', 'tipo_conta' (residencial|comercial), 'nome_cliente' (primeiro nome que o cliente disse), 'valor_fatura' (apenas número em reais)."
+          },
+          value: { type: "string", description: "Valor a salvar (texto)." }
+        },
+        required: ["field", "value"]
+      }
+    },
+    {
+      name: "validate_green_invoice",
+      description: "Use SEMPRE que o cliente enviar a FATURA DE ENERGIA. Extraia da imagem/PDF o NOME do titular impresso na conta e o VALOR. A tool compara com o nome que o cliente já disse (nome_cliente). Retorna match=true (nomes batem, pode prosseguir e adicionar tag 'enviou fatura') ou match=false (nomes diferentes — você deve EDUCAR o cliente: 'A conta precisa estar no nome de quem vai assinar o contrato. O titular da conta pode dar continuidade?').",
+      parameters: {
+        type: "object",
+        properties: {
+          extracted_name: { type: "string", description: "Nome COMPLETO do titular impresso na fatura." },
+          extracted_value: { type: "number", description: "Valor total da fatura em reais (opcional)." }
+        },
+        required: ["extracted_name"]
+      }
+    },
+    {
+      name: "validate_green_identity",
+      description: "Use SEMPRE que o cliente enviar o DOCUMENTO DE IDENTIFICAÇÃO (RG ou CNH). Extraia o NOME impresso no documento. A tool compara com o titular da fatura já validada. Retorna match=true (nomes batem — adicione a tag 'enviou documento' e o sistema notifica a equipe automaticamente) ou match=false (nomes diferentes — peça com educação o documento do TITULAR da fatura).",
+      parameters: {
+        type: "object",
+        properties: {
+          extracted_name: { type: "string", description: "Nome COMPLETO impresso no documento de identificação." }
+        },
+        required: ["extracted_name"]
+      }
     }
   ]
 };
@@ -1269,7 +1318,29 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           functionCallsProcessed++;
           continue;
         }
-        
+
+        // ====== IGREEN GREEN FLOW TOOLS ======
+        if (fc.name === "add_contact_tag" || fc.name === "save_green_lead_field" ||
+            fc.name === "validate_green_invoice" || fc.name === "validate_green_identity") {
+          const result = await executeGreenFlowTool(
+            supabase, userId, accountId, phone, contactName, fc.name, fc.args || {},
+          );
+          geminiPayload.contents.push(content);
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{ functionResponse: { name: fc.name, response: result } }],
+          });
+          // Se a tool disparou handoff por "enviou documento", encerra o turno
+          if ((result as any)?.handoff_triggered) {
+            aiReply = "";
+            handoffHandled = true;
+            functionCallsProcessed = maxFunctionCalls;
+            break;
+          }
+          functionCallsProcessed++;
+          continue;
+        }
+
         // Execute the function
         const functionResult = await executeFunction(supabase, supabaseUrl, fc.name, {
           ...fc.args,
@@ -2479,5 +2550,175 @@ async function applyRouletteOnHandoff(
     });
   } catch (err) {
     console.error("Roulette assignee notify error:", err);
+  }
+}
+
+// ============================================================
+// IGREEN GREEN FLOW HELPERS
+// ============================================================
+function normalizeNameForCompare(name: string | null | undefined): string {
+  return String(name || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function namesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  const aTokens = normalizeNameForCompare(a).split(" ").filter(t => t.length >= 3);
+  const bTokens = normalizeNameForCompare(b).split(" ").filter(t => t.length >= 3);
+  if (aTokens.length === 0 || bTokens.length === 0) return false;
+  // Considera match se nome + sobrenome (>=2 tokens) coincidirem
+  const shared = aTokens.filter(t => bTokens.includes(t));
+  return shared.length >= 2 || (aTokens[0] === bTokens[0] && (aTokens.length === 1 || bTokens.length === 1));
+}
+
+async function upsertContactTag(supabase: any, accountId: string, phone: string, tag: string): Promise<void> {
+  const cleanTag = String(tag || "").trim().toLowerCase();
+  if (!cleanTag) return;
+  const { data: contact } = await supabase
+    .from("contacts")
+    .select("id, tags")
+    .eq("account_id", accountId)
+    .eq("phone", phone)
+    .maybeSingle();
+  if (!contact?.id) return;
+  const currentTags: string[] = Array.isArray(contact.tags) ? contact.tags : [];
+  if (currentTags.map(t => String(t).toLowerCase()).includes(cleanTag)) return;
+  const newTags = [...currentTags, cleanTag];
+  await supabase.from("contacts").update({ tags: newTags, updated_at: new Date().toISOString() }).eq("id", contact.id);
+}
+
+async function getOrCreateGreenLead(supabase: any, accountId: string, phone: string): Promise<any> {
+  const { data: existing } = await supabase
+    .from("igreen_lead_data")
+    .select("*")
+    .eq("account_id", accountId)
+    .eq("phone", phone)
+    .maybeSingle();
+  if (existing) return existing;
+  const { data: created } = await supabase
+    .from("igreen_lead_data")
+    .insert({ account_id: accountId, phone })
+    .select("*")
+    .single();
+  return created;
+}
+
+async function executeGreenFlowTool(
+  supabase: any,
+  userId: string,
+  accountId: string | null,
+  phone: string,
+  contactName: string | null,
+  toolName: string,
+  args: any,
+): Promise<any> {
+  if (!accountId) return { success: false, error: "account_id ausente" };
+  try {
+    if (toolName === "add_contact_tag") {
+      const tag = String(args?.tag || "").trim().toLowerCase();
+      if (!tag) return { success: false, error: "tag vazia" };
+      await upsertContactTag(supabase, accountId, phone, tag);
+
+      // Se for "enviou documento" → notifica equipe + handoff
+      if (tag === "enviou documento") {
+        const claimed = await claimHandoffNotification(supabase, userId, accountId, phone);
+        if (claimed) {
+          const closingMsg = "Perfeito! Recebi tudo certinho. Já passei para o nosso consultor responsável dar sequência no seu cadastro. Em instantes alguém vai te chamar por aqui. 🙌";
+          try { await sendWhatsAppMessage(supabase, userId, phone, closingMsg); } catch (e) { console.error("send closing err:", e); }
+          try { await saveAIMessage(supabase, userId, phone, closingMsg, "ai"); } catch (_) {}
+          try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff err:", e); }
+          try { await applyRouletteOnHandoff(supabase, accountId, userId, phone, contactName); } catch (e) { console.error("roulette err:", e); }
+          try { await moveCRMDealToHumanStage(supabase, userId, phone); } catch (e) { console.error("crm move err:", e); }
+          try { await supabase.rpc("cancel_followup_sequence", { p_user_id: userId, p_phone: phone, p_reason: "handoff" }); } catch (e) { console.error("cancel followup err:", e); }
+          return { success: true, tag, handoff_triggered: true };
+        }
+      }
+      return { success: true, tag };
+    }
+
+    if (toolName === "save_green_lead_field") {
+      const field = String(args?.field || "").trim().toLowerCase();
+      const value = String(args?.value || "").trim();
+      if (!field || !value) return { success: false, error: "campo/valor vazio" };
+      const allowed: Record<string, string> = {
+        estado: "estado",
+        distribuidora: "distribuidora",
+        tipo_conta: "tipo_conta",
+        nome_cliente: "nome_cliente",
+        valor_fatura: "valor_fatura_cents",
+      };
+      const col = allowed[field];
+      if (!col) return { success: false, error: `campo '${field}' não suportado` };
+      await getOrCreateGreenLead(supabase, accountId, phone);
+      const payload: any = { updated_at: new Date().toISOString() };
+      if (col === "valor_fatura_cents") {
+        const num = Number(String(value).replace(/[^\d]/g, ""));
+        payload[col] = Number.isFinite(num) ? Math.round(num * 100) : null;
+      } else {
+        payload[col] = value;
+      }
+      await supabase.from("igreen_lead_data").update(payload).eq("account_id", accountId).eq("phone", phone);
+      return { success: true, field, value };
+    }
+
+    if (toolName === "validate_green_invoice") {
+      const extractedName = String(args?.extracted_name || "").trim();
+      const extractedValue = Number(args?.extracted_value);
+      if (!extractedName) return { success: false, error: "extracted_name vazio" };
+      const lead = await getOrCreateGreenLead(supabase, accountId, phone);
+      const clientName = lead?.nome_cliente || contactName;
+      const match = namesMatch(clientName, extractedName);
+      const update: any = {
+        nome_titular_fatura: extractedName,
+        fatura_url: lead?.fatura_url || null,
+        nomes_conferem: match,
+        titular_confirmado: match,
+        updated_at: new Date().toISOString(),
+      };
+      if (Number.isFinite(extractedValue) && extractedValue > 0) {
+        update.valor_fatura_cents = Math.round(extractedValue * 100);
+      }
+      await supabase.from("igreen_lead_data").update(update).eq("account_id", accountId).eq("phone", phone);
+      return {
+        success: true,
+        match,
+        nome_cliente: clientName,
+        nome_titular_fatura: extractedName,
+        instruction: match
+          ? "Nomes batem. Agradeça, adicione a tag 'enviou fatura' e em seguida peça o RG ou CNH do titular."
+          : `Os nomes NÃO batem (cliente disse '${clientName}', titular da fatura é '${extractedName}'). Explique com educação que o cadastro precisa ficar no nome do titular da conta de energia e pergunte se o titular pode dar continuidade ao atendimento. NÃO adicione a tag.`,
+      };
+    }
+
+    if (toolName === "validate_green_identity") {
+      const extractedName = String(args?.extracted_name || "").trim();
+      if (!extractedName) return { success: false, error: "extracted_name vazio" };
+      const lead = await getOrCreateGreenLead(supabase, accountId, phone);
+      const reference = lead?.nome_titular_fatura || lead?.nome_cliente || contactName;
+      const match = namesMatch(reference, extractedName);
+      await supabase.from("igreen_lead_data").update({
+        nome_documento: extractedName,
+        nomes_conferem: match,
+        updated_at: new Date().toISOString(),
+      }).eq("account_id", accountId).eq("phone", phone);
+      return {
+        success: true,
+        match,
+        nome_titular_fatura: reference,
+        nome_documento: extractedName,
+        instruction: match
+          ? "Nomes batem. Agradeça em 1 frase e adicione a tag 'enviou documento' — o sistema notifica a equipe e transfere para humano automaticamente."
+          : `Os nomes NÃO batem (titular da fatura é '${reference}', documento enviado é de '${extractedName}'). Peça com educação o RG ou CNH do TITULAR da fatura. NÃO adicione a tag.`,
+      };
+    }
+
+    return { success: false, error: `tool '${toolName}' desconhecida` };
+  } catch (e) {
+    console.error("[executeGreenFlowTool]", toolName, e);
+    return { success: false, error: e instanceof Error ? e.message : "erro inesperado" };
   }
 }

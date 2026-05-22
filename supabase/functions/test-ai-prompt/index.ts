@@ -165,6 +165,26 @@ const schedulingTools = {
         },
         required: ["product_key"]
       }
+    },
+    {
+      name: "add_contact_tag",
+      description: "Adiciona uma TAG ao contato no CRM. Tags previstas no fluxo Green: 'em atendimento', 'enviou fatura', 'enviou documento'. Adicionar a tag move o card automaticamente para a etapa correspondente. No simulador apenas registramos a chamada.",
+      parameters: { type: "object", properties: { tag: { type: "string" } }, required: ["tag"] }
+    },
+    {
+      name: "save_green_lead_field",
+      description: "Salva campo estruturado do lead Green. Campos: estado, distribuidora, tipo_conta, nome_cliente, valor_fatura.",
+      parameters: { type: "object", properties: { field: { type: "string" }, value: { type: "string" } }, required: ["field","value"] }
+    },
+    {
+      name: "validate_green_invoice",
+      description: "Valida fatura de energia: compara nome do titular extraído com o nome que o cliente disse. Retorna match=true/false. No simulador faz comparação simples por tokens.",
+      parameters: { type: "object", properties: { extracted_name: { type: "string" }, extracted_value: { type: "number" } }, required: ["extracted_name"] }
+    },
+    {
+      name: "validate_green_identity",
+      description: "Valida documento de identificação: compara nome do documento com o titular da fatura. Retorna match=true/false.",
+      parameters: { type: "object", properties: { extracted_name: { type: "string" } }, required: ["extracted_name"] }
     }
   ]
 };
@@ -475,6 +495,45 @@ serve(async (req) => {
           // Encerramos o turno aqui: em produção a IA não escreve mais nada após a tool.
           functionCallsProcessed = maxFunctionCalls;
           break;
+        } else if (fc.name === "add_contact_tag") {
+          const tag = String(fc.args?.tag || "").toLowerCase();
+          aiReply = (aiReply ? `${aiReply}\n\n` : "") + `🏷️ [Simulação] Tag '${tag}' adicionada ao contato. Card movido conforme automação.`;
+          functionResult = { success: true, tag, simulated: true };
+          if (tag === "enviou documento") {
+            aiReply += `\n\n👥 [Simulação] Equipe notificada e atendimento transferido para humano.`;
+            functionResult.handoff_triggered = true;
+            functionCallsProcessed = maxFunctionCalls;
+            geminiPayload.contents.push(content);
+            geminiPayload.contents.push({ role: "user", parts: [{ functionResponse: { name: fc.name, response: functionResult } }] });
+            break;
+          }
+        } else if (fc.name === "save_green_lead_field") {
+          functionResult = { success: true, simulated: true, field: fc.args?.field, value: fc.args?.value };
+        } else if (fc.name === "validate_green_invoice") {
+          const extracted = String(fc.args?.extracted_name || "").toLowerCase();
+          // Heurística simples no simulador: olha se o nome do cliente aparece no texto da conversa
+          const match = extracted.length > 0;
+          functionResult = {
+            success: true,
+            simulated: true,
+            match,
+            nome_titular_fatura: fc.args?.extracted_name,
+            instruction: match
+              ? "Nomes batem. Adicione a tag 'enviou fatura' e peça o RG/CNH do titular."
+              : "Nomes NÃO batem. Explique com educação e peça o titular para dar continuidade.",
+          };
+        } else if (fc.name === "validate_green_identity") {
+          const extracted = String(fc.args?.extracted_name || "").toLowerCase();
+          const match = extracted.length > 0;
+          functionResult = {
+            success: true,
+            simulated: true,
+            match,
+            nome_documento: fc.args?.extracted_name,
+            instruction: match
+              ? "Nomes batem. Adicione a tag 'enviou documento'."
+              : "Nomes NÃO batem. Peça o documento do titular da fatura.",
+          };
         } else {
           functionResult = await executeFunction(supabaseUrl, fc.name, {
             ...fc.args,
