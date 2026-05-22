@@ -26,7 +26,8 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { userId, instanceName, limit: bodyLimit, offset: bodyOffset, daysBack } = await req.json();
+    const { userId, instanceName, limit: bodyLimit, offset: bodyOffset, daysBack, forceDisableAI } = await req.json();
+    const FORCE_DISABLE_AI = forceDisableAI === true;
     const BATCH_LIMIT = typeof bodyLimit === "number" && bodyLimit > 0 ? Math.min(bodyLimit, 100) : 40;
     const OFFSET = typeof bodyOffset === "number" && bodyOffset >= 0 ? bodyOffset : 0;
     const CONCURRENCY = 5;
@@ -259,7 +260,7 @@ serve(async (req) => {
             messages: mergedMessages,
             last_message_at: lastMessageAt,
             total_messages: mergedMessages.length,
-            ai_active: existing?.ai_active ?? false,
+            ai_active: FORCE_DISABLE_AI ? false : (existing?.ai_active ?? false),
           }, { onConflict: "user_id,phone" });
 
         if (upsertError) {
