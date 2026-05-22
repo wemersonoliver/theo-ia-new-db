@@ -1,0 +1,1 @@
+UPDATE public.igreen_account_products SET followup_after_video_message = 'O que achou, {nome}? Vamos fazer seu cadastro gratuito?' WHERE key = 'green';

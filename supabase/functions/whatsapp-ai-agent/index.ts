@@ -1626,7 +1626,7 @@ async function executeSendProductVideo(
     const delaySec = Number(product.followup_after_video_seconds || 120);
     const scheduledAt = new Date(Date.now() + delaySec * 1000).toISOString();
     const firstName = (contactName || "").split(/\s+/)[0] || "";
-    const msgTemplate = product.followup_after_video_message || "Conseguiu ver, {nome}?";
+    const msgTemplate = product.followup_after_video_message || "O que achou, {nome}? Vamos fazer seu cadastro gratuito?";
     const followupMessage = msgTemplate.replace(/\{nome\}/gi, firstName).replace(/, \?/g, "?").replace(/\s+\?/g, "?");
 
     // Cancela qualquer follow-up anterior pendente para este telefone+produto
