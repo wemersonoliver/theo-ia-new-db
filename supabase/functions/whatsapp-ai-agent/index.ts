@@ -1549,6 +1549,38 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           continue;
         }
 
+        // ====== MARK LEAD UNINTERESTED — bloqueia follow-up ======
+        if (fc.name === "mark_lead_uninterested") {
+          const reason = String(fc.args?.reason || "sem interesse declarado").slice(0, 200);
+          let tagResult: any = { success: false };
+          try {
+            if (accountId) {
+              const { error } = await supabase.rpc("tag_contact_reserved", {
+                _account_id: accountId,
+                _phone: phone,
+                _tag: "sem-interesse",
+                _add: true,
+              });
+              if (!error) tagResult = { success: true, tag: "sem-interesse", reason };
+              else tagResult = { success: false, error: error.message };
+            }
+            // Garante cancelamento mesmo se RPC tiver falhado parcialmente
+            await supabase.rpc("cancel_followup_sequence", {
+              p_user_id: userId, p_phone: phone, p_reason: "declined",
+            });
+          } catch (e) {
+            console.error("mark_lead_uninterested err:", e);
+            tagResult = { success: false, error: e instanceof Error ? e.message : "unknown" };
+          }
+          geminiPayload.contents.push(content);
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{ functionResponse: { name: fc.name, response: { ...tagResult, instruction: "Encerre a conversa com elegância e respeito. NÃO insista. Agradeça e deixe o canal aberto caso ele mude de ideia." } } }],
+          });
+          functionCallsProcessed++;
+          continue;
+        }
+
         // Execute the function
         const functionResult = await executeFunction(supabase, supabaseUrl, fc.name, {
           ...fc.args,
