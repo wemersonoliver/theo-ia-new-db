@@ -39,6 +39,9 @@ verify_jwt = false
 [functions.send-welcome-sequence]
 verify_jwt = false
 
+[functions.enforce-trial-expiration]
+verify_jwt = false
+
 [functions.reprocess-knowledge-doc]
 verify_jwt = false
 
