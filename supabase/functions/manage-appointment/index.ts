@@ -375,6 +375,29 @@ serve(async (req) => {
           });
         }
 
+        // Verifica se ainda restam agendamentos ativos do contato; se não, remove a tag "agendamento"
+        try {
+          const cancelledApt = data[0];
+          const aptPhone = cancelledApt?.phone;
+          const aptAccount = cancelledApt?.account_id;
+          if (aptAccount && aptPhone) {
+            const { count: remaining } = await supabase
+              .from("appointments")
+              .select("id", { count: "exact", head: true })
+              .eq("user_id", userId)
+              .eq("phone", aptPhone)
+              .in("status", ["scheduled", "confirmed"]);
+            if (!remaining || remaining === 0) {
+              await supabase.rpc("tag_contact_reserved", {
+                _account_id: aptAccount,
+                _phone: aptPhone,
+                _tag: "agendamento",
+                _add: false,
+              });
+            }
+          }
+        } catch (e) { console.error("tag_contact_reserved (cancel) err:", e); }
+
         return new Response(JSON.stringify({ 
           success: true,
           message: "Agendamento cancelado com sucesso."
