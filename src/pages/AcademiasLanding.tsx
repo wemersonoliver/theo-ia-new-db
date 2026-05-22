@@ -35,27 +35,27 @@ import {
 } from "lucide-react";
 
 const gymFeatures = [
-  { icon: Users, title: "Captação de novos alunos 24/7", desc: "Responde no WhatsApp instantaneamente — não importa se é 6h da manhã ou meia-noite de domingo." },
-  { icon: CalendarCheck, title: "Aula experimental automática", desc: "A IA agenda a aula experimental sem você mexer um dedo. O lead já chega aquecido para virar matrícula." },
-  { icon: HeartHandshake, title: "Retenção de alunos", desc: "Reativa alunos parados há semanas com mensagens personalizadas e convites para voltar." },
-  { icon: Repeat, title: "Cobrança de mensalidade", desc: "Lembra o aluno da mensalidade vencida com tato — sem constrangimento, sem você precisar cobrar pessoalmente." },
-  { icon: Bell, title: "Lembretes de aula", desc: "Reduz faltas em aulas coletivas e personal training com lembretes automáticos." },
-  { icon: CheckCircle2, title: "Avaliação física agendada", desc: "Marca avaliações físicas, reavaliações e consultas com nutricionista direto pelo WhatsApp." },
-  { icon: Trophy, title: "Vende planos com inteligência", desc: "Sabe qual plano oferecer baseado no objetivo do aluno: emagrecimento, hipertrofia, condicionamento." },
-  { icon: UserCheck, title: "Qualifica leads frios", desc: "Separa curioso de comprador. Você só fala com quem está realmente pronto pra fechar." },
-  { icon: BarChart3, title: "Dashboard de matrículas", desc: "Veja quantos leads chegaram, quantas experimentais foram agendadas e quantas viraram aluno." },
+  { icon: Users, title: "Atendimento no WhatsApp 24/7", desc: "Responde leads instantaneamente em qualquer horário, sem fila de espera e sem perder mensagem." },
+  { icon: CalendarCheck, title: "Agendamento de aula experimental", desc: "A IA agenda aula experimental, avaliação física ou visita direto na agenda da sua academia." },
+  { icon: Bell, title: "Lembretes automáticos de agendamento", desc: "Envia lembrete antes do horário agendado, reduzindo faltas em aulas experimentais e avaliações." },
+  { icon: Repeat, title: "Follow-up automático de leads", desc: "Cadência inteligente para reengajar quem pediu informação e não fechou — sem você precisar lembrar." },
+  { icon: Trophy, title: "Vende planos com argumentação", desc: "Treinada com técnicas de venda, responde objeções comuns (preço, tempo, indecisão) e direciona para o fechamento." },
+  { icon: UserCheck, title: "Qualifica leads automaticamente", desc: "Separa curioso de comprador. Você só fala com quem realmente está pronto pra matricular." },
+  { icon: BarChart3, title: "CRM Kanban de matrículas", desc: "Funil visual de leads — do primeiro contato à matrícula fechada — para acompanhar cada oportunidade." },
+  { icon: Brain, title: "Base de conhecimento personalizada", desc: "Você cadastra planos, horários, modalidades e regras. A IA responde com as informações da SUA academia." },
+  { icon: MessageSquare, title: "Áudio e imagem entendidos pela IA", desc: "Aluno mandou áudio? Foto da ficha de outro plano? A IA transcreve, lê e responde normalmente." },
 ];
 
 const gymPains = [
   {
     icon: Clock,
-    title: "Lead que pergunta no Instagram às 22h",
+    title: "Lead que chama no WhatsApp às 22h",
     desc: "Sem Theo IA: você só responde no outro dia e ele já fechou na concorrência. Com Theo IA: respondido em segundos, com aula experimental agendada para amanhã.",
   },
   {
     icon: TrendingUp,
-    title: "Aluno que sumiu há 3 semanas",
-    desc: "Sem Theo IA: ninguém liga e ele cancela no fim do mês. Com Theo IA: a IA puxa de volta com mensagem certeira no momento certo.",
+    title: "Lead que pediu informação e sumiu",
+    desc: "Sem Theo IA: ele esquece da sua academia e fecha em outra. Com Theo IA: follow-up automático em cadência reaquece o lead até a decisão.",
   },
   {
     icon: Target,
@@ -64,15 +64,15 @@ const gymPains = [
   },
   {
     icon: Timer,
-    title: "Mensalidade atrasada virando inadimplência",
-    desc: "Sem Theo IA: você deixa pra cobrar depois e esquece. Com Theo IA: lembrete automático no dia certo, no tom certo, sem desgaste com o aluno.",
+    title: "Falta em aula experimental marcada",
+    desc: "Sem Theo IA: o lead esquece do horário e não aparece. Com Theo IA: lembrete automático antes do horário agendado reduz drasticamente o no-show.",
   },
 ];
 
 const gymStats = [
   { value: "78%", label: "dos alunos escolhem a academia que responde primeiro", source: "Adaptado de Harvard Business Review" },
   { value: "5min", label: "é o tempo máximo para o lead da academia esfriar", source: "MIT Lead Response Study" },
-  { value: "60%", label: "dos cancelamentos vêm de alunos sem contato há +15 dias", source: "IHRSA — Indústria Fitness" },
+  { value: "80%", label: "das vendas exigem 5+ follow-ups após o primeiro contato", source: "National Sales Executive Association" },
   { value: "3x", label: "mais matrículas com agendamento automático de aula experimental", source: "Estudo interno Theo IA" },
 ];
 
@@ -82,6 +82,8 @@ const faqItems = [
   { q: "Preciso entender de tecnologia?", a: "Não. Você responde algumas perguntas sobre sua academia (planos, horários, modalidades) e o Theo IA monta o atendente automaticamente." },
   { q: "E se o aluno quiser falar com pessoa real?", a: "A IA identifica e transfere a conversa pra você ou pra recepção de forma transparente, sem o aluno perceber atrito." },
   { q: "Posso conectar mais de um número?", a: "Sim. No plano Pro você conecta até 3 números — ideal pra separar comercial, recepção e personal trainer." },
+  { q: "Funciona com Instagram Direct também?", a: "Não. O Theo IA opera exclusivamente no WhatsApp, que é onde a maior parte das matrículas é fechada hoje no Brasil." },
+  { q: "A IA controla frequência de aluno ou inadimplência?", a: "Não. O Theo IA é focado em atendimento, vendas e agendamento via WhatsApp. Controle de frequência e financeiro continuam no seu sistema atual." },
   { q: "O que é o plano Theo Personalitê?", a: "É um sistema personalizado feito exclusivamente para a sua academia: integrações específicas, fluxos sob medida e suporte dedicado. Inclui tudo do Pro como base." },
 ];
 
@@ -89,7 +91,7 @@ const proIncluded = [
   "Tudo do Basic",
   "Até 3 números de WhatsApp conectados",
   "CRM Kanban com funil de matrículas",
-  "Follow-up automático de leads e alunos",
+  "Follow-up automático de leads",
   "Gestão de tarefas da equipe",
   "Transcrição de áudios e leitura de imagens",
   "Múltiplos atendentes na mesma conta",
@@ -99,7 +101,7 @@ const proIncluded = [
 const personaliteIncluded = [
   "Tudo do Plano Pro",
   "Sistema personalizado para a sua academia",
-  "Integrações sob medida (sistema de matrícula, catraca, app)",
+  "Integrações sob medida conforme a necessidade",
   "Fluxos de atendimento customizados",
   "Treinamento da IA com a identidade da sua marca",
   "Onboarding assistido por especialista",
@@ -146,9 +148,9 @@ export default function AcademiasLanding() {
             </span>
           </h1>
           <p className="mx-auto mb-8 max-w-2xl text-lg text-white md:text-xl">
-            O Theo IA atende seus leads em segundos, agenda aulas experimentais,
-            reativa alunos parados e cobra mensalidade — tudo automaticamente,
-            <strong className="text-[hsl(142,76%,36%)]"> 24 horas por dia</strong>.
+            O Theo IA atende seus leads no WhatsApp em segundos, agenda aulas experimentais
+            e faz follow-up automático até a matrícula —
+            <strong className="text-[hsl(142,76%,36%)]"> 24 horas por dia, 7 dias por semana</strong>.
           </p>
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <Button size="lg" asChild className="h-14 px-6 sm:px-8 text-base bg-[hsl(142,76%,36%)] hover:bg-[hsl(142,76%,30%)] w-full sm:w-auto">
