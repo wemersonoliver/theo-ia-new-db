@@ -1766,11 +1766,11 @@ function splitMessage(text: string): string[] {
   const trimmed = text.trim();
   const HARD_MAX = 220;
   const softLimit = 150;
-  const hardSplit = (value: string): string[] => {
+  const splitByLimit = (value: string, limit = softLimit): string[] => {
     const out: string[] = [];
     let remaining = value.trim();
-    while (remaining.length > HARD_MAX) {
-      const window = remaining.slice(0, HARD_MAX + 1);
+    while (remaining.length > limit) {
+      const window = remaining.slice(0, Math.min(HARD_MAX, limit) + 1);
       const cut = Math.max(
         window.lastIndexOf(". "),
         window.lastIndexOf("! "),
@@ -1779,7 +1779,7 @@ function splitMessage(text: string): string[] {
         window.lastIndexOf("; "),
         window.lastIndexOf(" "),
       );
-      const splitAt = cut > 80 ? cut + 1 : HARD_MAX;
+      const splitAt = cut > 70 ? cut + 1 : Math.min(HARD_MAX, limit);
       out.push(remaining.slice(0, splitAt).trim());
       remaining = remaining.slice(splitAt).trim();
     }
@@ -1793,24 +1793,13 @@ function splitMessage(text: string): string[] {
   // 1. Se a IA já marcou parágrafos com \n\n, respeita
   const paragraphs = trimmed.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
   if (paragraphs.length > 1) {
-    const merged: string[] = [];
-    let buffer = "";
-    for (const part of paragraphs) {
-      if (buffer && (buffer.length + part.length + 2) < 220) {
-        buffer += "\n\n" + part;
-      } else {
-        if (buffer) merged.push(buffer);
-        buffer = part;
-      }
-    }
-    if (buffer) merged.push(buffer);
-    return merged.flatMap(hardSplit).filter(Boolean);
+    return paragraphs.flatMap(part => splitByLimit(part)).filter(Boolean);
   }
 
   // 2. Sem parágrafos: força divisão por sentenças sempre que passa de ~140 chars
   //    Isso garante humanização mesmo quando a IA esquece o \n\n.
   const sentences = trimmed.split(/(?<=[.!?…])\s+/).map(s => s.trim()).filter(Boolean);
-  if (sentences.length <= 1) return hardSplit(trimmed);
+  if (sentences.length <= 1) return splitByLimit(trimmed);
 
   const TARGET = 150; // alvo por bloco
   const MAX = HARD_MAX;    // limite duro por bloco
@@ -1831,7 +1820,7 @@ function splitMessage(text: string): string[] {
   }
   if (current) chunks.push(current);
 
-  return chunks.flatMap(hardSplit).filter(Boolean);
+  return chunks.flatMap(part => splitByLimit(part, HARD_MAX)).filter(Boolean);
 }
 
 function delay(ms: number): Promise<void> {
