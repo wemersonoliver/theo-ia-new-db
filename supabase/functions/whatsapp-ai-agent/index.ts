@@ -387,17 +387,38 @@ function getGreenNameStepFirstName(recentMessages: any[] | null | undefined, mes
   const normalized = normalizeTextForIntent(raw);
   if (/(conexao green|energia|desconto|fatura|conta|celesc|cemig|copel)/i.test(normalized)) return null;
 
-  const lastAssistant = [...(recentMessages || [])]
-    .reverse()
-    .find((m: any) => m?.from_me && typeof (m?.ai_content || m?.content) === "string");
-  const lastAssistantNorm = normalizeTextForIntent(lastAssistant?.ai_content || lastAssistant?.content || "");
+  // A IA quebra a saudação em várias bolhas (ex.: "...Conexão Green 😊" e
+  // depois "Antes de te explicar tudo, com quem tenho o prazer..."). Por isso
+  // analisamos as últimas mensagens do assistente em conjunto, e não apenas a
+  // última. Também consideramos o último bloco contíguo de mensagens do bot
+  // antes do cliente responder.
+  const assistantTail: string[] = [];
+  for (let i = (recentMessages || []).length - 1; i >= 0; i--) {
+    const m: any = (recentMessages as any)[i];
+    if (!m) continue;
+    if (m.from_me) {
+      const txt = m.ai_content || m.content;
+      if (typeof txt === "string") assistantTail.unshift(txt);
+    } else {
+      // pula a mensagem atual do cliente; se acharmos outra do cliente, paramos
+      if (assistantTail.length > 0) break;
+    }
+    if (assistantTail.length >= 6) break;
+  }
+  const combinedNorm = normalizeTextForIntent(assistantTail.join(" \n "));
   const askedForName =
-    lastAssistantNorm.includes("como posso te chamar") ||
-    lastAssistantNorm.includes("com quem eu tenho o prazer de falar") ||
-    lastAssistantNorm.includes("com quem tenho o prazer de falar") ||
-    lastAssistantNorm.includes("antes de te explicar tudo");
+    combinedNorm.includes("como posso te chamar") ||
+    combinedNorm.includes("com quem eu tenho o prazer de falar") ||
+    combinedNorm.includes("com quem tenho o prazer de falar") ||
+    combinedNorm.includes("antes de te explicar tudo") ||
+    combinedNorm.includes("qual o seu nome") ||
+    combinedNorm.includes("qual seu nome");
   if (!askedForName) return null;
-  if (!lastAssistantNorm.includes("conexao green")) return null;
+  const mentionsGreen =
+    combinedNorm.includes("conexao green") ||
+    combinedNorm.includes("igreen") ||
+    combinedNorm.includes("i green");
+  if (!mentionsGreen) return null;
 
   return titleCaseName(raw).split(/\s+/)[0] || null;
 }
