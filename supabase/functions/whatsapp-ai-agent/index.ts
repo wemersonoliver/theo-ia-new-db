@@ -309,6 +309,17 @@ const schedulingTools = {
         },
         required: ["state", "distributor"]
       }
+    },
+    {
+      name: "mark_lead_uninterested",
+      description: "Marca o lead como SEM INTERESSE quando o cliente disser explicitamente que não tem interesse, não quer mais receber mensagens, pediu para parar, encerrou o contato ou recusou a oferta de forma clara. Adiciona a tag 'sem-interesse' no contato e BLOQUEIA QUALQUER follow-up futuro automaticamente. NÃO use por inatividade ou silêncio — use apenas com declaração explícita do cliente.",
+      parameters: {
+        type: "object",
+        properties: {
+          reason: { type: "string", description: "Motivo curto informado ou inferido (ex.: 'não tem interesse', 'pediu para parar', 'já contratou outro')." }
+        },
+        required: []
+      }
     }
   ]
 };
