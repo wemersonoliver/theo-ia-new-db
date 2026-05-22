@@ -2157,6 +2157,21 @@ async function saveAIMessage(
   }
 }
 
+async function sendAndSaveAIMessageParts(
+  supabase: any,
+  userId: string,
+  phone: string,
+  text: string,
+  sentBy = "ai",
+): Promise<void> {
+  const parts = splitMessage(text);
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) await delay(1800 + Math.random() * 500);
+    const wid = await sendWhatsAppMessage(supabase, userId, phone, parts[i]);
+    await saveAIMessage(supabase, userId, phone, parts[i], sentBy, wid);
+  }
+}
+
 async function notifyHandoff(supabase: any, userId: string, clientPhone: string, clientName: string | null) {
   try {
     let displayName = clientName || null;
