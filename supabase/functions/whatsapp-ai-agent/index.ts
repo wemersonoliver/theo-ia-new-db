@@ -247,6 +247,55 @@ const schedulingTools = {
         },
         required: ["product_key"]
       }
+    },
+    {
+      name: "add_contact_tag",
+      description: "Adiciona uma TAG ao contato atual no CRM. Use APENAS as tags previstas no fluxo Conexão Green: 'em atendimento' (após cliente reagir ao vídeo), 'enviou fatura' (depois que validar a fatura com validate_green_invoice retornando match=true) e 'enviou documento' (depois que validar o documento de identificação com validate_green_identity retornando match=true). Nunca repita uma tag já existente. Ao adicionar uma tag o sistema move o card automaticamente para a etapa configurada.",
+      parameters: {
+        type: "object",
+        properties: {
+          tag: { type: "string", description: "Nome exato da tag a adicionar (lowercase). Ex.: 'em atendimento', 'enviou fatura', 'enviou documento'." }
+        },
+        required: ["tag"]
+      }
+    },
+    {
+      name: "save_green_lead_field",
+      description: "Salva um campo estruturado do lead Conexão Green para não se perder no meio da conversa. Use sempre que o cliente informar um dado relevante.",
+      parameters: {
+        type: "object",
+        properties: {
+          field: {
+            type: "string",
+            description: "Campo a salvar. Valores aceitos: 'estado', 'distribuidora', 'tipo_conta' (residencial|comercial), 'nome_cliente' (primeiro nome que o cliente disse), 'valor_fatura' (apenas número em reais)."
+          },
+          value: { type: "string", description: "Valor a salvar (texto)." }
+        },
+        required: ["field", "value"]
+      }
+    },
+    {
+      name: "validate_green_invoice",
+      description: "Use SEMPRE que o cliente enviar a FATURA DE ENERGIA. Extraia da imagem/PDF o NOME do titular impresso na conta e o VALOR. A tool compara com o nome que o cliente já disse (nome_cliente). Retorna match=true (nomes batem, pode prosseguir e adicionar tag 'enviou fatura') ou match=false (nomes diferentes — você deve EDUCAR o cliente: 'A conta precisa estar no nome de quem vai assinar o contrato. O titular da conta pode dar continuidade?').",
+      parameters: {
+        type: "object",
+        properties: {
+          extracted_name: { type: "string", description: "Nome COMPLETO do titular impresso na fatura." },
+          extracted_value: { type: "number", description: "Valor total da fatura em reais (opcional)." }
+        },
+        required: ["extracted_name"]
+      }
+    },
+    {
+      name: "validate_green_identity",
+      description: "Use SEMPRE que o cliente enviar o DOCUMENTO DE IDENTIFICAÇÃO (RG ou CNH). Extraia o NOME impresso no documento. A tool compara com o titular da fatura já validada. Retorna match=true (nomes batem — adicione a tag 'enviou documento' e o sistema notifica a equipe automaticamente) ou match=false (nomes diferentes — peça com educação o documento do TITULAR da fatura).",
+      parameters: {
+        type: "object",
+        properties: {
+          extracted_name: { type: "string", description: "Nome COMPLETO impresso no documento de identificação." }
+        },
+        required: ["extracted_name"]
+      }
     }
   ]
 };
