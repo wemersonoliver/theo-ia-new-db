@@ -102,6 +102,8 @@ const proIncluded = [
   "Até 3 números de WhatsApp conectados",
   "CRM Kanban com funil de matrículas",
   "Follow-up automático de leads",
+  "Follow up avançado",
+  "Dashboard avançada",
   "Gestão de tarefas da equipe",
   "Múltiplos atendentes na mesma conta",
   "Suporte prioritário por WhatsApp",
