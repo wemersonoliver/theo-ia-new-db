@@ -98,6 +98,17 @@ serve(async (req) => {
             .map((t: any) => t.phone)
         );
 
+        // Carrega contatos com tags reservadas que BLOQUEIAM follow-up
+        const { data: blockedContacts } = await supabase
+          .from("contacts")
+          .select("phone, tags")
+          .eq("account_id", accountId)
+          .overlaps("tags", ["agendamento", "sem-interesse"]);
+
+        const blockedPhonesSet = new Set(
+          (blockedContacts || []).map((c: any) => c.phone)
+        );
+
         for (const conv of conversations) {
           if (activePhonesSet.has(conv.phone)) {
             trackReason("already_active_tracking");
@@ -107,6 +118,11 @@ serve(async (req) => {
           if (completedPhonesSet.has(conv.phone)) {
             trackReason("cycle_completed");
             console.log(`[${runId}] [${conv.phone}] SKIP: cycle completed`);
+            continue;
+          }
+          if (blockedPhonesSet.has(conv.phone)) {
+            trackReason("blocked_by_tag");
+            console.log(`[${runId}] [${conv.phone}] SKIP: blocked by tag (agendamento/sem-interesse)`);
             continue;
           }
 
