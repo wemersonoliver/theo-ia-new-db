@@ -1278,8 +1278,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           // 3. Mensagem de transição ao cliente (se configurada)
           const handoffMsg = aiConfig.handoff_message
             || "Entendi! Já estou te transferindo para um atendente da nossa equipe. Em instantes alguém vai te responder por aqui. 🙌";
-          await sendWhatsAppMessage(supabase, userId, phone, handoffMsg);
-          await saveAIMessage(supabase, userId, phone, handoffMsg, "ai");
+          await sendAndSaveAIMessageParts(supabase, userId, phone, handoffMsg);
 
           // 4. Notifica equipe
           try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff err:", e); }
@@ -1646,8 +1645,7 @@ async function executeSendProductVideo(
     // Envia a mensagem de introdução ANTES do vídeo (se houver)
     if (introMessage) {
       try {
-        await sendWhatsAppMessage(supabase, userId, phone, introMessage);
-        await saveAIMessage(supabase, userId, phone, introMessage, "ai");
+        await sendAndSaveAIMessageParts(supabase, userId, phone, introMessage);
       } catch (e) {
         console.error("send intro_message error:", e);
       }
@@ -2661,8 +2659,7 @@ async function executeGreenFlowTool(
         const claimed = await claimHandoffNotification(supabase, userId, accountId, phone);
         if (claimed) {
           const closingMsg = "Perfeito! Recebi tudo certinho. Já passei para o nosso consultor responsável dar sequência no seu cadastro. Em instantes alguém vai te chamar por aqui. 🙌";
-          try { await sendWhatsAppMessage(supabase, userId, phone, closingMsg); } catch (e) { console.error("send closing err:", e); }
-          try { await saveAIMessage(supabase, userId, phone, closingMsg, "ai"); } catch (_) {}
+          try { await sendAndSaveAIMessageParts(supabase, userId, phone, closingMsg); } catch (e) { console.error("send closing err:", e); }
           try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff err:", e); }
           try { await applyRouletteOnHandoff(supabase, accountId, userId, phone, contactName); } catch (e) { console.error("roulette err:", e); }
           try { await moveCRMDealToHumanStage(supabase, userId, phone); } catch (e) { console.error("crm move err:", e); }
