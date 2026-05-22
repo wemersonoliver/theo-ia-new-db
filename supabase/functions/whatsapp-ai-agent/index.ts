@@ -1197,7 +1197,13 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
       const content = candidate?.content;
 
       if (!content?.parts) {
-        console.error("Empty AI response");
+        // Loga detalhes de finishReason / safetyRatings — útil quando o Gemini
+        // bloqueia por safety/recitation (ex.: análise de CNH com CPF/MRZ).
+        console.error("Empty AI response", JSON.stringify({
+          finishReason: candidate?.finishReason,
+          safetyRatings: candidate?.safetyRatings,
+          promptFeedback: aiData?.promptFeedback,
+        }));
         break;
       }
 
