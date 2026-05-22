@@ -249,14 +249,14 @@ export default function AcademiasLanding() {
 
       {/* Planos */}
       <section className="px-4 py-20">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-6xl">
           <h2 className="mb-4 text-center text-3xl font-bold md:text-4xl">
             Escolha o plano da sua academia
           </h2>
           <p className="mx-auto mb-12 max-w-2xl text-center text-white">
-            Dois planos pensados para crescer com você — do estúdio pequeno até a rede com várias unidades.
+            Três planos pensados para crescer com você — do estúdio pequeno até a rede com várias unidades.
           </p>
-          <div className="grid gap-8 md:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-3">
             {/* Pro */}
             <Card className="relative overflow-hidden border-2 border-[hsl(142,76%,36%)] bg-[hsl(222,47%,8%)] text-white">
               <div className="absolute right-0 top-0 rounded-bl-xl bg-[hsl(142,76%,36%)] px-4 py-1.5 text-sm font-bold text-white">
