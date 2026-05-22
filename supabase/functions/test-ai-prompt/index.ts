@@ -461,12 +461,21 @@ serve(async (req) => {
     let igreenProductsBlock = "";
     try {
       if (accountId) {
-        const { data: igreenProds } = await serviceClient
-          .from("igreen_account_products")
-          .select("id, key, name, description, enabled, video_url")
-          .eq("account_id", accountId)
-          .order("position", { ascending: true });
-        if (igreenProds && igreenProds.length > 0) {
+        // PROTEÇÃO: só injeta contexto Igreen em contas Igreen reais.
+        const { data: accRow } = await serviceClient
+          .from("accounts")
+          .select("is_igreen")
+          .eq("id", accountId)
+          .maybeSingle();
+        const isIgreenAccount = !!(accRow as any)?.is_igreen;
+        const { data: igreenProds } = isIgreenAccount
+          ? await serviceClient
+              .from("igreen_account_products")
+              .select("id, key, name, description, enabled, video_url")
+              .eq("account_id", accountId)
+              .order("position", { ascending: true })
+          : { data: [] as any[] };
+        if (isIgreenAccount && igreenProds && igreenProds.length > 0) {
           igreenProductsBlock = buildIgreenProductsPromptBlock({
             agentName: aiConfig?.agent_name || "seu assistente",
             greeting: brt.greeting,
