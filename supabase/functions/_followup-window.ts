@@ -25,23 +25,20 @@ export function isWithinWindow(config: WindowConfig): boolean {
   // Bloquear envios automáticos aos domingos (BRT)
   if (date.getDay() === 0) return false;
   const [mSH, mSM] = parseHM(config.morning_window_start, "08:00");
-  const [mEH, mEM] = parseHM(config.morning_window_end, "12:00");
-  const [eSH, eSM] = parseHM(config.evening_window_start, "13:00");
   const [eEH, eEM] = parseHM(config.evening_window_end, "19:00");
-  const mStart = mSH * 60 + mSM;
-  const mEnd = mEH * 60 + mEM;
-  const eStart = eSH * 60 + eSM;
-  const eEnd = eEH * 60 + eEM;
-  return (minutes >= mStart && minutes <= mEnd) || (minutes >= eStart && minutes <= eEnd);
+  // Janela ÚNICA: morning_window_start (default 08:00) até evening_window_end (default 19:00)
+  const dayStart = mSH * 60 + mSM;
+  const dayEnd = eEH * 60 + eEM;
+  return minutes >= dayStart && minutes <= dayEnd;
 }
 
 /**
  * Gera N timestamps (UTC ISO) seguindo a regra:
- * 2 mensagens/dia (uma manhã, uma tarde), nas janelas BRT,
- * começando do próximo slot disponível a partir de "agora".
+ * 1 mensagem por dia, em horário aleatório dentro da janela única (default 08:00–19:00 BRT),
+ * começando do próximo dia útil disponível a partir de "agora". Pula domingos.
  *
  * @param config janelas
- * @param count quantidade de slots a gerar (ex: 12)
+ * @param count quantidade de slots a gerar (ex: 6)
  * @param startsAt timestamp base (default: agora). Útil em testes.
  */
 export function generateScheduleSequence(
@@ -50,13 +47,9 @@ export function generateScheduleSequence(
   startsAt?: Date,
 ): string[] {
   const [mSH, mSM] = parseHM(config.morning_window_start, "08:00");
-  const [mEH, mEM] = parseHM(config.morning_window_end, "12:00");
-  const [eSH, eSM] = parseHM(config.evening_window_start, "13:00");
   const [eEH, eEM] = parseHM(config.evening_window_end, "19:00");
-  const mStart = mSH * 60 + mSM;
-  const mEnd = mEH * 60 + mEM;
-  const eStart = eSH * 60 + eSM;
-  const eEnd = eEH * 60 + eEM;
+  const dayStart = mSH * 60 + mSM;
+  const dayEnd = eEH * 60 + eEM;
 
   const baseLocal = startsAt
     ? new Date(startsAt.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }))
@@ -64,49 +57,27 @@ export function generateScheduleSequence(
   const tzOffsetMs = baseLocal.getTime() - (startsAt ?? new Date()).getTime();
 
   const result: string[] = [];
-  // Cursor: data local BRT + slot "morning" | "evening"
   const cursor = new Date(baseLocal);
-  let slot: "morning" | "evening" = "morning";
   const nowMin = baseLocal.getHours() * 60 + baseLocal.getMinutes();
 
-  if (nowMin < mEnd - 5) {
-    slot = "morning";
-  } else if (nowMin < eEnd - 5) {
-    slot = "evening";
-  } else {
-    // Já passou da tarde — começa amanhã de manhã
+  // Se já passou da janela do dia, começa amanhã
+  if (nowMin >= dayEnd - 5) {
     cursor.setDate(cursor.getDate() + 1);
-    slot = "morning";
   }
 
   // Se o cursor inicial cair em domingo, pula para segunda
   while (cursor.getDay() === 0) {
     cursor.setDate(cursor.getDate() + 1);
-    slot = "morning";
   }
 
   for (let i = 0; i < count; i++) {
-    let startMin: number;
-    let endMin: number;
-    if (slot === "morning") {
-      startMin = mStart;
-      endMin = mEnd;
-      // Se for hoje e já estamos dentro da janela da manhã, garantir buffer de 5min
-      if (
-        cursor.toDateString() === baseLocal.toDateString() &&
-        nowMin >= mStart - 1
-      ) {
-        startMin = Math.max(mStart, nowMin + 5);
-      }
-    } else {
-      startMin = eStart;
-      endMin = eEnd;
-      if (
-        cursor.toDateString() === baseLocal.toDateString() &&
-        nowMin >= eStart - 1
-      ) {
-        startMin = Math.max(eStart, nowMin + 5);
-      }
+    let startMin = dayStart;
+    const endMin = dayEnd;
+    if (
+      cursor.toDateString() === baseLocal.toDateString() &&
+      nowMin >= dayStart - 1
+    ) {
+      startMin = Math.max(dayStart, nowMin + 5);
     }
 
     if (startMin >= endMin) startMin = endMin - 5;
@@ -115,20 +86,13 @@ export function generateScheduleSequence(
 
     const slotLocal = new Date(cursor);
     slotLocal.setHours(Math.floor(r / 60), r % 60, 0, 0);
-    // Converte BRT pseudo-local para UTC
     const utc = new Date(slotLocal.getTime() - tzOffsetMs);
     result.push(utc.toISOString());
 
-    // Avança cursor
-    if (slot === "morning") {
-      slot = "evening";
-    } else {
-      slot = "morning";
+    // Avança para o próximo dia (1 mensagem por dia)
+    cursor.setDate(cursor.getDate() + 1);
+    while (cursor.getDay() === 0) {
       cursor.setDate(cursor.getDate() + 1);
-      // Pula domingo
-      while (cursor.getDay() === 0) {
-        cursor.setDate(cursor.getDate() + 1);
-      }
     }
   }
 
