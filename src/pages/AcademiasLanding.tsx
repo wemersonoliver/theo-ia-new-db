@@ -300,7 +300,7 @@ export default function AcademiasLanding() {
                 <div className="mb-6">
                   <div className="flex items-baseline gap-1">
                     <span className="text-sm text-white">R$</span>
-                    <span className="text-5xl font-extrabold text-white">197</span>
+                    <span className="text-5xl font-extrabold text-white">149</span>
                     <span className="text-white">/mês</span>
                   </div>
                 </div>
