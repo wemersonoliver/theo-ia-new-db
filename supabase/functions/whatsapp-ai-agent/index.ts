@@ -1318,7 +1318,29 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           functionCallsProcessed++;
           continue;
         }
-        
+
+        // ====== IGREEN GREEN FLOW TOOLS ======
+        if (fc.name === "add_contact_tag" || fc.name === "save_green_lead_field" ||
+            fc.name === "validate_green_invoice" || fc.name === "validate_green_identity") {
+          const result = await executeGreenFlowTool(
+            supabase, userId, accountId, phone, contactName, fc.name, fc.args || {},
+          );
+          geminiPayload.contents.push(content);
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{ functionResponse: { name: fc.name, response: result } }],
+          });
+          // Se a tool disparou handoff por "enviou documento", encerra o turno
+          if ((result as any)?.handoff_triggered) {
+            aiReply = "";
+            handoffHandled = true;
+            functionCallsProcessed = maxFunctionCalls;
+            break;
+          }
+          functionCallsProcessed++;
+          continue;
+        }
+
         // Execute the function
         const functionResult = await executeFunction(supabase, supabaseUrl, fc.name, {
           ...fc.args,
