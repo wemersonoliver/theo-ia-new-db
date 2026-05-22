@@ -1048,12 +1048,25 @@ serve(async (req) => {
     let igreenProductsBlock = "";
     try {
       if (accountId) {
-        const { data: igreenProds } = await supabase
-          .from("igreen_account_products")
-          .select("id, key, name, description, enabled, video_url")
-          .eq("account_id", accountId)
-          .order("position", { ascending: true });
-        if (igreenProds && igreenProds.length > 0) {
+        // PROTEÇÃO CRÍTICA: só injeta o contexto Igreen (Jhulia, Conexão Green,
+        // Conexão Telecom, Conexão Expansão, descontos por distribuidora etc.)
+        // em contas que são explicitamente revendedoras Igreen. Sem essa
+        // verificação o prompt vazava entre negócios (ex.: clínica recebia
+        // prompt de iGreen Energy).
+        const { data: accRow } = await supabase
+          .from("accounts")
+          .select("is_igreen")
+          .eq("id", accountId)
+          .maybeSingle();
+        const isIgreenAccount = !!(accRow as any)?.is_igreen;
+        const { data: igreenProds } = isIgreenAccount
+          ? await supabase
+              .from("igreen_account_products")
+              .select("id, key, name, description, enabled, video_url")
+              .eq("account_id", accountId)
+              .order("position", { ascending: true })
+          : { data: [] as any[] };
+        if (isIgreenAccount && igreenProds && igreenProds.length > 0) {
           igreenProductsBlock = buildIgreenProductsPromptBlock({
             agentName: aiConfig.agent_name || "seu assistente",
             greeting: brt.greeting,
