@@ -87,13 +87,22 @@ const faqItems = [
   { q: "O que é o plano Theo Personalitê?", a: "É um sistema personalizado feito exclusivamente para a sua academia: integrações específicas, fluxos sob medida e suporte dedicado. Inclui tudo do Pro como base." },
 ];
 
+const basicIncluded = [
+  "1 número de WhatsApp conectado",
+  "Atendimento com IA 24/7",
+  "Agendamento de aula experimental",
+  "Base de conhecimento personalizada",
+  "Lembretes automáticos de agendamento",
+  "Transcrição de áudios e leitura de imagens",
+  "Suporte por WhatsApp",
+];
+
 const proIncluded = [
   "Tudo do Basic",
   "Até 3 números de WhatsApp conectados",
   "CRM Kanban com funil de matrículas",
   "Follow-up automático de leads",
   "Gestão de tarefas da equipe",
-  "Transcrição de áudios e leitura de imagens",
   "Múltiplos atendentes na mesma conta",
   "Suporte prioritário por WhatsApp",
 ];
