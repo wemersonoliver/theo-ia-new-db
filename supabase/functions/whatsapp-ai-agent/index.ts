@@ -1046,6 +1046,11 @@ serve(async (req) => {
       console.error("Error loading igreen products:", e);
     }
 
+    // Anexa o bloco de desconto já confirmado (se houver) ao prompt Igreen.
+    if (knownDiscountBlock) {
+      igreenProductsBlock = `${igreenProductsBlock || ""}\n\n${knownDiscountBlock}`;
+    }
+
     // Salvaguarda determinística para reagendamento: quando o cliente já está
     // em fluxo de remarcar e envia nova data/horário, não dependemos do Gemini.
     // Atualizamos o agendamento existente diretamente, evitando "sumir" sem ação.
