@@ -528,8 +528,7 @@ async function performHandoff(
 
     const handoffMsg = aiConfig?.handoff_message
       || "Entendi! Já estou te transferindo para um atendente da nossa equipe. Em instantes alguém vai te responder por aqui. 🙌";
-    try { await sendWhatsAppMessage(supabase, userId, phone, handoffMsg); } catch (e) { console.error("handoff send err:", e); }
-    try { await saveAIMessage(supabase, userId, phone, handoffMsg, "ai"); } catch (e) { console.error("handoff save err:", e); }
+    try { await sendAndSaveAIMessageParts(supabase, userId, phone, handoffMsg); } catch (e) { console.error("handoff send/save err:", e); }
 
     try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff err:", e); }
     try { await applyRouletteOnHandoff(supabase, accountId, userId, phone, contactName); } catch (e) { console.error("roulette err:", e); }
@@ -600,8 +599,7 @@ serve(async (req) => {
 
     if (!businessDays.includes(currentDay) || currentTime < startTime || currentTime > endTime) {
       if (aiConfig.out_of_hours_message) {
-        await sendWhatsAppMessage(supabase, userId, phone, aiConfig.out_of_hours_message);
-        await saveAIMessage(supabase, userId, phone, aiConfig.out_of_hours_message, "ai");
+        await sendAndSaveAIMessageParts(supabase, userId, phone, aiConfig.out_of_hours_message);
       }
       return new Response(JSON.stringify({ skipped: true, reason: "Outside business hours" }), { 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
@@ -638,8 +636,7 @@ serve(async (req) => {
       }
 
       if (aiConfig.handoff_message) {
-        await sendWhatsAppMessage(supabase, userId, phone, aiConfig.handoff_message);
-        await saveAIMessage(supabase, userId, phone, aiConfig.handoff_message, "ai");
+        await sendAndSaveAIMessageParts(supabase, userId, phone, aiConfig.handoff_message);
       }
 
       // Notify registered contacts about handoff
