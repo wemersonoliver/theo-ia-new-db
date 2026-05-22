@@ -1769,8 +1769,31 @@ async function executeFunction(supabase: any, supabaseUrl: string, name: string,
 
 function splitMessage(text: string): string[] {
   const trimmed = text.trim();
+  const HARD_MAX = 220;
+  const softLimit = 150;
+  const hardSplit = (value: string): string[] => {
+    const out: string[] = [];
+    let remaining = value.trim();
+    while (remaining.length > HARD_MAX) {
+      const window = remaining.slice(0, HARD_MAX + 1);
+      const cut = Math.max(
+        window.lastIndexOf(". "),
+        window.lastIndexOf("! "),
+        window.lastIndexOf("? "),
+        window.lastIndexOf(", "),
+        window.lastIndexOf("; "),
+        window.lastIndexOf(" "),
+      );
+      const splitAt = cut > 80 ? cut + 1 : HARD_MAX;
+      out.push(remaining.slice(0, splitAt).trim());
+      remaining = remaining.slice(splitAt).trim();
+    }
+    if (remaining) out.push(remaining);
+    return out.filter(Boolean);
+  };
+
   // Mensagens muito curtas não precisam ser divididas
-  if (trimmed.length < 140) return [trimmed];
+  if (trimmed.length <= softLimit) return [trimmed];
 
   // 1. Se a IA já marcou parágrafos com \n\n, respeita
   const paragraphs = trimmed.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
@@ -1786,16 +1809,16 @@ function splitMessage(text: string): string[] {
       }
     }
     if (buffer) merged.push(buffer);
-    return merged.slice(0, 4);
+    return merged.flatMap(hardSplit).filter(Boolean);
   }
 
   // 2. Sem parágrafos: força divisão por sentenças sempre que passa de ~140 chars
   //    Isso garante humanização mesmo quando a IA esquece o \n\n.
   const sentences = trimmed.split(/(?<=[.!?…])\s+/).map(s => s.trim()).filter(Boolean);
-  if (sentences.length <= 1) return [trimmed];
+  if (sentences.length <= 1) return hardSplit(trimmed);
 
-  const TARGET = 180; // alvo por bloco
-  const MAX = 240;    // limite duro por bloco
+  const TARGET = 150; // alvo por bloco
+  const MAX = HARD_MAX;    // limite duro por bloco
   const chunks: string[] = [];
   let current = "";
   for (const sentence of sentences) {
@@ -1813,7 +1836,7 @@ function splitMessage(text: string): string[] {
   }
   if (current) chunks.push(current);
 
-  return chunks.slice(0, 4);
+  return chunks.flatMap(hardSplit).filter(Boolean);
 }
 
 function delay(ms: number): Promise<void> {
