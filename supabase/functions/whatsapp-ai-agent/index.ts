@@ -528,8 +528,7 @@ async function performHandoff(
 
     const handoffMsg = aiConfig?.handoff_message
       || "Entendi! Já estou te transferindo para um atendente da nossa equipe. Em instantes alguém vai te responder por aqui. 🙌";
-    try { await sendWhatsAppMessage(supabase, userId, phone, handoffMsg); } catch (e) { console.error("handoff send err:", e); }
-    try { await saveAIMessage(supabase, userId, phone, handoffMsg, "ai"); } catch (e) { console.error("handoff save err:", e); }
+    try { await sendAndSaveAIMessageParts(supabase, userId, phone, handoffMsg); } catch (e) { console.error("handoff send/save err:", e); }
 
     try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff err:", e); }
     try { await applyRouletteOnHandoff(supabase, accountId, userId, phone, contactName); } catch (e) { console.error("roulette err:", e); }
@@ -600,8 +599,7 @@ serve(async (req) => {
 
     if (!businessDays.includes(currentDay) || currentTime < startTime || currentTime > endTime) {
       if (aiConfig.out_of_hours_message) {
-        await sendWhatsAppMessage(supabase, userId, phone, aiConfig.out_of_hours_message);
-        await saveAIMessage(supabase, userId, phone, aiConfig.out_of_hours_message, "ai");
+        await sendAndSaveAIMessageParts(supabase, userId, phone, aiConfig.out_of_hours_message);
       }
       return new Response(JSON.stringify({ skipped: true, reason: "Outside business hours" }), { 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
@@ -638,8 +636,7 @@ serve(async (req) => {
       }
 
       if (aiConfig.handoff_message) {
-        await sendWhatsAppMessage(supabase, userId, phone, aiConfig.handoff_message);
-        await saveAIMessage(supabase, userId, phone, aiConfig.handoff_message, "ai");
+        await sendAndSaveAIMessageParts(supabase, userId, phone, aiConfig.handoff_message);
       }
 
       // Notify registered contacts about handoff
@@ -839,12 +836,7 @@ serve(async (req) => {
       fallbackName: contactName,
     });
     if (deterministicGreenSimulation) {
-      const parts = splitMessage(deterministicGreenSimulation);
-      for (let i = 0; i < parts.length; i++) {
-        if (i > 0) await delay(1000 + Math.random() * 500);
-        const wid = await sendWhatsAppMessage(supabase, userId, phone, parts[i]);
-        await saveAIMessage(supabase, userId, phone, parts[i], "ai", wid);
-      }
+      await sendAndSaveAIMessageParts(supabase, userId, phone, deterministicGreenSimulation);
       await supabase
         .from("whatsapp_ai_sessions")
         .upsert({
@@ -981,8 +973,7 @@ serve(async (req) => {
           ? `Perfeito! Reagendei seu ${aptToReschedule.title || "agendamento"} para ${parsedRescheduleTarget.date} às ${parsedRescheduleTarget.time}. Te esperamos! 💪`
           : String(rescheduleResult?.message || "Não consegui reagendar nesse horário. Pode me passar outra opção?");
 
-        const wid = await sendWhatsAppMessage(supabase, userId, phone, reply);
-        await saveAIMessage(supabase, userId, phone, reply, "ai", wid);
+        await sendAndSaveAIMessageParts(supabase, userId, phone, reply);
         await supabase
           .from("whatsapp_ai_sessions")
           .upsert({
@@ -1172,6 +1163,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
 
     let aiReply = "";
     let handoffHandled = false;
+    let toolOnlyTurnHandled = false;
     let functionCallsProcessed = 0;
     let createAppointmentCalled = false;
     const maxFunctionCalls = 3;
@@ -1258,6 +1250,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           // automático e a IA NÃO deve mandar texto extra agora.
           if ((videoResult as any)?.success) {
             aiReply = "";
+            toolOnlyTurnHandled = true;
             functionCallsProcessed = maxFunctionCalls;
             break;
           }
@@ -1285,8 +1278,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           // 3. Mensagem de transição ao cliente (se configurada)
           const handoffMsg = aiConfig.handoff_message
             || "Entendi! Já estou te transferindo para um atendente da nossa equipe. Em instantes alguém vai te responder por aqui. 🙌";
-          await sendWhatsAppMessage(supabase, userId, phone, handoffMsg);
-          await saveAIMessage(supabase, userId, phone, handoffMsg, "ai");
+          await sendAndSaveAIMessageParts(supabase, userId, phone, handoffMsg);
 
           // 4. Notifica equipe
           try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff err:", e); }
@@ -1318,6 +1310,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           // Encerra o loop: o departamento de destino assumiu o atendimento
           if ((transferResult as any)?.success) {
             aiReply = "";
+            toolOnlyTurnHandled = true;
             functionCallsProcessed = maxFunctionCalls;
             break;
           }
@@ -1435,8 +1428,8 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
     }
 
     if (!aiReply) {
-      if (handoffHandled) {
-        return new Response(JSON.stringify({ handoff: true, handled: true }), {
+      if (handoffHandled || toolOnlyTurnHandled) {
+        return new Response(JSON.stringify({ handoff: handoffHandled, handled: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -1458,8 +1451,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
       // assumir manualmente. Isso evita o problema "IA parou de responder".
       try {
         const waitingMessage = "Recebi seu material! 😊\n\nDeixa eu validar com a equipe e já te confirmo aqui mesmo, tudo bem?";
-        const wid = await sendWhatsAppMessage(supabase, userId, phone, waitingMessage);
-        await saveAIMessage(supabase, userId, phone, waitingMessage, "ai", wid);
+        await sendAndSaveAIMessageParts(supabase, userId, phone, waitingMessage);
         console.log("[EMPTY-RESPONSE FALLBACK] Sent waiting message and triggering handoff");
         await performHandoff(supabase, userId, accountId, phone, contactName, aiConfig);
       } catch (e) {
@@ -1498,21 +1490,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
     }
 
     // Split response into parts for more human-like delivery
-    const parts = splitMessage(aiReply);
-
-    // Send each part with typing simulation delay AND persist each one with the
-    // real WhatsApp message id returned by Evolution. The webhook will then
-    // dedupe by id when the fromMe=true echo arrives — no more duplicate
-    // messages in the conversation history and the AI no longer "disables
-    // itself" right after replying.
-    for (let i = 0; i < parts.length; i++) {
-      if (i > 0) {
-        // Delay fixo de ~2s entre blocos para simular digitação humana
-        await delay(2000 + Math.random() * 400);
-      }
-      const wid = await sendWhatsAppMessage(supabase, userId, phone, parts[i]);
-      await saveAIMessage(supabase, userId, phone, parts[i], "ai", wid);
-    }
+    await sendAndSaveAIMessageParts(supabase, userId, phone, aiReply);
 
     // Update session
     await supabase
@@ -1667,8 +1645,7 @@ async function executeSendProductVideo(
     // Envia a mensagem de introdução ANTES do vídeo (se houver)
     if (introMessage) {
       try {
-        await sendWhatsAppMessage(supabase, userId, phone, introMessage);
-        await saveAIMessage(supabase, userId, phone, introMessage, "ai");
+        await sendAndSaveAIMessageParts(supabase, userId, phone, introMessage);
       } catch (e) {
         console.error("send intro_message error:", e);
       }
@@ -1787,33 +1764,45 @@ async function executeFunction(supabase: any, supabaseUrl: string, name: string,
 
 function splitMessage(text: string): string[] {
   const trimmed = text.trim();
+  const HARD_MAX = 220;
+  const softLimit = 150;
+  const splitByLimit = (value: string, limit = softLimit): string[] => {
+    const out: string[] = [];
+    let remaining = value.trim();
+    while (remaining.length > limit) {
+      const window = remaining.slice(0, Math.min(HARD_MAX, limit) + 1);
+      const cut = Math.max(
+        window.lastIndexOf(". "),
+        window.lastIndexOf("! "),
+        window.lastIndexOf("? "),
+        window.lastIndexOf(", "),
+        window.lastIndexOf("; "),
+        window.lastIndexOf(" "),
+      );
+      const splitAt = cut > 70 ? cut + 1 : Math.min(HARD_MAX, limit);
+      out.push(remaining.slice(0, splitAt).trim());
+      remaining = remaining.slice(splitAt).trim();
+    }
+    if (remaining) out.push(remaining);
+    return out.filter(Boolean);
+  };
+
   // Mensagens muito curtas não precisam ser divididas
-  if (trimmed.length < 140) return [trimmed];
+  if (trimmed.length <= softLimit) return [trimmed];
 
   // 1. Se a IA já marcou parágrafos com \n\n, respeita
   const paragraphs = trimmed.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
   if (paragraphs.length > 1) {
-    const merged: string[] = [];
-    let buffer = "";
-    for (const part of paragraphs) {
-      if (buffer && (buffer.length + part.length + 2) < 220) {
-        buffer += "\n\n" + part;
-      } else {
-        if (buffer) merged.push(buffer);
-        buffer = part;
-      }
-    }
-    if (buffer) merged.push(buffer);
-    return merged.slice(0, 4);
+    return paragraphs.flatMap(part => splitByLimit(part)).filter(Boolean);
   }
 
   // 2. Sem parágrafos: força divisão por sentenças sempre que passa de ~140 chars
   //    Isso garante humanização mesmo quando a IA esquece o \n\n.
   const sentences = trimmed.split(/(?<=[.!?…])\s+/).map(s => s.trim()).filter(Boolean);
-  if (sentences.length <= 1) return [trimmed];
+  if (sentences.length <= 1) return splitByLimit(trimmed);
 
-  const TARGET = 180; // alvo por bloco
-  const MAX = 240;    // limite duro por bloco
+  const TARGET = 150; // alvo por bloco
+  const MAX = HARD_MAX;    // limite duro por bloco
   const chunks: string[] = [];
   let current = "";
   for (const sentence of sentences) {
@@ -1831,7 +1820,7 @@ function splitMessage(text: string): string[] {
   }
   if (current) chunks.push(current);
 
-  return chunks.slice(0, 4);
+  return chunks.flatMap(part => splitByLimit(part, HARD_MAX)).filter(Boolean);
 }
 
 function delay(ms: number): Promise<void> {
@@ -2151,6 +2140,21 @@ async function saveAIMessage(
         updated_at: new Date().toISOString(),
       })
       .eq("id", conversation.id);
+  }
+}
+
+async function sendAndSaveAIMessageParts(
+  supabase: any,
+  userId: string,
+  phone: string,
+  text: string,
+  sentBy = "ai",
+): Promise<void> {
+  const parts = splitMessage(text);
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) await delay(1800 + Math.random() * 500);
+    const wid = await sendWhatsAppMessage(supabase, userId, phone, parts[i]);
+    await saveAIMessage(supabase, userId, phone, parts[i], sentBy, wid);
   }
 }
 
@@ -2644,8 +2648,7 @@ async function executeGreenFlowTool(
         const claimed = await claimHandoffNotification(supabase, userId, accountId, phone);
         if (claimed) {
           const closingMsg = "Perfeito! Recebi tudo certinho. Já passei para o nosso consultor responsável dar sequência no seu cadastro. Em instantes alguém vai te chamar por aqui. 🙌";
-          try { await sendWhatsAppMessage(supabase, userId, phone, closingMsg); } catch (e) { console.error("send closing err:", e); }
-          try { await saveAIMessage(supabase, userId, phone, closingMsg, "ai"); } catch (_) {}
+          try { await sendAndSaveAIMessageParts(supabase, userId, phone, closingMsg); } catch (e) { console.error("send closing err:", e); }
           try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff err:", e); }
           try { await applyRouletteOnHandoff(supabase, accountId, userId, phone, contactName); } catch (e) { console.error("roulette err:", e); }
           try { await moveCRMDealToHumanStage(supabase, userId, phone); } catch (e) { console.error("crm move err:", e); }
