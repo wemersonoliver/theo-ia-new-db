@@ -296,6 +296,19 @@ const schedulingTools = {
         },
         required: ["extracted_name"]
       }
+    },
+    {
+      name: "get_distributor_discount",
+      description: "FONTE DE VERDADE do desconto da Conexão Green por distribuidora e estado. Use SEMPRE antes de simular economia, falar do percentual de desconto, ou cair no fallback 'vou verificar com a equipe'. Retorna { found, discount_percent, min_bill, notes }. Se found=true, use o percentual retornado direto na resposta — NÃO diga que vai confirmar com a equipe. Se found=false, aí sim avise educadamente que vai confirmar com a equipe.",
+      parameters: {
+        type: "object",
+        properties: {
+          state: { type: "string", description: "UF do cliente (ex.: 'PA', 'SC', 'SP'). Aceita também o nome do estado, mas prefira a sigla." },
+          distributor: { type: "string", description: "Nome da distribuidora informada pelo cliente (ex.: 'Equatorial', 'Celesc', 'Enel SP', 'Cemig', 'CPFL')." },
+          account_type: { type: "string", description: "'residencial' ou 'comercial'. Se o cliente ainda não disse, use 'residencial' como padrão." }
+        },
+        required: ["state", "distributor"]
+      }
     }
   ]
 };
