@@ -1172,6 +1172,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
 
     let aiReply = "";
     let handoffHandled = false;
+    let toolOnlyTurnHandled = false;
     let functionCallsProcessed = 0;
     let createAppointmentCalled = false;
     const maxFunctionCalls = 3;
@@ -1258,6 +1259,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           // automático e a IA NÃO deve mandar texto extra agora.
           if ((videoResult as any)?.success) {
             aiReply = "";
+            toolOnlyTurnHandled = true;
             functionCallsProcessed = maxFunctionCalls;
             break;
           }
@@ -1318,6 +1320,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           // Encerra o loop: o departamento de destino assumiu o atendimento
           if ((transferResult as any)?.success) {
             aiReply = "";
+            toolOnlyTurnHandled = true;
             functionCallsProcessed = maxFunctionCalls;
             break;
           }
@@ -1435,8 +1438,8 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
     }
 
     if (!aiReply) {
-      if (handoffHandled) {
-        return new Response(JSON.stringify({ handoff: true, handled: true }), {
+      if (handoffHandled || toolOnlyTurnHandled) {
+        return new Response(JSON.stringify({ handoff: handoffHandled, handled: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
