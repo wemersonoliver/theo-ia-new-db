@@ -1488,9 +1488,8 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
     // itself" right after replying.
     for (let i = 0; i < parts.length; i++) {
       if (i > 0) {
-        // Delay proporcional ao tamanho da mensagem anterior (simula digitação ~40 chars/sec)
-        const typingDelay = Math.min(Math.max(parts[i].length * 25, 1000), 4000);
-        await delay(typingDelay + Math.random() * 800);
+        // Delay fixo de ~2s entre blocos para simular digitação humana
+        await delay(2000 + Math.random() * 400);
       }
       const wid = await sendWhatsAppMessage(supabase, userId, phone, parts[i]);
       await saveAIMessage(supabase, userId, phone, parts[i], "ai", wid);
@@ -1790,7 +1789,7 @@ function splitMessage(text: string): string[] {
     if (buffer) merged.push(buffer);
     
     // Limita a no máximo 2 mensagens (regra de brevidade)
-    return merged.slice(0, 2);
+    return merged.slice(0, 4);
   }
 
   // 2. Se não tem parágrafos, tenta dividir por sentenças em mensagens longas
@@ -1811,7 +1810,7 @@ function splitMessage(text: string): string[] {
       }
       if (current) chunks.push(current.trim());
       
-      return chunks.slice(0, 2);
+      return chunks.slice(0, 4);
     }
   }
 
