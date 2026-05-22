@@ -1786,19 +1786,17 @@ async function executeFunction(supabase: any, supabaseUrl: string, name: string,
 }
 
 function splitMessage(text: string): string[] {
-  // Mensagens curtas não precisam ser divididas
-  if (text.length < 150) return [text];
+  const trimmed = text.trim();
+  // Mensagens muito curtas não precisam ser divididas
+  if (trimmed.length < 140) return [trimmed];
 
-  // 1. Tenta dividir por parágrafos (dupla quebra de linha)
-  let parts = text.split(/\n\n+/).filter(p => p.trim());
-  
-  if (parts.length > 1) {
-    // Agrupa partes muito pequenas com a próxima para não enviar mensagens de 1 linha
+  // 1. Se a IA já marcou parágrafos com \n\n, respeita
+  const paragraphs = trimmed.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+  if (paragraphs.length > 1) {
     const merged: string[] = [];
     let buffer = "";
-    
-    for (const part of parts) {
-      if (buffer && (buffer.length + part.length) < 250) {
+    for (const part of paragraphs) {
+      if (buffer && (buffer.length + part.length + 2) < 220) {
         buffer += "\n\n" + part;
       } else {
         if (buffer) merged.push(buffer);
@@ -1806,34 +1804,34 @@ function splitMessage(text: string): string[] {
       }
     }
     if (buffer) merged.push(buffer);
-    
-    // Limita a no máximo 2 mensagens (regra de brevidade)
     return merged.slice(0, 4);
   }
 
-  // 2. Se não tem parágrafos, tenta dividir por sentenças em mensagens longas
-  if (text.length > 300) {
-    const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.trim());
-    
-    if (sentences.length > 1) {
-      const chunks: string[] = [];
-      let current = "";
-      
-      for (const sentence of sentences) {
-        if (current && (current.length + sentence.length) > 280) {
-          chunks.push(current.trim());
-          current = sentence;
-        } else {
-          current += (current ? " " : "") + sentence;
-        }
-      }
-      if (current) chunks.push(current.trim());
-      
-      return chunks.slice(0, 4);
+  // 2. Sem parágrafos: força divisão por sentenças sempre que passa de ~140 chars
+  //    Isso garante humanização mesmo quando a IA esquece o \n\n.
+  const sentences = trimmed.split(/(?<=[.!?…])\s+/).map(s => s.trim()).filter(Boolean);
+  if (sentences.length <= 1) return [trimmed];
+
+  const TARGET = 180; // alvo por bloco
+  const MAX = 240;    // limite duro por bloco
+  const chunks: string[] = [];
+  let current = "";
+  for (const sentence of sentences) {
+    if (!current) {
+      current = sentence;
+      continue;
+    }
+    const next = current + " " + sentence;
+    if (next.length > MAX || current.length >= TARGET) {
+      chunks.push(current);
+      current = sentence;
+    } else {
+      current = next;
     }
   }
+  if (current) chunks.push(current);
 
-  return [text];
+  return chunks.slice(0, 4);
 }
 
 function delay(ms: number): Promise<void> {
