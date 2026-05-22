@@ -130,7 +130,7 @@ serve(async (req) => {
     // Find the instance owner (user instance or system instance)
     const { data: instanceData } = await supabase
       .from("whatsapp_instances")
-      .select("user_id, id, status, instance_name, ai_enabled, followup_enabled")
+      .select("user_id, id, status, instance_name, ai_enabled, followup_enabled, initial_sync_completed_at")
       .eq("instance_name", instanceName)
       .maybeSingle();
 
@@ -496,20 +496,58 @@ serve(async (req) => {
 
         console.log("WhatsApp connected for user:", userId);
 
-        // Trigger conversation sync in background (fire-and-forget)
-        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        fetch(`${supabaseUrl}/functions/v1/sync-whatsapp-conversations`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({ userId, instanceName }),
-        }).catch(err => {
-          console.error("Error triggering conversation sync:", err);
-        });
-        console.log("Conversation sync triggered for user:", userId);
+        // Importação inicial: só dispara uma vez por instância (primeira conexão / recriação).
+        // Reconexões posteriores NÃO reimportam histórico nem mexem na IA das conversas existentes.
+        if (!instanceData.initial_sync_completed_at) {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+          const instanceRowId = instanceData.id;
+
+          (async () => {
+            try {
+              let offset = 0;
+              let pages = 0;
+              const MAX_PAGES = 10; // teto de segurança (~400 chats)
+              while (pages < MAX_PAGES) {
+                const resp = await fetch(`${supabaseUrl}/functions/v1/sync-whatsapp-conversations`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${serviceKey}`,
+                  },
+                  body: JSON.stringify({
+                    userId,
+                    instanceName,
+                    daysBack: 7,
+                    forceDisableAI: true,
+                    offset,
+                  }),
+                });
+                if (!resp.ok) {
+                  console.error("Initial sync page failed:", await resp.text());
+                  break;
+                }
+                const json = await resp.json();
+                pages++;
+                if (!json?.hasMore) break;
+                offset = json.nextOffset;
+              }
+
+              await supabase
+                .from("whatsapp_instances")
+                .update({ initial_sync_completed_at: new Date().toISOString() })
+                .eq("id", instanceRowId);
+
+              console.log(`Initial sync completed for user ${userId} (${pages} page(s))`);
+            } catch (err) {
+              console.error("Error during initial sync loop:", err);
+            }
+          })();
+
+          console.log("Initial conversation sync started for user:", userId);
+        } else {
+          console.log("Reconnection detected — skipping initial sync for user:", userId);
+        }
       } else if (state === "close" || state === "disconnected") {
         const previousStatus = instanceData.status;
         await supabase
