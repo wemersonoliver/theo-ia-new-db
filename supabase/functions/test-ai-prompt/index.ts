@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { resolveAccountId } from "../_account.ts";
-import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply } from "../_igreen_flow.ts";
+import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock } from "../_igreen_flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -185,6 +185,19 @@ const schedulingTools = {
       name: "validate_green_identity",
       description: "Valida documento de identificação: compara nome do documento com o titular da fatura. Retorna match=true/false.",
       parameters: { type: "object", properties: { extracted_name: { type: "string" } }, required: ["extracted_name"] }
+    },
+    {
+      name: "get_distributor_discount",
+      description: "FONTE DE VERDADE do desconto da Conexão Green por distribuidora/estado. Use SEMPRE antes de falar de percentual ou simular economia. Retorna { found, discount_percent, min_bill }.",
+      parameters: {
+        type: "object",
+        properties: {
+          state: { type: "string", description: "UF (ex.: 'PA', 'SC') ou nome do estado." },
+          distributor: { type: "string", description: "Nome da distribuidora (ex.: 'Equatorial', 'Celesc')." },
+          account_type: { type: "string", description: "'residencial' ou 'comercial'. Padrão 'residencial'." }
+        },
+        required: ["state", "distributor"]
+      }
     }
   ]
 };
@@ -316,10 +329,71 @@ serve(async (req) => {
     const lastUserMessage = userMessage
       || ([...(messages || [])].reverse().find((m: any) => m.role === "user")?.content ?? "");
 
+    // ====== Igreen — Lookup de descontos (simulador) ======
+    let distributorDiscounts: any[] = [];
+    try {
+      const { data: discRows } = await serviceClient
+        .from("igreen_distributor_discounts")
+        .select("state, state_name, distributor, distributor_aliases, discount_residencial_percent, discount_comercial_percent, min_bill_brl, notes, enabled")
+        .eq("enabled", true);
+      distributorDiscounts = discRows || [];
+    } catch (e) {
+      console.error("Error loading distributor discounts:", e);
+    }
+
+    const normalizeIg = (s: string) => String(s || "")
+      .toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+    const stateNameToUf: Record<string, string> = {
+      ACRE:"AC", ALAGOAS:"AL", AMAPA:"AP", AMAZONAS:"AM", BAHIA:"BA", CEARA:"CE",
+      "DISTRITO FEDERAL":"DF", "ESPIRITO SANTO":"ES", GOIAS:"GO", MARANHAO:"MA",
+      "MATO GROSSO":"MT", "MATO GROSSO DO SUL":"MS", "MINAS GERAIS":"MG", PARA:"PA",
+      PARAIBA:"PB", PARANA:"PR", PERNAMBUCO:"PE", PIAUI:"PI", "RIO DE JANEIRO":"RJ",
+      "RIO GRANDE DO NORTE":"RN", "RIO GRANDE DO SUL":"RS", RONDONIA:"RO", RORAIMA:"RR",
+      "SANTA CATARINA":"SC", "SAO PAULO":"SP", SERGIPE:"SE", TOCANTINS:"TO",
+    };
+    function resolveUf(input: string): string {
+      const norm = normalizeIg(input);
+      if (/^[A-Z]{2}$/.test(norm)) return norm;
+      if (stateNameToUf[norm]) return stateNameToUf[norm];
+      const m = norm.match(/\b([A-Z]{2})\b/);
+      if (m) return m[1];
+      for (const [name, uf] of Object.entries(stateNameToUf)) {
+        if (norm.includes(name)) return uf;
+      }
+      return norm.slice(0, 2);
+    }
+    function lookupGreenDiscount(stateRaw: string, distributorRaw: string, accountType: "residencial" | "comercial" = "residencial") {
+      if (!stateRaw || !distributorRaw || distributorDiscounts.length === 0) return null;
+      const uf = resolveUf(stateRaw);
+      const distNorm = normalizeIg(distributorRaw);
+      const candidates = distributorDiscounts.filter((r: any) => String(r.state || "").toUpperCase() === uf);
+      const matches = candidates.filter((r: any) => {
+        const main = normalizeIg(r.distributor);
+        if (main && (distNorm.includes(main) || main.includes(distNorm))) return true;
+        const aliases: string[] = Array.isArray(r.distributor_aliases) ? r.distributor_aliases : [];
+        return aliases.some(a => {
+          const an = normalizeIg(a);
+          return an && (distNorm.includes(an) || an.includes(distNorm));
+        });
+      });
+      const row = matches[0] || null;
+      if (!row) return null;
+      const percent = accountType === "comercial"
+        ? (Number(row.discount_comercial_percent) || Number(row.discount_residencial_percent))
+        : (Number(row.discount_residencial_percent) || Number(row.discount_comercial_percent));
+      if (!Number.isFinite(percent) || percent <= 0) return null;
+      return { percent, min_bill: row.min_bill_brl ?? null, notes: row.notes ?? null, row };
+    }
+
     const deterministicGreenSimulation = buildGreenSimulationReply({
       messages: messages || [],
       currentUserMessage: lastUserMessage,
       knowledgeText: docTexts.join("\n\n---\n\n"),
+      lookupDiscount: (state, distributor, accountType) => {
+        const hit = lookupGreenDiscount(state, distributor, accountType);
+        return hit ? { percent: hit.percent, min_bill: hit.min_bill } : null;
+      },
     });
     if (deterministicGreenSimulation) {
       return new Response(JSON.stringify({ message: deterministicGreenSimulation }), {
@@ -534,6 +608,31 @@ serve(async (req) => {
               ? "Nomes batem. Adicione a tag 'enviou documento'."
               : "Nomes NÃO batem. Peça o documento do titular da fatura.",
           };
+        } else if (fc.name === "get_distributor_discount") {
+          const stateArg = String(fc.args?.state || "").trim();
+          const distributorArg = String(fc.args?.distributor || "").trim();
+          const atArg = String(fc.args?.account_type || "residencial").toLowerCase();
+          const accountType: "residencial" | "comercial" = atArg.startsWith("com") ? "comercial" : "residencial";
+          const hit = lookupGreenDiscount(stateArg, distributorArg, accountType);
+          functionResult = hit?.row
+            ? {
+                found: true,
+                state: hit.row.state,
+                distributor: hit.row.distributor,
+                account_type: accountType,
+                discount_percent: hit.percent,
+                discount_residencial_percent: hit.row.discount_residencial_percent,
+                discount_comercial_percent: hit.row.discount_comercial_percent,
+                min_bill: hit.row.min_bill_brl,
+                notes: hit.row.notes,
+                instruction: "Use ESTE percentual diretamente. NÃO diga 'vou verificar com a equipe'.",
+              }
+            : {
+                found: false,
+                state: stateArg,
+                distributor: distributorArg,
+                instruction: "Distribuidora não está na tabela oficial. Avise que vai confirmar com a equipe e siga pedindo a fatura.",
+              };
         } else {
           functionResult = await executeFunction(supabaseUrl, fc.name, {
             ...fc.args,

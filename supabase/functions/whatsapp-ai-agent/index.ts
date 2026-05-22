@@ -7,7 +7,7 @@ import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { reportApiFailure, reportApiSuccess } from "../_health.ts";
 import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
-import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply } from "../_igreen_flow.ts";
+import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock } from "../_igreen_flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -295,6 +295,19 @@ const schedulingTools = {
           extracted_name: { type: "string", description: "Nome COMPLETO impresso no documento de identificação." }
         },
         required: ["extracted_name"]
+      }
+    },
+    {
+      name: "get_distributor_discount",
+      description: "FONTE DE VERDADE do desconto da Conexão Green por distribuidora e estado. Use SEMPRE antes de simular economia, falar do percentual de desconto, ou cair no fallback 'vou verificar com a equipe'. Retorna { found, discount_percent, min_bill, notes }. Se found=true, use o percentual retornado direto na resposta — NÃO diga que vai confirmar com a equipe. Se found=false, aí sim avise educadamente que vai confirmar com a equipe.",
+      parameters: {
+        type: "object",
+        properties: {
+          state: { type: "string", description: "UF do cliente (ex.: 'PA', 'SC', 'SP'). Aceita também o nome do estado, mas prefira a sigla." },
+          distributor: { type: "string", description: "Nome da distribuidora informada pelo cliente (ex.: 'Equatorial', 'Celesc', 'Enel SP', 'Cemig', 'CPFL')." },
+          account_type: { type: "string", description: "'residencial' ou 'comercial'. Se o cliente ainda não disse, use 'residencial' como padrão." }
+        },
+        required: ["state", "distributor"]
       }
     }
   ]
@@ -829,11 +842,117 @@ serve(async (req) => {
         return `${header}\n${d.content_text}`;
       });
 
+    // ====== Igreen — Lookup de descontos por distribuidora/estado ======
+    // Fonte de verdade estruturada. Substitui o regex em cima do PDF da KB,
+    // que vinha falhando para distribuidoras que não estavam no formato esperado.
+    let distributorDiscounts: any[] = [];
+    try {
+      const { data: discRows } = await supabase
+        .from("igreen_distributor_discounts")
+        .select("state, state_name, distributor, distributor_aliases, discount_residencial_percent, discount_comercial_percent, min_bill_brl, notes, enabled")
+        .eq("enabled", true);
+      distributorDiscounts = discRows || [];
+    } catch (e) {
+      console.error("Error loading distributor discounts:", e);
+    }
+
+    const normalizeIg = (s: string) => String(s || "")
+      .toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+
+    const stateNameToUf: Record<string, string> = {
+      ACRE:"AC", ALAGOAS:"AL", AMAPA:"AP", AMAZONAS:"AM", BAHIA:"BA", CEARA:"CE",
+      "DISTRITO FEDERAL":"DF", "ESPIRITO SANTO":"ES", GOIAS:"GO", MARANHAO:"MA",
+      "MATO GROSSO":"MT", "MATO GROSSO DO SUL":"MS", "MINAS GERAIS":"MG", PARA:"PA",
+      PARAIBA:"PB", PARANA:"PR", PERNAMBUCO:"PE", PIAUI:"PI", "RIO DE JANEIRO":"RJ",
+      "RIO GRANDE DO NORTE":"RN", "RIO GRANDE DO SUL":"RS", RONDONIA:"RO", RORAIMA:"RR",
+      "SANTA CATARINA":"SC", "SAO PAULO":"SP", SERGIPE:"SE", TOCANTINS:"TO",
+    };
+
+    function resolveUf(input: string): string {
+      const norm = normalizeIg(input);
+      if (/^[A-Z]{2}$/.test(norm)) return norm;
+      if (stateNameToUf[norm]) return stateNameToUf[norm];
+      // tenta achar UF dentro do texto
+      const match = norm.match(/\b([A-Z]{2})\b/);
+      if (match) return match[1];
+      // tenta nome composto
+      for (const [name, uf] of Object.entries(stateNameToUf)) {
+        if (norm.includes(name)) return uf;
+      }
+      return norm.slice(0, 2);
+    }
+
+    function lookupGreenDiscount(
+      stateRaw: string,
+      distributorRaw: string,
+      accountType: "residencial" | "comercial" = "residencial",
+    ): { percent: number; min_bill?: number | null; notes?: string | null; row?: any } | null {
+      if (!stateRaw || !distributorRaw || distributorDiscounts.length === 0) return null;
+      const uf = resolveUf(stateRaw);
+      const distNorm = normalizeIg(distributorRaw);
+      const candidates = distributorDiscounts.filter((r: any) => String(r.state || "").toUpperCase() === uf);
+      const matches = candidates.filter((r: any) => {
+        const main = normalizeIg(r.distributor);
+        if (main && (distNorm.includes(main) || main.includes(distNorm))) return true;
+        const aliases: string[] = Array.isArray(r.distributor_aliases) ? r.distributor_aliases : [];
+        return aliases.some(a => {
+          const an = normalizeIg(a);
+          return an && (distNorm.includes(an) || an.includes(distNorm));
+        });
+      });
+      const row = matches[0] || null;
+      if (!row) return null;
+      const percent = accountType === "comercial"
+        ? (Number(row.discount_comercial_percent) || Number(row.discount_residencial_percent))
+        : (Number(row.discount_residencial_percent) || Number(row.discount_comercial_percent));
+      if (!Number.isFinite(percent) || percent <= 0) return null;
+      return { percent, min_bill: row.min_bill_brl ?? null, notes: row.notes ?? null, row };
+    }
+
+    // Pré-carrega lead_data deste contato (estado/distribuidora já salvos) para
+    // injetar um bloco "DESCONTO CONFIRMADO" no system prompt e tirar a IA do
+    // fallback "vou verificar com a equipe".
+    let greenLeadData: any = null;
+    if (accountId) {
+      try {
+        const { data: ldRow } = await supabase
+          .from("igreen_lead_data")
+          .select("estado, distribuidora, tipo_conta, nome_cliente, valor_fatura_cents")
+          .eq("account_id", accountId)
+          .eq("phone", phone)
+          .maybeSingle();
+        greenLeadData = ldRow || null;
+      } catch (_) { /* opcional */ }
+    }
+
+    let knownDiscountBlock = "";
+    if (greenLeadData?.estado && greenLeadData?.distribuidora) {
+      const at: "residencial" | "comercial" =
+        String(greenLeadData.tipo_conta || "").toLowerCase().startsWith("com") ? "comercial" : "residencial";
+      const hit = lookupGreenDiscount(greenLeadData.estado, greenLeadData.distribuidora, at);
+      if (hit?.row) {
+        knownDiscountBlock = buildGreenKnownDiscountBlock({
+          state: hit.row.state,
+          distributor: hit.row.distributor,
+          accountType: at,
+          discountResidencial: hit.row.discount_residencial_percent,
+          discountComercial: hit.row.discount_comercial_percent,
+          minBill: hit.row.min_bill_brl,
+          notes: hit.row.notes,
+        });
+      }
+    }
+
     const deterministicGreenSimulation = buildGreenSimulationReply({
       messages: recentMessages,
       currentUserMessage: messageContent,
       knowledgeText: docTexts.join("\n\n---\n\n"),
       fallbackName: contactName,
+      lookupDiscount: (state, distributor, accountType) => {
+        const hit = lookupGreenDiscount(state, distributor, accountType);
+        return hit ? { percent: hit.percent, min_bill: hit.min_bill } : null;
+      },
     });
     if (deterministicGreenSimulation) {
       await sendAndSaveAIMessageParts(supabase, userId, phone, deterministicGreenSimulation);
@@ -925,6 +1044,11 @@ serve(async (req) => {
       }
     } catch (e) {
       console.error("Error loading igreen products:", e);
+    }
+
+    // Anexa o bloco de desconto já confirmado (se houver) ao prompt Igreen.
+    if (knownDiscountBlock) {
+      igreenProductsBlock = `${igreenProductsBlock || ""}\n\n${knownDiscountBlock}`;
     }
 
     // Salvaguarda determinística para reagendamento: quando o cliente já está
@@ -1336,6 +1460,41 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
             functionCallsProcessed = maxFunctionCalls;
             break;
           }
+          functionCallsProcessed++;
+          continue;
+        }
+
+        if (fc.name === "get_distributor_discount") {
+          const stateArg = String(fc.args?.state || "").trim();
+          const distributorArg = String(fc.args?.distributor || "").trim();
+          const atArg = String(fc.args?.account_type || "residencial").toLowerCase();
+          const accountType: "residencial" | "comercial" = atArg.startsWith("com") ? "comercial" : "residencial";
+          const hit = lookupGreenDiscount(stateArg, distributorArg, accountType);
+          const response = hit?.row
+            ? {
+                found: true,
+                state: hit.row.state,
+                state_name: hit.row.state_name,
+                distributor: hit.row.distributor,
+                account_type: accountType,
+                discount_percent: hit.percent,
+                discount_residencial_percent: hit.row.discount_residencial_percent,
+                discount_comercial_percent: hit.row.discount_comercial_percent,
+                min_bill: hit.row.min_bill_brl,
+                notes: hit.row.notes,
+                instruction: "Use ESTE percentual diretamente na resposta. NÃO diga 'vou verificar com a equipe'. Se o cliente já informou o valor da fatura, calcule a economia agora mesmo.",
+              }
+            : {
+                found: false,
+                state: stateArg,
+                distributor: distributorArg,
+                instruction: "A distribuidora informada ainda não está na tabela oficial. Avise educadamente que você vai confirmar o desconto exato com a equipe e siga adiante pedindo a fatura para já adiantar o cadastro.",
+              };
+          geminiPayload.contents.push(content);
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{ functionResponse: { name: fc.name, response } }],
+          });
           functionCallsProcessed++;
           continue;
         }

@@ -175,6 +175,18 @@ export function buildGreenSimulationReply(opts: {
   currentUserMessage: string | null | undefined;
   knowledgeText: string;
   fallbackName?: string | null;
+  /**
+   * Lookup determinístico do desconto a partir da tabela
+   * `igreen_distributor_discounts`. Recebe distribuidora + UF + tipo de conta
+   * ('residencial' | 'comercial') e devolve { percent, min_bill } ou null.
+   * Quando informado, tem prioridade sobre o regex em cima da knowledgeText
+   * (que é mantido só como fallback legado).
+   */
+  lookupDiscount?: (
+    state: string,
+    distributor: string,
+    accountType: "residencial" | "comercial",
+  ) => { percent: number; min_bill?: number | null } | null;
 }): string | null {
   const current = String(opts.currentUserMessage || "");
   const amount = extractBillAmount(current);
@@ -195,7 +207,18 @@ export function buildGreenSimulationReply(opts: {
   const location = extractDistributorState(conversationText);
   if (!location) return null;
 
-  const percentage = findDiscountPercentage(opts.knowledgeText, location.distributor, location.state);
+  const accountType: "residencial" | "comercial" =
+    /\b(comercial|empresa|empresarial)\b/i.test(conversationText) ? "comercial" : "residencial";
+
+  let percentage: number | null = null;
+  if (opts.lookupDiscount) {
+    const hit = opts.lookupDiscount(location.state, location.distributor, accountType);
+    if (hit && Number.isFinite(hit.percent)) percentage = hit.percent;
+  }
+  if (percentage === null) {
+    // Fallback legado: regex em cima do PDF da knowledge base.
+    percentage = findDiscountPercentage(opts.knowledgeText, location.distributor, location.state);
+  }
   if (percentage === null) return null;
 
   const monthlySavings = Math.round(amount * (percentage / 100));
@@ -206,6 +229,46 @@ export function buildGreenSimulationReply(opts: {
   const percentLabel = Number.isInteger(percentage) ? String(percentage) : String(percentage).replace(".", ",");
 
   return `Perfeito, ${namePrefix}para a ${location.distributor}/${location.state}, o desconto médio é de ${percentLabel}%. Na sua conta de R$ ${amount}, você economizaria cerca de R$ ${monthlySavings} por mês, quase R$ ${yearlySavings} por ano, e sua fatura ficaria perto de R$ ${newBill}. Para iniciar seu cadastro, pode me enviar uma foto ou PDF da sua fatura de energia?`;
+}
+
+/**
+ * Monta um bloco curto para injetar no system prompt quando já sabemos a
+ * distribuidora e o estado do cliente. Faz com que a IA pare de cair no
+ * fallback "vou verificar com a equipe".
+ */
+export function buildGreenKnownDiscountBlock(opts: {
+  state?: string | null;
+  distributor?: string | null;
+  accountType?: string | null;
+  discountResidencial?: number | null;
+  discountComercial?: number | null;
+  minBill?: number | null;
+  notes?: string | null;
+}): string {
+  const state = String(opts.state || "").trim();
+  const distributor = String(opts.distributor || "").trim();
+  if (!state || !distributor) return "";
+  const lines: string[] = [];
+  lines.push("============================================================");
+  lines.push("DESCONTO CONFIRMADO DA DISTRIBUIDORA DO CLIENTE (FONTE DE VERDADE)");
+  lines.push("============================================================");
+  lines.push(`Distribuidora: ${distributor}`);
+  lines.push(`Estado: ${state}`);
+  if (opts.discountResidencial !== null && opts.discountResidencial !== undefined) {
+    lines.push(`Desconto residencial: ${opts.discountResidencial}%`);
+  }
+  if (opts.discountComercial !== null && opts.discountComercial !== undefined) {
+    lines.push(`Desconto comercial: ${opts.discountComercial}%`);
+  }
+  if (opts.minBill) lines.push(`Faixa mínima de fatura atendida: R$ ${opts.minBill}`);
+  if (opts.notes) lines.push(`Observações: ${opts.notes}`);
+  lines.push("");
+  lines.push("Use ESTES números diretamente para a simulação de economia.");
+  lines.push("NÃO diga 'vou verificar com a equipe' — o desconto já está confirmado aqui.");
+  lines.push("NÃO invente outro percentual. Se o cliente já disse o valor da fatura,");
+  lines.push("faça a simulação de economia AGORA usando o desconto acima.");
+  lines.push("============================================================");
+  return lines.join("\n");
 }
 
 /**
@@ -292,6 +355,14 @@ ETAPA 3 — QUALIFICAR APÓS O VÍDEO
   "Perfeito, {nome}! Posso te mostrar quanto você economizaria por mês?
    Para isso, preciso saber qual a sua distribuidora de energia e em qual
    estado você mora."
+• REGRA — NÃO RESPONDA PERGUNTA COM PERGUNTA: se o cliente perguntar algo
+  direto como "o que precisa?", "como funciona?", "como faço?", "o que
+  tenho que fazer?", "qual o próximo passo?", NÃO devolva outra pergunta
+  retórica antes ("Posso te mostrar quanto você economizaria?" — isso é
+  proibido). Responda DIRETO em 1 frase o próximo passo objetivo já
+  pedindo a informação que falta. Ex.:
+    "Pra te mostrar quanto você economiza, só preciso da sua distribuidora
+     de energia e do estado em que mora."
 • Quando o cliente responder a distribuidora e o estado, confirme que
   atendemos a região ANTES de pedir o valor. SALVE os dados chamando
   save_green_lead_field(field="distribuidora", value="...") e
@@ -304,12 +375,20 @@ ETAPA 3 — QUALIFICAR APÓS O VÍDEO
   save_green_lead_field (campos 'tipo_conta' e 'valor_fatura'). E quando
   ele disser o primeiro nome dele em qualquer momento, salve com
   save_green_lead_field(field="nome_cliente", value="<primeiro nome>").
-• Use APENAS o percentual real da base [PRODUTO: ${green.name}] para a
-  distribuidora/estado informados. NUNCA invente número, NUNCA chute
-  "média de 20%" ou similar. Se não encontrar o percentual exato da
-  distribuidora do cliente na base, responda com transparência:
-  "Deixa eu confirmar o desconto exato da sua distribuidora com a equipe
-  e já te retorno, tudo bem?" e siga pedindo a fatura para o cadastro.
+• FONTE DE VERDADE DO DESCONTO: o sistema mantém uma tabela oficial de
+  descontos por distribuidora/estado. ANTES de responder qualquer coisa
+  sobre desconto ou simulação de economia, CHAME a tool
+  get_distributor_discount(state="<UF>", distributor="<nome>",
+  account_type="residencial"|"comercial"). A tool retorna found=true com
+  o percentual oficial OU found=false. Se já existir um bloco
+  "DESCONTO CONFIRMADO DA DISTRIBUIDORA DO CLIENTE" no system prompt,
+  use diretamente os números desse bloco — eles já vieram da tabela.
+• NUNCA invente número, NUNCA chute "média de 20%". Se a tool devolver
+  found=false (distribuidora ainda não está na tabela), aí sim responda
+  com transparência: "Deixa eu confirmar o desconto exato dessa
+  distribuidora com a equipe e já te retorno, tudo bem?" e siga pedindo
+  a fatura para o cadastro. Se found=true, faça a simulação NA HORA, sem
+  dizer "vou verificar com a equipe".
 • Apresente a simulação de forma clara e agradável de ler, sem tabela.
 
 ETAPA 4 — PEDIR OS DOCUMENTOS
