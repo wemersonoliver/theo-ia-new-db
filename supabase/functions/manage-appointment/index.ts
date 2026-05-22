@@ -619,6 +619,19 @@ serve(async (req) => {
         // Move CRM deal to "Agendamento Confirmado"
         await moveCRMDealByPhone(supabase, userId, aptToConfirm.phone, "Agendamento Confirmado");
 
+        // Garante tag "agendamento" no contato e cancela follow-up
+        try {
+          const acc = aptToConfirm.account_id;
+          if (acc && aptToConfirm.phone) {
+            await supabase.rpc("tag_contact_reserved", {
+              _account_id: acc,
+              _phone: aptToConfirm.phone,
+              _tag: "agendamento",
+              _add: true,
+            });
+          }
+        } catch (e) { console.error("tag_contact_reserved (confirm) err:", e); }
+
         return new Response(JSON.stringify({ 
           success: true,
           message: `Presença confirmada para ${aptToConfirm.title} em ${formatDate(aptToConfirm.appointment_date)} às ${aptToConfirm.appointment_time.slice(0, 5)}.`
