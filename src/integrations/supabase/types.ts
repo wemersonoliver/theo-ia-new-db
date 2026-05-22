@@ -4127,6 +4127,7 @@ export type Database = {
           display_name: string | null
           followup_enabled: boolean
           id: string
+          initial_sync_completed_at: string | null
           instance_name: string
           is_primary: boolean
           last_sync_at: string | null
@@ -4147,6 +4148,7 @@ export type Database = {
           display_name?: string | null
           followup_enabled?: boolean
           id?: string
+          initial_sync_completed_at?: string | null
           instance_name: string
           is_primary?: boolean
           last_sync_at?: string | null
@@ -4167,6 +4169,7 @@ export type Database = {
           display_name?: string | null
           followup_enabled?: boolean
           id?: string
+          initial_sync_completed_at?: string | null
           instance_name?: string
           is_primary?: boolean
           last_sync_at?: string | null
