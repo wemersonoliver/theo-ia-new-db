@@ -1464,6 +1464,41 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           continue;
         }
 
+        if (fc.name === "get_distributor_discount") {
+          const stateArg = String(fc.args?.state || "").trim();
+          const distributorArg = String(fc.args?.distributor || "").trim();
+          const atArg = String(fc.args?.account_type || "residencial").toLowerCase();
+          const accountType: "residencial" | "comercial" = atArg.startsWith("com") ? "comercial" : "residencial";
+          const hit = lookupGreenDiscount(stateArg, distributorArg, accountType);
+          const response = hit?.row
+            ? {
+                found: true,
+                state: hit.row.state,
+                state_name: hit.row.state_name,
+                distributor: hit.row.distributor,
+                account_type: accountType,
+                discount_percent: hit.percent,
+                discount_residencial_percent: hit.row.discount_residencial_percent,
+                discount_comercial_percent: hit.row.discount_comercial_percent,
+                min_bill: hit.row.min_bill_brl,
+                notes: hit.row.notes,
+                instruction: "Use ESTE percentual diretamente na resposta. NÃO diga 'vou verificar com a equipe'. Se o cliente já informou o valor da fatura, calcule a economia agora mesmo.",
+              }
+            : {
+                found: false,
+                state: stateArg,
+                distributor: distributorArg,
+                instruction: "A distribuidora informada ainda não está na tabela oficial. Avise educadamente que você vai confirmar o desconto exato com a equipe e siga adiante pedindo a fatura para já adiantar o cadastro.",
+              };
+          geminiPayload.contents.push(content);
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{ functionResponse: { name: fc.name, response } }],
+          });
+          functionCallsProcessed++;
+          continue;
+        }
+
         // Execute the function
         const functionResult = await executeFunction(supabase, supabaseUrl, fc.name, {
           ...fc.args,
