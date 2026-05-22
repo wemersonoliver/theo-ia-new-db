@@ -257,6 +257,36 @@ export default function AcademiasLanding() {
             Três planos pensados para crescer com você — do estúdio pequeno até a rede com várias unidades.
           </p>
           <div className="grid gap-6 md:grid-cols-3">
+            {/* Basic */}
+            <Card className="relative overflow-hidden border border-[hsl(217,33%,17%)] bg-[hsl(222,47%,8%)] text-white">
+              <CardContent className="p-8">
+                <div className="mb-6">
+                  <h3 className="mb-1 text-2xl font-extrabold text-white">Plano Basic</h3>
+                  <p className="text-sm text-white/70">Para estúdios e academias iniciando</p>
+                </div>
+                <div className="mb-6">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-sm text-white">R$</span>
+                    <span className="text-5xl font-extrabold text-white">97</span>
+                    <span className="text-white">/mês</span>
+                  </div>
+                </div>
+                <ul className="mb-8 space-y-3">
+                  {basicIncluded.map((item, i) => (
+                    <li key={i} className="flex items-center gap-3 text-sm text-white">
+                      <Check className="h-5 w-5 shrink-0 text-[hsl(217,91%,60%)]" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <Button size="lg" asChild variant="outline" className="w-full h-14 text-base border-[hsl(217,91%,60%)] text-[hsl(217,91%,60%)] hover:bg-[hsl(217,91%,60%)] hover:text-white">
+                  <Link to="/register">
+                    Testar 7 Dias Grátis <ArrowRight className="ml-2 h-5 w-5" />
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
             {/* Pro */}
             <Card className="relative overflow-hidden border-2 border-[hsl(142,76%,36%)] bg-[hsl(222,47%,8%)] text-white">
               <div className="absolute right-0 top-0 rounded-bl-xl bg-[hsl(142,76%,36%)] px-4 py-1.5 text-sm font-bold text-white">
