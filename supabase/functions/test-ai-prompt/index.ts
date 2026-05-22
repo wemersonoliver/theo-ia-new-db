@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { resolveAccountId } from "../_account.ts";
-import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply } from "../_igreen_flow.ts";
+import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock } from "../_igreen_flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -185,6 +185,19 @@ const schedulingTools = {
       name: "validate_green_identity",
       description: "Valida documento de identificação: compara nome do documento com o titular da fatura. Retorna match=true/false.",
       parameters: { type: "object", properties: { extracted_name: { type: "string" } }, required: ["extracted_name"] }
+    },
+    {
+      name: "get_distributor_discount",
+      description: "FONTE DE VERDADE do desconto da Conexão Green por distribuidora/estado. Use SEMPRE antes de falar de percentual ou simular economia. Retorna { found, discount_percent, min_bill }.",
+      parameters: {
+        type: "object",
+        properties: {
+          state: { type: "string", description: "UF (ex.: 'PA', 'SC') ou nome do estado." },
+          distributor: { type: "string", description: "Nome da distribuidora (ex.: 'Equatorial', 'Celesc')." },
+          account_type: { type: "string", description: "'residencial' ou 'comercial'. Padrão 'residencial'." }
+        },
+        required: ["state", "distributor"]
+      }
     }
   ]
 };
