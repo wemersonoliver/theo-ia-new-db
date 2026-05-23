@@ -95,15 +95,15 @@ export function useContacts() {
 
   const deleteContact = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("contacts")
-        .delete()
-        .eq("id", id);
+      const { data, error } = await supabase.functions.invoke("delete-contact-cascade", {
+        body: { contact_id: id },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contacts", accountId] });
-      toast.success("Contato removido!");
+      toast.success("Contato e dados relacionados removidos!");
     },
     onError: () => toast.error("Erro ao remover contato"),
   });
