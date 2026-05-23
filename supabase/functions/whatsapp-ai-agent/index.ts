@@ -3053,6 +3053,16 @@ async function executeGreenFlowTool(
       // Move o card automaticamente para a etapa correspondente à tag
       try { await moveCRMDealByTag(supabase, userId, phone, tag); } catch (e) { console.error("[moveCRMDealByTag] err:", e); }
 
+      // Quando a tag "em atendimento" é adicionada (cliente reagiu ao vídeo
+      // e está engajado), notifica a equipe para acompanhar o atendimento.
+      // Não desativa a IA — ela continua qualificando o lead em paralelo.
+      if (tag === "em atendimento") {
+        const claimed = await claimHandoffNotification(supabase, userId, accountId, phone, "em_atendimento");
+        if (claimed) {
+          try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff (em atendimento) err:", e); }
+        }
+      }
+
       // Se for "enviou documento" → notifica equipe + handoff
       if (tag === "enviou documento") {
         const claimed = await claimHandoffNotification(supabase, userId, accountId, phone);
