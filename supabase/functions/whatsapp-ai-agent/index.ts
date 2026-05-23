@@ -277,23 +277,27 @@ const schedulingTools = {
     },
     {
       name: "validate_green_invoice",
-      description: "Use SEMPRE que o cliente enviar a FATURA DE ENERGIA. Extraia da imagem/PDF o NOME do titular impresso na conta e o VALOR. A tool compara com o nome que o cliente já disse (nome_cliente). Retorna match=true (nomes batem, pode prosseguir e adicionar tag 'enviou fatura') ou match=false (nomes diferentes — você deve EDUCAR o cliente: 'A conta precisa estar no nome de quem vai assinar o contrato. O titular da conta pode dar continuidade?').",
+      description: "Use SEMPRE que o cliente enviar QUALQUER imagem ou PDF onde supostamente seria a FATURA DE ENERGIA. ANTES de chamar a tool você é OBRIGADO a analisar o OCR e classificar o documento em document_type: 'fatura_energia' (consta kWh, distribuidora de energia, energia elétrica, leitura, conta de luz) ou 'outro' (boleto de aluguel, fatura de telefone/internet/cartão, condomínio, IPTU, água, comprovante, contrato, etc.). Também informe a distribuidora e a UF que aparecem na fatura. A tool valida tipo, distribuidora/UF e o nome do titular. Retorna instruction com o que dizer ao cliente.",
       parameters: {
         type: "object",
         properties: {
           extracted_name: { type: "string", description: "Nome COMPLETO do titular impresso na fatura." },
-          extracted_value: { type: "number", description: "Valor total da fatura em reais (opcional)." }
+          extracted_value: { type: "number", description: "Valor total da fatura em reais (opcional)." },
+          document_type: { type: "string", description: "Classifique o documento: 'fatura_energia' se for claramente uma conta de luz/energia elétrica (tem kWh, distribuidora, leitura). 'outro' para qualquer coisa diferente (aluguel, telefone, internet, cartão, condomínio, IPTU, água, contrato, comprovante, etc.). NUNCA chute 'fatura_energia' por padrão." },
+          distributor_in_invoice: { type: "string", description: "Nome da distribuidora de energia identificada na fatura (ex.: 'Celesc', 'Enel SP', 'Equatorial PA'). Vazio se não for fatura de energia." },
+          state_in_invoice: { type: "string", description: "UF da fatura, identificada pelo endereço/cabeçalho (ex.: 'SC', 'SP'). Vazio se não for fatura de energia." }
         },
         required: ["extracted_name"]
       }
     },
     {
       name: "validate_green_identity",
-      description: "Use SEMPRE que o cliente enviar o DOCUMENTO DE IDENTIFICAÇÃO (RG ou CNH). Extraia o NOME impresso no documento. A tool compara com o titular da fatura já validada. Retorna match=true (nomes batem — adicione a tag 'enviou documento' e o sistema notifica a equipe automaticamente) ou match=false (nomes diferentes — peça com educação o documento do TITULAR da fatura).",
+      description: "Use SEMPRE que o cliente enviar QUALQUER imagem ou PDF que seria o documento de identificação. ANTES de chamar a tool você é OBRIGADO a classificar em document_type: 'rg', 'cnh' ou 'outro' (qualquer coisa que não seja documento oficial de identificação com foto). A tool compara o nome com o titular da fatura. Retorna instruction com o próximo passo.",
       parameters: {
         type: "object",
         properties: {
-          extracted_name: { type: "string", description: "Nome COMPLETO impresso no documento de identificação." }
+          extracted_name: { type: "string", description: "Nome COMPLETO impresso no documento de identificação." },
+          document_type: { type: "string", description: "Tipo do documento enviado: 'rg', 'cnh' ou 'outro'. Use 'outro' para qualquer coisa que não seja RG ou CNH (selfie, comprovante, fatura, outro contrato, etc.)." }
         },
         required: ["extracted_name"]
       }
