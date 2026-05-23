@@ -339,3 +339,28 @@ body.show-recaptcha .grecaptcha-badge {
   --accent: 120 96% 48%;
   --sidebar-background: 168 45% 13%;
 }
+
+/* Destructive (alertas/botões vermelhos) — tom mais claro + alto contraste + ring/glow para legibilidade sobre fundo verde escuro */
+.theme-igreen,
+.theme-igreen.dark,
+.theme-igreen .dark {
+  --destructive: 0 95% 65%;
+  --destructive-foreground: 0 0% 100%;
+}
+
+.theme-igreen [class*="bg-destructive"],
+.theme-igreen button.bg-destructive,
+.theme-igreen .bg-destructive {
+  box-shadow: 0 0 0 1px hsl(0 95% 75% / 0.6), 0 8px 24px -8px hsl(0 95% 55% / 0.55);
+  color: hsl(0 0% 100%) !important;
+  font-weight: 600;
+}
+
+.theme-igreen [role="alert"].border-destructive,
+.theme-igreen [role="alert"].text-destructive,
+.theme-igreen .border-destructive\/50,
+.theme-igreen .text-destructive {
+  color: hsl(0 95% 78%) !important;
+  border-color: hsl(0 95% 65% / 0.7) !important;
+  background-color: hsl(0 80% 30% / 0.25);
+}
