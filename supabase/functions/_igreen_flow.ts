@@ -177,28 +177,25 @@ export function buildGreenSimulationReply(opts: {
   fallbackName?: string | null;
   /**
    * Lookup determinístico do desconto a partir da tabela
-   * `igreen_distributor_discounts`. Recebe distribuidora + UF + tipo de conta
-   * ('residencial' | 'comercial') e devolve { percent, min_bill } ou null.
-   * Quando informado, tem prioridade sobre o regex em cima da knowledgeText
-   * (que é mantido só como fallback legado).
+   * `igreen_distributor_discounts`. Recebe distribuidora + UF e devolve
+   * { min, max, min_bill } ou null. A faixa varia conforme o consumo do
+   * cliente — usamos o valor MÁXIMO ("até X%") na simulação.
    */
   lookupDiscount?: (
     state: string,
     distributor: string,
-    accountType: "residencial" | "comercial",
-  ) => { percent: number; min_bill?: number | null } | null;
+  ) => { min: number; max: number; min_bill?: number | null } | null;
 }): string | null {
   const current = String(opts.currentUserMessage || "");
   const amount = extractBillAmount(current);
   if (!amount) return null;
 
-  const accountTypeMentioned = /\b(residencial|residencia|comercial|empresa|empresarial)\b/i.test(current);
   const previousAssistantAskedBill = opts.messages.some((m) => {
     const isAssistant = m?.from_me === true || m?.role === "assistant";
     const norm = normalizeFlowText(m?.ai_content || m?.content || "");
-    return isAssistant && norm.includes("RESIDENCIAL OU COMERCIAL") && norm.includes("VALOR MEDIO");
+    return isAssistant && norm.includes("VALOR MEDIO");
   });
-  if (!accountTypeMentioned && !previousAssistantAskedBill) return null;
+  if (!previousAssistantAskedBill) return null;
 
   const conversationText = [
     ...opts.messages.map(m => String(m?.ai_content || m?.content || "")),
@@ -207,28 +204,33 @@ export function buildGreenSimulationReply(opts: {
   const location = extractDistributorState(conversationText);
   if (!location) return null;
 
-  const accountType: "residencial" | "comercial" =
-    /\b(comercial|empresa|empresarial)\b/i.test(conversationText) ? "comercial" : "residencial";
-
-  let percentage: number | null = null;
+  let minPct: number | null = null;
+  let maxPct: number | null = null;
   if (opts.lookupDiscount) {
-    const hit = opts.lookupDiscount(location.state, location.distributor, accountType);
-    if (hit && Number.isFinite(hit.percent)) percentage = hit.percent;
+    const hit = opts.lookupDiscount(location.state, location.distributor);
+    if (hit && Number.isFinite(hit.max)) {
+      minPct = Number(hit.min);
+      maxPct = Number(hit.max);
+    }
   }
-  if (percentage === null) {
+  if (maxPct === null) {
     // Fallback legado: regex em cima do PDF da knowledge base.
-    percentage = findDiscountPercentage(opts.knowledgeText, location.distributor, location.state);
+    const legacy = findDiscountPercentage(opts.knowledgeText, location.distributor, location.state);
+    if (legacy === null) return null;
+    minPct = legacy; maxPct = legacy;
   }
-  if (percentage === null) return null;
 
-  const monthlySavings = Math.round(amount * (percentage / 100));
-  const yearlySavings = monthlySavings * 12;
-  const newBill = Math.max(0, amount - monthlySavings);
+  const maxSavings = Math.round(amount * ((maxPct as number) / 100));
+  const yearlyMax = maxSavings * 12;
+  const newBillBest = Math.max(0, amount - maxSavings);
   const firstName = extractGreenFirstName(opts.messages, opts.fallbackName);
   const namePrefix = firstName ? `${firstName}, ` : "";
-  const percentLabel = Number.isInteger(percentage) ? String(percentage) : String(percentage).replace(".", ",");
+  const fmt = (n: number) => Number.isInteger(n) ? String(n) : String(n).replace(".", ",");
+  const rangeLabel = (minPct === maxPct)
+    ? `${fmt(maxPct as number)}%`
+    : `de ${fmt(minPct as number)}% a ${fmt(maxPct as number)}%`;
 
-  return `Perfeito, ${namePrefix}para a ${location.distributor}/${location.state}, o desconto médio é de ${percentLabel}%. Na sua conta de R$ ${amount}, você economizaria cerca de R$ ${monthlySavings} por mês, quase R$ ${yearlySavings} por ano, e sua fatura ficaria perto de R$ ${newBill}. Para iniciar seu cadastro, pode me enviar uma foto ou PDF da sua fatura de energia?`;
+  return `Perfeito, ${namePrefix}para a ${location.distributor}/${location.state} o desconto varia ${rangeLabel} de acordo com o seu consumo. Na sua conta de R$ ${amount}, você pode economizar até R$ ${maxSavings} por mês (quase R$ ${yearlyMax} por ano), ficando perto de R$ ${newBillBest}. Para iniciar seu cadastro, pode me enviar uma foto ou PDF da sua fatura de energia?`;
 }
 
 /**
@@ -239,9 +241,8 @@ export function buildGreenSimulationReply(opts: {
 export function buildGreenKnownDiscountBlock(opts: {
   state?: string | null;
   distributor?: string | null;
-  accountType?: string | null;
-  discountResidencial?: number | null;
-  discountComercial?: number | null;
+  discountMin?: number | null;
+  discountMax?: number | null;
   minBill?: number | null;
   notes?: string | null;
 }): string {
@@ -254,19 +255,23 @@ export function buildGreenKnownDiscountBlock(opts: {
   lines.push("============================================================");
   lines.push(`Distribuidora: ${distributor}`);
   lines.push(`Estado: ${state}`);
-  if (opts.discountResidencial !== null && opts.discountResidencial !== undefined) {
-    lines.push(`Desconto residencial: ${opts.discountResidencial}%`);
-  }
-  if (opts.discountComercial !== null && opts.discountComercial !== undefined) {
-    lines.push(`Desconto comercial: ${opts.discountComercial}%`);
+  if (opts.discountMin !== null && opts.discountMin !== undefined &&
+      opts.discountMax !== null && opts.discountMax !== undefined) {
+    if (Number(opts.discountMin) === Number(opts.discountMax)) {
+      lines.push(`Desconto: ${opts.discountMax}% (fixo)`);
+    } else {
+      lines.push(`Desconto: de ${opts.discountMin}% a ${opts.discountMax}% (varia de acordo com o consumo do cliente)`);
+    }
   }
   if (opts.minBill) lines.push(`Faixa mínima de fatura atendida: R$ ${opts.minBill}`);
   if (opts.notes) lines.push(`Observações: ${opts.notes}`);
   lines.push("");
   lines.push("Use ESTES números diretamente para a simulação de economia.");
+  lines.push("SEMPRE comunique como 'você pode economizar ATÉ X%' (use o desconto MÁXIMO).");
+  lines.push("Explique que o percentual exato depende do consumo mensal do cliente.");
   lines.push("NÃO diga 'vou verificar com a equipe' — o desconto já está confirmado aqui.");
   lines.push("NÃO invente outro percentual. Se o cliente já disse o valor da fatura,");
-  lines.push("faça a simulação de economia AGORA usando o desconto acima.");
+  lines.push("faça a simulação de economia AGORA usando o desconto MÁXIMO acima.");
   lines.push("============================================================");
   return lines.join("\n");
 }
