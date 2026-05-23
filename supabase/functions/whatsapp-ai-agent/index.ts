@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveAccountId } from "../_account.ts";
 import { cleanAIText } from "../_ai_text.ts";
+import { extractIntroducedName, extractPersonName } from "../_person-name.ts";
 import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts";
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
