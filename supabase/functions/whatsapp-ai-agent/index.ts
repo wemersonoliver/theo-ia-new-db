@@ -3067,8 +3067,18 @@ async function executeGreenFlowTool(
 
     if (toolName === "save_green_lead_field") {
       const field = String(args?.field || "").trim().toLowerCase();
-      const value = String(args?.value || "").trim();
+      let value = String(args?.value || "").trim();
       if (!field || !value) return { success: false, error: "campo/valor vazio" };
+      // Sanitiza nome do cliente: remove "Bom dia, me chamo ...", "Olá, sou ..."
+      if (field === "nome_cliente") {
+        const parsedIntro = extractIntroducedName(value) || extractPersonName(value);
+        if (!parsedIntro?.firstName) {
+          return { success: false, error: "valor não parece um nome de pessoa", value };
+        }
+        value = parsedIntro.firstName;
+        // Atualiza contacts.name se o atual for genérico
+        try { await maybeUpdateContactName(supabase, accountId, phone, parsedIntro.fullName); } catch (_e) {}
+      }
       const allowed: Record<string, string> = {
         estado: "estado",
         distribuidora: "distribuidora",
