@@ -885,7 +885,7 @@ serve(async (req) => {
     try {
       const { data: discRows } = await supabase
         .from("igreen_distributor_discounts")
-        .select("state, state_name, distributor, distributor_aliases, discount_residencial_percent, discount_comercial_percent, min_bill_brl, notes, enabled")
+        .select("state, state_name, distributor, distributor_aliases, discount_min_percent, discount_max_percent, min_bill_brl, notes, modalidade, credit_analysis, injection_days, enabled")
         .eq("enabled", true);
       distributorDiscounts = discRows || [];
     } catch (e) {
@@ -922,8 +922,7 @@ serve(async (req) => {
     function lookupGreenDiscount(
       stateRaw: string,
       distributorRaw: string,
-      accountType: "residencial" | "comercial" = "residencial",
-    ): { percent: number; min_bill?: number | null; notes?: string | null; row?: any } | null {
+    ): { min: number; max: number; percent: number; min_bill?: number | null; notes?: string | null; row?: any } | null {
       if (!stateRaw || !distributorRaw || distributorDiscounts.length === 0) return null;
       const uf = resolveUf(stateRaw);
       const distNorm = normalizeIg(distributorRaw);
@@ -939,11 +938,10 @@ serve(async (req) => {
       });
       const row = matches[0] || null;
       if (!row) return null;
-      const percent = accountType === "comercial"
-        ? (Number(row.discount_comercial_percent) || Number(row.discount_residencial_percent))
-        : (Number(row.discount_residencial_percent) || Number(row.discount_comercial_percent));
-      if (!Number.isFinite(percent) || percent <= 0) return null;
-      return { percent, min_bill: row.min_bill_brl ?? null, notes: row.notes ?? null, row };
+      const min = Number(row.discount_min_percent);
+      const max = Number(row.discount_max_percent);
+      if (!Number.isFinite(max) || max <= 0) return null;
+      return { min, max, percent: max, min_bill: row.min_bill_brl ?? null, notes: row.notes ?? null, row };
     }
 
     // Pré-carrega lead_data deste contato (estado/distribuidora já salvos) para
@@ -964,16 +962,13 @@ serve(async (req) => {
 
     let knownDiscountBlock = "";
     if (greenLeadData?.estado && greenLeadData?.distribuidora) {
-      const at: "residencial" | "comercial" =
-        String(greenLeadData.tipo_conta || "").toLowerCase().startsWith("com") ? "comercial" : "residencial";
-      const hit = lookupGreenDiscount(greenLeadData.estado, greenLeadData.distribuidora, at);
+      const hit = lookupGreenDiscount(greenLeadData.estado, greenLeadData.distribuidora);
       if (hit?.row) {
         knownDiscountBlock = buildGreenKnownDiscountBlock({
           state: hit.row.state,
           distributor: hit.row.distributor,
-          accountType: at,
-          discountResidencial: hit.row.discount_residencial_percent,
-          discountComercial: hit.row.discount_comercial_percent,
+          discountMin: hit.row.discount_min_percent,
+          discountMax: hit.row.discount_max_percent,
           minBill: hit.row.min_bill_brl,
           notes: hit.row.notes,
         });
@@ -985,9 +980,9 @@ serve(async (req) => {
       currentUserMessage: messageContent,
       knowledgeText: docTexts.join("\n\n---\n\n"),
       fallbackName: contactName,
-      lookupDiscount: (state, distributor, accountType) => {
-        const hit = lookupGreenDiscount(state, distributor, accountType);
-        return hit ? { percent: hit.percent, min_bill: hit.min_bill } : null;
+      lookupDiscount: (state, distributor) => {
+        const hit = lookupGreenDiscount(state, distributor);
+        return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
       },
     });
     if (deterministicGreenSimulation) {
