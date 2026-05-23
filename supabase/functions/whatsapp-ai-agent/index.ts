@@ -2627,6 +2627,7 @@ async function moveCRMDealToHumanStage(supabase: any, userId: string, phone: str
 
   const aiStage = stages.find((s: any) => s.name === "Atendimento IA") || stages[0];
   const humanStage = stages.find((s: any) => s.name === "Atendimento humano") || stages[1];
+  const humanStageResolved = stages.find((s: any) => /atendimento\s*humano/i.test(s.name)) || humanStage;
 
   const { data: contact } = await supabase
     .from("contacts")
@@ -2642,7 +2643,6 @@ async function moveCRMDealToHumanStage(supabase: any, userId: string, phone: str
     .select("id")
     .eq("user_id", userId)
     .eq("contact_id", contact.id)
-    .eq("stage_id", aiStage.id)
     .is("won_at", null)
     .is("lost_at", null)
     .limit(1);
@@ -2650,10 +2650,70 @@ async function moveCRMDealToHumanStage(supabase: any, userId: string, phone: str
   if (deals && deals.length > 0) {
     await supabase
       .from("crm_deals")
-      .update({ stage_id: humanStage.id, updated_at: new Date().toISOString() })
+      .update({ stage_id: humanStageResolved.id, updated_at: new Date().toISOString() })
       .eq("id", deals[0].id);
     console.log("CRM deal moved to Atendimento humano on handoff:", phone);
   }
+}
+
+// Move o deal para a etapa correspondente à tag adicionada (fluxo Green).
+// Mapeia tag → padrões de nome de etapa (case-insensitive, tolerante a variações).
+async function moveCRMDealByTag(supabase: any, userId: string, phone: string, tag: string) {
+  const tagToStagePatterns: Record<string, RegExp[]> = {
+    "em atendimento": [/iniciou\s*atendimento/i, /em\s*atendimento/i],
+    "enviou fatura": [/enviou\s*fatura/i, /fatura\s*de\s*energia/i],
+    "enviou documento": [/enviou\s*documento/i, /documento\s*do\s*titular/i],
+  };
+  const patterns = tagToStagePatterns[tag.toLowerCase()];
+  if (!patterns) return;
+
+  const { data: pipelines } = await supabase
+    .from("crm_pipelines")
+    .select("id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  if (!pipelines || pipelines.length === 0) return;
+
+  const { data: stages } = await supabase
+    .from("crm_stages")
+    .select("id, name, position")
+    .eq("pipeline_id", pipelines[0].id)
+    .order("position", { ascending: true });
+  if (!stages || stages.length === 0) return;
+
+  const targetStage = stages.find((s: any) => patterns.some((re) => re.test(String(s.name || ""))));
+  if (!targetStage) {
+    console.log(`[moveCRMDealByTag] etapa não encontrada para tag '${tag}'`);
+    return;
+  }
+
+  const { data: contact } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("phone", phone)
+    .maybeSingle();
+  if (!contact) return;
+
+  const { data: deals } = await supabase
+    .from("crm_deals")
+    .select("id, stage_id")
+    .eq("user_id", userId)
+    .eq("contact_id", contact.id)
+    .is("won_at", null)
+    .is("lost_at", null)
+    .limit(1);
+  if (!deals || deals.length === 0) return;
+
+  const deal = deals[0];
+  if (deal.stage_id === targetStage.id) return;
+
+  await supabase
+    .from("crm_deals")
+    .update({ stage_id: targetStage.id, updated_at: new Date().toISOString() })
+    .eq("id", deal.id);
+  console.log(`[moveCRMDealByTag] deal ${deal.id} movido para '${targetStage.name}' por tag '${tag}'`);
 }
 
 async function applyRouletteOnHandoff(
