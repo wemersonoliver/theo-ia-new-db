@@ -294,6 +294,7 @@ export function buildIgreenProductsPromptBlock(opts: {
     .join("\n");
 
   const green = enabled.find(p => p.key === "green");
+  const telecom = enabled.find(p => p.key === "telecom");
   const greenFlow = green ? `
 
 ============================================================
@@ -533,6 +534,55 @@ REGRAS DE HUMANIZAÇÃO (mais importantes que qualquer roteiro):
 ============================================================
 ` : "";
 
+  const telecomKnowledge = telecom ? `
+
+============================================================
+CONEXÃO TELECOM — RESUMO OFICIAL (USE ESTES DADOS DIRETO, SEM PRECISAR CONSULTAR A BASE)
+============================================================
+O QUE É:
+- iGreen Telecom (também chamada Conexão Telecom) é a operadora de celular da iGreen Energy.
+- Cobertura em todos os 5.570 municípios do Brasil. Tecnologias 2G, 3G, 4G e 5G (varia por município).
+- Modelo de planos CONTROLE (paga e usa, sem surpresa na fatura). Atendimento 100% digital pelo app iGreen Club.
+- SEM FIDELIDADE: cliente pode trocar de plano ou cancelar a qualquer momento, sem multa.
+- Dados não usados ACUMULAM para o mês seguinte (limite máximo = DOBRO da franquia base do plano). Atraso no pagamento ZERA o acúmulo.
+- Planos iguais para PF e PJ (mesmas condições e preço).
+- Todo plano inclui: Ligações Ilimitadas + WhatsApp Ilimitado + Internet que Acumula + iGreen Club Grátis (descontos em +30 mil lojas).
+
+PLANOS (sempre pergunte ANTES se é PORTABILIDADE — mantém o número — ou NÚMERO NOVO — nova ativação):
+- START   — Portabilidade: 11 GB por R$ 54,90/mês  |  Número novo: 6 GB por R$ 59,90/mês  (franquia base 4 GB, acúmulo até 8 GB)
+- MEGA    — Portabilidade: 15 GB por R$ 59,90/mês  |  Número novo: 10 GB por R$ 64,90/mês (franquia base 7 GB, acúmulo até 14 GB)
+- GIGA    — Portabilidade: 20 GB por R$ 69,90/mês  |  Número novo: 15 GB por R$ 74,90/mês (franquia base 11 GB, acúmulo até 22 GB)
+- ULTRA   — Portabilidade: 28 GB por R$ 79,90/mês  |  Número novo: 23 GB por R$ 84,90/mês (franquia base 19 GB, acúmulo até 38 GB)
+- INFINITY— Portabilidade: 50 GB por R$ 99,90/mês  |  Número novo: 45 GB por R$ 104,90/mês (franquia base 41 GB, acúmulo até 82 GB)
+REGRA: portabilidade = mais GB e R$ 5,00 mais barato que número novo.
+
+COMO ADQUIRIR (passo a passo):
+1) Todo cadastro começa com um LICENCIADO AUTORIZADO iGreen (a própria consultora pode encaminhar).
+2) Licenciado cadastra o cliente em: https://telecom.igreenenergy.com.br/?id=IDLICENCIADO (escolhe portabilidade ou nova ativação).
+3) Se for CHIP FÍSICO: informar o ICCID (código longo iniciado em 8955, vem no pacote do chip). Se for eSIM: dispensa essa etapa.
+4) Cliente baixa o app "iGreen Club" (iOS/Android), toca em PRIMEIRO ACESSO, entra com CPF + e-mail cadastrado + cria senha.
+5) No app o cliente escolhe o plano e paga. Após o pagamento confirmado, o plano é ativado automaticamente.
+
+PAGAMENTO:
+- Feito dentro do app iGreen Club. Aceita cartão de crédito com RECORRÊNCIA AUTOMÁTICA (link gerado dentro do app).
+- Atraso de pagamento ZERA os dados acumulados.
+
+CANCELAMENTO:
+- Sem fidelidade, sem multa. Solicitação feita pelo atendimento; após verificar pendências, o cancelamento é processado.
+
+SUPORTE AO CLIENTE:
+- 100% digital: ícone "Suporte" no app iGreen Club.
+- WhatsApp / 0800: 0800 183 0080, atendimento 24h.
+
+REGRAS DE USO DESTE RESUMO PELA IA:
+- Esses valores são OFICIAIS — use direto, sem dizer "vou verificar com a equipe".
+- ANTES de citar preço, SEMPRE pergunte se o cliente quer PORTABILIDADE ou NÚMERO NOVO.
+- Destaque os diferenciais: acúmulo de dados, sem fidelidade, cobertura nacional, app completo, iGreen Club grátis.
+- Para cadastrar o cliente, direcione para o LICENCIADO — esse é o ponto de entrada obrigatório.
+- Só consulte a base de conhecimento [PRODUTO: ${telecom.name}] se o cliente perguntar algo MUITO específico que não esteja neste resumo.
+============================================================
+` : "";
+
   return `PRODUTOS IGREEN DISPONÍVEIS NA CONTA:
 ${list}
 
@@ -545,7 +595,7 @@ REGRAS DOS PRODUTOS IGREEN:
 
 PRODUTOS SEM BASE DE CONHECIMENTO COMPLETA:
 - Pode acontecer do cliente chegar perguntando sobre um produto da lista acima
-  (ex.: Conexão Telecom, Conexão Expansão) que ainda NÃO tem trechos rotulados
+  (ex.: Conexão Expansão) que ainda NÃO tem trechos rotulados
   [PRODUTO: <nome>] na base de conhecimento.
 - Nesse caso: NUNCA invente preços, percentuais, prazos, cobertura ou condições.
   Não chute. Não copie informações de outro produto.
@@ -561,5 +611,5 @@ PRODUTOS SEM BASE DE CONHECIMENTO COMPLETA:
        a conversa "vazia".
 - Se o cliente insistir em valores/condições que você não tem, seja honesto(a):
   "Deixa eu confirmar isso certinho com a equipe pra não te passar nada errado,
-  ok? Enquanto isso, me adianta [próxima pergunta de qualificação]."${greenFlow}`;
+  ok? Enquanto isso, me adianta [próxima pergunta de qualificação]."${telecomKnowledge}${greenFlow}`;
 }
