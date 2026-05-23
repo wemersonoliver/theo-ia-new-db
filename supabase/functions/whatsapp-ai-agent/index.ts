@@ -277,23 +277,27 @@ const schedulingTools = {
     },
     {
       name: "validate_green_invoice",
-      description: "Use SEMPRE que o cliente enviar a FATURA DE ENERGIA. Extraia da imagem/PDF o NOME do titular impresso na conta e o VALOR. A tool compara com o nome que o cliente já disse (nome_cliente). Retorna match=true (nomes batem, pode prosseguir e adicionar tag 'enviou fatura') ou match=false (nomes diferentes — você deve EDUCAR o cliente: 'A conta precisa estar no nome de quem vai assinar o contrato. O titular da conta pode dar continuidade?').",
+      description: "Use SEMPRE que o cliente enviar QUALQUER imagem ou PDF onde supostamente seria a FATURA DE ENERGIA. ANTES de chamar a tool você é OBRIGADO a analisar o OCR e classificar o documento em document_type: 'fatura_energia' (consta kWh, distribuidora de energia, energia elétrica, leitura, conta de luz) ou 'outro' (boleto de aluguel, fatura de telefone/internet/cartão, condomínio, IPTU, água, comprovante, contrato, etc.). Também informe a distribuidora e a UF que aparecem na fatura. A tool valida tipo, distribuidora/UF e o nome do titular. Retorna instruction com o que dizer ao cliente.",
       parameters: {
         type: "object",
         properties: {
           extracted_name: { type: "string", description: "Nome COMPLETO do titular impresso na fatura." },
-          extracted_value: { type: "number", description: "Valor total da fatura em reais (opcional)." }
+          extracted_value: { type: "number", description: "Valor total da fatura em reais (opcional)." },
+          document_type: { type: "string", description: "Classifique o documento: 'fatura_energia' se for claramente uma conta de luz/energia elétrica (tem kWh, distribuidora, leitura). 'outro' para qualquer coisa diferente (aluguel, telefone, internet, cartão, condomínio, IPTU, água, contrato, comprovante, etc.). NUNCA chute 'fatura_energia' por padrão." },
+          distributor_in_invoice: { type: "string", description: "Nome da distribuidora de energia identificada na fatura (ex.: 'Celesc', 'Enel SP', 'Equatorial PA'). Vazio se não for fatura de energia." },
+          state_in_invoice: { type: "string", description: "UF da fatura, identificada pelo endereço/cabeçalho (ex.: 'SC', 'SP'). Vazio se não for fatura de energia." }
         },
         required: ["extracted_name"]
       }
     },
     {
       name: "validate_green_identity",
-      description: "Use SEMPRE que o cliente enviar o DOCUMENTO DE IDENTIFICAÇÃO (RG ou CNH). Extraia o NOME impresso no documento. A tool compara com o titular da fatura já validada. Retorna match=true (nomes batem — adicione a tag 'enviou documento' e o sistema notifica a equipe automaticamente) ou match=false (nomes diferentes — peça com educação o documento do TITULAR da fatura).",
+      description: "Use SEMPRE que o cliente enviar QUALQUER imagem ou PDF que seria o documento de identificação. ANTES de chamar a tool você é OBRIGADO a classificar em document_type: 'rg', 'cnh' ou 'outro' (qualquer coisa que não seja documento oficial de identificação com foto). A tool compara o nome com o titular da fatura. Retorna instruction com o próximo passo.",
       parameters: {
         type: "object",
         properties: {
-          extracted_name: { type: "string", description: "Nome COMPLETO impresso no documento de identificação." }
+          extracted_name: { type: "string", description: "Nome COMPLETO impresso no documento de identificação." },
+          document_type: { type: "string", description: "Tipo do documento enviado: 'rg', 'cnh' ou 'outro'. Use 'outro' para qualquer coisa que não seja RG ou CNH (selfie, comprovante, fatura, outro contrato, etc.)." }
         },
         required: ["extracted_name"]
       }
@@ -3103,8 +3107,45 @@ async function executeGreenFlowTool(
     if (toolName === "validate_green_invoice") {
       const extractedName = String(args?.extracted_name || "").trim();
       const extractedValue = Number(args?.extracted_value);
+      const documentType = String(args?.document_type || "").trim().toLowerCase();
+      const distributorInInvoice = String(args?.distributor_in_invoice || "").trim();
+      const stateInInvoice = String(args?.state_in_invoice || "").trim().toUpperCase();
       if (!extractedName) return { success: false, error: "extracted_name vazio" };
       const lead = await getOrCreateGreenLead(supabase, accountId, phone);
+
+      // 1) Rejeita documentos que claramente NÃO são fatura de energia
+      if (documentType && documentType !== "fatura_energia" && documentType !== "fatura" && documentType !== "energia") {
+        return {
+          success: true,
+          match: false,
+          is_energy_invoice: false,
+          document_type: documentType,
+          instruction: `O documento enviado NÃO é uma fatura de energia (foi classificado como '${documentType}'). Agradeça pelo envio em 1 frase, explique com gentileza que para o cadastro da Conexão Green precisamos especificamente da CONTA DE LUZ / FATURA DE ENERGIA ELÉTRICA mais recente (não serve aluguel, telefone, internet, cartão, condomínio, IPTU ou água) e peça a fatura de energia correta. NÃO adicione tag 'enviou fatura'. NÃO peça documento de identificação ainda.`,
+        };
+      }
+
+      // 2) Se o cliente já informou a distribuidora/UF e a fatura é de outra, alerta
+      const savedDistributor = String(lead?.distribuidora || "").trim().toLowerCase();
+      const savedState = String(lead?.estado || "").trim().toUpperCase();
+      const distributorMismatch = !!savedDistributor && !!distributorInInvoice &&
+        !savedDistributor.includes(distributorInInvoice.toLowerCase()) &&
+        !distributorInInvoice.toLowerCase().includes(savedDistributor);
+      const stateMismatch = !!savedState && !!stateInInvoice && savedState !== stateInInvoice;
+      if (distributorMismatch || stateMismatch) {
+        return {
+          success: true,
+          match: false,
+          is_energy_invoice: true,
+          distributor_mismatch: distributorMismatch,
+          state_mismatch: stateMismatch,
+          saved_distributor: lead?.distribuidora,
+          saved_state: lead?.estado,
+          distributor_in_invoice: distributorInInvoice,
+          state_in_invoice: stateInInvoice,
+          instruction: `A fatura enviada é da ${distributorInInvoice || "outra distribuidora"}/${stateInInvoice || "outra UF"}, mas o cliente havia informado ${lead?.distribuidora || "outra distribuidora"}/${lead?.estado || "outra UF"}. Pergunte com leveza ao cliente se ele realmente é atendido por essa distribuidora/estado da fatura, ou se enviou a fatura errada. NÃO adicione tag ainda. Se ele confirmar que mora nesse outro estado/distribuidora, chame save_green_lead_field para atualizar e get_distributor_discount para a faixa correta.`,
+        };
+      }
+
       const clientName = lead?.nome_cliente || contactName;
       const match = namesMatch(clientName, extractedName);
       const update: any = {
@@ -3126,6 +3167,7 @@ async function executeGreenFlowTool(
       return {
         success: true,
         match,
+        is_energy_invoice: true,
         nome_cliente: clientName,
         nome_titular_fatura: extractedName,
         instruction: match
@@ -3136,7 +3178,19 @@ async function executeGreenFlowTool(
 
     if (toolName === "validate_green_identity") {
       const extractedName = String(args?.extracted_name || "").trim();
+      const documentType = String(args?.document_type || "").trim().toLowerCase();
       if (!extractedName) return { success: false, error: "extracted_name vazio" };
+
+      if (documentType && documentType !== "rg" && documentType !== "cnh" && documentType !== "identidade") {
+        return {
+          success: true,
+          match: false,
+          is_id_document: false,
+          document_type: documentType,
+          instruction: `O documento enviado NÃO é RG nem CNH (foi classificado como '${documentType}'). Agradeça em 1 frase e peça com gentileza uma foto ou PDF do RG OU da CNH do titular da fatura para finalizar o cadastro. NÃO adicione tag 'enviou documento'.`,
+        };
+      }
+
       const lead = await getOrCreateGreenLead(supabase, accountId, phone);
       const reference = lead?.nome_titular_fatura || lead?.nome_cliente || contactName;
       const match = namesMatch(reference, extractedName);
@@ -3148,6 +3202,7 @@ async function executeGreenFlowTool(
       return {
         success: true,
         match,
+        is_id_document: true,
         nome_titular_fatura: reference,
         nome_documento: extractedName,
         instruction: match
