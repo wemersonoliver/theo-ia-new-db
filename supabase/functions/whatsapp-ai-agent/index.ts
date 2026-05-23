@@ -829,17 +829,15 @@ serve(async (req) => {
     const greenNameStepFirstName = getGreenNameStepFirstName(recentMessages, messageContent);
     if (greenNameStepFirstName) {
       const intro = buildGreenIntroMessage(greenNameStepFirstName);
-      const videoResult = await executeSendProductVideo(
-        supabase,
-        userId,
-        accountId,
-        phone,
-        greenNameStepFirstName,
-        "green",
-        intro,
-      );
-
-      if (videoResult?.success) {
+      try {
+        await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "save_green_lead_field", {
+          field: "nome_cliente",
+          value: greenNameStepFirstName,
+        });
+      } catch (e) {
+        console.error("[GREEN FLOW] error saving name before discovery options:", e);
+      }
+      await sendAndSaveAIMessageParts(supabase, userId, phone, intro);
         await supabase
           .from("whatsapp_ai_sessions")
           .upsert({
@@ -851,12 +849,9 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
           }, { onConflict: "user_id,phone" });
 
-        return new Response(JSON.stringify({ success: true, response: intro, product_video_sent: true }), {
+        return new Response(JSON.stringify({ success: true, response: intro, green_discovery_options_sent: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
-      }
-
-      console.warn("[GREEN FLOW FALLBACK] deterministic video step failed, falling back to Gemini:", videoResult?.error);
     }
 
     // Check if the last incoming message has media for vision analysis
