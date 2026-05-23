@@ -299,13 +299,12 @@ const schedulingTools = {
     },
     {
       name: "get_distributor_discount",
-      description: "FONTE DE VERDADE do desconto da Conexão Green por distribuidora e estado. Use SEMPRE antes de simular economia, falar do percentual de desconto, ou cair no fallback 'vou verificar com a equipe'. Retorna { found, discount_percent, min_bill, notes }. Se found=true, use o percentual retornado direto na resposta — NÃO diga que vai confirmar com a equipe. Se found=false, aí sim avise educadamente que vai confirmar com a equipe.",
+      description: "FONTE DE VERDADE do desconto da Conexão Green por distribuidora e estado. Use SEMPRE antes de simular economia, falar do percentual de desconto, ou cair no fallback 'vou verificar com a equipe'. Retorna { found, discount_min_percent, discount_max_percent, min_bill, notes } — a FAIXA varia conforme o consumo do cliente. SEMPRE comunique como 'você pode economizar ATÉ X%' usando o valor MÁXIMO. NÃO diferencie residencial/comercial — o desconto é o mesmo. Se found=false, aí sim avise educadamente que vai confirmar com a equipe.",
       parameters: {
         type: "object",
         properties: {
           state: { type: "string", description: "UF do cliente (ex.: 'PA', 'SC', 'SP'). Aceita também o nome do estado, mas prefira a sigla." },
-          distributor: { type: "string", description: "Nome da distribuidora informada pelo cliente (ex.: 'Equatorial', 'Celesc', 'Enel SP', 'Cemig', 'CPFL')." },
-          account_type: { type: "string", description: "'residencial' ou 'comercial'. Se o cliente ainda não disse, use 'residencial' como padrão." }
+          distributor: { type: "string", description: "Nome da distribuidora informada pelo cliente (ex.: 'Equatorial', 'Celesc', 'Enel SP', 'Cemig', 'CPFL')." }
         },
         required: ["state", "distributor"]
       }
@@ -886,7 +885,7 @@ serve(async (req) => {
     try {
       const { data: discRows } = await supabase
         .from("igreen_distributor_discounts")
-        .select("state, state_name, distributor, distributor_aliases, discount_residencial_percent, discount_comercial_percent, min_bill_brl, notes, enabled")
+        .select("state, state_name, distributor, distributor_aliases, discount_min_percent, discount_max_percent, min_bill_brl, notes, modalidade, credit_analysis, injection_days, enabled")
         .eq("enabled", true);
       distributorDiscounts = discRows || [];
     } catch (e) {
@@ -923,8 +922,7 @@ serve(async (req) => {
     function lookupGreenDiscount(
       stateRaw: string,
       distributorRaw: string,
-      accountType: "residencial" | "comercial" = "residencial",
-    ): { percent: number; min_bill?: number | null; notes?: string | null; row?: any } | null {
+    ): { min: number; max: number; percent: number; min_bill?: number | null; notes?: string | null; row?: any } | null {
       if (!stateRaw || !distributorRaw || distributorDiscounts.length === 0) return null;
       const uf = resolveUf(stateRaw);
       const distNorm = normalizeIg(distributorRaw);
@@ -940,11 +938,10 @@ serve(async (req) => {
       });
       const row = matches[0] || null;
       if (!row) return null;
-      const percent = accountType === "comercial"
-        ? (Number(row.discount_comercial_percent) || Number(row.discount_residencial_percent))
-        : (Number(row.discount_residencial_percent) || Number(row.discount_comercial_percent));
-      if (!Number.isFinite(percent) || percent <= 0) return null;
-      return { percent, min_bill: row.min_bill_brl ?? null, notes: row.notes ?? null, row };
+      const min = Number(row.discount_min_percent);
+      const max = Number(row.discount_max_percent);
+      if (!Number.isFinite(max) || max <= 0) return null;
+      return { min, max, percent: max, min_bill: row.min_bill_brl ?? null, notes: row.notes ?? null, row };
     }
 
     // Pré-carrega lead_data deste contato (estado/distribuidora já salvos) para
@@ -965,16 +962,13 @@ serve(async (req) => {
 
     let knownDiscountBlock = "";
     if (greenLeadData?.estado && greenLeadData?.distribuidora) {
-      const at: "residencial" | "comercial" =
-        String(greenLeadData.tipo_conta || "").toLowerCase().startsWith("com") ? "comercial" : "residencial";
-      const hit = lookupGreenDiscount(greenLeadData.estado, greenLeadData.distribuidora, at);
+      const hit = lookupGreenDiscount(greenLeadData.estado, greenLeadData.distribuidora);
       if (hit?.row) {
         knownDiscountBlock = buildGreenKnownDiscountBlock({
           state: hit.row.state,
           distributor: hit.row.distributor,
-          accountType: at,
-          discountResidencial: hit.row.discount_residencial_percent,
-          discountComercial: hit.row.discount_comercial_percent,
+          discountMin: hit.row.discount_min_percent,
+          discountMax: hit.row.discount_max_percent,
           minBill: hit.row.min_bill_brl,
           notes: hit.row.notes,
         });
@@ -986,9 +980,9 @@ serve(async (req) => {
       currentUserMessage: messageContent,
       knowledgeText: docTexts.join("\n\n---\n\n"),
       fallbackName: contactName,
-      lookupDiscount: (state, distributor, accountType) => {
-        const hit = lookupGreenDiscount(state, distributor, accountType);
-        return hit ? { percent: hit.percent, min_bill: hit.min_bill } : null;
+      lookupDiscount: (state, distributor) => {
+        const hit = lookupGreenDiscount(state, distributor);
+        return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
       },
     });
     if (deterministicGreenSimulation) {
@@ -1561,22 +1555,19 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
         if (fc.name === "get_distributor_discount") {
           const stateArg = String(fc.args?.state || "").trim();
           const distributorArg = String(fc.args?.distributor || "").trim();
-          const atArg = String(fc.args?.account_type || "residencial").toLowerCase();
-          const accountType: "residencial" | "comercial" = atArg.startsWith("com") ? "comercial" : "residencial";
-          const hit = lookupGreenDiscount(stateArg, distributorArg, accountType);
+          const hit = lookupGreenDiscount(stateArg, distributorArg);
           const response = hit?.row
             ? {
                 found: true,
                 state: hit.row.state,
                 state_name: hit.row.state_name,
                 distributor: hit.row.distributor,
-                account_type: accountType,
-                discount_percent: hit.percent,
-                discount_residencial_percent: hit.row.discount_residencial_percent,
-                discount_comercial_percent: hit.row.discount_comercial_percent,
+                discount_min_percent: hit.min,
+                discount_max_percent: hit.max,
                 min_bill: hit.row.min_bill_brl,
                 notes: hit.row.notes,
-                instruction: "Use ESTE percentual diretamente na resposta. NÃO diga 'vou verificar com a equipe'. Se o cliente já informou o valor da fatura, calcule a economia agora mesmo.",
+                modalidade: hit.row.modalidade,
+                instruction: "Comunique SEMPRE como 'você pode economizar ATÉ X%' usando discount_max_percent. Explique que o percentual exato varia conforme o consumo. NÃO diferencie residencial/comercial. NÃO diga 'vou verificar com a equipe'. Se o cliente já informou o valor da fatura, calcule a economia agora usando o MÁXIMO.",
               }
             : {
                 found: false,

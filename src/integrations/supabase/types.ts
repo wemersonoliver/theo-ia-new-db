@@ -2093,13 +2093,16 @@ export type Database = {
       igreen_distributor_discounts: {
         Row: {
           created_at: string
-          discount_comercial_percent: number | null
-          discount_residencial_percent: number | null
+          credit_analysis: string | null
+          discount_max_percent: number
+          discount_min_percent: number
           distributor: string
           distributor_aliases: string[]
           enabled: boolean
           id: string
+          injection_days: string | null
           min_bill_brl: number | null
+          modalidade: string | null
           notes: string | null
           state: string
           state_name: string
@@ -2107,13 +2110,16 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          discount_comercial_percent?: number | null
-          discount_residencial_percent?: number | null
+          credit_analysis?: string | null
+          discount_max_percent?: number
+          discount_min_percent?: number
           distributor: string
           distributor_aliases?: string[]
           enabled?: boolean
           id?: string
+          injection_days?: string | null
           min_bill_brl?: number | null
+          modalidade?: string | null
           notes?: string | null
           state: string
           state_name: string
@@ -2121,13 +2127,16 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          discount_comercial_percent?: number | null
-          discount_residencial_percent?: number | null
+          credit_analysis?: string | null
+          discount_max_percent?: number
+          discount_min_percent?: number
           distributor?: string
           distributor_aliases?: string[]
           enabled?: boolean
           id?: string
+          injection_days?: string | null
           min_bill_brl?: number | null
+          modalidade?: string | null
           notes?: string | null
           state?: string
           state_name?: string
