@@ -618,21 +618,17 @@ serve(async (req) => {
         } else if (fc.name === "get_distributor_discount") {
           const stateArg = String(fc.args?.state || "").trim();
           const distributorArg = String(fc.args?.distributor || "").trim();
-          const atArg = String(fc.args?.account_type || "residencial").toLowerCase();
-          const accountType: "residencial" | "comercial" = atArg.startsWith("com") ? "comercial" : "residencial";
-          const hit = lookupGreenDiscount(stateArg, distributorArg, accountType);
+          const hit = lookupGreenDiscount(stateArg, distributorArg);
           functionResult = hit?.row
             ? {
                 found: true,
                 state: hit.row.state,
                 distributor: hit.row.distributor,
-                account_type: accountType,
-                discount_percent: hit.percent,
-                discount_residencial_percent: hit.row.discount_residencial_percent,
-                discount_comercial_percent: hit.row.discount_comercial_percent,
+                discount_min_percent: hit.min,
+                discount_max_percent: hit.max,
                 min_bill: hit.row.min_bill_brl,
                 notes: hit.row.notes,
-                instruction: "Use ESTE percentual diretamente. NÃO diga 'vou verificar com a equipe'.",
+                instruction: "Comunique como 'você pode economizar até X%' usando discount_max_percent. NÃO diferencie residencial/comercial.",
               }
             : {
                 found: false,
