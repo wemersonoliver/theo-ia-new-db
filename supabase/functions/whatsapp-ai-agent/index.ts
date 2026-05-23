@@ -608,7 +608,12 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { userId, phone, messageContent, contactName, mediaInfo } = await req.json();
+    const { userId, phone, messageContent, mediaInfo } = await req.json();
+    let contactName: string | null = (await Promise.resolve(null), null);
+    {
+      // mantém destructuring de contactName separado para podermos reatribuir
+      const _body = arguments as any; // noop, apenas para clareza
+    }
 
     if (!userId || !phone) {
       return new Response(JSON.stringify({ error: "Missing parameters" }), { 
