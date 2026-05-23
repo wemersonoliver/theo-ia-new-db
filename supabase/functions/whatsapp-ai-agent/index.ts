@@ -2965,6 +2965,8 @@ async function executeGreenFlowTool(
       const tag = String(args?.tag || "").trim().toLowerCase();
       if (!tag) return { success: false, error: "tag vazia" };
       await upsertContactTag(supabase, accountId, phone, tag);
+      // Move o card automaticamente para a etapa correspondente à tag
+      try { await moveCRMDealByTag(supabase, userId, phone, tag); } catch (e) { console.error("[moveCRMDealByTag] err:", e); }
 
       // Se for "enviou documento" → notifica equipe + handoff
       if (tag === "enviou documento") {
