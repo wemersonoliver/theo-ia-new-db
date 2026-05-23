@@ -1067,6 +1067,43 @@ serve(async (req) => {
       }
     }
 
+    const detectedGreenInvoice = parseGreenInvoiceFromOcr(messageContent);
+    if (detectedGreenInvoice) {
+      const invoiceResult = await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "validate_green_invoice", {
+        extracted_name: detectedGreenInvoice.extractedName,
+        extracted_value: detectedGreenInvoice.extractedValue,
+        document_type: "fatura_energia",
+        distributor_in_invoice: detectedGreenInvoice.distributor,
+        state_in_invoice: detectedGreenInvoice.state,
+      });
+
+      let deterministicInvoiceReply = "Recebi a fatura de energia, obrigado.";
+      if ((invoiceResult as any)?.distributor_mismatch || (invoiceResult as any)?.state_mismatch) {
+        deterministicInvoiceReply = `Recebi a fatura, mas vi que ela é da ${detectedGreenInvoice.distributor}/${detectedGreenInvoice.state}. É essa mesmo a distribuidora/estado do cadastro, ou você enviou outra fatura sem querer?`;
+      } else if ((invoiceResult as any)?.match) {
+        await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "add_contact_tag", { tag: "enviou fatura" });
+        deterministicInvoiceReply = `Perfeito, ${detectedGreenInvoice.extractedName.split(/\s+/)[0]}! Recebi sua fatura de energia. Agora, para finalizar o cadastro, pode me enviar uma foto ou PDF do RG ou CNH do titular da fatura?`;
+      } else {
+        deterministicInvoiceReply = `Percebi que a fatura está no nome de ${detectedGreenInvoice.extractedName.split(/\s+/)[0]}. Para finalizar o cadastro o titular vai precisar fazer uma assinatura digital no final.\n\nEssa pessoa é alguém da sua família? Você já comentou com ela sobre esse cadastro?`;
+      }
+
+      await sendAndSaveAIMessageParts(supabase, userId, phone, deterministicInvoiceReply);
+      await supabase
+        .from("whatsapp_ai_sessions")
+        .upsert({
+          user_id: userId,
+          account_id: accountId,
+          phone,
+          status: "active",
+          messages_without_human: messagesCount + 1,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,phone" });
+
+      return new Response(JSON.stringify({ success: true, response: deterministicInvoiceReply, deterministic_green_invoice: true, invoiceResult }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const deterministicGreenSimulation = buildGreenSimulationReply({
       messages: recentMessages,
       currentUserMessage: messageContent,
