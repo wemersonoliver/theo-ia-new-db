@@ -1079,6 +1079,13 @@ serve(async (req) => {
 
     const detectedGreenInvoice = parseGreenInvoiceFromOcr(messageContent);
     if (detectedGreenInvoice) {
+      const historicalFirstName = String(greenLeadData?.nome_cliente || "").trim() || extractGreenFirstNameFromHistory(recentMessages);
+      if (!greenLeadData?.nome_cliente && historicalFirstName) {
+        await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "save_green_lead_field", {
+          field: "nome_cliente",
+          value: historicalFirstName,
+        });
+      }
       const invoiceResult = await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "validate_green_invoice", {
         extracted_name: detectedGreenInvoice.extractedName,
         extracted_value: detectedGreenInvoice.extractedValue,
@@ -1094,7 +1101,7 @@ serve(async (req) => {
         await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "add_contact_tag", { tag: "enviou fatura" });
         deterministicInvoiceReply = `Perfeito, ${detectedGreenInvoice.extractedName.split(/\s+/)[0]}! Recebi sua fatura de energia. Agora, para finalizar o cadastro, pode me enviar uma foto ou PDF do RG ou CNH do titular da fatura?`;
       } else {
-        const leadFirstName = String(greenLeadData?.nome_cliente || "").trim() || extractGreenFirstNameFromHistory(recentMessages);
+        const leadFirstName = historicalFirstName;
         if (leadFirstName && namesMatch(leadFirstName, detectedGreenInvoice.extractedName)) {
           await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "add_contact_tag", { tag: "enviou fatura" });
           deterministicInvoiceReply = `Perfeito, ${leadFirstName}! Recebi sua fatura de energia. Agora, para finalizar o cadastro, pode me enviar uma foto ou PDF do RG ou CNH do titular da fatura?`;
