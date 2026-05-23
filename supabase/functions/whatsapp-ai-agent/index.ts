@@ -1331,7 +1331,13 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
       tools: [schedulingTools],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 4096,
+        // Desligamos o "thinking" do Gemini 2.5: este é um agente conversacional
+        // com tools, não precisa de reasoning estendido. Com thinking habilitado
+        // o modelo costuma gastar TODO o orçamento de tokens em "thought parts"
+        // após um functionResponse e devolver texto vazio (finishReason MAX_TOKENS),
+        // o que cai no fallback "Perfeito, obrigado! Pode me mandar sua próxima dúvida".
+        thinkingConfig: { thinkingBudget: 0 },
       },
     };
 
@@ -1377,23 +1383,32 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           retry: emptyResponseRetries,
         }));
 
-        // RETRY: Gemini às vezes devolve só "thinking parts" (ou nada) em mensagens
-        // curtas/ambíguas tipo "Interessante" / "O que precisa?". Tentamos de novo
-        // desligando o thinking e pedindo resposta direta — antes de cair no fallback.
+        // RETRY: tenta de novo com mais orçamento de tokens, sem injetar
+        // mensagem "user" extra — fazer isso depois de um functionResponse
+        // (que já é role:user) cria dois turnos user seguidos e confunde o modelo.
         if (emptyResponseRetries < 2) {
           emptyResponseRetries++;
+          const lastTurn = geminiPayload.contents[geminiPayload.contents.length - 1];
+          const lastIsFunctionResponse = lastTurn?.role === "user"
+            && Array.isArray(lastTurn?.parts)
+            && lastTurn.parts.some((p: any) => p?.functionResponse);
+
           geminiPayload.generationConfig = {
             ...(geminiPayload.generationConfig || {}),
             temperature: 0.7,
-            maxOutputTokens: 1024,
+            maxOutputTokens: 4096,
             thinkingConfig: { thinkingBudget: 0 },
           };
-          geminiPayload.contents.push({
-            role: "user",
-            parts: [{
-              text: "Responda agora em texto natural, breve e útil, dando sequência à conversa. Mesmo que a mensagem do cliente seja curta, NÃO fique em silêncio.",
-            }],
-          });
+
+          // Só injeta nudge textual quando NÃO estamos logo após um functionResponse.
+          if (!lastIsFunctionResponse) {
+            geminiPayload.contents.push({
+              role: "user",
+              parts: [{
+                text: "Responda agora em texto natural, breve e útil, dando sequência à conversa. Mesmo que a mensagem do cliente seja curta, NÃO fique em silêncio.",
+              }],
+            });
+          }
           continue;
         }
         break;

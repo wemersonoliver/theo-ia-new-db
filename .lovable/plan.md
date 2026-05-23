@@ -1,45 +1,64 @@
-## Objetivo
-Quando o usuário **criar uma nova instância** de WhatsApp (primeira conexão ou após excluir e recriar), importar automaticamente os números com conversas ativas nos **últimos 7 dias** e cadastrá-los no sistema com a **IA desativada**, evitando conflito com atendimentos em andamento.
+## Diagnóstico aprofundado
 
-Reconexões normais (cair e voltar a conectar a mesma instância) **NÃO** devem reimportar nem desligar IA novamente.
+Reproduzi o caso do Wemerson (22/05/26, 23:03). A sequência foi:
 
-## Situação atual
-- `whatsapp-webhook` dispara `sync-whatsapp-conversations` **toda vez** que a instância passa para `connected` — incluindo reconexões. Precisa virar disparo apenas na primeira conexão da instância.
-- `sync-whatsapp-conversations` hoje usa janela de **5 dias** e grava novas conversas com `ai_active = false` (mantém o valor se já existir).
-- Só processa o **primeiro lote de 40 chats** por chamada.
+1. Cliente: "Moro no Pará" + "Equatorial" (entram juntas no turno por debounce).
+2. IA chama `save_green_lead_field` com distribuidora=Equatorial — função executa OK.
+3. Loop volta a chamar o Gemini para o próximo passo (que deveria ser: salvar o estado e/ou chamar `get_distributor_discount`).
+4. Gemini devolve resposta vazia → cai no `EMPTY-RESPONSE FALLBACK` → manda "Perfeito, obrigado! 😊 / Pode me mandar sua próxima dúvida...".
 
-## Mudanças propostas
+Confirmado nos logs da edge `whatsapp-ai-agent` (uma única chamada de função, depois fallback neutro).
 
-### 1. Marcar instância como "já sincronizada"
-Adicionar coluna `initial_sync_completed_at timestamptz` em `whatsapp_instances` (default `NULL`).
-- Ao criar/recriar a instância (`create-whatsapp-instance`): garantir que essa coluna fica `NULL`.
-- Ao concluir a sincronização inicial com sucesso: gravar `now()`.
+## Causa raiz
 
-### 2. Disparar sync inicial apenas uma vez por instância
-No `whatsapp-webhook`, no bloco `connection.update → connected`:
-- Ler `initial_sync_completed_at` da instância.
-- Se for `NULL` → disparar `sync-whatsapp-conversations` com `daysBack: 7`, `forceDisableAI: true` e paginação completa (loop em `hasMore`, com teto de segurança de ~10 páginas / 400 chats).
-- Se já tiver valor → **não disparar nada** (reconexão comum).
+A configuração atual é:
 
-### 3. Forçar IA desativada na importação inicial
-Em `sync-whatsapp-conversations`:
-- Aceitar parâmetro `forceDisableAI: boolean`.
-- Quando `true`, o upsert grava `ai_active: false` mesmo para conversas que já existiam.
-- Demais chamadas (botão manual "Sincronizar conversas") continuam preservando o estado atual.
+- Modelo: `gemini-2.5-flash`
+- `maxOutputTokens: 2048`
+- **Thinking habilitado por padrão** (não é desligado no payload inicial)
 
-### 4. Paginação automática na importação inicial
-Após o primeiro lote retornar `hasMore: true`, o webhook chama novamente a função com o `nextOffset` recebido, até `hasMore = false` ou atingir o teto. Apenas no fim do loop a instância é marcada com `initial_sync_completed_at = now()`.
+O Gemini 2.5 Flash, quando recebe um turno que continua após `functionResponse`, costuma gastar **todo o orçamento de tokens em "thinking parts"** (parts com `thought: true`) e **não sobra orçamento para produzir o texto final ou a próxima `functionCall`**. O `finishReason` vira `MAX_TOKENS`, `content.parts` só tem thoughts, e o nosso filtro `usableParts` (que descarta thoughts) deixa o array vazio → cai no fallback.
 
-### 5. Garantir reset ao recriar instância
-Como o fluxo do app já é "excluir → criar nova", a nova linha em `whatsapp_instances` nasce sem `initial_sync_completed_at`, então a próxima conexão será tratada como primeira automaticamente. Só precisamos garantir que a função `create-whatsapp-instance` não copie o valor antigo nem o defina manualmente.
+Por isso o sintoma é "a IA perde o contexto a cada passo": não é perda real de contexto (o histórico é montado corretamente em `conversationMessages` e o `systemInstruction` é mantido) — é o **modelo silenciando** porque o thinking estourou o limite de saída.
 
-## Arquivos afetados
-- **Migration nova** — adicionar coluna `initial_sync_completed_at` em `whatsapp_instances`.
-- `supabase/functions/whatsapp-webhook/index.ts` — checar `initial_sync_completed_at`, disparar sync apenas quando `NULL`, loop de paginação, marcar coluna ao final.
-- `supabase/functions/sync-whatsapp-conversations/index.ts` — aceitar `forceDisableAI`, aplicar `daysBack: 7` quando vindo da conexão inicial.
-- `supabase/functions/create-whatsapp-instance/index.ts` — apenas garantir que a coluna nasce `NULL` (sem mudança de lógica se for o caso).
+Isso explica por que o problema migra de passo em passo: cada turno novo que segue um function call cai no mesmo padrão. O retry que adicionei antes ajuda em mensagens curtas/ambíguas, mas **não cobre o caso pós-function-call**, porque:
+- Empilhar uma mensagem `user` ("responda em texto natural...") logo depois de um `functionResponse` (que também tem `role: user`) gera dois turnos `user` seguidos, o que confunde o Gemini e não resolve o token estourado.
+- O retry só desliga o thinking na segunda tentativa — desperdiça uma chamada cara antes.
 
-## Pontos de atenção
-- Conversas dos últimos 7 dias já existentes no banco terão `ai_active` forçado para `false` na importação inicial — comportamento desejado.
-- Reconexões posteriores **não** mexem mais em IA nem reimportam histórico.
-- O usuário sempre pode reativar a IA manualmente em qualquer conversa pela tela `/conversations`.
+## Correção
+
+Edição cirúrgica em `supabase/functions/whatsapp-ai-agent/index.ts`:
+
+1. **Desligar o thinking por padrão** no `geminiPayload.generationConfig`:
+   ```ts
+   generationConfig: {
+     temperature: 0.7,
+     maxOutputTokens: 4096,
+     thinkingConfig: { thinkingBudget: 0 },
+   }
+   ```
+   Este é um agente conversacional com tools — não precisa de reasoning estendido. Desligar o thinking elimina a causa raiz do silêncio.
+
+2. **Subir `maxOutputTokens` para 4096** (margem confortável para function calls + texto da resposta).
+
+3. **Logar explicitamente `finishReason`** quando vier `MAX_TOKENS` para monitoramento futuro.
+
+4. **Ajustar o retry de resposta vazia** para:
+   - Não empilhar um turno `user` extra quando o último turno já é um `functionResponse` (evita dois `user` seguidos).
+   - Apenas re-chamar o Gemini com `thinkingConfig.thinkingBudget: 0` reforçado e `maxOutputTokens: 4096` — sem injetar mensagem fake.
+
+5. **Deploy explícito da função** após o ajuste para garantir que entre em produção (a correção anterior pode não estar ativa no momento da captura — o log "Empty AI response" do retry não apareceu).
+
+## Validação
+
+- Reabrir conversa real do Wemerson e enviar nova mensagem teste no fluxo Conexão Green (estado + distribuidora) para confirmar que a IA segue ao próximo passo (cálculo do desconto via `get_distributor_discount`) sem cair no fallback.
+- Conferir logs: deve aparecer chamada da função e texto natural na mesma resposta, sem `EMPTY-RESPONSE FALLBACK`.
+- Acompanhar 24h os logs de `[EMPTY-RESPONSE FALLBACK]` — deve cair próximo de zero.
+
+## Detalhes técnicos
+
+Arquivo: `supabase/functions/whatsapp-ai-agent/index.ts`
+- Linhas ~1332-1336: `generationConfig` inicial.
+- Linhas ~1372-1399: bloco do retry de resposta vazia.
+
+Sem mudanças no frontend, schema, ou outras funções.
