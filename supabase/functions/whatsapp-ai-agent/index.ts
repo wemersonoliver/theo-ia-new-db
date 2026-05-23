@@ -439,7 +439,64 @@ function getGreenNameStepFirstName(recentMessages: any[] | null | undefined, mes
 }
 
 function buildGreenIntroMessage(firstName: string): string {
-  return `Prazer em falar com você, ${firstName}. A Conexão Green é o nosso serviço de energia por assinatura que garante desconto na sua conta de luz. Vou te enviar um vídeo rápido explicando exatamente como a Conexão Green funciona.`;
+  return `Prazer em falar com você, ${firstName}. Para eu te ajudar da melhor forma, me conta: você está buscando?\n1 - Economia na conta de luz sem instalar nada\n2 - Planos de telefonia e internet para seu telefone\n3 - Como se tornar um Licenciado da iGreen e ganhar dinheiro vendendo assinaturas e placas solares`;
+}
+
+function parseGreenInvoiceFromOcr(text: string | null | undefined): null | {
+  extractedName: string;
+  extractedValue?: number;
+  distributor: string;
+  state: string;
+} {
+  const raw = String(text || "");
+  if (!raw.trim()) return null;
+  const norm = normalizeTextForIntent(raw);
+  const isMediaAnalysis = /\[(documento|imagem|image|foto)\s*-\s*(analise|análise)\]/i.test(raw)
+    || norm.includes("conteudo extraido:")
+    || norm.includes("conteudo extraido");
+  if (!isMediaAnalysis) return null;
+
+  const hasEnergySignals = [
+    /\bkwh\b/i,
+    /energia eletrica|energia elétrica/i,
+    /nota fiscal de energia/i,
+    /leitura atual|leitura anterior/i,
+    /consumo faturado|unidade consumidora/i,
+    /total a pagar|valor a pagar/i,
+  ].filter((re) => re.test(raw)).length;
+  const distributorMap: Array<[RegExp, string, string]> = [
+    [/\bcelesc\b/i, "Celesc", "SC"],
+    [/\bcemig\b/i, "Cemig", "MG"],
+    [/\bcopel\b/i, "Copel", "PR"],
+    [/\blight\b/i, "Light", "RJ"],
+    [/\bcpfl\b/i, "CPFL", "SP"],
+    [/\bedp\b/i, "EDP", "ES"],
+    [/\benel\s*(sp|sao paulo|são paulo)?\b/i, "Enel", "SP"],
+    [/\bequatorial\b/i, "Equatorial", "PA"],
+    [/\benergisa\b/i, "Energisa", "MT"],
+    [/\bneoenergia\b/i, "Neoenergia", "BA"],
+  ];
+  const distributorHit = distributorMap.find(([re]) => re.test(raw));
+  if (hasEnergySignals < 2 || !distributorHit) return null;
+
+  const nameMatch = raw.match(/(?:NOME|TITULAR|NOME DO CLIENTE)\s*:?\s*([^\n\r]{5,120})/i);
+  const extractedName = titleCaseName(String(nameMatch?.[1] || "")
+    .replace(/\b(UNIDADE CONSUMIDORA|CPF\/CNPJ|ENDERECO|ENDEREÇO).*$/i, "")
+    .trim());
+  if (!extractedName || extractedName.split(/\s+/).length < 2) return null;
+
+  const totalMatch = raw.match(/(?:TOTAL A PAGAR|VALOR A PAGAR|VALOR TOTAL)\s*[\n\r\s:]*R?\$?\s*([0-9]{1,5}(?:[.,][0-9]{2})?)/i);
+  const extractedValue = totalMatch
+    ? Number(totalMatch[1].replace(/\./g, "").replace(",", "."))
+    : undefined;
+  const stateMatch = raw.match(/\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b/);
+
+  return {
+    extractedName,
+    extractedValue: Number.isFinite(extractedValue) ? extractedValue : undefined,
+    distributor: distributorHit[1],
+    state: stateMatch?.[1] || distributorHit[2],
+  };
 }
 
 function resolveGreenVideoUrl(videoUrl: string | null | undefined): string {
