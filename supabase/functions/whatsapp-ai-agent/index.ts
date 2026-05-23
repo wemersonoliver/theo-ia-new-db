@@ -438,6 +438,21 @@ function getGreenNameStepFirstName(recentMessages: any[] | null | undefined, mes
   return titleCaseName(raw).split(/\s+/)[0] || null;
 }
 
+function extractGreenFirstNameFromHistory(messages: any[] | null | undefined): string | null {
+  const list = Array.isArray(messages) ? messages : [];
+  for (let i = 0; i < list.length; i++) {
+    const assistant = list[i];
+    if (!assistant?.from_me) continue;
+    const asked = normalizeTextForIntent(assistant.ai_content || assistant.content || "");
+    if (!asked.includes("com quem eu tenho o prazer de falar") && !asked.includes("como posso te chamar")) continue;
+    const reply = list.slice(i + 1).find((m: any) => !m?.from_me && typeof (m?.content || m?.ai_content) === "string");
+    const raw = String(reply?.content || reply?.ai_content || "").replace(/["“”]/g, "").trim();
+    const parsed = extractPersonName(raw);
+    if (parsed?.firstName && raw.length <= 60) return parsed.firstName;
+  }
+  return null;
+}
+
 function buildGreenIntroMessage(firstName: string): string {
   return `Prazer em falar com você, ${firstName}. Para eu te ajudar da melhor forma, me conta: você está buscando?\n1 - Economia na conta de luz sem instalar nada\n2 - Planos de telefonia e internet para seu telefone\n3 - Como se tornar um Licenciado da iGreen e ganhar dinheiro vendendo assinaturas e placas solares`;
 }
