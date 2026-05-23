@@ -1,64 +1,71 @@
-## Diagnóstico aprofundado
+## Diagnóstico — conversa do Wemerson (5547989118695)
 
-Reproduzi o caso do Wemerson (22/05/26, 23:03). A sequência foi:
+Reconstituí a conversa pelo banco. As falhas reais foram:
 
-1. Cliente: "Moro no Pará" + "Equatorial" (entram juntas no turno por debounce).
-2. IA chama `save_green_lead_field` com distribuidora=Equatorial — função executa OK.
-3. Loop volta a chamar o Gemini para o próximo passo (que deveria ser: salvar o estado e/ou chamar `get_distributor_discount`).
-4. Gemini devolve resposta vazia → cai no `EMPTY-RESPONSE FALLBACK` → manda "Perfeito, obrigado! 😊 / Pode me mandar sua próxima dúvida...".
+1. **Nome do cliente capturado errado no início.** O cliente abriu por áudio: *"Bom dia, me chamo Emerson."* A IA salvou o nome dele como **"Áudio"** / **"Atlas IA"** (o push name do WhatsApp), não como "Emerson". Daí para frente todo o atendimento ficou contaminado.
+2. **IA alucinou o valor da fatura.** A conta era R$ 553,98, mas a IA disse "na sua conta de R$ 160 você pode economizar…".
+3. **IA chamou o cliente de "Atlas"** porque o `contacts.name` ficou com o push name "Atlas IA" e nunca foi sobrescrito pelo nome real ("Emerson"/"Wemerson").
+4. **Confusão "Emerson" vs "Wemerson".** O `namesMatch` exige 2 tokens em comum OU primeiro nome idêntico — "Emerson" e "Wemerson" não batem por causa da primeira letra. A IA entrou em loop de desculpas ("Me desculpe…", "Mil desculpas… falha na comunicação").
+5. **Card parado em "Enviou fatura de energia".** Quando o cliente mandou a CNH, a IA **não chamou `validate_green_identity` nem `add_contact_tag('enviou documento')`**. Resultado: o deal não foi para "Enviou documento do titular", o handoff automático não rodou, a equipe não foi notificada, o follow-up não foi cancelado e a IA continuou ativa, apesar de ter dito "vou encaminhar para a equipe".
 
-Confirmado nos logs da edge `whatsapp-ai-agent` (uma única chamada de função, depois fallback neutro).
+O motor de movimentação do CRM (`moveCRMDealByTag` + handoff em `enviou documento`) **funciona** — o que faltou foi a IA disparar a tool correta no momento certo, e o contato começar com o nome certo.
 
-## Causa raiz
+## O que vamos corrigir (sem mexer em UI nem em schema)
 
-A configuração atual é:
+### 1. Extrair o nome real de frases tipo "Bom dia, me chamo Emerson"
+Hoje qualquer texto vira candidato a nome. Vamos adicionar um **extrator de nome humano** que roda **antes** de salvar o nome em `contacts.name` ou em `igreen_lead_data.nome_cliente`:
 
-- Modelo: `gemini-2.5-flash`
-- `maxOutputTokens: 2048`
-- **Thinking habilitado por padrão** (não é desligado no payload inicial)
+- Remove saudações no começo: "bom dia", "boa tarde", "boa noite", "olá", "oi", "e aí", "tudo bem", "tudo bom".
+- Remove introduções: "me chamo", "meu nome é", "sou o(a)", "aqui é o(a)", "pode me chamar de", "é o(a)".
+- Remove pontuação/emoji do entorno.
+- Aceita só se o restante tiver 1-3 palavras alfabéticas, sem números, e não estiver na blacklist (`audio`, `documento`, `atlas`, `ia`, `bot`, `cliente`, `whatsapp`, `teste`, etc.).
+- Em transcrições de áudio (`[Áudio transcrito] ...`), aplica o extrator no texto transcrito, nunca na palavra "Áudio".
 
-O Gemini 2.5 Flash, quando recebe um turno que continua após `functionResponse`, costuma gastar **todo o orçamento de tokens em "thinking parts"** (parts com `thought: true`) e **não sobra orçamento para produzir o texto final ou a próxima `functionCall`**. O `finishReason` vira `MAX_TOKENS`, `content.parts` só tem thoughts, e o nosso filtro `usableParts` (que descarta thoughts) deixa o array vazio → cai no fallback.
+Esse extrator vai ser usado em todos os pontos onde hoje gravamos o nome do cliente (tanto no `whatsapp-ai-agent` quanto no fluxo Green via `save_green_lead_field`).
 
-Por isso o sintoma é "a IA perde o contexto a cada passo": não é perda real de contexto (o histórico é montado corretamente em `conversationMessages` e o `systemInstruction` é mantido) — é o **modelo silenciando** porque o thinking estourou o limite de saída.
+### 2. Sobrescrever push name genérico
+Quando o `contacts.name` for um push name genérico (contém "IA"/"Bot"/"Atendimento", é igual ao display name da instância conectada, ou é literalmente "Áudio"/"Documento"/"Imagem"), o sistema substitui pelo nome extraído pelo extrator acima assim que ele aparecer pela primeira vez na conversa.
 
-Isso explica por que o problema migra de passo em passo: cada turno novo que segue um function call cai no mesmo padrão. O retry que adicionei antes ajuda em mensagens curtas/ambíguas, mas **não cobre o caso pós-function-call**, porque:
-- Empilhar uma mensagem `user` ("responda em texto natural...") logo depois de um `functionResponse` (que também tem `role: user`) gera dois turnos `user` seguidos, o que confunde o Gemini e não resolve o token estourado.
-- O retry só desliga o thinking na segunda tentativa — desperdiça uma chamada cara antes.
+### 3. Forçar `validate_green_identity` quando chega documento depois da fatura validada
+- Reforçar no prompt: se `igreen_lead_data.nome_titular_fatura` já existe e chega um anexo novo de documento (imagem/PDF que não é outra fatura), a IA é **obrigada** a chamar `validate_green_identity` antes de qualquer texto.
+- Guarda no servidor: se a IA gerar resposta sem chamar a tool nesse cenário, o backend chama `validate_green_identity` automaticamente usando o OCR já extraído, e dispara `add_contact_tag('enviou documento')` se houver match — isso aciona o handoff, a notificação da equipe e o movimento do card.
 
-## Correção
+### 4. Bloquear textos de "encaminhamento" sem handoff real
+Pós-processamento da resposta da IA: se o texto contiver "vou encaminhar", "passar para a equipe", "consultor entrará em contato", "finalizar seu cadastro" e a tag `enviou documento` ainda não está presente, descartamos esse trecho e mantemos só a pergunta correta (pedido do documento certo OU o fluxo de validação).
 
-Edição cirúrgica em `supabase/functions/whatsapp-ai-agent/index.ts`:
+### 5. Eliminar alucinação de valor da fatura
+No prompt: proibir mencionar valores em reais que não tenham sido retornados por `validate_green_invoice` (`extracted_value`) ou `get_distributor_discount`. Se o valor não foi confirmado pela tool, falar de forma genérica ("posso simular sua economia depois").
 
-1. **Desligar o thinking por padrão** no `geminiPayload.generationConfig`:
-   ```ts
-   generationConfig: {
-     temperature: 0.7,
-     maxOutputTokens: 4096,
-     thinkingConfig: { thinkingBudget: 0 },
-   }
-   ```
-   Este é um agente conversacional com tools — não precisa de reasoning estendido. Desligar o thinking elimina a causa raiz do silêncio.
+### 6. Aceitar variações fonéticas "Emerson"/"Wemerson"
+Relaxar `namesMatch`: além das regras atuais, considerar match quando um nome contém o outro como substring de pelo menos 5 caracteres. Isso evita rejeitar o cliente por apelido/aférese.
 
-2. **Subir `maxOutputTokens` para 4096** (margem confortável para function calls + texto da resposta).
-
-3. **Logar explicitamente `finishReason`** quando vier `MAX_TOKENS` para monitoramento futuro.
-
-4. **Ajustar o retry de resposta vazia** para:
-   - Não empilhar um turno `user` extra quando o último turno já é um `functionResponse` (evita dois `user` seguidos).
-   - Apenas re-chamar o Gemini com `thinkingConfig.thinkingBudget: 0` reforçado e `maxOutputTokens: 4096` — sem injetar mensagem fake.
-
-5. **Deploy explícito da função** após o ajuste para garantir que entre em produção (a correção anterior pode não estar ativa no momento da captura — o log "Empty AI response" do retry não apareceu).
-
-## Validação
-
-- Reabrir conversa real do Wemerson e enviar nova mensagem teste no fluxo Conexão Green (estado + distribuidora) para confirmar que a IA segue ao próximo passo (cálculo do desconto via `get_distributor_discount`) sem cair no fallback.
-- Conferir logs: deve aparecer chamada da função e texto natural na mesma resposta, sem `EMPTY-RESPONSE FALLBACK`.
-- Acompanhar 24h os logs de `[EMPTY-RESPONSE FALLBACK]` — deve cair próximo de zero.
+### 7. Anti-loop de desculpas
+Detectar padrão "desculpa + desculpa" em dois turnos seguidos e suprimir a segunda — manter só uma frase curta de retomada.
 
 ## Detalhes técnicos
 
-Arquivo: `supabase/functions/whatsapp-ai-agent/index.ts`
-- Linhas ~1332-1336: `generationConfig` inicial.
-- Linhas ~1372-1399: bloco do retry de resposta vazia.
+Arquivos afetados:
 
-Sem mudanças no frontend, schema, ou outras funções.
+- `supabase/functions/whatsapp-ai-agent/index.ts`
+  - `namesMatch`: relaxar para aceitar substring ≥ 5 chars.
+  - `executeGreenFlowTool > validate_green_invoice` e `save_green_lead_field('nome_cliente')`: usar o extrator de nome e atualizar `contacts.name` quando o atual for push name genérico.
+  - Após geração da resposta da IA e antes de enviar: guarda que (a) força `validate_green_identity` quando há OCR de documento + fatura já validada + tag ausente; (b) remove frases de encaminhamento órfãs; (c) suprime desculpas duplicadas.
+  - System prompt: regras de proibição de valor não retornado por tool, obrigação da tool de identidade.
+
+- `supabase/functions/_ai_system_prompt.ts`
+  - Bloco novo de "captura de nome do cliente" com a regra de ignorar saudações/introdução.
+
+- `supabase/functions/_person-name.ts`
+  - Expandir `extractPersonName` para receber frases inteiras ("Bom dia, me chamo Emerson") e retornar só "Emerson". Adicionar "audio", "documento", "imagem", "atlas" à blacklist.
+
+Nenhuma migração nova, nenhuma alteração de UI, nenhum schema novo.
+
+## Validação
+
+Após o deploy peço para você refazer o teste com o mesmo contato (já limpo). Confirmo no banco:
+- `contacts.name` = "Emerson" (ou "Wemerson") logo após o primeiro áudio — nunca "Atlas IA", "Áudio" ou "Documento".
+- `igreen_lead_data.nome_cliente` = "Emerson".
+- `contacts.tags` contém `enviou fatura` e `enviou documento`.
+- `crm_deals.stage_id` avança até "Atendimento Humano".
+- `whatsapp_conversations.ai_active = false` após o handoff.
+- Nenhuma mensagem da IA com "Mil desculpas… falha na comunicação" nem valor em reais inventado.
