@@ -438,8 +438,80 @@ function getGreenNameStepFirstName(recentMessages: any[] | null | undefined, mes
   return titleCaseName(raw).split(/\s+/)[0] || null;
 }
 
+function extractGreenFirstNameFromHistory(messages: any[] | null | undefined): string | null {
+  const list = Array.isArray(messages) ? messages : [];
+  for (let i = 0; i < list.length; i++) {
+    const assistant = list[i];
+    if (!assistant?.from_me) continue;
+    const asked = normalizeTextForIntent(assistant.ai_content || assistant.content || "");
+    if (!asked.includes("com quem eu tenho o prazer de falar") && !asked.includes("como posso te chamar")) continue;
+    const reply = list.slice(i + 1).find((m: any) => !m?.from_me && typeof (m?.content || m?.ai_content) === "string");
+    const raw = String(reply?.content || reply?.ai_content || "").replace(/["“”]/g, "").trim();
+    const parsed = extractPersonName(raw);
+    if (parsed?.firstName && raw.length <= 60) return parsed.firstName;
+  }
+  return null;
+}
+
 function buildGreenIntroMessage(firstName: string): string {
-  return `Prazer em falar com você, ${firstName}. A Conexão Green é o nosso serviço de energia por assinatura que garante desconto na sua conta de luz. Vou te enviar um vídeo rápido explicando exatamente como a Conexão Green funciona.`;
+  return `Prazer em falar com você, ${firstName}. Para eu te ajudar da melhor forma, me conta: você está buscando?\n1 - Economia na conta de luz sem instalar nada\n2 - Planos de telefonia e internet para seu telefone\n3 - Como se tornar um Licenciado da iGreen e ganhar dinheiro vendendo assinaturas e placas solares`;
+}
+
+function parseGreenInvoiceFromOcr(text: string | null | undefined): null | {
+  extractedName: string;
+  extractedValue?: number;
+  distributor: string;
+  state: string;
+} {
+  const raw = String(text || "");
+  if (!raw.trim()) return null;
+  const norm = normalizeTextForIntent(raw);
+  const isMediaAnalysis = /\[(documento|imagem|image|foto)\s*-\s*(analise|análise)\]/i.test(raw)
+    || norm.includes("conteudo extraido:")
+    || norm.includes("conteudo extraido");
+  if (!isMediaAnalysis) return null;
+
+  const hasEnergySignals = [
+    /\bkwh\b/i,
+    /energia eletrica|energia elétrica/i,
+    /nota fiscal de energia/i,
+    /leitura atual|leitura anterior/i,
+    /consumo faturado|unidade consumidora/i,
+    /total a pagar|valor a pagar/i,
+  ].filter((re) => re.test(raw)).length;
+  const distributorMap: Array<[RegExp, string, string]> = [
+    [/\bcelesc\b/i, "Celesc", "SC"],
+    [/\bcemig\b/i, "Cemig", "MG"],
+    [/\bcopel\b/i, "Copel", "PR"],
+    [/\blight\b/i, "Light", "RJ"],
+    [/\bcpfl\b/i, "CPFL", "SP"],
+    [/\bedp\b/i, "EDP", "ES"],
+    [/\benel\s*(sp|sao paulo|são paulo)?\b/i, "Enel", "SP"],
+    [/\bequatorial\b/i, "Equatorial", "PA"],
+    [/\benergisa\b/i, "Energisa", "MT"],
+    [/\bneoenergia\b/i, "Neoenergia", "BA"],
+  ];
+  const distributorHit = distributorMap.find(([re]) => re.test(raw));
+  if (hasEnergySignals < 2 || !distributorHit) return null;
+
+  const nameMatch = raw.match(/(?:NOME|TITULAR|NOME DO CLIENTE)\s*:?\s*([^\n\r]{5,120})/i);
+  const extractedName = titleCaseName(String(nameMatch?.[1] || "")
+    .replace(/\b(UNIDADE CONSUMIDORA|CPF\/CNPJ|ENDERECO|ENDEREÇO).*$/i, "")
+    .trim());
+  if (!extractedName || extractedName.split(/\s+/).length < 2) return null;
+
+  const totalMatch = raw.match(/(?:TOTAL A PAGAR|VALOR A PAGAR|VALOR TOTAL)\s*[\n\r\s:]*R?\$?\s*([0-9]{1,5}(?:[.,][0-9]{2})?)/i);
+  const extractedValue = totalMatch
+    ? Number(totalMatch[1].replace(/\./g, "").replace(",", "."))
+    : undefined;
+  const stateMatch = raw.match(/\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b/);
+
+  return {
+    extractedName,
+    extractedValue: Number.isFinite(extractedValue) ? extractedValue : undefined,
+    distributor: distributorHit[1],
+    state: stateMatch?.[1] || distributorHit[2],
+  };
 }
 
 function resolveGreenVideoUrl(videoUrl: string | null | undefined): string {
@@ -772,17 +844,15 @@ serve(async (req) => {
     const greenNameStepFirstName = getGreenNameStepFirstName(recentMessages, messageContent);
     if (greenNameStepFirstName) {
       const intro = buildGreenIntroMessage(greenNameStepFirstName);
-      const videoResult = await executeSendProductVideo(
-        supabase,
-        userId,
-        accountId,
-        phone,
-        greenNameStepFirstName,
-        "green",
-        intro,
-      );
-
-      if (videoResult?.success) {
+      try {
+        await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "save_green_lead_field", {
+          field: "nome_cliente",
+          value: greenNameStepFirstName,
+        });
+      } catch (e) {
+        console.error("[GREEN FLOW] error saving name before discovery options:", e);
+      }
+      await sendAndSaveAIMessageParts(supabase, userId, phone, intro);
         await supabase
           .from("whatsapp_ai_sessions")
           .upsert({
@@ -794,12 +864,9 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
           }, { onConflict: "user_id,phone" });
 
-        return new Response(JSON.stringify({ success: true, response: intro, product_video_sent: true }), {
+        return new Response(JSON.stringify({ success: true, response: intro, green_discovery_options_sent: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
-      }
-
-      console.warn("[GREEN FLOW FALLBACK] deterministic video step failed, falling back to Gemini:", videoResult?.error);
     }
 
     // Check if the last incoming message has media for vision analysis
@@ -1008,6 +1075,56 @@ serve(async (req) => {
           notes: hit.row.notes,
         });
       }
+    }
+
+    const detectedGreenInvoice = parseGreenInvoiceFromOcr(messageContent);
+    if (detectedGreenInvoice) {
+      const historicalFirstName = String(greenLeadData?.nome_cliente || "").trim() || extractGreenFirstNameFromHistory(recentMessages);
+      if (!greenLeadData?.nome_cliente && historicalFirstName) {
+        await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "save_green_lead_field", {
+          field: "nome_cliente",
+          value: historicalFirstName,
+        });
+      }
+      const invoiceResult = await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "validate_green_invoice", {
+        extracted_name: detectedGreenInvoice.extractedName,
+        extracted_value: detectedGreenInvoice.extractedValue,
+        document_type: "fatura_energia",
+        distributor_in_invoice: detectedGreenInvoice.distributor,
+        state_in_invoice: detectedGreenInvoice.state,
+      });
+
+      let deterministicInvoiceReply = "Recebi a fatura de energia, obrigado.";
+      if ((invoiceResult as any)?.distributor_mismatch || (invoiceResult as any)?.state_mismatch) {
+        deterministicInvoiceReply = `Recebi a fatura, mas vi que ela é da ${detectedGreenInvoice.distributor}/${detectedGreenInvoice.state}. É essa mesmo a distribuidora/estado do cadastro, ou você enviou outra fatura sem querer?`;
+      } else if ((invoiceResult as any)?.match) {
+        await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "add_contact_tag", { tag: "enviou fatura" });
+        deterministicInvoiceReply = `Perfeito, ${detectedGreenInvoice.extractedName.split(/\s+/)[0]}! Recebi sua fatura de energia. Agora, para finalizar o cadastro, pode me enviar uma foto ou PDF do RG ou CNH do titular da fatura?`;
+      } else {
+        const leadFirstName = historicalFirstName;
+        if (leadFirstName && namesMatch(leadFirstName, detectedGreenInvoice.extractedName)) {
+          await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "add_contact_tag", { tag: "enviou fatura" });
+          deterministicInvoiceReply = `Perfeito, ${leadFirstName}! Recebi sua fatura de energia. Agora, para finalizar o cadastro, pode me enviar uma foto ou PDF do RG ou CNH do titular da fatura?`;
+        } else {
+          deterministicInvoiceReply = `Percebi que a fatura está no nome de ${detectedGreenInvoice.extractedName.split(/\s+/)[0]}. Para finalizar o cadastro o titular vai precisar fazer uma assinatura digital no final.\n\nEssa pessoa é alguém da sua família? Você já comentou com ela sobre esse cadastro?`;
+        }
+      }
+
+      await sendAndSaveAIMessageParts(supabase, userId, phone, deterministicInvoiceReply);
+      await supabase
+        .from("whatsapp_ai_sessions")
+        .upsert({
+          user_id: userId,
+          account_id: accountId,
+          phone,
+          status: "active",
+          messages_without_human: messagesCount + 1,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,phone" });
+
+      return new Response(JSON.stringify({ success: true, response: deterministicInvoiceReply, deterministic_green_invoice: true, invoiceResult }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const deterministicGreenSimulation = buildGreenSimulationReply({
