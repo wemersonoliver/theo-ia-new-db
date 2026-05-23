@@ -1342,6 +1342,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
     let createAppointmentCalled = false;
     const maxFunctionCalls = 3;
 
+    let emptyResponseRetries = 0;
     while (functionCallsProcessed < maxFunctionCalls) {
       const aiResponse = await fetchGeminiWithRetry(geminiApiKey, geminiPayload);
 
@@ -1362,16 +1363,44 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
       const candidate = aiData.candidates?.[0];
       const content = candidate?.content;
 
-      if (!content?.parts) {
-        // Loga detalhes de finishReason / safetyRatings — útil quando o Gemini
-        // bloqueia por safety/recitation (ex.: análise de CNH com CPF/MRZ).
+      // Filtra "thinking parts" (thought: true) que não trazem resposta para o cliente.
+      const usableParts = (content?.parts || []).filter((p: any) => !p?.thought);
+      const hasUsableContent = usableParts.some(
+        (p: any) => p?.functionCall || (typeof p?.text === "string" && p.text.trim().length > 0),
+      );
+
+      if (!hasUsableContent) {
         console.error("Empty AI response", JSON.stringify({
           finishReason: candidate?.finishReason,
           safetyRatings: candidate?.safetyRatings,
           promptFeedback: aiData?.promptFeedback,
+          retry: emptyResponseRetries,
         }));
+
+        // RETRY: Gemini às vezes devolve só "thinking parts" (ou nada) em mensagens
+        // curtas/ambíguas tipo "Interessante" / "O que precisa?". Tentamos de novo
+        // desligando o thinking e pedindo resposta direta — antes de cair no fallback.
+        if (emptyResponseRetries < 2) {
+          emptyResponseRetries++;
+          geminiPayload.generationConfig = {
+            ...(geminiPayload.generationConfig || {}),
+            temperature: 0.7,
+            maxOutputTokens: 1024,
+            thinkingConfig: { thinkingBudget: 0 },
+          };
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{
+              text: "Responda agora em texto natural, breve e útil, dando sequência à conversa. Mesmo que a mensagem do cliente seja curta, NÃO fique em silêncio.",
+            }],
+          });
+          continue;
+        }
         break;
       }
+
+      // Daqui pra frente, só trabalhamos com parts úteis (sem thinking).
+      content.parts = usableParts;
 
       // Check for function calls
       const functionCall = content.parts.find((p: any) => p.functionCall);
