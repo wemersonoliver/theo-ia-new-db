@@ -274,68 +274,68 @@ body.show-recaptcha .grecaptcha-badge {
    ============================================================ */
 .theme-igreen {
   /* Brand palette — neon #04CA04 + gradient left (#045B4E→#029080) / right (#2F782C→#4CC348) */
-  --background: 165 60% 22%;
+  /* Fundo central bem escuro (verde-petróleo profundo), como o tema padrão do Theo */
+  --background: 165 55% 8%;
   --foreground: 0 0% 100%;
 
-  --card: 150 45% 18%;
+  /* Cards mais escuros que o fundo da sidebar, para destacar com glow neon por baixo */
+  --card: 165 50% 11%;
   --card-foreground: 0 0% 100%;
 
-  --popover: 150 45% 18%;
+  --popover: 165 50% 11%;
   --popover-foreground: 0 0% 100%;
 
   --primary: 120 96% 41%;
   --primary-foreground: 0 0% 100%;
   --primary-glow: 120 96% 55%;
 
-  --secondary: 150 45% 24%;
+  --secondary: 160 40% 16%;
   --secondary-foreground: 0 0% 100%;
 
-  --muted: 150 35% 22%;
+  --muted: 160 30% 14%;
   --muted-foreground: 0 0% 92%;
 
   --accent: 120 96% 41%;
   --accent-foreground: 0 0% 100%;
 
-  --border: 150 40% 32%;
-  --input: 150 40% 26%;
+  --border: 160 35% 20%;
+  --input: 160 35% 16%;
   --ring: 120 96% 41%;
 
   --neon-green: 120 96% 41%;
   --neon-cyan: 120 96% 41%;
   --neon-purple: 120 96% 41%;
 
-  --sidebar-background: 172 92% 14%;
+  /* Sidebar um tom mais claro que o fundo central */
+  --sidebar-background: 168 45% 14%;
   --sidebar-foreground: 0 0% 100%;
   --sidebar-primary: 120 96% 41%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 173 80% 20%;
+  --sidebar-accent: 168 45% 20%;
   --sidebar-accent-foreground: 0 0% 100%;
-  --sidebar-border: 172 60% 24%;
+  --sidebar-border: 168 40% 22%;
   --sidebar-ring: 120 96% 41%;
 
-  /* Fundo: degradê horizontal — esquerda teal (#045B4E→#029080) / direita verde (#2F782C→#4CC348) */
-  --gradient-aurora: linear-gradient(
-    90deg,
-    #045B4E 0%,
-    #029080 40%,
-    #2F782C 60%,
-    #4CC348 100%
+  /* Aurora sutil — manchas neon sobre fundo escuro, igual ao tema padrão Theo */
+  --gradient-aurora: radial-gradient(
+    ellipse at top, hsl(120 96% 41% / 0.15), transparent 60%
   );
   --gradient-primary: linear-gradient(135deg, hsl(120 96% 41%), hsl(118 70% 55%));
   --gradient-glow: linear-gradient(135deg, hsl(120 96% 41% / 0.95), hsl(120 96% 55% / 0.9));
 
-  --glow-primary: 0 0 40px hsl(120 96% 41% / 0.5);
-  --glow-cyan: 0 0 40px hsl(120 96% 41% / 0.5);
-  --glow-purple: 0 0 40px hsl(120 96% 41% / 0.45);
-  --shadow-elevated: 0 25px 80px -25px hsl(120 96% 41% / 0.4);
+  --glow-primary: 0 0 50px hsl(120 96% 45% / 0.55);
+  --glow-cyan: 0 0 50px hsl(120 96% 45% / 0.5);
+  --glow-purple: 0 0 50px hsl(120 96% 45% / 0.45);
+  /* Glow neon por baixo dos cards — destaca cada card como no Theo padrão */
+  --shadow-elevated: 0 20px 60px -15px hsl(120 96% 45% / 0.35), 0 0 0 1px hsl(120 96% 45% / 0.08);
 }
 .theme-igreen.dark,
 .theme-igreen .dark {
-  --background: 165 60% 18%;
-  --card: 150 50% 14%;
-  --popover: 150 50% 14%;
-  --primary: 120 96% 45%;
-  --primary-glow: 120 96% 60%;
-  --accent: 120 96% 45%;
-  --sidebar-background: 172 92% 12%;
+  --background: 165 55% 7%;
+  --card: 165 50% 10%;
+  --popover: 165 50% 10%;
+  --primary: 120 96% 48%;
+  --primary-glow: 120 96% 62%;
+  --accent: 120 96% 48%;
+  --sidebar-background: 168 45% 13%;
 }
