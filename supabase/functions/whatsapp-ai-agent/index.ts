@@ -1094,7 +1094,13 @@ serve(async (req) => {
         await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "add_contact_tag", { tag: "enviou fatura" });
         deterministicInvoiceReply = `Perfeito, ${detectedGreenInvoice.extractedName.split(/\s+/)[0]}! Recebi sua fatura de energia. Agora, para finalizar o cadastro, pode me enviar uma foto ou PDF do RG ou CNH do titular da fatura?`;
       } else {
-        deterministicInvoiceReply = `Percebi que a fatura está no nome de ${detectedGreenInvoice.extractedName.split(/\s+/)[0]}. Para finalizar o cadastro o titular vai precisar fazer uma assinatura digital no final.\n\nEssa pessoa é alguém da sua família? Você já comentou com ela sobre esse cadastro?`;
+        const leadFirstName = String(greenLeadData?.nome_cliente || "").trim() || extractGreenFirstNameFromHistory(recentMessages);
+        if (leadFirstName && namesMatch(leadFirstName, detectedGreenInvoice.extractedName)) {
+          await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "add_contact_tag", { tag: "enviou fatura" });
+          deterministicInvoiceReply = `Perfeito, ${leadFirstName}! Recebi sua fatura de energia. Agora, para finalizar o cadastro, pode me enviar uma foto ou PDF do RG ou CNH do titular da fatura?`;
+        } else {
+          deterministicInvoiceReply = `Percebi que a fatura está no nome de ${detectedGreenInvoice.extractedName.split(/\s+/)[0]}. Para finalizar o cadastro o titular vai precisar fazer uma assinatura digital no final.\n\nEssa pessoa é alguém da sua família? Você já comentou com ela sobre esse cadastro?`;
+        }
       }
 
       await sendAndSaveAIMessageParts(supabase, userId, phone, deterministicInvoiceReply);
