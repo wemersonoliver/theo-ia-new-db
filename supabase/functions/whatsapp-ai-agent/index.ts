@@ -3118,6 +3118,11 @@ async function executeGreenFlowTool(
         update.valor_fatura_cents = Math.round(extractedValue * 100);
       }
       await supabase.from("igreen_lead_data").update(update).eq("account_id", accountId).eq("phone", phone);
+      // Se houve match e o contacts.name ainda é um push name genérico,
+      // adota o primeiro+último nome do titular da fatura.
+      if (match) {
+        try { await maybeUpdateContactName(supabase, accountId, phone, extractedName); } catch (_e) {}
+      }
       return {
         success: true,
         match,
