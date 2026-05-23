@@ -1555,22 +1555,19 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
         if (fc.name === "get_distributor_discount") {
           const stateArg = String(fc.args?.state || "").trim();
           const distributorArg = String(fc.args?.distributor || "").trim();
-          const atArg = String(fc.args?.account_type || "residencial").toLowerCase();
-          const accountType: "residencial" | "comercial" = atArg.startsWith("com") ? "comercial" : "residencial";
-          const hit = lookupGreenDiscount(stateArg, distributorArg, accountType);
+          const hit = lookupGreenDiscount(stateArg, distributorArg);
           const response = hit?.row
             ? {
                 found: true,
                 state: hit.row.state,
                 state_name: hit.row.state_name,
                 distributor: hit.row.distributor,
-                account_type: accountType,
-                discount_percent: hit.percent,
-                discount_residencial_percent: hit.row.discount_residencial_percent,
-                discount_comercial_percent: hit.row.discount_comercial_percent,
+                discount_min_percent: hit.min,
+                discount_max_percent: hit.max,
                 min_bill: hit.row.min_bill_brl,
                 notes: hit.row.notes,
-                instruction: "Use ESTE percentual diretamente na resposta. NÃO diga 'vou verificar com a equipe'. Se o cliente já informou o valor da fatura, calcule a economia agora mesmo.",
+                modalidade: hit.row.modalidade,
+                instruction: "Comunique SEMPRE como 'você pode economizar ATÉ X%' usando discount_max_percent. Explique que o percentual exato varia conforme o consumo. NÃO diferencie residencial/comercial. NÃO diga 'vou verificar com a equipe'. Se o cliente já informou o valor da fatura, calcule a economia agora usando o MÁXIMO.",
               }
             : {
                 found: false,
