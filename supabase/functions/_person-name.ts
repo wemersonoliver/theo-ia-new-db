@@ -20,6 +20,8 @@ const BLACKLIST = new Set([
   "audio", "áudio", "documento", "doc", "imagem", "image", "foto", "video", "vídeo",
   // Push names genéricos vistos em produção
   "atlas",
+  // Saudações (caso o texto chegue sem ser sanitizado antes)
+  "bom", "boa", "ola", "olá", "oi", "opa", "salve", "alo", "alô",
 ]);
 
 // Remove emojis, símbolos pictográficos, bandeiras, etc.
