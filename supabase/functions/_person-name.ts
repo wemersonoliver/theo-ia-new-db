@@ -164,45 +164,43 @@ export function extractIntroducedName(raw: string | null | undefined): PersonNam
   s = stripEmoji(s).trim();
   if (!s) return null;
 
-  // Considera apenas a PRIMEIRA frase (até ., !, ?, \n)
-  const firstSentence = s.split(/[.!?\n]/)[0]?.trim() || s;
-  let work = firstSentence;
+  // Divide em frases (por ., !, ?, \n) — em mensagens agrupadas o nome
+  // pode aparecer só na 2ª/3ª frase ("Boa tarde\nMe chamo Wemerson").
+  const sentences = s.split(/[.!?\n]+/).map((x) => x.trim()).filter(Boolean);
+  if (sentences.length === 0) sentences.push(s);
 
-  // Remove saudações iniciais
-  work = stripLeadingGreetings(work);
-
-  // Remove vírgulas que sobraram do começo
-  work = work.replace(/^[,;:\-\s]+/, "").trim();
-
-  // Tenta achar um padrão de introdução explícito ("me chamo X", "meu nome é X")
-  let candidate: string | null = null;
-  for (const re of INTRO_PATTERNS) {
-    if (re.test(work)) {
-      candidate = work.replace(re, "").trim();
-      break;
+  // 1ª passada: procura intro explícita em qualquer frase.
+  for (const sentence of sentences) {
+    const work = stripLeadingGreetings(sentence).replace(/^[,;:\-\s]+/, "").trim();
+    if (!work) continue;
+    for (const re of INTRO_PATTERNS) {
+      if (re.test(work)) {
+        const candidate = work
+          .replace(re, "")
+          .trim()
+          .replace(/[,;:.!?].*$/, "")
+          .trim()
+          .split(/\s+/)
+          .slice(0, 3)
+          .join(" ");
+        const parsed = extractPersonName(candidate);
+        if (parsed) return parsed;
+      }
     }
   }
 
-  // Se nenhuma intro explícita, mas o restante é curto (até 3 palavras alfabéticas),
-  // assume que o restante É o nome (caso: "Bom dia, Emerson")
-  if (!candidate) {
+  // 2ª passada: frase curta sem intro ("Bom dia, Emerson").
+  for (const sentence of sentences) {
+    const work = stripLeadingGreetings(sentence).replace(/^[,;:\-\s]+/, "").trim();
+    if (!work) continue;
     const w = work.split(/\s+/).filter(Boolean);
     if (w.length > 0 && w.length <= 3 && /^[\p{L}\s'-]+$/u.test(work)) {
-      candidate = work;
+      const parsed = extractPersonName(w.slice(0, 3).join(" "));
+      if (parsed) return parsed;
     }
   }
 
-  if (!candidate) return null;
-
-  // Limpa pontuação de borda e limita a 3 palavras
-  candidate = candidate
-    .replace(/[,;:.!?].*$/, "")
-    .trim()
-    .split(/\s+/)
-    .slice(0, 3)
-    .join(" ");
-
-  return extractPersonName(candidate);
+  return null;
 }
 
 // Helper: rendering de templates com fallback vazio.
