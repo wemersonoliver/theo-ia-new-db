@@ -16,6 +16,10 @@ const BLACKLIST = new Set([
   "eu", "ele", "ela", "voce", "você",
   "mae", "mãe", "pai", "amor", "vida", "anjo", "deus",
   "boss", "chefe", "patrao", "patrão",
+  // Marcadores de mídia (nunca são nomes)
+  "audio", "áudio", "documento", "doc", "imagem", "image", "foto", "video", "vídeo",
+  // Push names genéricos vistos em produção
+  "atlas",
 ]);
 
 // Remove emojis, símbolos pictográficos, bandeiras, etc.
@@ -89,6 +93,114 @@ export function extractPersonName(raw: string | null | undefined): PersonName | 
 
   const firstName = titleCaseWord(firstLetters);
   return { fullName, firstName };
+}
+
+// ============================================================
+// Extrai nome de pessoa a partir de UMA MENSAGEM livre do cliente.
+// Aceita coisas como:
+//   "Bom dia, me chamo Emerson"   -> Emerson
+//   "Olá, meu nome é Maria Silva" -> Maria Silva
+//   "[Áudio transcrito] Oi, sou o João"   -> João
+//   "pode me chamar de Zé"        -> Zé
+// Retorna null se não conseguir identificar um nome confiável.
+// ============================================================
+const GREETING_PATTERNS = [
+  /^bom\s*dia[\s,.!]*/i,
+  /^boa\s*tarde[\s,.!]*/i,
+  /^boa\s*noite[\s,.!]*/i,
+  /^ol[áa]+[\s,.!]*/i,
+  /^oi+[\s,.!]*/i,
+  /^e\s*a[ií][\s,.!]*/i,
+  /^opa[\s,.!]*/i,
+  /^salve[\s,.!]*/i,
+  /^tudo\s*(bem|bom|tranquilo)[\s,.?!]*/i,
+  /^como\s*vai[\s,.?!]*/i,
+  /^prazer[\s,.!]*/i,
+];
+
+const INTRO_PATTERNS = [
+  /^me\s*chamo\s+/i,
+  /^meu\s*nome\s*[ée]\s+/i,
+  /^o\s*meu\s*nome\s*[ée]\s+/i,
+  /^sou\s*(o|a)\s+/i,
+  /^eu\s*sou\s*(o|a)?\s*/i,
+  /^aqui\s*[ée]?\s*(o|a)\s+/i,
+  /^aqui\s*quem\s*fala\s*[ée]\s*(o|a)?\s*/i,
+  /^pode\s*me\s*chamar\s*de\s+/i,
+  /^[ée]\s*(o|a)\s+/i,
+  /^chamo[\s-]*me\s+/i,
+];
+
+function stripLeadingGreetings(input: string): string {
+  let s = input.trim();
+  // Remove até 2 saudações encadeadas ("Oi, bom dia, ...")
+  for (let i = 0; i < 2; i++) {
+    let changed = false;
+    for (const re of GREETING_PATTERNS) {
+      if (re.test(s)) {
+        s = s.replace(re, "").trim();
+        changed = true;
+        break;
+      }
+    }
+    if (!changed) break;
+  }
+  return s;
+}
+
+export function extractIntroducedName(raw: string | null | undefined): PersonName | null {
+  if (!raw) return null;
+  let s = String(raw).trim();
+  if (!s) return null;
+
+  // Remove marcador de transcrição
+  s = s.replace(/^\[(?:áudio|audio)\s*transcrito\]\s*/i, "").trim();
+  s = s.replace(/^\[(?:áudio|audio|imagem|image|foto|documento|video|vídeo)\][\s:-]*/i, "").trim();
+  if (!s) return null;
+
+  // Tira emojis
+  s = stripEmoji(s).trim();
+  if (!s) return null;
+
+  // Considera apenas a PRIMEIRA frase (até ., !, ?, \n)
+  const firstSentence = s.split(/[.!?\n]/)[0]?.trim() || s;
+  let work = firstSentence;
+
+  // Remove saudações iniciais
+  work = stripLeadingGreetings(work);
+
+  // Remove vírgulas que sobraram do começo
+  work = work.replace(/^[,;:\-\s]+/, "").trim();
+
+  // Tenta achar um padrão de introdução explícito ("me chamo X", "meu nome é X")
+  let candidate: string | null = null;
+  for (const re of INTRO_PATTERNS) {
+    if (re.test(work)) {
+      candidate = work.replace(re, "").trim();
+      break;
+    }
+  }
+
+  // Se nenhuma intro explícita, mas o restante é curto (até 3 palavras alfabéticas),
+  // assume que o restante É o nome (caso: "Bom dia, Emerson")
+  if (!candidate) {
+    const w = work.split(/\s+/).filter(Boolean);
+    if (w.length > 0 && w.length <= 3 && /^[\p{L}\s'-]+$/u.test(work)) {
+      candidate = work;
+    }
+  }
+
+  if (!candidate) return null;
+
+  // Limpa pontuação de borda e limita a 3 palavras
+  candidate = candidate
+    .replace(/[,;:.!?].*$/, "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 3)
+    .join(" ");
+
+  return extractPersonName(candidate);
 }
 
 // Helper: rendering de templates com fallback vazio.
