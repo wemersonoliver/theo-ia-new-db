@@ -2916,7 +2916,57 @@ function namesMatch(a: string | null | undefined, b: string | null | undefined):
   if (aTokens.length === 0 || bTokens.length === 0) return false;
   // Considera match se nome + sobrenome (>=2 tokens) coincidirem
   const shared = aTokens.filter(t => bTokens.includes(t));
-  return shared.length >= 2 || (aTokens[0] === bTokens[0] && (aTokens.length === 1 || bTokens.length === 1));
+  if (shared.length >= 2) return true;
+  if (aTokens[0] === bTokens[0] && (aTokens.length === 1 || bTokens.length === 1)) return true;
+  // Tolerância a variações fonéticas / aféreses ("Emerson" vs "Wemerson",
+  // "Cristina" vs "Maria Cristina"): aceita se o primeiro nome de um
+  // contém o do outro como substring de pelo menos 5 caracteres.
+  const aFirst = aTokens[0] || "";
+  const bFirst = bTokens[0] || "";
+  if (aFirst.length >= 5 && bFirst.includes(aFirst)) return true;
+  if (bFirst.length >= 5 && aFirst.includes(bFirst)) return true;
+  return false;
+}
+
+// Push names genéricos do WhatsApp que NÃO devem manter-se como contacts.name
+// quando um nome real é descoberto na conversa.
+function isGenericContactName(name: string | null | undefined): boolean {
+  if (!name) return true;
+  const n = String(name).trim();
+  if (!n) return true;
+  if (/^\+?\d[\d\s()-]*$/.test(n)) return true; // só números
+  const low = n.toLowerCase();
+  if (/(^|\s)(ia|bot|atendimento|atendente|theo|theoia|assistente|whatsapp|cliente|lead|teste|test|suporte|admin|sistema)(\s|$)/i.test(low)) return true;
+  if (/^(áudio|audio|documento|imagem|image|foto|video|vídeo)$/i.test(low)) return true;
+  if (/^atlas( ia)?$/i.test(low)) return true;
+  return false;
+}
+
+// Atualiza contacts.name SE o nome atual for genérico/push name.
+// Usa o extractPersonName para garantir Title Case e bloqueio de blacklist.
+async function maybeUpdateContactName(
+  supabase: any,
+  accountId: string,
+  phone: string,
+  candidateRaw: string | null | undefined,
+): Promise<string | null> {
+  if (!accountId || !candidateRaw) return null;
+  const parsed = extractPersonName(candidateRaw);
+  if (!parsed?.firstName) return null;
+  const { data: contact } = await supabase
+    .from("contacts")
+    .select("id, name")
+    .eq("account_id", accountId)
+    .eq("phone", phone)
+    .maybeSingle();
+  if (!contact?.id) return null;
+  if (!isGenericContactName(contact.name)) return contact.name;
+  const newName = parsed.fullName;
+  await supabase
+    .from("contacts")
+    .update({ name: newName, updated_at: new Date().toISOString() })
+    .eq("id", contact.id);
+  return newName;
 }
 
 async function upsertContactTag(supabase: any, accountId: string, phone: string, tag: string): Promise<void> {
