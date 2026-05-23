@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveAccountId } from "../_account.ts";
 import { cleanAIText } from "../_ai_text.ts";
+import { extractIntroducedName, extractPersonName } from "../_person-name.ts";
 import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts";
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
@@ -607,7 +608,9 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { userId, phone, messageContent, contactName, mediaInfo } = await req.json();
+    const _body = await req.json();
+    const { userId, phone, messageContent, mediaInfo } = _body;
+    let contactName: string | null = _body?.contactName ?? null;
 
     if (!userId || !phone) {
       return new Response(JSON.stringify({ error: "Missing parameters" }), { 
@@ -617,6 +620,34 @@ serve(async (req) => {
     }
 
     const accountId = await resolveAccountId(supabase, userId);
+
+    // CAPTURA DE NOME NA INTRODUÇÃO
+    // Se a mensagem do cliente vier no formato "Bom dia, me chamo Emerson",
+    // extrai o nome real e sobrescreve contacts.name caso o atual seja um
+    // push name genérico ("Atlas IA", "Áudio", número puro, etc.).
+    // Também ignora a saudação para nunca usar "Bom" ou "Áudio" como nome.
+    try {
+      if (accountId && typeof messageContent === "string" && messageContent.trim()) {
+        const introduced = extractIntroducedName(messageContent);
+        if (introduced?.firstName) {
+          const updated = await maybeUpdateContactName(supabase, accountId, phone, introduced.fullName);
+          if (updated) contactName = updated;
+        }
+      }
+      // Mesmo sem introdução nova, se o contactName recebido do webhook é genérico,
+      // tenta usar o nome já gravado no banco (que pode ter sido corrigido antes).
+      if (accountId && isGenericContactName(contactName)) {
+        const { data: c } = await supabase
+          .from("contacts")
+          .select("name")
+          .eq("account_id", accountId)
+          .eq("phone", phone)
+          .maybeSingle();
+        if (c?.name && !isGenericContactName(c.name)) contactName = c.name;
+      }
+    } catch (e) {
+      console.error("[contactName-intro] err:", e);
+    }
 
     // Get AI config
     const { data: aiConfig } = await supabase
@@ -2915,7 +2946,57 @@ function namesMatch(a: string | null | undefined, b: string | null | undefined):
   if (aTokens.length === 0 || bTokens.length === 0) return false;
   // Considera match se nome + sobrenome (>=2 tokens) coincidirem
   const shared = aTokens.filter(t => bTokens.includes(t));
-  return shared.length >= 2 || (aTokens[0] === bTokens[0] && (aTokens.length === 1 || bTokens.length === 1));
+  if (shared.length >= 2) return true;
+  if (aTokens[0] === bTokens[0] && (aTokens.length === 1 || bTokens.length === 1)) return true;
+  // Tolerância a variações fonéticas / aféreses ("Emerson" vs "Wemerson",
+  // "Cristina" vs "Maria Cristina"): aceita se o primeiro nome de um
+  // contém o do outro como substring de pelo menos 5 caracteres.
+  const aFirst = aTokens[0] || "";
+  const bFirst = bTokens[0] || "";
+  if (aFirst.length >= 5 && bFirst.includes(aFirst)) return true;
+  if (bFirst.length >= 5 && aFirst.includes(bFirst)) return true;
+  return false;
+}
+
+// Push names genéricos do WhatsApp que NÃO devem manter-se como contacts.name
+// quando um nome real é descoberto na conversa.
+function isGenericContactName(name: string | null | undefined): boolean {
+  if (!name) return true;
+  const n = String(name).trim();
+  if (!n) return true;
+  if (/^\+?\d[\d\s()-]*$/.test(n)) return true; // só números
+  const low = n.toLowerCase();
+  if (/(^|\s)(ia|bot|atendimento|atendente|theo|theoia|assistente|whatsapp|cliente|lead|teste|test|suporte|admin|sistema)(\s|$)/i.test(low)) return true;
+  if (/^(áudio|audio|documento|imagem|image|foto|video|vídeo)$/i.test(low)) return true;
+  if (/^atlas( ia)?$/i.test(low)) return true;
+  return false;
+}
+
+// Atualiza contacts.name SE o nome atual for genérico/push name.
+// Usa o extractPersonName para garantir Title Case e bloqueio de blacklist.
+async function maybeUpdateContactName(
+  supabase: any,
+  accountId: string,
+  phone: string,
+  candidateRaw: string | null | undefined,
+): Promise<string | null> {
+  if (!accountId || !candidateRaw) return null;
+  const parsed = extractPersonName(candidateRaw);
+  if (!parsed?.firstName) return null;
+  const { data: contact } = await supabase
+    .from("contacts")
+    .select("id, name")
+    .eq("account_id", accountId)
+    .eq("phone", phone)
+    .maybeSingle();
+  if (!contact?.id) return null;
+  if (!isGenericContactName(contact.name)) return contact.name;
+  const newName = parsed.fullName;
+  await supabase
+    .from("contacts")
+    .update({ name: newName, updated_at: new Date().toISOString() })
+    .eq("id", contact.id);
+  return newName;
 }
 
 async function upsertContactTag(supabase: any, accountId: string, phone: string, tag: string): Promise<void> {
@@ -2986,8 +3067,18 @@ async function executeGreenFlowTool(
 
     if (toolName === "save_green_lead_field") {
       const field = String(args?.field || "").trim().toLowerCase();
-      const value = String(args?.value || "").trim();
+      let value = String(args?.value || "").trim();
       if (!field || !value) return { success: false, error: "campo/valor vazio" };
+      // Sanitiza nome do cliente: remove "Bom dia, me chamo ...", "Olá, sou ..."
+      if (field === "nome_cliente") {
+        const parsedIntro = extractIntroducedName(value) || extractPersonName(value);
+        if (!parsedIntro?.firstName) {
+          return { success: false, error: "valor não parece um nome de pessoa", value };
+        }
+        value = parsedIntro.firstName;
+        // Atualiza contacts.name se o atual for genérico
+        try { await maybeUpdateContactName(supabase, accountId, phone, parsedIntro.fullName); } catch (_e) {}
+      }
       const allowed: Record<string, string> = {
         estado: "estado",
         distribuidora: "distribuidora",
@@ -3027,6 +3118,11 @@ async function executeGreenFlowTool(
         update.valor_fatura_cents = Math.round(extractedValue * 100);
       }
       await supabase.from("igreen_lead_data").update(update).eq("account_id", accountId).eq("phone", phone);
+      // Se houve match e o contacts.name ainda é um push name genérico,
+      // adota o primeiro+último nome do titular da fatura.
+      if (match) {
+        try { await maybeUpdateContactName(supabase, accountId, phone, extractedName); } catch (_e) {}
+      }
       return {
         success: true,
         match,
