@@ -619,6 +619,23 @@ serve(async (req) => {
 
     const accountId = await resolveAccountId(supabase, userId);
 
+    // CAPTURA DE NOME NA INTRODUÇÃO
+    // Se a mensagem do cliente vier no formato "Bom dia, me chamo Emerson",
+    // extrai o nome real e sobrescreve contacts.name caso o atual seja um
+    // push name genérico ("Atlas IA", "Áudio", número puro, etc.).
+    let effectiveContactName = contactName;
+    try {
+      if (accountId && typeof messageContent === "string" && messageContent.trim()) {
+        const introduced = extractIntroducedName(messageContent);
+        if (introduced?.firstName) {
+          const updated = await maybeUpdateContactName(supabase, accountId, phone, introduced.fullName);
+          if (updated) effectiveContactName = updated;
+        }
+      }
+    } catch (e) {
+      console.error("[contactName-intro] err:", e);
+    }
+
     // Get AI config
     const { data: aiConfig } = await supabase
       .from("whatsapp_ai_config")
