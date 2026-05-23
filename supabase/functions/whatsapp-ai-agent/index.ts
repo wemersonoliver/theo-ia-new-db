@@ -625,14 +625,25 @@ serve(async (req) => {
     // Se a mensagem do cliente vier no formato "Bom dia, me chamo Emerson",
     // extrai o nome real e sobrescreve contacts.name caso o atual seja um
     // push name genérico ("Atlas IA", "Áudio", número puro, etc.).
-    let effectiveContactName = contactName;
+    // Também ignora a saudação para nunca usar "Bom" ou "Áudio" como nome.
     try {
       if (accountId && typeof messageContent === "string" && messageContent.trim()) {
         const introduced = extractIntroducedName(messageContent);
         if (introduced?.firstName) {
           const updated = await maybeUpdateContactName(supabase, accountId, phone, introduced.fullName);
-          if (updated) effectiveContactName = updated;
+          if (updated) contactName = updated;
         }
+      }
+      // Mesmo sem introdução nova, se o contactName recebido do webhook é genérico,
+      // tenta usar o nome já gravado no banco (que pode ter sido corrigido antes).
+      if (accountId && isGenericContactName(contactName)) {
+        const { data: c } = await supabase
+          .from("contacts")
+          .select("name")
+          .eq("account_id", accountId)
+          .eq("phone", phone)
+          .maybeSingle();
+        if (c?.name && !isGenericContactName(c.name)) contactName = c.name;
       }
     } catch (e) {
       console.error("[contactName-intro] err:", e);
