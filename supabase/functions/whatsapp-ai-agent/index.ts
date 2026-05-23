@@ -3049,33 +3049,9 @@ async function executeGreenFlowTool(
     if (toolName === "add_contact_tag") {
       const tag = String(args?.tag || "").trim().toLowerCase();
       if (!tag) return { success: false, error: "tag vazia" };
-      // Detecta se essa é a PRIMEIRA vez que a tag está sendo adicionada
-      // ao contato — usado para disparar notificação só uma vez.
-      let isNewTag = true;
-      try {
-        const { data: c } = await supabase
-          .from("contacts")
-          .select("tags")
-          .eq("account_id", accountId)
-          .eq("phone", phone)
-          .maybeSingle();
-        const existing: string[] = Array.isArray(c?.tags) ? c!.tags : [];
-        if (existing.map((t: string) => String(t).toLowerCase()).includes(tag)) {
-          isNewTag = false;
-        }
-      } catch (e) {
-        console.error("[tag-precheck] err:", e);
-      }
       await upsertContactTag(supabase, accountId, phone, tag);
       // Move o card automaticamente para a etapa correspondente à tag
       try { await moveCRMDealByTag(supabase, userId, phone, tag); } catch (e) { console.error("[moveCRMDealByTag] err:", e); }
-
-      // Notifica a equipe quando o lead engaja ("em atendimento" ou
-      // "enviou fatura") — assim o atendente pode acompanhar mesmo
-      // enquanto a IA continua qualificando. Idempotente via isNewTag.
-      if (isNewTag && (tag === "em atendimento" || tag === "enviou fatura")) {
-        try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff (engagement) err:", e); }
-      }
 
       // Se for "enviou documento" → notifica equipe + handoff
       if (tag === "enviou documento") {
