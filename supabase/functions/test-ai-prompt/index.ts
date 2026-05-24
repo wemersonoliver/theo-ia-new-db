@@ -384,6 +384,21 @@ serve(async (req) => {
       return { min, max, percent: max, min_bill: row.min_bill_brl ?? null, notes: row.notes ?? null, row };
     }
 
+    const deterministicLocationReply = buildGreenDistributorStateReply({
+      messages: messages || [],
+      currentUserMessage: lastUserMessage,
+      fallbackName: "Simulação",
+      lookupDiscount: (state, distributor) => {
+        const hit = lookupGreenDiscount(state, distributor);
+        return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
+      },
+    });
+    if (deterministicLocationReply) {
+      return new Response(JSON.stringify({ message: deterministicLocationReply.reply }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const deterministicGreenSimulation = buildGreenSimulationReply({
       messages: messages || [],
       currentUserMessage: lastUserMessage,
@@ -403,7 +418,7 @@ serve(async (req) => {
     if (greenNameStepFirstName) {
       const intro = buildGreenIntroMessage(greenNameStepFirstName);
       return new Response(JSON.stringify({
-        message: `${intro}\n\n🎥 [Simulação] Vídeo do produto 'green' enviado. Follow-up automático em 2min ("Conseguiu ver?").`,
+        message: intro,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
