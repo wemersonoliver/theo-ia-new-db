@@ -558,6 +558,8 @@ serve(async (req) => {
     let aiReply = "";
     let functionCallsProcessed = 0;
     const maxFunctionCalls = 8;
+    let lastToolName = "";
+    let lastToolResult: any = null;
 
     while (functionCallsProcessed < maxFunctionCalls) {
       const geminiRes = await fetchGeminiWithRetry(geminiApiKey, geminiPayload);
@@ -577,6 +579,7 @@ serve(async (req) => {
       if (functionCall) {
         const fc = functionCall.functionCall;
         console.log("Test - Function call:", fc.name, fc.args);
+        lastToolName = fc.name;
 
         // No simulador, send_product_video é apenas mockada (não envia vídeo real)
         let functionResult: any;
@@ -666,6 +669,7 @@ serve(async (req) => {
         }
 
         console.log("Test - Function result:", functionResult);
+        lastToolResult = functionResult;
 
         // Add function call and result to context
         geminiPayload.contents.push(content);
@@ -738,7 +742,15 @@ serve(async (req) => {
     }
 
     if (!aiReply) {
-      aiReply = "Desculpe, não consegui processar sua solicitação. Pode tentar novamente?";
+      if (lastToolName === "get_distributor_discount" && lastToolResult) {
+        aiReply = lastToolResult.found
+          ? "Ótimo, atendemos sua região.\n\nQual o valor médio da sua fatura mensal de energia?"
+          : "Obrigada. Vou confirmar o desconto exato dessa distribuidora com a equipe.\n\nEnquanto isso, para adiantar seu cadastro, qual o valor médio da sua fatura mensal de energia?";
+      } else if (lastToolName === "add_contact_tag" && lastToolResult?.tag === "enviou fatura") {
+        aiReply = "Perfeito, recebi sua fatura de energia.\n\nAgora, para finalizar o cadastro, pode me enviar uma foto ou PDF do RG ou CNH do titular da fatura?";
+      } else {
+        aiReply = "Certo, vou continuar te ajudando por aqui.\n\nPode me mandar a próxima informação para eu seguir com o atendimento?";
+      }
     }
 
     return new Response(JSON.stringify({ message: aiReply }), {
