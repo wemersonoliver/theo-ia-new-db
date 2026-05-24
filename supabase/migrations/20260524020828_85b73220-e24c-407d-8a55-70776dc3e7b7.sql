@@ -1,0 +1,2 @@
+ALTER TABLE public.whatsapp_ai_sessions ADD COLUMN IF NOT EXISTS handed_off_at timestamptz;
+CREATE INDEX IF NOT EXISTS idx_whatsapp_ai_sessions_handed_off_at ON public.whatsapp_ai_sessions (handed_off_at);
