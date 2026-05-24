@@ -968,41 +968,61 @@ serve(async (req) => {
     // Cada trecho é prefixado com o produto correspondente (quando houver),
     // para que a IA saiba a qual produto a informação pertence.
     let documents: any[] = [];
-    let documentsQuery = supabase
-      .from("knowledge_base_documents")
-      .select("content_text, igreen_product_id, file_name")
-      .eq("status", "ready");
-    documentsQuery = accountId
-      ? documentsQuery.eq("account_id", accountId)
-      : documentsQuery.eq("user_id", userId);
-    const { data: scopedDocuments, error: documentsError } = await documentsQuery;
-    if (documentsError) console.error("Error loading knowledge docs by account/user:", documentsError);
-    documents = scopedDocuments || [];
-
-    if (documents.length === 0 && accountId) {
-      const { data: fallbackDocuments, error: fallbackDocumentsError } = await supabase
+    if (isIgreenAccountEarly) {
+      // Conta Igreen: usa SOMENTE a base de conhecimento global Igreen.
+      const { data: globalDocs, error: gErr } = await supabase
+        .from("knowledge_base_documents")
+        .select("content_text, igreen_product_id, igreen_global_product_key, file_name")
+        .eq("status", "ready")
+        .eq("is_igreen_global", true);
+      if (gErr) console.error("Error loading igreen global KB:", gErr);
+      documents = globalDocs || [];
+    } else {
+      let documentsQuery = supabase
         .from("knowledge_base_documents")
         .select("content_text, igreen_product_id, file_name")
-        .eq("user_id", userId)
         .eq("status", "ready");
-      if (fallbackDocumentsError) console.error("Error loading fallback knowledge docs by user:", fallbackDocumentsError);
-      documents = fallbackDocuments || [];
+      documentsQuery = accountId
+        ? documentsQuery.eq("account_id", accountId)
+        : documentsQuery.eq("user_id", userId);
+      const { data: scopedDocuments, error: documentsError } = await documentsQuery;
+      if (documentsError) console.error("Error loading knowledge docs by account/user:", documentsError);
+      documents = scopedDocuments || [];
+
+      if (documents.length === 0 && accountId) {
+        const { data: fallbackDocuments, error: fallbackDocumentsError } = await supabase
+          .from("knowledge_base_documents")
+          .select("content_text, igreen_product_id, file_name")
+          .eq("user_id", userId)
+          .eq("status", "ready");
+        if (fallbackDocumentsError) console.error("Error loading fallback knowledge docs by user:", fallbackDocumentsError);
+        documents = fallbackDocuments || [];
+      }
     }
 
-    // Mapa de produtos do account (id -> nome) para rotular os trechos
+    // Mapa de produtos (id -> nome) para rotular trechos da KB
     const productMap = new Map<string, string>();
     try {
-      const { data: accProducts } = await supabase
-        .from("igreen_account_products")
-        .select("id, name, enabled")
-        .eq("account_id", accountId);
-      (accProducts || []).forEach((p: any) => productMap.set(p.id, p.name));
+      if (isIgreenAccountEarly) {
+        // Em contas Igreen, rotulamos pelos produtos globais Igreen.
+        const { data: globalProds } = await supabase
+          .from("igreen_products")
+          .select("key, name, enabled");
+        (globalProds || []).forEach((p: any) => productMap.set(p.key, p.name));
+      } else {
+        const { data: accProducts } = await supabase
+          .from("igreen_account_products")
+          .select("id, name, enabled")
+          .eq("account_id", accountId);
+        (accProducts || []).forEach((p: any) => productMap.set(p.id, p.name));
+      }
     } catch (_) { /* opcional */ }
 
     const docTexts = (documents || [])
       .filter((d: any) => typeof d.content_text === "string" && d.content_text.length > 0)
       .map((d: any) => {
-        const productName = d.igreen_product_id ? productMap.get(d.igreen_product_id) : null;
+        const lookupKey = (d as any).igreen_global_product_key || d.igreen_product_id;
+        const productName = lookupKey ? productMap.get(lookupKey) : null;
         const header = productName
           ? `[PRODUTO: ${productName}]`
           : `[GERAL]`;
