@@ -56,6 +56,13 @@ serve(async (req) => {
       ignoreDuplicates: true,
     });
 
+    // Provisiona pipeline CRM Igreen (etapas + automações por tag)
+    try {
+      await supabase.rpc("provision_igreen_pipeline", { _account_id: account_id });
+    } catch (e) {
+      console.warn("provision_igreen_pipeline failed", e);
+    }
+
     // Aplica prompt padrão Igreen no whatsapp_ai_config do owner da conta
     let aiApplied = false;
     try {
