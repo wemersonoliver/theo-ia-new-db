@@ -62,7 +62,12 @@ function extractGreenFirstName(messages: GreenSimulationMessage[], fallbackName?
     const current = String(messages[i]?.ai_content || messages[i]?.content || "");
     const currentNorm = normalizeFlowText(current);
     const isAssistant = messages[i]?.from_me === true || messages[i]?.role === "assistant";
-    if (!isAssistant || !currentNorm.includes("COMO POSSO TE CHAMAR")) continue;
+    const askedForName = currentNorm.includes("COMO POSSO TE CHAMAR")
+      || currentNorm.includes("COM QUEM EU TENHO O PRAZER DE FALAR")
+      || currentNorm.includes("COM QUEM TENHO O PRAZER DE FALAR")
+      || currentNorm.includes("QUAL O SEU NOME")
+      || currentNorm.includes("QUAL SEU NOME");
+    if (!isAssistant || !askedForName) continue;
 
     const nextUser = messages.slice(i + 1).find((m) => {
       const isUser = m?.from_me === false || m?.role === "user";
