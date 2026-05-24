@@ -1570,6 +1570,8 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
     let functionCallsProcessed = 0;
     let createAppointmentCalled = false;
     const maxFunctionCalls = 8;
+    let lastToolName = "";
+    let lastToolResult: any = null;
 
     let emptyResponseRetries = 0;
     while (functionCallsProcessed < maxFunctionCalls) {
@@ -1646,6 +1648,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
       if (functionCall) {
         const fc = functionCall.functionCall;
         console.log("Function call:", fc.name, JSON.stringify(fc.args));
+        lastToolName = fc.name;
         
         if (fc.name === "create_appointment") {
           createAppointmentCalled = true;
@@ -1805,6 +1808,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
                 instruction: "A distribuidora informada ainda não está na tabela oficial. Avise educadamente que você vai confirmar o desconto exato com a equipe e siga adiante pedindo a fatura para já adiantar o cadastro.",
               };
           geminiPayload.contents.push(content);
+          lastToolResult = response;
           geminiPayload.contents.push({
             role: "user",
             parts: [{ functionResponse: { name: fc.name, response } }],
@@ -1854,6 +1858,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
         });
 
         console.log("Function result:", JSON.stringify(functionResult));
+        lastToolResult = functionResult;
 
         // Add function call and result to context
         geminiPayload.contents.push(content);
