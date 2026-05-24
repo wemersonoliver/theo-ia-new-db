@@ -4324,6 +4324,10 @@ export type Database = {
         Args: { p_phone: string }
         Returns: number
       }
+      provision_igreen_pipeline: {
+        Args: { _account_id: string }
+        Returns: undefined
+      }
       recalc_admin_deal_stage: {
         Args: { _user_id: string }
         Returns: undefined
