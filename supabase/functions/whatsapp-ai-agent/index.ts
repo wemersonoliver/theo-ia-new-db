@@ -3174,7 +3174,7 @@ async function executeGreenFlowTool(
       if (tag === "enviou documento") {
         const claimed = await claimHandoffNotification(supabase, userId, accountId, phone);
         if (claimed) {
-          const closingMsg = "Perfeito! Recebi tudo certinho. Já passei para o nosso consultor responsável dar sequência no seu cadastro. Em instantes alguém vai te chamar por aqui. 🙌";
+          const closingMsg = "Perfeito! Recebi tudo certinho.\n\nVou iniciar agora as verificações do seu cadastro e em instantes já retorno por aqui com a confirmação. 🙌";
           try { await sendAndSaveAIMessageParts(supabase, userId, phone, closingMsg); } catch (e) { console.error("send closing err:", e); }
           try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff err:", e); }
           try { await applyRouletteOnHandoff(supabase, accountId, userId, phone, contactName); } catch (e) { console.error("roulette err:", e); }
@@ -3316,15 +3316,39 @@ async function executeGreenFlowTool(
         nomes_conferem: match,
         updated_at: new Date().toISOString(),
       }).eq("account_id", accountId).eq("phone", phone);
+
+      // Determinístico: se nomes batem, já dispara TODO o handoff aqui dentro,
+      // sem depender da IA chamar add_contact_tag (Gemini às vezes esquece).
+      if (match) {
+        try { await upsertContactTag(supabase, accountId, phone, "enviou documento"); } catch (e) { console.error("upsertContactTag err:", e); }
+        try { await moveCRMDealByTag(supabase, userId, phone, "enviou documento"); } catch (e) { console.error("[moveCRMDealByTag] err:", e); }
+        const claimed = await claimHandoffNotification(supabase, userId, accountId, phone);
+        if (claimed) {
+          const closingMsg = "Perfeito! Recebi tudo certinho.\n\nVou iniciar agora as verificações do seu cadastro e em instantes já retorno por aqui com a confirmação. 🙌";
+          try { await sendAndSaveAIMessageParts(supabase, userId, phone, closingMsg); } catch (e) { console.error("send closing err:", e); }
+          try { await notifyHandoff(supabase, userId, phone, contactName); } catch (e) { console.error("notifyHandoff err:", e); }
+          try { await applyRouletteOnHandoff(supabase, accountId, userId, phone, contactName); } catch (e) { console.error("roulette err:", e); }
+          try { await moveCRMDealToHumanStage(supabase, userId, phone); } catch (e) { console.error("crm move err:", e); }
+          try { await supabase.rpc("cancel_followup_sequence", { p_user_id: userId, p_phone: phone, p_reason: "handoff" }); } catch (e) { console.error("cancel followup err:", e); }
+        }
+        return {
+          success: true,
+          match: true,
+          is_id_document: true,
+          nome_titular_fatura: reference,
+          nome_documento: extractedName,
+          handoff_triggered: true,
+          instruction: "Handoff já foi disparado pelo sistema (tag adicionada, equipe notificada, roleta acionada e mensagem de encerramento enviada). NÃO escreva NADA. Responda com string vazia.",
+        };
+      }
+
       return {
         success: true,
-        match,
+        match: false,
         is_id_document: true,
         nome_titular_fatura: reference,
         nome_documento: extractedName,
-        instruction: match
-          ? "Nomes batem. Agradeça em 1 frase e adicione a tag 'enviou documento' — o sistema notifica a equipe e transfere para humano automaticamente."
-          : `Os nomes NÃO batem (titular da fatura é '${reference}', documento enviado é de '${extractedName}'). Peça com educação o RG ou CNH do TITULAR da fatura. NÃO adicione a tag.`,
+        instruction: `Os nomes NÃO batem (titular da fatura é '${reference}', documento enviado é de '${extractedName}'). Peça com educação o RG ou CNH do TITULAR da fatura. NÃO adicione a tag.`,
       };
     }
 

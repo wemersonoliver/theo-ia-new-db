@@ -554,9 +554,11 @@ ETAPA 6 — VALIDAR O DOCUMENTO DE IDENTIFICAÇÃO
   gentileza uma foto ou PDF do RG OU CNH do titular da fatura. NÃO
   adicione a tag 'enviou documento'.
 • Se retornar match=true:
-    - Chame add_contact_tag(tag="enviou documento").
-    - O sistema notifica a equipe, transfere para humano e envia a
-      mensagem de encerramento automaticamente. NÃO escreva nada depois.
+    - NÃO escreva NADA. NÃO agradeça. NÃO chame nenhuma outra tool.
+    - O próprio sistema já adicionou a tag, notificou a equipe pela
+      roleta, moveu o card e enviou a mensagem de encerramento dizendo
+      que você vai iniciar as verificações e já retorna. Qualquer texto
+      seu agora vira mensagem duplicada para o cliente.
 • Se retornar match=false:
     - NÃO adicione tag. Peça com educação o documento DO TITULAR da fatura.
 
