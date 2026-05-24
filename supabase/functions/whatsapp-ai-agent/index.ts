@@ -2060,13 +2060,24 @@ async function executeSendProductVideo(
 ): Promise<any> {
   if (!accountId) return { success: false, error: "Account não encontrada para envio do vídeo." };
 
-  // Busca o produto e seu vídeo
-  const { data: product } = await supabase
-    .from("igreen_account_products")
-    .select("id, key, name, video_url, followup_after_video_seconds, followup_after_video_message, enabled")
-    .eq("account_id", accountId)
-    .eq("key", productKey)
-    .maybeSingle();
+  // Em contas Igreen, lemos o vídeo da tabela GLOBAL `igreen_products`.
+  // Para contas que não são Igreen (caso raro), caímos no produto da conta.
+  const { data: accFlagRow } = await supabase
+    .from("accounts").select("is_igreen").eq("id", accountId).maybeSingle();
+  const isIg = !!(accFlagRow as any)?.is_igreen;
+
+  const { data: product } = isIg
+    ? await supabase
+        .from("igreen_products")
+        .select("key, name, video_url, followup_after_video_seconds, followup_after_video_message, enabled")
+        .eq("key", productKey)
+        .maybeSingle()
+    : await supabase
+        .from("igreen_account_products")
+        .select("id, key, name, video_url, followup_after_video_seconds, followup_after_video_message, enabled")
+        .eq("account_id", accountId)
+        .eq("key", productKey)
+        .maybeSingle();
 
   if (!product || product.enabled === false) {
     return { success: false, error: `Produto '${productKey}' não está habilitado nesta conta.` };
