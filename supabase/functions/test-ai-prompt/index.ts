@@ -71,8 +71,13 @@ function getGreenNameStepFirstName(messages: any[] | null | undefined, userMessa
     .reverse()
     .find((m: any) => m?.role === "assistant" && typeof m?.content === "string")?.content || "";
   const lastAssistantNorm = normalizeForFlow(lastAssistant);
-  if (!lastAssistantNorm.includes("como posso te chamar")) return null;
-  if (!lastAssistantNorm.includes("conexao green")) return null;
+  const askedForName =
+    lastAssistantNorm.includes("como posso te chamar") ||
+    lastAssistantNorm.includes("com quem eu tenho o prazer de falar") ||
+    lastAssistantNorm.includes("com quem tenho o prazer de falar") ||
+    lastAssistantNorm.includes("qual o seu nome") ||
+    lastAssistantNorm.includes("qual seu nome");
+  if (!askedForName) return null;
 
   return titleCaseName(raw).split(/\s+/)[0] || null;
 }
