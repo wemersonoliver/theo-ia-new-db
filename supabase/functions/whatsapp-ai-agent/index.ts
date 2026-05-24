@@ -8,7 +8,7 @@ import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { reportApiFailure, reportApiSuccess } from "../_health.ts";
 import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
-import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock } from "../_igreen_flow.ts";
+import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock, buildGreenDistributorStateReply } from "../_igreen_flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1176,6 +1176,41 @@ serve(async (req) => {
       });
     }
 
+    const deterministicLocationReply = buildGreenDistributorStateReply({
+      messages: recentMessages,
+      currentUserMessage: messageContent,
+      fallbackName: contactName,
+      lookupDiscount: (state, distributor) => {
+        const hit = lookupGreenDiscount(state, distributor);
+        return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
+      },
+    });
+    if (deterministicLocationReply) {
+      await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "save_green_lead_field", {
+        field: "estado",
+        value: deterministicLocationReply.state,
+      });
+      await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "save_green_lead_field", {
+        field: "distribuidora",
+        value: deterministicLocationReply.distributor,
+      });
+      await sendAndSaveAIMessageParts(supabase, userId, phone, deterministicLocationReply.reply);
+      await supabase
+        .from("whatsapp_ai_sessions")
+        .upsert({
+          user_id: userId,
+          account_id: accountId,
+          phone,
+          status: "active",
+          messages_without_human: messagesCount + 1,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,phone" });
+
+      return new Response(JSON.stringify({ success: true, response: deterministicLocationReply.reply, deterministic_green_location: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const deterministicGreenSimulation = buildGreenSimulationReply({
       messages: recentMessages,
       currentUserMessage: messageContent,
@@ -1534,7 +1569,9 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
     let toolOnlyTurnHandled = false;
     let functionCallsProcessed = 0;
     let createAppointmentCalled = false;
-    const maxFunctionCalls = 3;
+    const maxFunctionCalls = 8;
+    let lastToolName = "";
+    let lastToolResult: any = null;
 
     let emptyResponseRetries = 0;
     while (functionCallsProcessed < maxFunctionCalls) {
@@ -1611,6 +1648,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
       if (functionCall) {
         const fc = functionCall.functionCall;
         console.log("Function call:", fc.name, JSON.stringify(fc.args));
+        lastToolName = fc.name;
         
         if (fc.name === "create_appointment") {
           createAppointmentCalled = true;
@@ -1619,6 +1657,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
         // Handle send_location separately
         if (fc.name === "send_location") {
           const locationResult = await executeSendLocation(supabase, userId, phone, aiConfig);
+          lastToolResult = locationResult;
           
           geminiPayload.contents.push(content);
           geminiPayload.contents.push({
@@ -1647,6 +1686,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
             productKey,
             introMessage,
           );
+          lastToolResult = videoResult;
           geminiPayload.contents.push(content);
           geminiPayload.contents.push({
             role: "user",
@@ -1730,6 +1770,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           const result = await executeGreenFlowTool(
             supabase, userId, accountId, phone, contactName, fc.name, fc.args || {},
           );
+          lastToolResult = result;
           geminiPayload.contents.push(content);
           geminiPayload.contents.push({
             role: "user",
@@ -1770,6 +1811,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
                 instruction: "A distribuidora informada ainda não está na tabela oficial. Avise educadamente que você vai confirmar o desconto exato com a equipe e siga adiante pedindo a fatura para já adiantar o cadastro.",
               };
           geminiPayload.contents.push(content);
+          lastToolResult = response;
           geminiPayload.contents.push({
             role: "user",
             parts: [{ functionResponse: { name: fc.name, response } }],
@@ -1819,6 +1861,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
         });
 
         console.log("Function result:", JSON.stringify(functionResult));
+        lastToolResult = functionResult;
 
         // Add function call and result to context
         geminiPayload.contents.push(content);
@@ -1900,6 +1943,24 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
     if (!aiReply) {
       if (handoffHandled || toolOnlyTurnHandled) {
         return new Response(JSON.stringify({ handoff: handoffHandled, handled: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (lastToolName === "get_distributor_discount" && lastToolResult) {
+        const recoveryReply = lastToolResult.found
+          ? "Ótimo, atendemos sua região.\n\nQual o valor médio da sua fatura mensal de energia?"
+          : "Obrigada. Vou confirmar o desconto exato dessa distribuidora com a equipe.\n\nEnquanto isso, para adiantar seu cadastro, qual o valor médio da sua fatura mensal de energia?";
+        await sendAndSaveAIMessageParts(supabase, userId, phone, recoveryReply);
+        return new Response(JSON.stringify({ success: true, response: recoveryReply, fallback: "tool_result_recovery" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (lastToolName === "add_contact_tag" && lastToolResult?.tag === "enviou fatura") {
+        const recoveryReply = "Perfeito, recebi sua fatura de energia.\n\nAgora, para finalizar o cadastro, pode me enviar uma foto ou PDF do RG ou CNH do titular da fatura?";
+        await sendAndSaveAIMessageParts(supabase, userId, phone, recoveryReply);
+        return new Response(JSON.stringify({ success: true, response: recoveryReply, fallback: "tool_result_recovery" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }

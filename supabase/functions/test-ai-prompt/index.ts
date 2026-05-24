@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { resolveAccountId } from "../_account.ts";
-import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock } from "../_igreen_flow.ts";
+import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock, buildGreenDistributorStateReply } from "../_igreen_flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -71,8 +71,13 @@ function getGreenNameStepFirstName(messages: any[] | null | undefined, userMessa
     .reverse()
     .find((m: any) => m?.role === "assistant" && typeof m?.content === "string")?.content || "";
   const lastAssistantNorm = normalizeForFlow(lastAssistant);
-  if (!lastAssistantNorm.includes("como posso te chamar")) return null;
-  if (!lastAssistantNorm.includes("conexao green")) return null;
+  const askedForName =
+    lastAssistantNorm.includes("como posso te chamar") ||
+    lastAssistantNorm.includes("com quem eu tenho o prazer de falar") ||
+    lastAssistantNorm.includes("com quem tenho o prazer de falar") ||
+    lastAssistantNorm.includes("qual o seu nome") ||
+    lastAssistantNorm.includes("qual seu nome");
+  if (!askedForName) return null;
 
   return titleCaseName(raw).split(/\s+/)[0] || null;
 }
@@ -384,6 +389,21 @@ serve(async (req) => {
       return { min, max, percent: max, min_bill: row.min_bill_brl ?? null, notes: row.notes ?? null, row };
     }
 
+    const deterministicLocationReply = buildGreenDistributorStateReply({
+      messages: messages || [],
+      currentUserMessage: lastUserMessage,
+      fallbackName: "Simulação",
+      lookupDiscount: (state, distributor) => {
+        const hit = lookupGreenDiscount(state, distributor);
+        return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
+      },
+    });
+    if (deterministicLocationReply) {
+      return new Response(JSON.stringify({ message: deterministicLocationReply.reply }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const deterministicGreenSimulation = buildGreenSimulationReply({
       messages: messages || [],
       currentUserMessage: lastUserMessage,
@@ -403,7 +423,7 @@ serve(async (req) => {
     if (greenNameStepFirstName) {
       const intro = buildGreenIntroMessage(greenNameStepFirstName);
       return new Response(JSON.stringify({
-        message: `${intro}\n\n🎥 [Simulação] Vídeo do produto 'green' enviado. Follow-up automático em 2min ("Conseguiu ver?").`,
+        message: intro,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -532,12 +552,14 @@ serve(async (req) => {
       contents: geminiContents,
       systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
       tools: [schedulingTools],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+      generationConfig: { temperature: 0.7, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
     };
 
     let aiReply = "";
     let functionCallsProcessed = 0;
-    const maxFunctionCalls = 3;
+    const maxFunctionCalls = 8;
+    let lastToolName = "";
+    let lastToolResult: any = null;
 
     while (functionCallsProcessed < maxFunctionCalls) {
       const geminiRes = await fetchGeminiWithRetry(geminiApiKey, geminiPayload);
@@ -557,6 +579,7 @@ serve(async (req) => {
       if (functionCall) {
         const fc = functionCall.functionCall;
         console.log("Test - Function call:", fc.name, fc.args);
+        lastToolName = fc.name;
 
         // No simulador, send_product_video é apenas mockada (não envia vídeo real)
         let functionResult: any;
@@ -646,6 +669,7 @@ serve(async (req) => {
         }
 
         console.log("Test - Function result:", functionResult);
+        lastToolResult = functionResult;
 
         // Add function call and result to context
         geminiPayload.contents.push(content);
@@ -718,7 +742,15 @@ serve(async (req) => {
     }
 
     if (!aiReply) {
-      aiReply = "Desculpe, não consegui processar sua solicitação. Pode tentar novamente?";
+      if (lastToolName === "get_distributor_discount" && lastToolResult) {
+        aiReply = lastToolResult.found
+          ? "Ótimo, atendemos sua região.\n\nQual o valor médio da sua fatura mensal de energia?"
+          : "Obrigada. Vou confirmar o desconto exato dessa distribuidora com a equipe.\n\nEnquanto isso, para adiantar seu cadastro, qual o valor médio da sua fatura mensal de energia?";
+      } else if (lastToolName === "add_contact_tag" && lastToolResult?.tag === "enviou fatura") {
+        aiReply = "Perfeito, recebi sua fatura de energia.\n\nAgora, para finalizar o cadastro, pode me enviar uma foto ou PDF do RG ou CNH do titular da fatura?";
+      } else {
+        aiReply = "Certo, vou continuar te ajudando por aqui.\n\nPode me mandar a próxima informação para eu seguir com o atendimento?";
+      }
     }
 
     return new Response(JSON.stringify({ message: aiReply }), {

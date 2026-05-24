@@ -62,7 +62,12 @@ function extractGreenFirstName(messages: GreenSimulationMessage[], fallbackName?
     const current = String(messages[i]?.ai_content || messages[i]?.content || "");
     const currentNorm = normalizeFlowText(current);
     const isAssistant = messages[i]?.from_me === true || messages[i]?.role === "assistant";
-    if (!isAssistant || !currentNorm.includes("COMO POSSO TE CHAMAR")) continue;
+    const askedForName = currentNorm.includes("COMO POSSO TE CHAMAR")
+      || currentNorm.includes("COM QUEM EU TENHO O PRAZER DE FALAR")
+      || currentNorm.includes("COM QUEM TENHO O PRAZER DE FALAR")
+      || currentNorm.includes("QUAL O SEU NOME")
+      || currentNorm.includes("QUAL SEU NOME");
+    if (!isAssistant || !askedForName) continue;
 
     const nextUser = messages.slice(i + 1).find((m) => {
       const isUser = m?.from_me === false || m?.role === "user";
@@ -231,6 +236,49 @@ export function buildGreenSimulationReply(opts: {
     : `de ${fmt(minPct as number)}% a ${fmt(maxPct as number)}%`;
 
   return `Perfeito, ${namePrefix}para a ${location.distributor}/${location.state} o desconto varia ${rangeLabel} de acordo com o seu consumo. Na sua conta de R$ ${amount}, você pode economizar até R$ ${maxSavings} por mês (quase R$ ${yearlyMax} por ano), ficando perto de R$ ${newBillBest}. Para iniciar seu cadastro, pode me enviar uma foto ou PDF da sua fatura de energia?`;
+}
+
+export function buildGreenDistributorStateReply(opts: {
+  messages: GreenSimulationMessage[];
+  currentUserMessage: string | null | undefined;
+  fallbackName?: string | null;
+  lookupDiscount?: (
+    state: string,
+    distributor: string,
+  ) => { min: number; max: number; min_bill?: number | null } | null;
+}): { reply: string; state: string; distributor: string; foundDiscount: boolean } | null {
+  const current = String(opts.currentUserMessage || "");
+  if (!current.trim() || extractBillAmount(current)) return null;
+
+  const conversationText = [
+    ...opts.messages.map(m => String(m?.ai_content || m?.content || "")),
+    current,
+  ].join("\n");
+  const location = extractDistributorState(conversationText);
+  if (!location) return null;
+
+  const assistantAskedLocation = opts.messages.some((m) => {
+    const isAssistant = m?.from_me === true || m?.role === "assistant";
+    const norm = normalizeFlowText(m?.ai_content || m?.content || "");
+    return isAssistant
+      && norm.includes("DISTRIBUIDORA")
+      && (norm.includes("ESTADO") || norm.includes("MORA"));
+  });
+  if (!assistantAskedLocation) return null;
+
+  const firstName = extractGreenFirstName(opts.messages, opts.fallbackName);
+  const nameSuffix = firstName ? `, ${firstName}` : "";
+  const hit = opts.lookupDiscount?.(location.state, location.distributor) || null;
+  const reply = hit
+    ? `Ótimo${nameSuffix}, atendemos sua região.\n\nQual o valor médio da sua fatura mensal de energia?`
+    : `Obrigada${nameSuffix}. Vou confirmar o desconto exato dessa distribuidora com a equipe.\n\nEnquanto isso, para adiantar seu cadastro, qual o valor médio da sua fatura mensal de energia?`;
+
+  return {
+    reply,
+    state: location.state,
+    distributor: location.distributor,
+    foundDiscount: !!hit,
+  };
 }
 
 /**
