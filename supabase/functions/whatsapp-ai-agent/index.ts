@@ -739,6 +739,35 @@ serve(async (req) => {
       });
     }
 
+    // ====== Igreen GLOBAL override ======
+    // Para qualquer conta marcada como Igreen, sobrescrevemos prompt /
+    // descrição / nicho / nome do agente com o template oficial Igreen
+    // (igreen_default_ai_config). Isso garante que TODOS os revendedores
+    // Igreen usem exatamente o mesmo prompt.
+    let isIgreenAccountEarly = false;
+    try {
+      if (accountId) {
+        const { data: accFlag } = await supabase
+          .from("accounts").select("is_igreen").eq("id", accountId).maybeSingle();
+        isIgreenAccountEarly = !!(accFlag as any)?.is_igreen;
+      }
+      if (isIgreenAccountEarly) {
+        const { data: igreenTmpl } = await supabase
+          .from("igreen_default_ai_config")
+          .select("custom_prompt, business_description, business_niche, agent_name")
+          .eq("singleton", true)
+          .maybeSingle();
+        if (igreenTmpl?.custom_prompt) {
+          aiConfig.custom_prompt        = igreenTmpl.custom_prompt;
+          aiConfig.business_description = igreenTmpl.business_description;
+          aiConfig.business_niche       = igreenTmpl.business_niche;
+          aiConfig.agent_name           = igreenTmpl.agent_name || aiConfig.agent_name || "Assistente Virtual";
+        }
+      }
+    } catch (e) {
+      console.error("[igreen-global-prompt] erro:", e);
+    }
+
     // Check business hours
     const now = new Date();
     const currentHour = now.getHours();
@@ -939,41 +968,61 @@ serve(async (req) => {
     // Cada trecho é prefixado com o produto correspondente (quando houver),
     // para que a IA saiba a qual produto a informação pertence.
     let documents: any[] = [];
-    let documentsQuery = supabase
-      .from("knowledge_base_documents")
-      .select("content_text, igreen_product_id, file_name")
-      .eq("status", "ready");
-    documentsQuery = accountId
-      ? documentsQuery.eq("account_id", accountId)
-      : documentsQuery.eq("user_id", userId);
-    const { data: scopedDocuments, error: documentsError } = await documentsQuery;
-    if (documentsError) console.error("Error loading knowledge docs by account/user:", documentsError);
-    documents = scopedDocuments || [];
-
-    if (documents.length === 0 && accountId) {
-      const { data: fallbackDocuments, error: fallbackDocumentsError } = await supabase
+    if (isIgreenAccountEarly) {
+      // Conta Igreen: usa SOMENTE a base de conhecimento global Igreen.
+      const { data: globalDocs, error: gErr } = await supabase
+        .from("knowledge_base_documents")
+        .select("content_text, igreen_product_id, igreen_global_product_key, file_name")
+        .eq("status", "ready")
+        .eq("is_igreen_global", true);
+      if (gErr) console.error("Error loading igreen global KB:", gErr);
+      documents = globalDocs || [];
+    } else {
+      let documentsQuery = supabase
         .from("knowledge_base_documents")
         .select("content_text, igreen_product_id, file_name")
-        .eq("user_id", userId)
         .eq("status", "ready");
-      if (fallbackDocumentsError) console.error("Error loading fallback knowledge docs by user:", fallbackDocumentsError);
-      documents = fallbackDocuments || [];
+      documentsQuery = accountId
+        ? documentsQuery.eq("account_id", accountId)
+        : documentsQuery.eq("user_id", userId);
+      const { data: scopedDocuments, error: documentsError } = await documentsQuery;
+      if (documentsError) console.error("Error loading knowledge docs by account/user:", documentsError);
+      documents = scopedDocuments || [];
+
+      if (documents.length === 0 && accountId) {
+        const { data: fallbackDocuments, error: fallbackDocumentsError } = await supabase
+          .from("knowledge_base_documents")
+          .select("content_text, igreen_product_id, file_name")
+          .eq("user_id", userId)
+          .eq("status", "ready");
+        if (fallbackDocumentsError) console.error("Error loading fallback knowledge docs by user:", fallbackDocumentsError);
+        documents = fallbackDocuments || [];
+      }
     }
 
-    // Mapa de produtos do account (id -> nome) para rotular os trechos
+    // Mapa de produtos (id -> nome) para rotular trechos da KB
     const productMap = new Map<string, string>();
     try {
-      const { data: accProducts } = await supabase
-        .from("igreen_account_products")
-        .select("id, name, enabled")
-        .eq("account_id", accountId);
-      (accProducts || []).forEach((p: any) => productMap.set(p.id, p.name));
+      if (isIgreenAccountEarly) {
+        // Em contas Igreen, rotulamos pelos produtos globais Igreen.
+        const { data: globalProds } = await supabase
+          .from("igreen_products")
+          .select("key, name, enabled");
+        (globalProds || []).forEach((p: any) => productMap.set(p.key, p.name));
+      } else {
+        const { data: accProducts } = await supabase
+          .from("igreen_account_products")
+          .select("id, name, enabled")
+          .eq("account_id", accountId);
+        (accProducts || []).forEach((p: any) => productMap.set(p.id, p.name));
+      }
     } catch (_) { /* opcional */ }
 
     const docTexts = (documents || [])
       .filter((d: any) => typeof d.content_text === "string" && d.content_text.length > 0)
       .map((d: any) => {
-        const productName = d.igreen_product_id ? productMap.get(d.igreen_product_id) : null;
+        const lookupKey = (d as any).igreen_global_product_key || d.igreen_product_id;
+        const productName = lookupKey ? productMap.get(lookupKey) : null;
         const header = productName
           ? `[PRODUTO: ${productName}]`
           : `[GERAL]`;
@@ -1205,22 +1254,15 @@ serve(async (req) => {
     let igreenProductsBlock = "";
     try {
       if (accountId) {
-        // PROTEÇÃO CRÍTICA: só injeta o contexto Igreen (Jhulia, Conexão Green,
-        // Conexão Telecom, Conexão Expansão, descontos por distribuidora etc.)
-        // em contas que são explicitamente revendedoras Igreen. Sem essa
-        // verificação o prompt vazava entre negócios (ex.: clínica recebia
-        // prompt de iGreen Energy).
-        const { data: accRow } = await supabase
-          .from("accounts")
-          .select("is_igreen")
-          .eq("id", accountId)
-          .maybeSingle();
-        const isIgreenAccount = !!(accRow as any)?.is_igreen;
+        // PROTEÇÃO CRÍTICA: só injeta o contexto Igreen em contas marcadas
+        // como revendedoras Igreen. Quando é Igreen, lemos da tabela GLOBAL
+        // igreen_products — todos os revendedores usam exatamente a mesma
+        // lista de produtos (Conexão Green/Telecom/Expansão).
+        const isIgreenAccount = isIgreenAccountEarly;
         const { data: igreenProds } = isIgreenAccount
           ? await supabase
-              .from("igreen_account_products")
-              .select("id, key, name, description, enabled, video_url")
-              .eq("account_id", accountId)
+              .from("igreen_products")
+              .select("key, name, description, enabled, video_url")
               .order("position", { ascending: true })
           : { data: [] as any[] };
         if (isIgreenAccount && igreenProds && igreenProds.length > 0) {
@@ -1228,7 +1270,7 @@ serve(async (req) => {
             agentName: aiConfig.agent_name || "seu assistente",
             greeting: brt.greeting,
             products: (igreenProds as any[]).map(p => ({
-              id: p.id,
+              id: p.key,
               key: p.key,
               name: p.name,
               description: p.description,
@@ -2018,13 +2060,24 @@ async function executeSendProductVideo(
 ): Promise<any> {
   if (!accountId) return { success: false, error: "Account não encontrada para envio do vídeo." };
 
-  // Busca o produto e seu vídeo
-  const { data: product } = await supabase
-    .from("igreen_account_products")
-    .select("id, key, name, video_url, followup_after_video_seconds, followup_after_video_message, enabled")
-    .eq("account_id", accountId)
-    .eq("key", productKey)
-    .maybeSingle();
+  // Em contas Igreen, lemos o vídeo da tabela GLOBAL `igreen_products`.
+  // Para contas que não são Igreen (caso raro), caímos no produto da conta.
+  const { data: accFlagRow } = await supabase
+    .from("accounts").select("is_igreen").eq("id", accountId).maybeSingle();
+  const isIg = !!(accFlagRow as any)?.is_igreen;
+
+  const { data: product } = isIg
+    ? await supabase
+        .from("igreen_products")
+        .select("key, name, video_url, followup_after_video_seconds, followup_after_video_message, enabled")
+        .eq("key", productKey)
+        .maybeSingle()
+    : await supabase
+        .from("igreen_account_products")
+        .select("id, key, name, video_url, followup_after_video_seconds, followup_after_video_message, enabled")
+        .eq("account_id", accountId)
+        .eq("key", productKey)
+        .maybeSingle();
 
   if (!product || product.enabled === false) {
     return { success: false, error: `Produto '${productKey}' não está habilitado nesta conta.` };

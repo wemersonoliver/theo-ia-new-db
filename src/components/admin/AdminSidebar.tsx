@@ -24,6 +24,7 @@ import {
   Package,
   Workflow,
   Megaphone,
+  Leaf,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -42,6 +43,7 @@ const adminNavItems = [
   { to: "/admin/voice-costs", icon: DollarSign, label: "Custos de Voz IA" },
   { to: "/admin/credits", icon: Users, label: "Créditos Usuários" },
   { to: "/admin/plans", icon: Package, label: "Planos" },
+  { to: "/admin/igreen-template", icon: Leaf, label: "Template Igreen" },
   { to: "/admin/trial-followup", icon: Megaphone, label: "Recuperação Trial" },
   { to: "/admin/support", icon: Ticket, label: "Suporte" },
   { to: "/admin/support-calendar", icon: Calendar, label: "Agenda de Suporte" },
