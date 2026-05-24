@@ -1254,22 +1254,15 @@ serve(async (req) => {
     let igreenProductsBlock = "";
     try {
       if (accountId) {
-        // PROTEÇÃO CRÍTICA: só injeta o contexto Igreen (Jhulia, Conexão Green,
-        // Conexão Telecom, Conexão Expansão, descontos por distribuidora etc.)
-        // em contas que são explicitamente revendedoras Igreen. Sem essa
-        // verificação o prompt vazava entre negócios (ex.: clínica recebia
-        // prompt de iGreen Energy).
-        const { data: accRow } = await supabase
-          .from("accounts")
-          .select("is_igreen")
-          .eq("id", accountId)
-          .maybeSingle();
-        const isIgreenAccount = !!(accRow as any)?.is_igreen;
+        // PROTEÇÃO CRÍTICA: só injeta o contexto Igreen em contas marcadas
+        // como revendedoras Igreen. Quando é Igreen, lemos da tabela GLOBAL
+        // igreen_products — todos os revendedores usam exatamente a mesma
+        // lista de produtos (Conexão Green/Telecom/Expansão).
+        const isIgreenAccount = isIgreenAccountEarly;
         const { data: igreenProds } = isIgreenAccount
           ? await supabase
-              .from("igreen_account_products")
-              .select("id, key, name, description, enabled, video_url")
-              .eq("account_id", accountId)
+              .from("igreen_products")
+              .select("key, name, description, enabled, video_url")
               .order("position", { ascending: true })
           : { data: [] as any[] };
         if (isIgreenAccount && igreenProds && igreenProds.length > 0) {
@@ -1277,7 +1270,7 @@ serve(async (req) => {
             agentName: aiConfig.agent_name || "seu assistente",
             greeting: brt.greeting,
             products: (igreenProds as any[]).map(p => ({
-              id: p.id,
+              id: p.key,
               key: p.key,
               name: p.name,
               description: p.description,
