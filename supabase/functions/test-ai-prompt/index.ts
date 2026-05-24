@@ -547,12 +547,12 @@ serve(async (req) => {
       contents: geminiContents,
       systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
       tools: [schedulingTools],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+      generationConfig: { temperature: 0.7, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
     };
 
     let aiReply = "";
     let functionCallsProcessed = 0;
-    const maxFunctionCalls = 3;
+    const maxFunctionCalls = 8;
 
     while (functionCallsProcessed < maxFunctionCalls) {
       const geminiRes = await fetchGeminiWithRetry(geminiApiKey, geminiPayload);
