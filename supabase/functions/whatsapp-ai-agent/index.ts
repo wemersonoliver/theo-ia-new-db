@@ -8,7 +8,7 @@ import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { reportApiFailure, reportApiSuccess } from "../_health.ts";
 import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
-import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock } from "../_igreen_flow.ts";
+import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock, buildGreenDistributorStateReply } from "../_igreen_flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
