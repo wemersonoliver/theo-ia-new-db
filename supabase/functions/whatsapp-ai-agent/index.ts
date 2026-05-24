@@ -1657,6 +1657,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
         // Handle send_location separately
         if (fc.name === "send_location") {
           const locationResult = await executeSendLocation(supabase, userId, phone, aiConfig);
+          lastToolResult = locationResult;
           
           geminiPayload.contents.push(content);
           geminiPayload.contents.push({
@@ -1685,6 +1686,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
             productKey,
             introMessage,
           );
+          lastToolResult = videoResult;
           geminiPayload.contents.push(content);
           geminiPayload.contents.push({
             role: "user",
@@ -1768,6 +1770,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           const result = await executeGreenFlowTool(
             supabase, userId, accountId, phone, contactName, fc.name, fc.args || {},
           );
+          lastToolResult = result;
           geminiPayload.contents.push(content);
           geminiPayload.contents.push({
             role: "user",
