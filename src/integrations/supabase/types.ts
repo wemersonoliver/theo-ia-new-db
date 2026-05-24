@@ -2273,28 +2273,37 @@ export type Database = {
           created_at: string
           description: string | null
           enabled: boolean
+          followup_after_video_message: string | null
+          followup_after_video_seconds: number | null
           key: string
           name: string
           position: number
           updated_at: string
+          video_url: string | null
         }
         Insert: {
           created_at?: string
           description?: string | null
           enabled?: boolean
+          followup_after_video_message?: string | null
+          followup_after_video_seconds?: number | null
           key: string
           name: string
           position?: number
           updated_at?: string
+          video_url?: string | null
         }
         Update: {
           created_at?: string
           description?: string | null
           enabled?: boolean
+          followup_after_video_message?: string | null
+          followup_after_video_seconds?: number | null
           key?: string
           name?: string
           position?: number
           updated_at?: string
+          video_url?: string | null
         }
         Relationships: []
       }
@@ -2609,7 +2618,9 @@ export type Database = {
           file_path: string
           file_size: number | null
           id: string
+          igreen_global_product_key: string | null
           igreen_product_id: string | null
+          is_igreen_global: boolean
           status: string | null
           user_id: string
         }
@@ -2621,7 +2632,9 @@ export type Database = {
           file_path: string
           file_size?: number | null
           id?: string
+          igreen_global_product_key?: string | null
           igreen_product_id?: string | null
+          is_igreen_global?: boolean
           status?: string | null
           user_id: string
         }
@@ -2633,7 +2646,9 @@ export type Database = {
           file_path?: string
           file_size?: number | null
           id?: string
+          igreen_global_product_key?: string | null
           igreen_product_id?: string | null
+          is_igreen_global?: boolean
           status?: string | null
           user_id?: string
         }
