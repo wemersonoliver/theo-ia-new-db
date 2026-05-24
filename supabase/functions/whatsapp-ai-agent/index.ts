@@ -1947,6 +1947,24 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
         });
       }
 
+      if (lastToolName === "get_distributor_discount" && lastToolResult) {
+        const recoveryReply = lastToolResult.found
+          ? "Ótimo, atendemos sua região.\n\nQual o valor médio da sua fatura mensal de energia?"
+          : "Obrigada. Vou confirmar o desconto exato dessa distribuidora com a equipe.\n\nEnquanto isso, para adiantar seu cadastro, qual o valor médio da sua fatura mensal de energia?";
+        await sendAndSaveAIMessageParts(supabase, userId, phone, recoveryReply);
+        return new Response(JSON.stringify({ success: true, response: recoveryReply, fallback: "tool_result_recovery" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (lastToolName === "add_contact_tag" && lastToolResult?.tag === "enviou fatura") {
+        const recoveryReply = "Perfeito, recebi sua fatura de energia.\n\nAgora, para finalizar o cadastro, pode me enviar uma foto ou PDF do RG ou CNH do titular da fatura?";
+        await sendAndSaveAIMessageParts(supabase, userId, phone, recoveryReply);
+        return new Response(JSON.stringify({ success: true, response: recoveryReply, fallback: "tool_result_recovery" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       console.error("No AI reply generated");
       // Fallback: se o cliente claramente pediu um humano, faz o handoff manualmente
       // mesmo que o Gemini tenha falhado em chamar a tool.
