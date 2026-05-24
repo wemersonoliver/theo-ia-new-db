@@ -739,6 +739,35 @@ serve(async (req) => {
       });
     }
 
+    // ====== Igreen GLOBAL override ======
+    // Para qualquer conta marcada como Igreen, sobrescrevemos prompt /
+    // descrição / nicho / nome do agente com o template oficial Igreen
+    // (igreen_default_ai_config). Isso garante que TODOS os revendedores
+    // Igreen usem exatamente o mesmo prompt.
+    let isIgreenAccountEarly = false;
+    try {
+      if (accountId) {
+        const { data: accFlag } = await supabase
+          .from("accounts").select("is_igreen").eq("id", accountId).maybeSingle();
+        isIgreenAccountEarly = !!(accFlag as any)?.is_igreen;
+      }
+      if (isIgreenAccountEarly) {
+        const { data: igreenTmpl } = await supabase
+          .from("igreen_default_ai_config")
+          .select("custom_prompt, business_description, business_niche, agent_name")
+          .eq("singleton", true)
+          .maybeSingle();
+        if (igreenTmpl?.custom_prompt) {
+          aiConfig.custom_prompt        = igreenTmpl.custom_prompt;
+          aiConfig.business_description = igreenTmpl.business_description;
+          aiConfig.business_niche       = igreenTmpl.business_niche;
+          aiConfig.agent_name           = igreenTmpl.agent_name || aiConfig.agent_name || "Assistente Virtual";
+        }
+      }
+    } catch (e) {
+      console.error("[igreen-global-prompt] erro:", e);
+    }
+
     // Check business hours
     const now = new Date();
     const currentHour = now.getHours();
