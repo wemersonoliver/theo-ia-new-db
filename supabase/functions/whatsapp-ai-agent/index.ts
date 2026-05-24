@@ -1569,7 +1569,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
     let toolOnlyTurnHandled = false;
     let functionCallsProcessed = 0;
     let createAppointmentCalled = false;
-    const maxFunctionCalls = 3;
+    const maxFunctionCalls = 8;
 
     let emptyResponseRetries = 0;
     while (functionCallsProcessed < maxFunctionCalls) {
