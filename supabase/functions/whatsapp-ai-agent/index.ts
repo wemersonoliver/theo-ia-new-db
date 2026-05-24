@@ -1176,6 +1176,41 @@ serve(async (req) => {
       });
     }
 
+    const deterministicLocationReply = buildGreenDistributorStateReply({
+      messages: recentMessages,
+      currentUserMessage: messageContent,
+      fallbackName: contactName,
+      lookupDiscount: (state, distributor) => {
+        const hit = lookupGreenDiscount(state, distributor);
+        return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
+      },
+    });
+    if (deterministicLocationReply) {
+      await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "save_green_lead_field", {
+        field: "estado",
+        value: deterministicLocationReply.state,
+      });
+      await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "save_green_lead_field", {
+        field: "distribuidora",
+        value: deterministicLocationReply.distributor,
+      });
+      await sendAndSaveAIMessageParts(supabase, userId, phone, deterministicLocationReply.reply);
+      await supabase
+        .from("whatsapp_ai_sessions")
+        .upsert({
+          user_id: userId,
+          account_id: accountId,
+          phone,
+          status: "active",
+          messages_without_human: messagesCount + 1,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,phone" });
+
+      return new Response(JSON.stringify({ success: true, response: deterministicLocationReply.reply, deterministic_green_location: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const deterministicGreenSimulation = buildGreenSimulationReply({
       messages: recentMessages,
       currentUserMessage: messageContent,
