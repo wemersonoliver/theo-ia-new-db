@@ -514,6 +514,27 @@ function parseGreenInvoiceFromOcr(text: string | null | undefined): null | {
   };
 }
 
+function isLikelyGreenInvoiceMediaOcr(text: string | null | undefined): boolean {
+  const raw = String(text || "");
+  if (!raw.trim()) return false;
+  const norm = normalizeTextForIntent(raw);
+  const isMediaAnalysis = /\[(documento|imagem|image|foto)\s*-\s*(analise|análise)\]/i.test(raw)
+    || norm.includes("conteudo extraido");
+  if (!isMediaAnalysis) return false;
+  const signals = [
+    /\bkwh\b/i,
+    /energia eletrica|energia elétrica/i,
+    /nota fiscal de energia/i,
+    /documento auxiliar da nota fiscal/i,
+    /unidade consumidora/i,
+    /leitura atual|leitura anterior/i,
+    /consumo faturado/i,
+    /total a pagar|valor a pagar/i,
+    /\bcelesc\b|\bcemig\b|\bcopel\b|\blight\b|\bcpfl\b|\bedp\b|\benel\b|\bequatorial\b|\benergisa\b|\bneoenergia\b/i,
+  ].filter((re) => re.test(raw)).length;
+  return signals >= 2;
+}
+
 function resolveGreenVideoUrl(videoUrl: string | null | undefined): string {
   const raw = String(videoUrl || "").trim();
   if (raw.includes("/igreen/conexao-green-reportagem.mp4")) {
