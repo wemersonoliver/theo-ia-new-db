@@ -1,278 +1,163 @@
+# Fase 3 — Green Specialist Minimalista + Behavior Engine + Guardrails + Failsafe
 
-# Igreen V2 — Plano final consolidado (arquitetura + 15 diretrizes operacionais)
+## Objetivo
 
-Diretrizes #14 e #15 incorporadas ao contrato permanente. Nada na arquitetura muda — elas formalizam regras que o `state-engine` e as `automations/` já precisariam respeitar, e viram **checklist obrigatório de PR**.
+Plugar o primeiro specialist real (Green) no pipeline da Fase 2, mantendo as 15 diretrizes + os 8 ajustes finais. Escopo deliberadamente pequeno: descoberta → vídeo → qualificação simples → solicitar fatura. Nada de objeção complexa, negociação ou recuperação avançada.
 
-SaaS genérico (`whatsapp-ai-agent`) permanece intocado. Tudo só roda para `accounts.is_igreen = true`.
+## Contratos novos
 
----
-
-## Contrato operacional permanente (15 diretrizes)
-
-| # | Regra | Garantia em código |
-|---|---|---|
-| 1 | LLM não controla fluxo | `state-engine` + `transitions` + `tool-router` |
-| 2 | Regras críticas em código, não em prompt | engines dedicadas (documentos, holder, thresholds, decay, timeout...) |
-| 3 | Prompts pequenos e modulares | `core/system-prompt` + `supervisor/prompt` + `agents/<x>/prompt` |
-| 4 | Toda tool idempotente | `tool-execution-guard` com lock `(account, phone, tool, key)` |
-| 5 | Observabilidade obrigatória | `igreen_traces` + `igreen_state_events` com priority |
-| 6 | Evitar overengineering | sem IA emocional, sem reranking, sem multi-provider ativo |
-| 7 | Implementar por camadas | fases sequenciais; N só após N-1 estável |
-| 8 | Fast Path prioritário | `fast-path/decide` antes do supervisor |
-| 9 | State é fonte da verdade | `igreen_conversation_state` + snapshots; histórico LLM é auxílio |
-| 10 | Failsafe obrigatório | `failsafe/handoff-fallback` + `neutral-reply` |
-| 11 | RAG controlado | tags + top-K + `token-budget.trim` |
-| 12 | Primeiro funcionar, depois sofisticar | fases 1–4 = core |
-| 13 | SaaS é sagrado | roteamento por `is_igreen`; zero import cruzado |
-| **14** | **Nenhuma tool altera estado diretamente** | tools retornam `{success, events, suggested_state_patch}`; **único writer = `state-engine/update.ts`** |
-| **15** | **Toda automação idempotente** | toda automação valida estado + checa execução prévia + usa idempotency key |
-
----
-
-## Diretriz #14 — Estado tem um único ponto de escrita
-
-**Regra:** nenhuma tool, automação, worker, retry, edge function ou webhook pode escrever em `igreen_conversation_state`. Apenas `state-engine/update.ts`.
-
-### Contrato de retorno de toda tool
-
-```json
-{
-  "success": true,
-  "events": [
-    {"type": "invoice_validated", "priority": "high", "payload": {"holder": "..."}}
-  ],
-  "suggested_state_patch": {
-    "fatura_valida": true,
-    "etapa_funil": "fatura_validada"
-  },
-  "error": null
-}
-```
-
-### Pipeline obrigatório
-
-```text
-tool.execute()
-  → retorna {success, events, suggested_state_patch}
-  → state-engine/update.applyPatch(suggested_state_patch)
-        ├─ valida shape (Zod)
-        ├─ valida transição contra transitions whitelist
-        ├─ aplica guardrails (anti-loop, conflitos)
-        ├─ registra trace + events (com priority)
-        ├─ snapshots.maybeCreate(event)
-        └─ persiste em igreen_conversation_state
-  → retry seguro: aplicar o mesmo patch 2x é no-op
-```
-
-### Garantias técnicas
-
-- `igreen_conversation_state` recebe `UPDATE` **somente** dentro de `state-engine/update.ts`. Convenção reforçada por:
-  - lint rule / grep no CI: nenhum outro arquivo pode conter `from("igreen_conversation_state").update(` ou `.upsert(`.
-  - revisão de PR (checklist).
-- Patches inválidos (transição não permitida, campo desconhecido, conflito de versão) → descartados, evento `invalid_state_patch` (HIGH), state intocado.
-- Automações que precisam refletir mudança de estado também passam pelo `state-engine/update.ts` — nunca `update` direto.
-
-### Por quê
-
-Em produção, com retries, webhooks duplicados, cron, edges paralelas e múltiplas tools, ter N pontos escrevendo em `state` gera corridas e inconsistência silenciosa. Um único writer + transitions whitelist + event sourcing = estado auditável e reconstruível.
-
----
-
-## Diretriz #15 — Toda automação é idempotente
-
-**Regra:** executar a mesma automação 2x (retry, webhook duplicado, race, reprocessamento) não pode produzir efeito colateral duplicado.
-
-### Automações cobertas
-
-- `handoff` (transferência para humano)
-- `tagging` (aplicar tag de contato/CRM)
-- `roleta` (atribuição)
-- `follow-up` (mensagens agendadas)
-- `notificações` (system whatsapp / push)
-- `crm-stage-update` (mover deal)
-- `scenario-enrollment` (matricular em cenário)
-- `disparos automáticos` (vídeo, áudio, mídia)
-
-### Padrão técnico — idempotency key + state check
-
-Tabela auxiliar (já prevista): **`igreen_tool_locks`** estendida para automações via mesmo mecanismo, ou nova `igreen_automation_executions` se for mais limpo (decisão na Fase 1).
-
+### `AgentResult` (saída obrigatória de todo specialist)
 ```ts
-// automations/handoff.ts (exemplo de contrato)
-export async function executeHandoff(ctx, reason) {
-  const idempotencyKey = `handoff:${ctx.account_id}:${ctx.phone}:${reason}`;
-
-  // 1. checa execução prévia
-  if (await alreadyExecuted(idempotencyKey)) {
-    return { skipped: true, reason: "already_executed" };
-  }
-
-  // 2. checa estado atual (não fazer handoff se já está em handoff)
-  if (ctx.state.handoff_ativo) {
-    return { skipped: true, reason: "state_already_handoff" };
-  }
-
-  // 3. lock + executa
-  const lock = await acquireLock(idempotencyKey, ttl: "10min");
-  if (!lock) return { skipped: true, reason: "lock_conflict" };
-
-  try {
-    await doHandoff(ctx);
-    await recordExecution(idempotencyKey, { result: "ok" });
-    return {
-      success: true,
-      events: [{ type: "handoff_executed", priority: "critical" }],
-      suggested_state_patch: { handoff_ativo: true }
-    };
-  } finally {
-    await releaseLock(lock);
-  }
+{
+  messages: string[];           // chunks já preparados (sem typing/delay)
+  events: IgreenEvent[];
+  tool_calls: { name: string; args: unknown }[];
+  suggested_state_patch: Partial<IgreenConversationState>;
 }
 ```
+Proibido `return string`. Mesmo um "olá" passa pelo contrato.
 
-### Idempotency keys por automação
+### Timeout budget (hard)
+- supervisor: 8s (já existe)
+- specialist: 15s
+- behavior-engine: 2s
+- tool individual: configurável (default 5s)
+- total edge ≤ 25s
 
-| Automação | Chave |
-|---|---|
-| handoff | `handoff:{account}:{phone}:{reason}` |
-| tag | `tag:{account}:{phone}:{tag_slug}` |
-| roleta | `roulette:{account}:{phone}:{round_id}` |
-| follow-up | `followup:{tracking_id}:{step}` |
-| notificação | `notify:{target_user}:{event_id}` |
-| crm-stage | `crm_stage:{deal_id}:{stage_id}` |
-| enrollment | `enroll:{account}:{phone}:{scenario_id}` |
-| envio mídia | `media:{account}:{phone}:{media_id}` |
+Excedeu → `failsafe` + evento `*_timeout` priority `high`.
 
-Todas validam:
-1. Estado atual permite a ação?
-2. Já executou antes? (`igreen_automation_executions`)
-3. Lock disponível? (TTL definido por automação)
-4. Resultado é gravado para próximas checagens
-
-### Por quê
-
-Webhooks duplicados, retries de cron, race entre edges e timeouts são certezas em produção. Sem idempotência: leads viram duas vezes na roleta, recebem o mesmo vídeo 2x, deal pula dois estágios, lista de tags incha. Com idempotência: o sistema sobrevive a qualquer reexecução.
-
----
-
-## Checklist obrigatório de PR (todas as fases)
-
-Toda PR Igreen V2 só passa se:
-
-- [ ] D1 — fluxo decidido por engine, não por LLM
-- [ ] D2 — regra crítica em código, não em prompt
-- [ ] D3 — prompt pequeno e com responsabilidade única
-- [ ] D4 — tool com `tool-execution-guard` + idempotente
-- [ ] D5 — eventos/traces emitidos com priority/level
-- [ ] D6 — sem abstração nova sem caso de uso real
-- [ ] D7 — depende só de fases já estáveis
-- [ ] D8 — fast-path considerado
-- [ ] D9 — leitura/recovery via state, não via histórico
-- [ ] D10 — failsafe coberto em erro/timeout
-- [ ] D11 — RAG limitado por tag/budget
-- [ ] D12 — não bloqueia o core para entregar sofisticação
-- [ ] D13 — zero import/efeito no SaaS genérico
-- [ ] **D14 — nenhum `update`/`upsert` em `igreen_conversation_state` fora de `state-engine/update.ts`**
-- [ ] **D15 — automação tem idempotency key + state check + lock**
-
----
-
-## Estrutura de pastas (ajuste de #14 e #15)
+## Estrutura nova
 
 ```text
-supabase/functions/_igreen_v2/
-├── state-engine/
-│   ├── update.ts                # ÚNICO writer de igreen_conversation_state [D14]
-│   ├── transitions.ts
-│   ├── snapshots.ts
-│   └── validators.ts            # Zod schemas dos state_patch
-├── tool-router/
-│   ├── registry.ts              # toda tool obrigatoriamente retorna ToolResult [D14]
-│   └── types.ts                 # ToolResult = {success,events,suggested_state_patch,error}
-├── automations/
-│   ├── _idempotency.ts          # alreadyExecuted/recordExecution [D15]
-│   ├── handoff.ts
-│   ├── followup.ts
-│   ├── tagging.ts
-│   ├── crm-stage.ts
-│   ├── notification.ts
-│   ├── roulette.ts
-│   ├── enrollment.ts
-│   └── media-dispatch.ts
-└── (demais módulos já descritos)
+_igreen_v2/
+├── specialist-router/
+│   └── resolve.ts            # state.specialist → AgentRunner (não chama o agent)
+├── agents/
+│   ├── _types.ts             # AgentContext, AgentResult, AgentRunner
+│   ├── _run.ts               # wrapper: timeout 15s + trace + failsafe on throw
+│   ├── green/
+│   │   ├── run.ts            # specialist Green minimalista
+│   │   ├── prompt.ts         # prompt curto e modular (D3)
+│   │   └── stages.ts         # heurísticas determinísticas por etapa_funil
+│   └── failsafe/
+│       └── run.ts            # resposta neutra + handoff + evento critical
+├── behavior-engine/
+│   ├── prepare.ts            # chunking 220ch, dedup, ordering — NÃO envia
+│   └── humanize.ts            # (stub) typing/delay calculados; transport usa depois
+├── guardrails/
+│   ├── validate.ts           # roda DEPOIS do specialist, ANTES do behavior
+│   └── rules/
+│       ├── max-length.ts
+│       ├── max-chunks.ts
+│       ├── semantic-repeat.ts        # hash simples de últimas N msgs
+│       ├── tool-stage-compat.ts      # tool x etapa_funil
+│       └── text-loop.ts              # já existia conceitualmente
+└── transport/
+    └── send.ts               # único ponto que fala com WhatsApp (stub Fase 3)
 ```
 
----
+Tools novas (mínimas para Green):
+- `send_discovery_video` — idempotency: `video:{produto}:{phone}` (não envia 2x)
+- `request_invoice` — idempotency: `request_invoice:{phone}:{etapa}`
+- `set_stage` — wrapper sobre transição de `etapa_funil`
 
-## Banco de dados (ajuste pequeno)
-
-Adicionada na Fase 1: **`igreen_automation_executions`**
-```text
-id, account_id, phone, automation, idempotency_key UNIQUE,
-result jsonb, executed_at, expires_at
-```
-- `UNIQUE(idempotency_key)` garante D15 no nível do banco.
-- `pg_cron` limpa executions expirados (retenção: 30d).
-
-`igreen_tool_locks` continua exclusivo para tools (D4).
-`igreen_automation_executions` cobre histórico de automações (D15).
-
----
-
-## Fluxo final (com #14 e #15)
+## Pipeline final da edge
 
 ```text
-Mensagem → whatsapp-igreen-agent-v2
-  ├─ load state                                    [D9]
-  ├─ fast-path? → talvez bypass                    [D8]
-  ├─ supervisor (se necessário)                    [D1]
-  ├─ specialist → {messages, events, tool_calls}
-  ├─ tool.execute() → {success, events, suggested_state_patch}   [D4, D14]
-  ├─ state-engine.update(suggested_state_patch)    [D14]
-  │     ├─ valida shape + transition + guardrails
-  │     ├─ persiste em igreen_conversation_state   (ÚNICO writer)
-  │     ├─ snapshots.maybeCreate
-  │     └─ events com priority + trace
-  ├─ automations.run(...) com idempotency key       [D15]
-  │     ├─ alreadyExecuted? → skip
-  │     ├─ state permite? → senão skip
-  │     ├─ lock TTL → executa → record
-  │     └─ retorna {events, suggested_state_patch} → volta ao state-engine
-  ├─ humanization envia
-  └─ trace.flush                                    [D5]
+load state
+  → fast-path.decide          (bypass = retorna)
+  → supervisor.decide         (8s, fallback failsafe)
+  → state-engine.applyPatch   (specialist + intent)
+  → specialist-router.resolve → AgentRunner
+  → agents/_run               (15s hard timeout)
+      └── green/run OU failsafe/run
+          ↳ retorna AgentResult
+  → para cada tool_call: tool-router.execute (D14 escreve estado)
+  → guardrails.validate(messages, state, tool_calls)
+      ↳ falha → degrada para failsafe ou trunca
+  → state-engine.applyPatch(suggested_state_patch + events)
+  → behavior-engine.prepare(messages)   (2s)
+  → transport.send                       (stub: só loga; integração real depois)
+  → trace.flush
 ```
 
----
+## Green Agent — escopo Fase 3 (minimalista)
 
-## Fases (inalteradas, com refinamentos)
+Cobre apenas:
+1. **Descoberta** — confirma nome + interesse, define `produto = green`
+2. **Envio de vídeo** — chama `send_discovery_video` 1x (idempotente)
+3. **Qualificação simples** — pergunta cidade/consumo médio
+4. **Solicitar fatura** — chama `request_invoice` e move `etapa_funil → fatura_enviada` quando o lead disser que vai mandar
 
-| Fase | Entrega | Diretrizes-foco |
-|---|---|---|
-| **1. Fundação** | 9 tabelas (inclui `igreen_automation_executions`), pg_cron retenção, esqueleto `_igreen_v2`, edge roteada por `is_igreen`, `state-engine/update.ts` esqueleto como **único writer**, `automations/_idempotency.ts` | D5, D13, **D14, D15** |
-| 2 | State + Supervisor + Fast Path + tool-router com `ToolResult` obrigatório | D1, D2, D4, D8, **D14** |
-| 3 | Green agent + behavior engine + guardrails + failsafe | D3, D6, D10 |
-| 4 | Document Validator + holder match + automations/handoff **idempotentes** + confidence thresholds | D2, D4, **D14, D15** |
-| 5 | RAG contextual + fallback | D11 |
-| 6 | Timeout + follow-ups **idempotentes** + snapshots estratégicos | D2, D9, **D15** |
-| 7 | Lead Scoring + decay + trace debug + painel mínimo | D2, D5 |
-| 8 | Telecom + Expansão + 2º vision provider opcional + cleanup | D13 |
+NÃO inclui: objeção, negociação emocional, recuperação, follow-up inteligente, validação de fatura (Fase 4), holder match (Fase 4).
 
----
+Heurísticas determinísticas em `stages.ts` decidem qual sub-passo rodar com base em `etapa_funil` + última mensagem. LLM só gera o texto curto dentro de um molde — nunca decide próximo passo (D1).
 
-## Riscos cobertos por #14 e #15
+## Failsafe specialist
 
-- Race entre 2 webhooks Evolution chegando ao mesmo tempo → D14 (state writer único) + D15 (automação idempotente)
-- Retry de cron de follow-up → D15 não reenvia mensagem
-- LLM "alucinando" tool → D14 patch é validado, transition rejeitada
-- Reprocessamento manual de uma conversa → D14 + D15 garantem que nada duplica
-- Tag aplicada 2x no contato → D15 via idempotency key
-- Deal pulando estágio errado por concorrência → D14 (estado canônico) + D15 (crm-stage idempotente)
+`agents/failsafe/run.ts` retorna:
+```ts
+{
+  messages: ["Vou te transferir para um atendente humano, só um momento."],
+  events: [{ type: "failsafe_triggered", priority: "critical", source: "specialist" }],
+  tool_calls: [],
+  suggested_state_patch: { handoff_ativo: true, specialist: "failsafe" }
+}
+```
+Acionado em: supervisor `failsafe`, specialist timeout, specialist throw, guardrail catastrófico.
 
----
+## Guardrails (validação pós-specialist)
 
-Aprove para iniciar **Fase 1 (Fundação)**:
-- 9 migrations (`igreen_conversation_state`, `igreen_state_snapshots`, `igreen_state_events`, `igreen_traces`, `igreen_document_validations`, `igreen_timeouts`, `igreen_tool_locks`, `igreen_observability_config`, **`igreen_automation_executions`**)
-- pg_cron de retenção (traces/events/locks/executions)
-- Esqueleto `_igreen_v2/` com `state-engine/update.ts` como único writer e `automations/_idempotency.ts`
-- Edge `whatsapp-igreen-agent-v2` com roteamento estrito por `accounts.is_igreen`
-- Sem alteração no `whatsapp-ai-agent` genérico
+Roda sobre `AgentResult` + `state`:
+- `max-length` — chunk > 1000 chars → trunca + evento `guardrail_truncated`
+- `max-chunks` — > 5 mensagens → mantém 5 + evento
+- `semantic-repeat` — hash das últimas 3 mensagens enviadas; repetição → degrade
+- `tool-stage-compat` — ex: `request_invoice` só em `qualificacao` ou `fatura_enviada`
+- `text-loop` — mesma string consecutiva
+
+Falha grave → degrade para `failsafe`. Falha leve → trunca/filtra + emite evento `medium`.
+
+## Traces obrigatórios (Fase 3)
+
+Adicionar steps: `specialist_selected`, `specialist_started`, `specialist_completed` (com `specialist_latency_ms`), `tools_requested` (count + names), `tools_executed` (count + names), `behavior_chunks_generated` (count), `guardrails_applied` (list), `agent_timeout`, `failsafe_triggered`.
+
+## Edge update
+
+`whatsapp-igreen-agent-v2/index.ts` ganha a parte final do pipeline acima. Mantém modo `tool:` para debug isolado. Adiciona modo `agent:` para testar specialist isolado sem supervisor.
+
+## Validação
+
+1. `curl_edge_functions` ping → `{ok:true,phase:3}`
+2. Mensagem "oi, quero economizar na luz" → supervisor:`green` → specialist Green retorna AgentResult com 1-2 chunks + tool `send_discovery_video`
+3. Repetir mesma mensagem → `send_discovery_video` retorna `skipped:lock_conflict` ou `state_unchanged` (não envia 2x)
+4. Forçar specialist throw (mock) → failsafe roda, `handoff_ativo=true`, evento `critical`
+5. Forçar 5 chunks com texto idêntico → guardrail `semantic-repeat` trunca + evento
+6. Conta não-igreen → continua 403
+
+## Fora de escopo (fases seguintes)
+
+- Specialists `telecom` / `expansao` / `qualifier` reais (Fase 3.5)
+- Document validator + holder match (Fase 4)
+- Automações com idempotency keys reais — roleta, tag, matrícula (Fase 4)
+- RAG controlado, token-budget (Fase 5)
+- Lead scoring, humanização real com typing/delay no transport (Fase 6)
+- Timeout-engine / follow-ups (Fase 7)
+- Mudanças em `whatsapp-ai-agent` genérico — **proibido** (D13)
+
+## Arquivos
+
+Criar:
+- `_igreen_v2/specialist-router/resolve.ts`
+- `_igreen_v2/agents/_types.ts`, `_run.ts`
+- `_igreen_v2/agents/green/{run,prompt,stages}.ts`
+- `_igreen_v2/agents/failsafe/run.ts`
+- `_igreen_v2/behavior-engine/{prepare,humanize}.ts`
+- `_igreen_v2/guardrails/validate.ts` + `rules/*.ts`
+- `_igreen_v2/transport/send.ts` (stub)
+- `_igreen_v2/tools/{send-discovery-video,request-invoice,set-stage}.ts`
+
+Editar:
+- `_igreen_v2/tools/_register-all.ts`
+- `whatsapp-igreen-agent-v2/index.ts`
+
+Sem migrations. Sem mudanças no SaaS genérico.
