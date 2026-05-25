@@ -11,12 +11,18 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { isIgreenAccount } from "../_igreen_v2/routing/is-igreen.ts";
-import { applyPatch, ensureState } from "../_igreen_v2/state-engine/update.ts";
+import { applyPatch, ensureState, loadState } from "../_igreen_v2/state-engine/update.ts";
 import { trace, emitEvents } from "../_igreen_v2/observability/trace.ts";
 import { decideFastPath } from "../_igreen_v2/fast-path/decide.ts";
 import { decideSupervisor } from "../_igreen_v2/supervisor/decide.ts";
 import { registerAllTools } from "../_igreen_v2/tools/_register-all.ts";
 import { executeTool } from "../_igreen_v2/tool-router/execute.ts";
+import { resolveSpecialist } from "../_igreen_v2/specialist-router/resolve.ts";
+import { runAgent } from "../_igreen_v2/agents/_run.ts";
+import { runFailsafe } from "../_igreen_v2/agents/failsafe/run.ts";
+import { validateAgentResult } from "../_igreen_v2/guardrails/validate.ts";
+import { prepareMessages } from "../_igreen_v2/behavior-engine/prepare.ts";
+import { send as transportSend } from "../_igreen_v2/transport/send.ts";
 
 // Boot: registra todas as tools (D4 — duplicado quebra o boot).
 registerAllTools();
@@ -34,6 +40,8 @@ interface IncomingPayload {
   /** Quando presente, roda apenas a tool informada (debug/teste do tool-router). */
   tool?: string;
   tool_args?: unknown;
+  /** Quando presente, roda specialist isolado sem supervisor (debug). */
+  agent?: string;
 }
 
 serve(async (req) => {
@@ -47,7 +55,7 @@ serve(async (req) => {
   }
 
   if (body.ping) {
-    return json({ ok: true, service: "whatsapp-igreen-agent-v2", phase: 2 });
+    return json({ ok: true, service: "whatsapp-igreen-agent-v2", phase: 3 });
   }
 
   const account_id = (body.account_id ?? "").trim();
@@ -78,7 +86,19 @@ serve(async (req) => {
       tool_name: body.tool,
       args: body.tool_args ?? {},
     });
-    return json({ ok: true, phase: 2, mode: "tool", tool: body.tool, result });
+    return json({ ok: true, phase: 3, mode: "tool", tool: body.tool, result });
+  }
+
+  // Modo debug: roda specialist isolado (sem supervisor).
+  if (body.agent) {
+    const state = await ensureState(account_id, phone);
+    const resolved = resolveSpecialist(body.agent);
+    const agentResult = await runAgent({
+      specialist: resolved.specialist,
+      runner: resolved.runner,
+      ctx: { account_id, phone, state, message: body.message ?? "" },
+    });
+    return json({ ok: true, phase: 3, mode: "agent", agent: resolved.specialist, agentResult });
   }
 
   const t0 = Date.now();
@@ -92,10 +112,8 @@ serve(async (req) => {
     payload: { has_message: !!message },
   });
 
-  // D9 — carrega state mínimo
-  const state = await ensureState(account_id, phone);
-
   // D8 — FAST PATH antes de qualquer carga pesada (sem histórico, sem LLM)
+  const state = await ensureState(account_id, phone);
   const fp = decideFastPath({ state, message });
   if (fp.bypass) {
     await emitEvents(account_id, phone, [
@@ -105,7 +123,7 @@ serve(async (req) => {
     await trace({ account_id, phone, step: "agent.fast_path.bypass",
       level: "minimal", duration_ms: Date.now() - t0,
       payload: { action: fp.action, reason: fp.reason } });
-    return json({ ok: true, phase: 2, routed: true, fast_path: fp });
+    return json({ ok: true, phase: 3, routed: true, fast_path: fp });
   }
 
   // Marca recebimento (passa pelo state-engine = único writer, D14)
@@ -120,7 +138,7 @@ serve(async (req) => {
   const sup = await decideSupervisor({ account_id, phone, message, state });
 
   // D14 — única escrita em state via state-engine
-  await applyPatch({
+  const afterSupervisor = await applyPatch({
     account_id, phone,
     patch: { intent: sup.intent, specialist: sup.specialist },
     events: [{
@@ -130,22 +148,96 @@ serve(async (req) => {
       payload: { intent: sup.intent, specialist: sup.specialist, confidence: sup.confidence, decision_source: sup.source },
     }],
     source: "supervisor",
+  }) ?? state;
+
+  // Specialist Router + Agent
+  const resolved = resolveSpecialist(sup.specialist);
+  await trace({
+    account_id, phone, step: "specialist_selected", level: "standard",
+    payload: { specialist: resolved.specialist, reason: resolved.reason },
   });
+
+  let agentResult = await runAgent({
+    specialist: resolved.specialist,
+    runner: resolved.runner,
+    ctx: { account_id, phone, state: afterSupervisor, message, intent: sup.intent },
+  });
+
+  // Guardrails
+  const recent = await loadRecentSent(account_id, phone);
+  let guard = validateAgentResult({ result: agentResult, state: afterSupervisor, recentMessages: recent });
+  if (guard.events.length) await emitEvents(account_id, phone, guard.events);
+  await trace({
+    account_id, phone, step: "guardrails_applied", level: "standard",
+    payload: { applied: guard.applied, degrade: guard.degrade_to_failsafe },
+  });
+  if (guard.degrade_to_failsafe) {
+    agentResult = await runFailsafe({ account_id, phone, state: afterSupervisor, message });
+    guard = validateAgentResult({ result: agentResult, state: afterSupervisor });
+  } else {
+    agentResult = guard.result;
+  }
+
+  // Tool calls solicitadas pelo specialist (state-engine é o único writer)
+  const toolResults: unknown[] = [];
+  await trace({
+    account_id, phone, step: "tools_requested", level: "standard",
+    payload: { count: agentResult.tool_calls.length, tools: agentResult.tool_calls.map((t) => t.name) },
+  });
+  for (const tc of agentResult.tool_calls) {
+    const currentState = (await loadState(account_id, phone)) ?? afterSupervisor;
+    const r = await executeTool({
+      ctx: { account_id, phone, state: currentState, message },
+      tool_name: tc.name,
+      args: tc.args,
+    });
+    toolResults.push({ name: tc.name, ...r });
+  }
+  await trace({
+    account_id, phone, step: "tools_executed", level: "standard",
+    payload: { count: toolResults.length },
+  });
+
+  // Patch sugerido pelo specialist (não-tool) via state-engine
+  if (Object.keys(agentResult.suggested_state_patch).length || agentResult.events.length) {
+    await applyPatch({
+      account_id, phone,
+      patch: agentResult.suggested_state_patch,
+      events: agentResult.events,
+      source: `specialist:${resolved.specialist}`,
+    });
+  }
+
+  // Behavior engine → transport
+  const prepared = prepareMessages(agentResult.messages);
+  await trace({
+    account_id, phone, step: "behavior_chunks_generated", level: "standard",
+    payload: { count: prepared.length },
+  });
+  const sent = await transportSend({ account_id, phone, messages: prepared });
 
   await trace({
     account_id, phone, step: "agent.completed",
     level: "minimal", duration_ms: Date.now() - t0,
-    payload: { phase: 2, specialist: sup.specialist, intent: sup.intent },
+    payload: { phase: 3, specialist: resolved.specialist, intent: sup.intent, chunks: prepared.length },
   });
 
   return json({
-    ok: true, phase: 2, routed: true,
+    ok: true, phase: 3, routed: true,
     fast_path: { bypass: false },
     supervisor: sup,
-    note: "Fase 2 (state + supervisor + fast-path + tool-router). Specialists reais na Fase 3.",
-    tools_endpoint_hint: "Para testar o tool-router: POST { tool: 'set_product', tool_args: { produto: 'green' } }",
+    specialist: resolved.specialist,
+    messages: prepared.map((p) => p.text),
+    tool_results: toolResults,
+    transport: sent,
+    note: "Fase 3 (Green minimalista + behavior + guardrails + failsafe).",
   });
 });
+
+async function loadRecentSent(_account_id: string, _phone: string): Promise<string[]> {
+  // Stub Fase 3: histórico real virá quando o transport for plugado.
+  return [];
+}
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
