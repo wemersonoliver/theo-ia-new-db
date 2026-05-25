@@ -2161,30 +2161,48 @@ async function executeSendProductVideo(
 ): Promise<any> {
   if (!accountId) return { success: false, error: "Account não encontrada para envio do vídeo." };
 
-  // Em contas Igreen, lemos o vídeo da tabela GLOBAL `igreen_products`.
-  // Para contas que não são Igreen (caso raro), caímos no produto da conta.
-  const { data: accFlagRow } = await supabase
-    .from("accounts").select("is_igreen").eq("id", accountId).maybeSingle();
-  const isIg = !!(accFlagRow as any)?.is_igreen;
+  // Sempre priorizamos a configuração do produto da CONTA (igreen_account_products),
+  // que é onde o usuário cadastra o vídeo institucional pelo painel. Como fallback,
+  // tentamos a tabela GLOBAL `igreen_products` (vídeo padrão da iGreen).
+  const { data: accountProduct } = await supabase
+    .from("igreen_account_products")
+    .select("id, key, name, video_url, followup_after_video_seconds, followup_after_video_message, enabled")
+    .eq("account_id", accountId)
+    .eq("key", productKey)
+    .maybeSingle();
 
-  const { data: product } = isIg
-    ? await supabase
-        .from("igreen_products")
-        .select("key, name, video_url, followup_after_video_seconds, followup_after_video_message, enabled")
-        .eq("key", productKey)
-        .maybeSingle()
-    : await supabase
-        .from("igreen_account_products")
-        .select("id, key, name, video_url, followup_after_video_seconds, followup_after_video_message, enabled")
-        .eq("account_id", accountId)
-        .eq("key", productKey)
-        .maybeSingle();
+  const { data: globalProduct } = await supabase
+    .from("igreen_products")
+    .select("key, name, video_url, followup_after_video_seconds, followup_after_video_message, enabled")
+    .eq("key", productKey)
+    .maybeSingle();
 
-  if (!product || product.enabled === false) {
+  // Mescla: dados base do produto da conta (se houver), com fallback no global.
+  const product: any = {
+    id: (accountProduct as any)?.id ?? null,
+    key: (accountProduct as any)?.key || (globalProduct as any)?.key || productKey,
+    name: (accountProduct as any)?.name || (globalProduct as any)?.name || productKey,
+    video_url: (accountProduct as any)?.video_url || (globalProduct as any)?.video_url || null,
+    followup_after_video_seconds:
+      (accountProduct as any)?.followup_after_video_seconds ??
+      (globalProduct as any)?.followup_after_video_seconds ?? 120,
+    followup_after_video_message:
+      (accountProduct as any)?.followup_after_video_message ||
+      (globalProduct as any)?.followup_after_video_message || null,
+    enabled:
+      (accountProduct as any)?.enabled !== false &&
+      (globalProduct as any)?.enabled !== false,
+  };
+
+  if (!accountProduct && !globalProduct) {
+    return { success: false, error: `Produto '${productKey}' não encontrado.` };
+  }
+  if (product.enabled === false) {
     return { success: false, error: `Produto '${productKey}' não está habilitado nesta conta.` };
   }
   const videoUrl = resolveGreenVideoUrl(product.video_url);
   if (!videoUrl) {
+    console.error(`[send_product_video] sem vídeo para account=${accountId} key=${productKey}`);
     return { success: false, error: `Produto '${product.name}' não possui vídeo cadastrado. Siga o fluxo sem envio de vídeo.` };
   }
 
