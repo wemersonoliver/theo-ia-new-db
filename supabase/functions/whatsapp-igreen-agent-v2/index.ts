@@ -23,6 +23,9 @@ import { runFailsafe } from "../_igreen_v2/agents/failsafe/run.ts";
 import { validateAgentResult } from "../_igreen_v2/guardrails/validate.ts";
 import { prepareMessages } from "../_igreen_v2/behavior-engine/prepare.ts";
 import { send as transportSend } from "../_igreen_v2/transport/send.ts";
+import { newCorrelationId } from "../_igreen_v2/observability/correlation.ts";
+import { dispatchAutomations } from "../_igreen_v2/automation-router/dispatch.ts";
+import { CURRENT_VALIDATION_VERSION } from "../_igreen_v2/document-rules-engine/version.ts";
 
 // Boot: registra todas as tools (D4 — duplicado quebra o boot).
 registerAllTools();
@@ -42,6 +45,10 @@ interface IncomingPayload {
   tool_args?: unknown;
   /** Quando presente, roda specialist isolado sem supervisor (debug). */
   agent?: string;
+  /** Mídia anexada (Fase 4) — usada para validate_green_invoice. */
+  media?: { url: string; mime_type: string; byte_size: number };
+  /** Correlation id externo (debug); senão é gerado. */
+  correlation_id?: string;
 }
 
 serve(async (req) => {
@@ -55,11 +62,13 @@ serve(async (req) => {
   }
 
   if (body.ping) {
-    return json({ ok: true, service: "whatsapp-igreen-agent-v2", phase: 3 });
+    return json({ ok: true, service: "whatsapp-igreen-agent-v2", phase: 4, validation_version: CURRENT_VALIDATION_VERSION });
   }
 
   const account_id = (body.account_id ?? "").trim();
   const phone = (body.phone ?? "").trim();
+  const correlation_id = body.correlation_id || newCorrelationId();
+  const media = body.media ?? null;
 
   if (!account_id || !phone) {
     return json({ error: "account_id and phone are required" }, 400);
@@ -82,11 +91,11 @@ serve(async (req) => {
   if (body.tool) {
     const state = await ensureState(account_id, phone);
     const result = await executeTool({
-      ctx: { account_id, phone, state, message: body.message },
+      ctx: { account_id, phone, state, message: body.message, correlation_id, media },
       tool_name: body.tool,
       args: body.tool_args ?? {},
     });
-    return json({ ok: true, phase: 3, mode: "tool", tool: body.tool, result });
+    return json({ ok: true, phase: 4, mode: "tool", correlation_id, tool: body.tool, result });
   }
 
   // Modo debug: roda specialist isolado (sem supervisor).
@@ -96,9 +105,9 @@ serve(async (req) => {
     const agentResult = await runAgent({
       specialist: resolved.specialist,
       runner: resolved.runner,
-      ctx: { account_id, phone, state, message: body.message ?? "" },
+      ctx: { account_id, phone, state, message: body.message ?? "", correlation_id, media },
     });
-    return json({ ok: true, phase: 3, mode: "agent", agent: resolved.specialist, agentResult });
+    return json({ ok: true, phase: 4, mode: "agent", correlation_id, agent: resolved.specialist, agentResult });
   }
 
   const t0 = Date.now();
@@ -109,7 +118,8 @@ serve(async (req) => {
     phone,
     step: "agent.received",
     level: "minimal",
-    payload: { has_message: !!message },
+    payload: { has_message: !!message, has_media: !!media },
+    correlation_id,
   });
 
   // D8 — FAST PATH antes de qualquer carga pesada (sem histórico, sem LLM)
@@ -119,19 +129,41 @@ serve(async (req) => {
     await emitEvents(account_id, phone, [
       { type: "fast_path_bypass", priority: fp.action === "handoff_now" ? "high" : "low",
         source: "fast_path", payload: { action: fp.action, reason: fp.reason } },
-    ]);
+    ], correlation_id);
+    // Soft-confirm "sim" → aplica patch de aprovação direto (D14).
+    if (fp.action === "soft_confirm_yes") {
+      await applyPatch({
+        account_id, phone,
+        patch: { etapa_funil: "fatura_validada", document_status: "validated", fatura_valida: true } as any,
+        events: [{ type: "invoice_approved", priority: "high", source: "fast_path", payload: { via: "soft_confirm_yes" } }],
+        source: "fast_path:soft_confirm_yes",
+        correlation_id,
+      });
+      const refreshed = (await loadState(account_id, phone)) ?? state;
+      await dispatchAutomations({
+        account_id, phone, correlation_id, state: refreshed,
+        events: [{ type: "invoice_approved", priority: "high", source: "fast_path" }],
+      });
+    } else if (fp.action === "handoff_now") {
+      await dispatchAutomations({
+        account_id, phone, correlation_id, state,
+        events: [{ type: "handoff_requested", priority: "critical", source: "fast_path",
+          payload: { reason: fp.reason } }],
+      });
+    }
     await trace({ account_id, phone, step: "agent.fast_path.bypass",
       level: "minimal", duration_ms: Date.now() - t0,
-      payload: { action: fp.action, reason: fp.reason } });
-    return json({ ok: true, phase: 3, routed: true, fast_path: fp });
+      payload: { action: fp.action, reason: fp.reason }, correlation_id });
+    return json({ ok: true, phase: 4, correlation_id, routed: true, fast_path: fp });
   }
 
   // Marca recebimento (passa pelo state-engine = único writer, D14)
   await applyPatch({
     account_id, phone,
     events: [{ type: "message_received", priority: "low", source: "supervisor",
-      payload: { message_preview: message.slice(0, 80) } }],
+      payload: { message_preview: message.slice(0, 80), has_media: !!media } }],
     source: "agent",
+    correlation_id,
   });
 
   // D1 — supervisor classifica intent + specialist (timeout 8s; fallback failsafe)
@@ -148,6 +180,7 @@ serve(async (req) => {
       payload: { intent: sup.intent, specialist: sup.specialist, confidence: sup.confidence, decision_source: sup.source },
     }],
     source: "supervisor",
+    correlation_id,
   }) ?? state;
 
   // Specialist Router + Agent
@@ -155,39 +188,41 @@ serve(async (req) => {
   await trace({
     account_id, phone, step: "specialist_selected", level: "standard",
     payload: { specialist: resolved.specialist, reason: resolved.reason },
+    correlation_id,
   });
 
   let agentResult = await runAgent({
     specialist: resolved.specialist,
     runner: resolved.runner,
-    ctx: { account_id, phone, state: afterSupervisor, message, intent: sup.intent },
+    ctx: { account_id, phone, state: afterSupervisor, message, intent: sup.intent, correlation_id, media },
   });
 
   // Guardrails
   const recent = await loadRecentSent(account_id, phone);
   let guard = validateAgentResult({ result: agentResult, state: afterSupervisor, recentMessages: recent });
-  if (guard.events.length) await emitEvents(account_id, phone, guard.events);
+  if (guard.events.length) await emitEvents(account_id, phone, guard.events, correlation_id);
   await trace({
     account_id, phone, step: "guardrails_applied", level: "standard",
-    payload: { applied: guard.applied, degrade: guard.degrade_to_failsafe },
+    payload: { applied: guard.applied, degrade: guard.degrade_to_failsafe }, correlation_id,
   });
   if (guard.degrade_to_failsafe) {
-    agentResult = await runFailsafe({ account_id, phone, state: afterSupervisor, message });
+    agentResult = await runFailsafe({ account_id, phone, state: afterSupervisor, message, correlation_id });
     guard = validateAgentResult({ result: agentResult, state: afterSupervisor });
   } else {
     agentResult = guard.result;
   }
 
   // Tool calls solicitadas pelo specialist (state-engine é o único writer)
-  const toolResults: unknown[] = [];
+  const toolResults: any[] = [];
   await trace({
     account_id, phone, step: "tools_requested", level: "standard",
     payload: { count: agentResult.tool_calls.length, tools: agentResult.tool_calls.map((t) => t.name) },
+    correlation_id,
   });
   for (const tc of agentResult.tool_calls) {
     const currentState = (await loadState(account_id, phone)) ?? afterSupervisor;
     const r = await executeTool({
-      ctx: { account_id, phone, state: currentState, message },
+      ctx: { account_id, phone, state: currentState, message, correlation_id, media },
       tool_name: tc.name,
       args: tc.args,
     });
@@ -195,7 +230,7 @@ serve(async (req) => {
   }
   await trace({
     account_id, phone, step: "tools_executed", level: "standard",
-    payload: { count: toolResults.length },
+    payload: { count: toolResults.length }, correlation_id,
   });
 
   // Patch sugerido pelo specialist (não-tool) via state-engine
@@ -205,32 +240,45 @@ serve(async (req) => {
       patch: agentResult.suggested_state_patch,
       events: agentResult.events,
       source: `specialist:${resolved.specialist}`,
+      correlation_id,
     });
   }
+
+  // Automation router — agrega events do specialist + tools e dispara automações.
+  const allEvents = [
+    ...agentResult.events,
+    ...toolResults.flatMap((r) => (r.events ?? []) as any[]),
+  ];
+  const refreshed = (await loadState(account_id, phone)) ?? afterSupervisor;
+  const automations = await dispatchAutomations({
+    account_id, phone, correlation_id, state: refreshed, events: allEvents,
+  });
 
   // Behavior engine → transport
   const prepared = prepareMessages(agentResult.messages);
   await trace({
     account_id, phone, step: "behavior_chunks_generated", level: "standard",
-    payload: { count: prepared.length },
+    payload: { count: prepared.length }, correlation_id,
   });
   const sent = await transportSend({ account_id, phone, messages: prepared });
 
   await trace({
     account_id, phone, step: "agent.completed",
     level: "minimal", duration_ms: Date.now() - t0,
-    payload: { phase: 3, specialist: resolved.specialist, intent: sup.intent, chunks: prepared.length },
+    payload: { phase: 4, specialist: resolved.specialist, intent: sup.intent, chunks: prepared.length },
+    correlation_id,
   });
 
   return json({
-    ok: true, phase: 3, routed: true,
+    ok: true, phase: 4, correlation_id, routed: true,
     fast_path: { bypass: false },
     supervisor: sup,
     specialist: resolved.specialist,
     messages: prepared.map((p) => p.text),
     tool_results: toolResults,
+    automations,
     transport: sent,
-    note: "Fase 3 (Green minimalista + behavior + guardrails + failsafe).",
+    note: "Fase 4 (Document Validator + Holder Match + Thresholds + Automations).",
   });
 });
 
