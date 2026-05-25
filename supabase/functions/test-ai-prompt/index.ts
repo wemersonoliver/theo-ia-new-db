@@ -552,10 +552,37 @@ serve(async (req) => {
 
     if (userMessage || safeAttachments.length > 0) {
       const parts: any[] = [];
-      if (userMessage) parts.push({ text: userMessage });
+
+      // Anexa as mídias PRIMEIRO (igual whatsapp-ai-agent: inline_data + texto)
       for (const att of safeAttachments) {
-        parts.push({ inlineData: { mimeType: att.mimeType, data: att.data } });
+        parts.push({ inline_data: { mime_type: att.mimeType, data: att.data } });
       }
+
+      // Quando o cliente envia anexo, injetamos o MESMO marcador que a produção
+      // usa após OCR ("[documento - análise]") + um pedido explícito de análise
+      // e classificação. Sem isso, o Gemini "vê" o PDF mas segue o script linear
+      // (ex.: perguntando o valor da fatura) em vez de chamar
+      // validate_green_invoice / validate_green_identity.
+      if (safeAttachments.length > 0) {
+        const attachmentNames = safeAttachments
+          .map((a) => a.name || a.mimeType)
+          .filter(Boolean)
+          .join(", ");
+        const userText = (userMessage || "").trim();
+        const analysisHeader =
+          `[documento - análise] Cliente enviou ${safeAttachments.length === 1 ? "1 arquivo" : safeAttachments.length + " arquivos"}` +
+          (attachmentNames ? ` (${attachmentNames})` : "") +
+          ". Analise o conteúdo: classifique o tipo (fatura de energia, RG/CNH, outro), " +
+          "extraia nome do titular, distribuidora, UF e valor quando aplicável, e " +
+          "chame a tool correta (validate_green_invoice para fatura de energia, " +
+          "validate_green_identity para documento de identificação) ANTES de responder ao cliente.";
+        parts.push({
+          text: userText ? `${analysisHeader}\n\nMensagem do cliente: ${userText}` : analysisHeader,
+        });
+      } else if (userMessage) {
+        parts.push({ text: userMessage });
+      }
+
       geminiContents.push({ role: "user", parts });
     }
 
