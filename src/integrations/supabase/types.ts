@@ -2054,6 +2054,118 @@ export type Database = {
           },
         ]
       }
+      igreen_automation_executions: {
+        Row: {
+          account_id: string
+          automation: string
+          executed_at: string
+          expires_at: string
+          id: string
+          idempotency_key: string
+          phone: string | null
+          result: Json
+        }
+        Insert: {
+          account_id: string
+          automation: string
+          executed_at?: string
+          expires_at?: string
+          id?: string
+          idempotency_key: string
+          phone?: string | null
+          result?: Json
+        }
+        Update: {
+          account_id?: string
+          automation?: string
+          executed_at?: string
+          expires_at?: string
+          id?: string
+          idempotency_key?: string
+          phone?: string | null
+          result?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_automation_executions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      igreen_conversation_state: {
+        Row: {
+          account_id: string
+          created_at: string
+          etapa_funil: string | null
+          extras: Json
+          fatura_valida: boolean | null
+          handoff_ativo: boolean
+          holder_match: boolean | null
+          id: string
+          identidade_validada: boolean | null
+          intent: string | null
+          last_event_at: string
+          lead_score: number
+          lead_temperature: string | null
+          phone: string
+          produto: string | null
+          specialist: string | null
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          etapa_funil?: string | null
+          extras?: Json
+          fatura_valida?: boolean | null
+          handoff_ativo?: boolean
+          holder_match?: boolean | null
+          id?: string
+          identidade_validada?: boolean | null
+          intent?: string | null
+          last_event_at?: string
+          lead_score?: number
+          lead_temperature?: string | null
+          phone: string
+          produto?: string | null
+          specialist?: string | null
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          etapa_funil?: string | null
+          extras?: Json
+          fatura_valida?: boolean | null
+          handoff_ativo?: boolean
+          holder_match?: boolean | null
+          id?: string
+          identidade_validada?: boolean | null
+          intent?: string | null
+          last_event_at?: string
+          lead_score?: number
+          lead_temperature?: string | null
+          phone?: string
+          produto?: string | null
+          specialist?: string | null
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_conversation_state_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       igreen_default_ai_config: {
         Row: {
           agent_name: string
@@ -2144,6 +2256,62 @@ export type Database = {
         }
         Relationships: []
       }
+      igreen_document_validations: {
+        Row: {
+          account_id: string
+          classification: string | null
+          confidence: number | null
+          created_at: string
+          extracted: Json
+          id: string
+          kind: string
+          media_url: string | null
+          phone: string
+          provider: string
+          reject_reason: string | null
+          threshold_decision: string | null
+          valid: boolean | null
+        }
+        Insert: {
+          account_id: string
+          classification?: string | null
+          confidence?: number | null
+          created_at?: string
+          extracted?: Json
+          id?: string
+          kind: string
+          media_url?: string | null
+          phone: string
+          provider?: string
+          reject_reason?: string | null
+          threshold_decision?: string | null
+          valid?: boolean | null
+        }
+        Update: {
+          account_id?: string
+          classification?: string | null
+          confidence?: number | null
+          created_at?: string
+          extracted?: Json
+          id?: string
+          kind?: string
+          media_url?: string | null
+          phone?: string
+          provider?: string
+          reject_reason?: string | null
+          threshold_decision?: string | null
+          valid?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_document_validations_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       igreen_lead_data: {
         Row: {
           account_id: string
@@ -2210,6 +2378,35 @@ export type Database = {
             foreignKeyName: "igreen_lead_data_account_id_fkey"
             columns: ["account_id"]
             isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      igreen_observability_config: {
+        Row: {
+          account_id: string
+          retention_overrides: Json
+          trace_level: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          retention_overrides?: Json
+          trace_level?: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          retention_overrides?: Json
+          trace_level?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_observability_config_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: true
             referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
@@ -2606,6 +2803,208 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "igreen_account_products"
             referencedColumns: ["account_id", "key"]
+          },
+        ]
+      }
+      igreen_state_events: {
+        Row: {
+          account_id: string
+          created_at: string
+          event_priority: string
+          event_type: string
+          id: string
+          payload: Json
+          phone: string
+          source: string | null
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          event_priority?: string
+          event_type: string
+          id?: string
+          payload?: Json
+          phone: string
+          source?: string | null
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          event_priority?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          phone?: string
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_state_events_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      igreen_state_snapshots: {
+        Row: {
+          account_id: string
+          created_at: string
+          id: string
+          phone: string
+          reason: string
+          state: Json
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          id?: string
+          phone: string
+          reason: string
+          state: Json
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          id?: string
+          phone?: string
+          reason?: string
+          state?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_state_snapshots_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      igreen_timeouts: {
+        Row: {
+          account_id: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          created_at: string
+          etapa: string
+          executed_at: string | null
+          id: string
+          payload: Json
+          phone: string
+          scheduled_at: string
+        }
+        Insert: {
+          account_id: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          etapa: string
+          executed_at?: string | null
+          id?: string
+          payload?: Json
+          phone: string
+          scheduled_at: string
+        }
+        Update: {
+          account_id?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          etapa?: string
+          executed_at?: string | null
+          id?: string
+          payload?: Json
+          phone?: string
+          scheduled_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_timeouts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      igreen_tool_locks: {
+        Row: {
+          account_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          lock_key: string
+          phone: string
+          tool: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          lock_key?: string
+          phone: string
+          tool: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          lock_key?: string
+          phone?: string
+          tool?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_tool_locks_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      igreen_traces: {
+        Row: {
+          account_id: string
+          created_at: string
+          duration_ms: number | null
+          id: string
+          payload: Json
+          phone: string | null
+          step: string
+          trace_level: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          payload?: Json
+          phone?: string | null
+          step: string
+          trace_level?: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          payload?: Json
+          phone?: string | null
+          step?: string
+          trace_level?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_traces_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
           },
         ]
       }
