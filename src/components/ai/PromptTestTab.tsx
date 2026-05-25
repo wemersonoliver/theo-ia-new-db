@@ -6,12 +6,55 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Send, RefreshCw, FlaskConical, Wand2 } from "lucide-react";
+import { Loader2, Send, RefreshCw, FlaskConical, Wand2, Paperclip, X, FileText, Image as ImageIcon, Mic } from "lucide-react";
 
 // ─── ABA TESTAR PROMPT ────────────────────────────────────────────────────────
 
 type TestMessage = { role: "user" | "assistant"; content: string };
 type GeneratorMessage = { role: "user" | "assistant"; content: string };
+type PendingAttachment = { id: string; file: File; mimeType: string; previewUrl?: string };
+
+const MAX_ATTACHMENT_BYTES = 16 * 1024 * 1024; // 16 MB
+const ACCEPT_ATTACHMENTS =
+  "image/*,audio/*,.pdf,.txt,.csv,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv";
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function AttachmentChip({ att, onRemove, disabled }: { att: PendingAttachment; onRemove: () => void; disabled?: boolean }) {
+  const isImage = att.mimeType.startsWith("image/");
+  const isAudio = att.mimeType.startsWith("audio/");
+  const Icon = isImage ? ImageIcon : isAudio ? Mic : FileText;
+  return (
+    <div className="inline-flex items-center gap-2 rounded-md border bg-muted/50 pl-2 pr-1 py-1 text-xs max-w-[220px]">
+      {isImage && att.previewUrl ? (
+        <img src={att.previewUrl} alt="" className="h-6 w-6 rounded object-cover" />
+      ) : (
+        <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+      )}
+      <span className="truncate">{att.file.name}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={disabled}
+        className="ml-1 rounded p-0.5 hover:bg-background disabled:opacity-50"
+        aria-label="Remover anexo"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
 
 const ChatPanel = ({
   title,
@@ -29,6 +72,9 @@ const ChatPanel = ({
   emptyTitle,
   emptyDesc,
   accentClass,
+  attachments,
+  onPickFile,
+  onRemoveAttachment,
 }: {
   title: string;
   subtitle: string;
@@ -45,6 +91,9 @@ const ChatPanel = ({
   emptyTitle: string;
   emptyDesc: string;
   accentClass: string;
+  attachments?: PendingAttachment[];
+  onPickFile?: (files: FileList | null) => void;
+  onRemoveAttachment?: (id: string) => void;
 }) => (
   <Card className="flex flex-col" style={{ maxHeight: "600px" }}>
     <CardHeader className="pb-3 shrink-0">
@@ -105,7 +154,22 @@ const ChatPanel = ({
       </ScrollArea>
 
       <div className="border-t p-4 shrink-0">
+        {attachments && attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {attachments.map((att) => (
+              <AttachmentChip
+                key={att.id}
+                att={att}
+                disabled={loading}
+                onRemove={() => onRemoveAttachment?.(att.id)}
+              />
+            ))}
+          </div>
+        )}
         <div className="flex gap-2 items-end">
+          {onPickFile && (
+            <FilePickButton onPick={onPickFile} disabled={loading} />
+          )}
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -120,7 +184,11 @@ const ChatPanel = ({
             className="flex-1 min-h-[80px] max-h-[200px] resize-y"
             rows={3}
           />
-          <Button onClick={onSend} disabled={!input.trim() || loading} size="icon">
+          <Button
+            onClick={onSend}
+            disabled={(!input.trim() && (!attachments || attachments.length === 0)) || loading}
+            size="icon"
+          >
             <Send className="h-4 w-4" />
           </Button>
         </div>
@@ -129,6 +197,36 @@ const ChatPanel = ({
   </Card>
 );
 
+function FilePickButton({ onPick, disabled }: { onPick: (files: FileList | null) => void; disabled?: boolean }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        disabled={disabled}
+        onClick={() => inputRef.current?.click()}
+        aria-label="Anexar arquivo"
+        className="shrink-0"
+      >
+        <Paperclip className="h-4 w-4" />
+      </Button>
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept={ACCEPT_ATTACHMENTS}
+        className="hidden"
+        onChange={(e) => {
+          onPick(e.target.files);
+          e.target.value = "";
+        }}
+      />
+    </>
+  );
+}
+
 export function PromptTestTab() {
   const { user } = useAuth();
 
@@ -136,6 +234,7 @@ export function PromptTestTab() {
   const [testMessages, setTestMessages] = useState<TestMessage[]>([]);
   const [testInput, setTestInput] = useState("");
   const [testLoading, setTestLoading] = useState(false);
+  const [testAttachments, setTestAttachments] = useState<PendingAttachment[]>([]);
   const testEndRef = useRef<HTMLDivElement>(null);
 
   // Generator chat state
@@ -152,20 +251,72 @@ export function PromptTestTab() {
     genEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [genMessages, genLoading]);
 
+  // Clear ephemeral attachments when this component unmounts (menu change).
+  useEffect(() => {
+    return () => {
+      setTestAttachments((prev) => {
+        prev.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
+        return [];
+      });
+    };
+  }, []);
+
+  const handleAddAttachments = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const next: PendingAttachment[] = [];
+    Array.from(files).forEach((file) => {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        toast.error(`"${file.name}" excede 16 MB.`);
+        return;
+      }
+      const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+      next.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        file,
+        mimeType: file.type || "application/octet-stream",
+        previewUrl,
+      });
+    });
+    if (next.length === 0) return;
+    setTestAttachments((prev) => [...prev, ...next].slice(0, 5));
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setTestAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((a) => a.id !== id);
+    });
+  };
+
   // ─── Test Chat ────────────────────────────────────────────────────
   const handleTestSend = async () => {
     const text = testInput.trim();
-    if (!text || testLoading || !user) return;
+    if ((!text && testAttachments.length === 0) || testLoading || !user) return;
     setTestInput("");
 
-    const newMessages: TestMessage[] = [...testMessages, { role: "user", content: text }];
+    const attachmentSummary = testAttachments.length
+      ? `\n\n📎 ${testAttachments.map((a) => a.file.name).join(", ")}`
+      : "";
+    const displayText = (text || "(anexo enviado)") + attachmentSummary;
+    const newMessages: TestMessage[] = [...testMessages, { role: "user", content: displayText }];
     setTestMessages(newMessages);
     setTestLoading(true);
+    const sendingAttachments = testAttachments;
+    setTestAttachments([]);
 
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Não autenticado");
+
+      const encodedAttachments = await Promise.all(
+        sendingAttachments.map(async (a) => ({
+          name: a.file.name,
+          mimeType: a.mimeType,
+          data: await fileToBase64(a.file),
+        }))
+      );
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const res = await fetch(`${supabaseUrl}/functions/v1/test-ai-prompt`, {
@@ -174,15 +325,23 @@ export function PromptTestTab() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ messages: testMessages, userMessage: text }),
+        body: JSON.stringify({
+          messages: testMessages,
+          userMessage: text || "(arquivo anexado pelo cliente)",
+          attachments: encodedAttachments,
+        }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro na requisição");
       setTestMessages([...newMessages, { role: "assistant", content: data.message }]);
+      // Liberar object URLs após o envio bem-sucedido
+      sendingAttachments.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao testar prompt");
       setTestMessages(testMessages);
+      // Restaurar anexos para o usuário tentar novamente
+      setTestAttachments(sendingAttachments);
     } finally {
       setTestLoading(false);
     }
@@ -236,6 +395,10 @@ export function PromptTestTab() {
   const handleTestRestart = () => {
     setTestMessages([]);
     setTestInput("");
+    setTestAttachments((prev) => {
+      prev.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
+      return [];
+    });
     toast.success("Conversa de teste reiniciada!");
   };
 
@@ -260,11 +423,14 @@ export function PromptTestTab() {
         onRestart={handleTestRestart}
         loading={testLoading}
         endRef={testEndRef}
-        placeholder="Escreva como um cliente faria..."
+        placeholder="Escreva como um cliente faria... (anexe imagem, áudio ou PDF se quiser testar)"
         emptyIcon={FlaskConical}
         emptyTitle="Simulador de Atendimento"
         emptyDesc="Envie uma mensagem como se fosse um cliente para testar o prompt atual."
         accentClass="text-primary"
+        attachments={testAttachments}
+        onPickFile={handleAddAttachments}
+        onRemoveAttachment={handleRemoveAttachment}
       />
       <ChatPanel
         title="Ajustar Atendimento"
