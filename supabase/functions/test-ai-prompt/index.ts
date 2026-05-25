@@ -271,7 +271,13 @@ serve(async (req) => {
     }
 
     const userId = authData.user.id;
-    const { messages, userMessage } = await req.json();
+    const { messages, userMessage, attachments } = await req.json();
+    const safeAttachments: Array<{ mimeType: string; data: string; name?: string }> =
+      Array.isArray(attachments)
+        ? attachments
+            .filter((a: any) => a && typeof a.mimeType === "string" && typeof a.data === "string")
+            .slice(0, 5)
+        : [];
 
     // Cliente com service role para ler dados consistentes (igual whatsapp-ai-agent)
     const serviceClient = createClient(
@@ -544,8 +550,13 @@ serve(async (req) => {
       });
     }
 
-    if (userMessage) {
-      geminiContents.push({ role: "user", parts: [{ text: userMessage }] });
+    if (userMessage || safeAttachments.length > 0) {
+      const parts: any[] = [];
+      if (userMessage) parts.push({ text: userMessage });
+      for (const att of safeAttachments) {
+        parts.push({ inlineData: { mimeType: att.mimeType, data: att.data } });
+      }
+      geminiContents.push({ role: "user", parts });
     }
 
     const geminiPayload: any = {
