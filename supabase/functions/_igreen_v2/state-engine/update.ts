@@ -14,6 +14,7 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { IgreenConversationState, IgreenEvent } from "../types.ts";
 import { emitEvents, trace } from "../observability/trace.ts";
+import { validateTransition } from "./transitions.ts";
 
 let _client: SupabaseClient | null = null;
 function svc() {
@@ -113,6 +114,26 @@ export async function applyPatch(args: {
     return current;
   }
 
+  // Valida transição de etapa_funil (D9 + D14)
+  if (clean.etapa_funil && !validateTransition(current.etapa_funil, clean.etapa_funil as string)) {
+    await trace({
+      account_id,
+      phone,
+      step: "state_engine.apply_patch.invalid_transition",
+      level: "standard",
+      payload: { from: current.etapa_funil, to: clean.etapa_funil },
+    });
+    await emitEvents(account_id, phone, [
+      {
+        type: "invalid_transition",
+        priority: "high",
+        source: "state_engine",
+        payload: { from: current.etapa_funil, to: clean.etapa_funil },
+      },
+    ]);
+    return null;
+  }
+
   const next = {
     ...clean,
     last_event_at: new Date().toISOString(),
@@ -155,7 +176,15 @@ export async function applyPatch(args: {
     level: "standard",
     payload: { patch: clean, source: args.source ?? null },
   });
-  await emitEvents(account_id, phone, events);
+  await emitEvents(account_id, phone, [
+    ...(events ?? []),
+    {
+      type: "state_version_incremented",
+      priority: "low",
+      source: "state_engine",
+      payload: { from: current.version ?? 1, to: next.version, fields: Object.keys(clean) },
+    },
+  ]);
 
   return data as IgreenConversationState;
 }
