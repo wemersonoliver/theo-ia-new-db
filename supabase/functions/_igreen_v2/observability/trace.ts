@@ -36,6 +36,7 @@ export async function trace(params: {
   level?: TraceLevel;
   payload?: Record<string, unknown>;
   duration_ms?: number;
+  correlation_id?: string | null;
 }): Promise<void> {
   try {
     await svc().from("igreen_traces").insert({
@@ -45,6 +46,7 @@ export async function trace(params: {
       step: params.step,
       payload: params.payload ?? {},
       duration_ms: params.duration_ms ?? null,
+      correlation_id: params.correlation_id ?? null,
     });
   } catch (e) {
     console.error("[igreen_v2] trace failed (non-blocking)", e);
@@ -55,6 +57,7 @@ export async function emitEvents(
   account_id: string,
   phone: string,
   events: IgreenEvent[] | undefined,
+  correlation_id?: string | null,
 ): Promise<void> {
   if (!events || events.length === 0) return;
   try {
@@ -66,6 +69,7 @@ export async function emitEvents(
         event_priority: (e.priority ?? "medium") as EventPriority,
         payload: e.payload ?? {},
         source: e.source ?? null,
+        correlation_id: correlation_id ?? null,
       })),
     );
   } catch (e) {

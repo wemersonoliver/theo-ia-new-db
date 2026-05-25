@@ -5,6 +5,8 @@ export interface ToolContext {
   phone: string;
   state: IgreenConversationState;
   message?: string;
+  correlation_id?: string | null;
+  media?: { url: string; mime_type: string; byte_size: number } | null;
 }
 
 export interface ToolDefinition<Args = Record<string, unknown>> {

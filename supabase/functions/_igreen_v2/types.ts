@@ -57,4 +57,10 @@ export interface IgreenConversationState {
   last_event_at?: string;
   created_at?: string;
   updated_at?: string;
+  // Fase 4 — estado documental
+  document_status?: "pending" | "awaiting_soft_confirm" | "validated" | "rejected" | "failed" | null;
+  document_confidence?: number | null;
+  holder_match_status?: "match" | "mismatch" | "unknown" | null;
+  validation_attempts?: number;
+  validation_version?: number;
 }

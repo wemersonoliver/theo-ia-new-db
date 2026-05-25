@@ -40,6 +40,12 @@ const ALLOWED_FIELDS = new Set<keyof IgreenConversationState>([
   "lead_temperature",
   "extras",
   "last_event_at",
+  // Fase 4 — estado documental
+  "document_status" as any,
+  "document_confidence" as any,
+  "holder_match_status" as any,
+  "validation_attempts" as any,
+  "validation_version" as any,
 ]);
 
 // Memory safety (D5/D14): extras é jsonb livre; precisa de limite p/ não crescer indefinidamente.
@@ -126,8 +132,9 @@ export async function applyPatch(args: {
   patch?: Partial<IgreenConversationState>;
   events?: IgreenEvent[];
   source?: string;
+  correlation_id?: string | null;
 }): Promise<IgreenConversationState | null> {
-  const { account_id, phone, events } = args;
+  const { account_id, phone, events, correlation_id } = args;
   const clean = sanitizePatch(args.patch);
   const hasPatch = Object.keys(clean).length > 0;
 
@@ -135,7 +142,7 @@ export async function applyPatch(args: {
   const current = await ensureState(account_id, phone);
 
   if (!hasPatch) {
-    await emitEvents(account_id, phone, events);
+    await emitEvents(account_id, phone, events, correlation_id);
     return current;
   }
 
@@ -147,6 +154,7 @@ export async function applyPatch(args: {
       step: "state_engine.apply_patch.invalid_transition",
       level: "standard",
       payload: { from: current.etapa_funil, to: clean.etapa_funil },
+      correlation_id,
     });
     await emitEvents(account_id, phone, [
       {
@@ -155,7 +163,7 @@ export async function applyPatch(args: {
         source: "state_engine",
         payload: { from: current.etapa_funil, to: clean.etapa_funil },
       },
-    ]);
+    ], correlation_id);
     return null;
   }
 
@@ -202,6 +210,7 @@ export async function applyPatch(args: {
       step: "state_engine.apply_patch.rejected",
       level: "standard",
       payload: { reason: lastError?.message ?? "version_conflict", attempted: clean, attempts: attempt },
+      correlation_id,
     });
     await emitEvents(account_id, phone, [
       {
@@ -210,7 +219,7 @@ export async function applyPatch(args: {
         source: "state_engine",
         payload: { reason: lastError?.message ?? "version_conflict", attempted: clean, attempts: attempt },
       },
-    ]);
+    ], correlation_id);
     return null;
   }
 
@@ -221,6 +230,7 @@ export async function applyPatch(args: {
     step: "state_engine.apply_patch.ok",
     level: "standard",
     payload: { patch: clean, source: args.source ?? null, attempts: attempt },
+    correlation_id,
   });
   await emitEvents(account_id, phone, [
     ...(events ?? []),
@@ -230,7 +240,7 @@ export async function applyPatch(args: {
       source: "state_engine",
       payload: { from: working.version ?? 1, to: finalVersion, fields: Object.keys(clean), attempts: attempt },
     },
-  ]);
+  ], correlation_id);
 
   return data;
 }
