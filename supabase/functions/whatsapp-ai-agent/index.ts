@@ -1197,6 +1197,25 @@ serve(async (req) => {
       });
     }
 
+    if (isLikelyGreenInvoiceMediaOcr(messageContent)) {
+      const retryInvoiceReply = "Recebi sua fatura de energia, mas a leitura automática não conseguiu identificar todos os dados com segurança.\n\nPode me enviar uma foto mais nítida ou o PDF original da fatura completa, por gentileza?";
+      await sendAndSaveAIMessageParts(supabase, userId, phone, retryInvoiceReply);
+      await supabase
+        .from("whatsapp_ai_sessions")
+        .upsert({
+          user_id: userId,
+          account_id: accountId,
+          phone,
+          status: "active",
+          messages_without_human: messagesCount + 1,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,phone" });
+
+      return new Response(JSON.stringify({ success: true, response: retryInvoiceReply, deterministic_green_invoice_retry: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const deterministicLocationReply = buildGreenDistributorStateReply({
       messages: recentMessages,
       currentUserMessage: messageContent,
