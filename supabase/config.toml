@@ -121,3 +121,6 @@ verify_jwt = false
 
 [functions.delete-contact-cascade]
 verify_jwt = false
+
+[functions.igreen-document-validator]
+verify_jwt = false
