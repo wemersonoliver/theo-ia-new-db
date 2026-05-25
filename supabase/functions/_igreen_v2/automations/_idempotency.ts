@@ -38,6 +38,7 @@ export async function recordExecution(args: {
   idempotency_key: string;
   result?: Record<string, unknown>;
   ttl_days?: number;
+  correlation_id?: string | null;
 }): Promise<{ recorded: boolean; conflict?: boolean }> {
   const ttl = args.ttl_days ?? 30;
   const expires_at = new Date(Date.now() + ttl * 24 * 60 * 60 * 1000).toISOString();
@@ -48,6 +49,7 @@ export async function recordExecution(args: {
     idempotency_key: args.idempotency_key,
     result: args.result ?? {},
     expires_at,
+    correlation_id: args.correlation_id ?? null,
   });
   if (error) {
     // 23505 = unique_violation → outra execução ganhou a corrida
@@ -71,6 +73,7 @@ export async function withIdempotency(
     automation: string;
     idempotency_key: string;
     ttl_days?: number;
+    correlation_id?: string | null;
   },
   fn: () => Promise<AutomationResult>,
 ): Promise<AutomationResult> {
@@ -85,6 +88,7 @@ export async function withIdempotency(
     idempotency_key: args.idempotency_key,
     result: { status: "running" },
     ttl_days: args.ttl_days,
+    correlation_id: args.correlation_id,
   });
   if (reserve.conflict) return { skipped: true, reason: "race_lost" };
   if (!reserve.recorded) return { skipped: true, reason: "reserve_failed" };

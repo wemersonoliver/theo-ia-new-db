@@ -7,6 +7,7 @@ import { setProductTool } from "./set-product.ts";
 import { sendDiscoveryVideoTool } from "./send-discovery-video.ts";
 import { requestInvoiceTool } from "./request-invoice.ts";
 import { setStageTool } from "./set-stage.ts";
+import { validateGreenInvoiceTool } from "./validate-green-invoice.ts";
 
 let _registered = false;
 
@@ -17,5 +18,6 @@ export function registerAllTools(): void {
   registerTool(sendDiscoveryVideoTool);
   registerTool(requestInvoiceTool);
   registerTool(setStageTool);
+  registerTool(validateGreenInvoiceTool);
   _registered = true;
 }

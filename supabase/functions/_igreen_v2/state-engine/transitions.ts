@@ -4,7 +4,8 @@
 export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   novo: ["qualificacao", "handoff", "descartado"],
   qualificacao: ["fatura_enviada", "handoff", "descartado"],
-  fatura_enviada: ["fatura_validada", "qualificacao", "handoff", "descartado"],
+  fatura_enviada: ["fatura_validada", "fatura_rejeitada", "qualificacao", "handoff", "descartado"],
+  fatura_rejeitada: ["fatura_enviada", "qualificacao", "handoff", "descartado"],
   fatura_validada: ["documento_enviado", "handoff", "descartado"],
   documento_enviado: ["documento_validado", "fatura_validada", "handoff", "descartado"],
   documento_validado: ["handoff", "fechado"],

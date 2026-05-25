@@ -9,7 +9,10 @@ import { GREEN_SYSTEM, buildGreenUserPrompt } from "./prompt.ts";
 const LLM_TIMEOUT_MS = 8000;
 
 export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
-  const stage = decideGreenStage(ctx.state, ctx.message);
+  const stage = decideGreenStage(
+    ctx.state, ctx.message,
+    !!ctx.media, (ctx.state as any).document_status ?? null,
+  );
   const text = await generateText(ctx, stage);
 
   const tool_calls: AgentResult["tool_calls"] = [];
@@ -34,6 +37,17 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     tool_calls.push({
       name: "request_invoice",
       args: { reason: "calculo_economia" },
+    });
+  }
+
+  if (stage === "validate_invoice" && ctx.media) {
+    tool_calls.push({
+      name: "validate_green_invoice",
+      args: {
+        media_url: ctx.media.url,
+        mime_type: ctx.media.mime_type,
+        byte_size: ctx.media.byte_size,
+      },
     });
   }
 

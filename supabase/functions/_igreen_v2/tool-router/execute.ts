@@ -20,6 +20,7 @@ export async function executeTool(args: {
   args: unknown;
 }): Promise<ToolResult> {
   const { ctx, tool_name } = args;
+  const correlation_id = ctx.correlation_id ?? null;
   const tool = getTool(tool_name) as ToolDefinition<any> | undefined;
 
   if (!tool) {
@@ -27,7 +28,7 @@ export async function executeTool(args: {
     await emitEvents(ctx.account_id, ctx.phone, [
       { type: "tool_execution_finished", priority: "high", source: "tool",
         payload: { tool: tool_name, success: false, error: err.error } },
-    ]);
+    ], correlation_id);
     return err;
   }
 
@@ -39,7 +40,7 @@ export async function executeTool(args: {
     await emitEvents(ctx.account_id, ctx.phone, [
       { type: "tool_execution_finished", priority: "high", source: "tool",
         payload: { tool: tool_name, success: false, error: err.error } },
-    ]);
+    ], correlation_id);
     return err;
   }
 
@@ -48,7 +49,7 @@ export async function executeTool(args: {
   await emitEvents(ctx.account_id, ctx.phone, [
     { type: "tool_execution_started", priority: "low", source: "tool",
       payload: { tool: tool_name, lock_key } },
-  ]);
+  ], correlation_id);
 
   const t0 = Date.now();
   const lock = await acquireLock({
@@ -56,6 +57,7 @@ export async function executeTool(args: {
     phone: ctx.phone,
     tool: tool_name,
     lock_key,
+    ttl_seconds: tool_name === "validate_green_invoice" ? 120 : undefined,
   });
 
   if (!lock) {
@@ -63,7 +65,7 @@ export async function executeTool(args: {
     await emitEvents(ctx.account_id, ctx.phone, [
       { type: "tool_execution_finished", priority: "medium", source: "tool",
         payload: { tool: tool_name, success: true, skipped: true, reason: "lock_conflict" } },
-    ]);
+    ], correlation_id);
     return skipped;
   }
 
@@ -82,9 +84,10 @@ export async function executeTool(args: {
       patch: result.suggested_state_patch,
       events: result.events,
       source: `tool:${tool_name}`,
+      correlation_id,
     });
   } else if (result.events?.length) {
-    await emitEvents(ctx.account_id, ctx.phone, result.events);
+    await emitEvents(ctx.account_id, ctx.phone, result.events, correlation_id);
   }
 
   await releaseLock(lock);
@@ -96,6 +99,7 @@ export async function executeTool(args: {
     level: "standard",
     duration_ms: Date.now() - t0,
     payload: { success: result.success, skipped: result.skipped ?? false, error: result.error ?? null },
+    correlation_id,
   });
 
   await emitEvents(ctx.account_id, ctx.phone, [
@@ -107,7 +111,7 @@ export async function executeTool(args: {
         error: result.error ?? null,
         duration_ms: Date.now() - t0,
       } },
-  ]);
+  ], correlation_id);
 
   return result;
 }

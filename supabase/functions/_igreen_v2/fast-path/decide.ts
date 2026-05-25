@@ -3,7 +3,7 @@
 
 import type { IgreenConversationState } from "../types.ts";
 
-export type FastPathAction = "noop" | "resend_last" | "handoff_now";
+export type FastPathAction = "noop" | "resend_last" | "handoff_now" | "soft_confirm_yes" | "soft_confirm_no";
 
 export interface FastPathDecision {
   bypass: boolean;
@@ -17,7 +17,7 @@ const HUMAN_KEYWORDS = [
 ];
 
 export function decideFastPath(args: {
-  state: Pick<IgreenConversationState, "handoff_ativo">;
+  state: Pick<IgreenConversationState, "handoff_ativo"> & { document_status?: string | null };
   message: string | null | undefined;
 }): FastPathDecision {
   const raw = (args.message ?? "").trim();
@@ -31,6 +31,16 @@ export function decideFastPath(args: {
   }
 
   const lower = raw.toLowerCase();
+
+  if (args.state.document_status === "awaiting_soft_confirm") {
+    if (/^(sim|isso|correto|confirmo|confirma|s)\b/.test(lower)) {
+      return { bypass: true, action: "soft_confirm_yes", reason: "soft_confirm:yes" };
+    }
+    if (/^(n[aã]o|incorreto|errado|n)\b/.test(lower)) {
+      return { bypass: true, action: "soft_confirm_no", reason: "soft_confirm:no" };
+    }
+  }
+
   for (const kw of HUMAN_KEYWORDS) {
     if (lower.includes(kw)) {
       return { bypass: true, action: "handoff_now", reason: `keyword:${kw}` };
