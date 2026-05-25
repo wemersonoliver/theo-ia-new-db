@@ -2058,6 +2058,7 @@ export type Database = {
         Row: {
           account_id: string
           automation: string
+          correlation_id: string | null
           executed_at: string
           expires_at: string
           id: string
@@ -2068,6 +2069,7 @@ export type Database = {
         Insert: {
           account_id: string
           automation: string
+          correlation_id?: string | null
           executed_at?: string
           expires_at?: string
           id?: string
@@ -2078,6 +2080,7 @@ export type Database = {
         Update: {
           account_id?: string
           automation?: string
+          correlation_id?: string | null
           executed_at?: string
           expires_at?: string
           id?: string
@@ -2099,11 +2102,14 @@ export type Database = {
         Row: {
           account_id: string
           created_at: string
+          document_confidence: number | null
+          document_status: string | null
           etapa_funil: string | null
           extras: Json
           fatura_valida: boolean | null
           handoff_ativo: boolean
           holder_match: boolean | null
+          holder_match_status: string | null
           id: string
           identidade_validada: boolean | null
           intent: string | null
@@ -2114,16 +2120,21 @@ export type Database = {
           produto: string | null
           specialist: string | null
           updated_at: string
+          validation_attempts: number
+          validation_version: number
           version: number
         }
         Insert: {
           account_id: string
           created_at?: string
+          document_confidence?: number | null
+          document_status?: string | null
           etapa_funil?: string | null
           extras?: Json
           fatura_valida?: boolean | null
           handoff_ativo?: boolean
           holder_match?: boolean | null
+          holder_match_status?: string | null
           id?: string
           identidade_validada?: boolean | null
           intent?: string | null
@@ -2134,16 +2145,21 @@ export type Database = {
           produto?: string | null
           specialist?: string | null
           updated_at?: string
+          validation_attempts?: number
+          validation_version?: number
           version?: number
         }
         Update: {
           account_id?: string
           created_at?: string
+          document_confidence?: number | null
+          document_status?: string | null
           etapa_funil?: string | null
           extras?: Json
           fatura_valida?: boolean | null
           handoff_ativo?: boolean
           holder_match?: boolean | null
+          holder_match_status?: string | null
           id?: string
           identidade_validada?: boolean | null
           intent?: string | null
@@ -2154,6 +2170,8 @@ export type Database = {
           produto?: string | null
           specialist?: string | null
           updated_at?: string
+          validation_attempts?: number
+          validation_version?: number
           version?: number
         }
         Relationships: [
@@ -2261,12 +2279,14 @@ export type Database = {
           account_id: string
           classification: string | null
           confidence: number | null
+          correlation_id: string | null
           created_at: string
           extracted: Json
           id: string
           kind: string
           media_url: string | null
           phone: string
+          pipeline_version: number
           provider: string
           reject_reason: string | null
           threshold_decision: string | null
@@ -2276,12 +2296,14 @@ export type Database = {
           account_id: string
           classification?: string | null
           confidence?: number | null
+          correlation_id?: string | null
           created_at?: string
           extracted?: Json
           id?: string
           kind: string
           media_url?: string | null
           phone: string
+          pipeline_version?: number
           provider?: string
           reject_reason?: string | null
           threshold_decision?: string | null
@@ -2291,12 +2313,14 @@ export type Database = {
           account_id?: string
           classification?: string | null
           confidence?: number | null
+          correlation_id?: string | null
           created_at?: string
           extracted?: Json
           id?: string
           kind?: string
           media_url?: string | null
           phone?: string
+          pipeline_version?: number
           provider?: string
           reject_reason?: string | null
           threshold_decision?: string | null
@@ -2809,6 +2833,7 @@ export type Database = {
       igreen_state_events: {
         Row: {
           account_id: string
+          correlation_id: string | null
           created_at: string
           event_priority: string
           event_type: string
@@ -2819,6 +2844,7 @@ export type Database = {
         }
         Insert: {
           account_id: string
+          correlation_id?: string | null
           created_at?: string
           event_priority?: string
           event_type: string
@@ -2829,6 +2855,7 @@ export type Database = {
         }
         Update: {
           account_id?: string
+          correlation_id?: string | null
           created_at?: string
           event_priority?: string
           event_type?: string
@@ -2970,6 +2997,7 @@ export type Database = {
       igreen_traces: {
         Row: {
           account_id: string
+          correlation_id: string | null
           created_at: string
           duration_ms: number | null
           id: string
@@ -2980,6 +3008,7 @@ export type Database = {
         }
         Insert: {
           account_id: string
+          correlation_id?: string | null
           created_at?: string
           duration_ms?: number | null
           id?: string
@@ -2990,6 +3019,7 @@ export type Database = {
         }
         Update: {
           account_id?: string
+          correlation_id?: string | null
           created_at?: string
           duration_ms?: number | null
           id?: string
