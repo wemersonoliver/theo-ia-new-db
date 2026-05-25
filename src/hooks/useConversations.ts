@@ -230,24 +230,28 @@ export function useConversations() {
     mutationFn: async ({ phone }: { phone: string }) => {
       if (!user || !accountId) throw new Error("Usuário não autenticado");
 
-      const { error: convError } = await supabase
-        .from("whatsapp_conversations")
-        .delete()
+      const { data: contact } = await supabase
+        .from("contacts")
+        .select("id")
         .eq("account_id", accountId)
-        .eq("phone", phone);
+        .eq("phone", phone)
+        .maybeSingle();
 
-      if (convError) throw convError;
+      const { data, error } = await supabase.functions.invoke("delete-contact-cascade", {
+        body: contact?.id
+          ? { contact_id: contact.id, delete_contact: false }
+          : { account_id: accountId, phone, delete_contact: false },
+      });
 
-      await supabase
-        .from("whatsapp_ai_sessions")
-        .delete()
-        .eq("account_id", accountId)
-        .eq("phone", phone);
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["conversations", accountId] });
       queryClient.invalidateQueries({ queryKey: ["conversation"] });
-      toast.success("Conversa excluída com sucesso.");
+      queryClient.invalidateQueries({ queryKey: ["contacts", accountId] });
+      queryClient.invalidateQueries({ queryKey: ["crm-deals", accountId] });
+      toast.success("Conversa e histórico do fluxo removidos com sucesso.");
     },
     onError: (error: Error) => {
       toast.error(`Erro ao excluir: ${error.message}`);

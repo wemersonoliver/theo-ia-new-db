@@ -17,14 +17,16 @@ const PHONE_TABLES: Array<{ table: string; phoneCol: string }> = [
   { table: "igreen_lead_data", phoneCol: "phone" },
   { table: "igreen_product_video_followups", phoneCol: "phone" },
   { table: "igreen_scenario_enrollments", phoneCol: "contact_phone" },
-  { table: "custom_followup_enrollments", phoneCol: "phone" },
   { table: "custom_followup_events", phoneCol: "phone" },
   { table: "custom_followup_queue", phoneCol: "phone" },
+  { table: "custom_followup_enrollments", phoneCol: "phone" },
   { table: "followup_tracking", phoneCol: "phone" },
   { table: "roulette_assignments", phoneCol: "phone" },
   { table: "appointments", phoneCol: "phone" },
   { table: "ai_voice_usage", phoneCol: "phone" },
 ];
+
+const GREEN_FLOW_TAGS = ["em atendimento", "enviou fatura", "enviou documento", "sem-interesse"];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -42,16 +44,27 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const contactId: string | undefined = body.contact_id;
-    if (!contactId) return json({ error: "contact_id required" }, 400);
+    const phoneFromBody: string | undefined = body.phone;
+    const accountIdFromBody: string | undefined = body.account_id;
+    const deleteContact = body.delete_contact !== false;
+    if (!contactId && (!phoneFromBody || !accountIdFromBody)) {
+      return json({ error: "contact_id ou phone+account_id required" }, 400);
+    }
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-    const { data: contact, error: cErr } = await admin
-      .from("contacts")
-      .select("id, account_id, phone")
-      .eq("id", contactId)
-      .maybeSingle();
-    if (cErr || !contact) return json({ error: "contact not found" }, 404);
+    let contact: any = null;
+    if (contactId) {
+      const { data, error: cErr } = await admin
+        .from("contacts")
+        .select("id, account_id, phone")
+        .eq("id", contactId)
+        .maybeSingle();
+      if (cErr || !data) return json({ error: "contact not found" }, 404);
+      contact = data;
+    } else {
+      contact = { id: null, account_id: accountIdFromBody, phone: phoneFromBody };
+    }
 
     // Verifica membership do usuário na account
     const { data: membership } = await admin
@@ -67,12 +80,54 @@ Deno.serve(async (req) => {
     const phone = contact.phone;
     const results: Record<string, number | string> = {};
 
-    // Apaga deals do CRM ligados ao contato (cascateia activities/products via FK)
-    const { error: dealsErr, count: dealsCount } = await admin
-      .from("crm_deals")
-      .delete({ count: "exact" })
-      .eq("contact_id", contactId);
+    const { data: contactsForPhone } = await admin
+      .from("contacts")
+      .select("id, tags")
+      .eq("account_id", accountId)
+      .eq("phone", phone);
+    const contactIds = (contactsForPhone || []).map((c: any) => c.id).filter(Boolean);
+
+    const { data: dealsForPhone } = contactIds.length
+      ? await admin.from("crm_deals").select("id").eq("account_id", accountId).in("contact_id", contactIds)
+      : { data: [] as any[] };
+    const dealIds = (dealsForPhone || []).map((d: any) => d.id).filter(Boolean);
+
+    if (dealIds.length) {
+      const childTables = ["crm_activities", "crm_deal_products", "crm_deal_tasks"];
+      for (const table of childTables) {
+        const { error, count } = await admin.from(table).delete({ count: "exact" }).in("deal_id", dealIds);
+        results[table] = error ? `err: ${error.message}` : (count ?? 0);
+      }
+    }
+
+    // Apaga deals do CRM ligados ao telefone dentro da account.
+    const dealDeleteQuery = admin.from("crm_deals").delete({ count: "exact" }).eq("account_id", accountId);
+    const { error: dealsErr, count: dealsCount } = contactIds.length
+      ? await dealDeleteQuery.in("contact_id", contactIds)
+      : await dealDeleteQuery.eq("contact_id", "00000000-0000-0000-0000-000000000000");
     results["crm_deals"] = dealsErr ? `err: ${dealsErr.message}` : (dealsCount ?? 0);
+
+    const { data: scenarioEnrollments } = await admin
+      .from("igreen_scenario_enrollments")
+      .select("id")
+      .eq("account_id", accountId)
+      .eq("contact_phone", phone);
+    const scenarioEnrollmentIds = (scenarioEnrollments || []).map((e: any) => e.id).filter(Boolean);
+    if (scenarioEnrollmentIds.length) {
+      const { error, count } = await admin.from("igreen_scenario_events").delete({ count: "exact" }).in("enrollment_id", scenarioEnrollmentIds);
+      results["igreen_scenario_events"] = error ? `err: ${error.message}` : (count ?? 0);
+    }
+
+    const { data: followupTrackings } = await admin
+      .from("followup_tracking")
+      .select("id")
+      .eq("account_id", accountId)
+      .eq("phone", phone);
+    const followupTrackingIds = (followupTrackings || []).map((t: any) => t.id).filter(Boolean);
+    if (followupTrackingIds.length) {
+      const { error, count } = await admin.from("followup_messages").delete({ count: "exact" }).in("tracking_id", followupTrackingIds);
+      results["followup_messages"] = error ? `err: ${error.message}` : (count ?? 0);
+    }
 
     // Tabelas por phone + account
     for (const { table, phoneCol } of PHONE_TABLES) {
@@ -84,9 +139,17 @@ Deno.serve(async (req) => {
       results[table] = error ? `err: ${error.message}` : (count ?? 0);
     }
 
-    // Finalmente apaga o contato
-    const { error: delErr } = await admin.from("contacts").delete().eq("id", contactId);
-    if (delErr) return json({ error: delErr.message, partial: results }, 500);
+    if (deleteContact && contactId) {
+      const { error: delErr } = await admin.from("contacts").delete().eq("id", contactId);
+      if (delErr) return json({ error: delErr.message, partial: results }, 500);
+    } else if (contactIds.length) {
+      for (const c of contactsForPhone || []) {
+        const currentTags = Array.isArray(c.tags) ? c.tags : [];
+        const tags = currentTags.filter((tag: string) => !GREEN_FLOW_TAGS.includes(String(tag).toLowerCase()));
+        await admin.from("contacts").update({ tags, updated_at: new Date().toISOString() }).eq("id", c.id);
+      }
+      results["contacts_reset"] = contactIds.length;
+    }
 
     return json({ success: true, deleted: results });
   } catch (e) {

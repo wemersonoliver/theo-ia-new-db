@@ -48,6 +48,16 @@ function normalizeFlowText(text: string | null | undefined): string {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+function isMediaAnalysisText(text: string | null | undefined): boolean {
+  const raw = String(text || "");
+  const norm = normalizeFlowText(raw);
+  return /\[(documento|imagem|image|foto)\s*-\s*(analise|análise)\]/i.test(raw)
+    || /^\s*\[(documento|imagem|image|foto)\]/i.test(raw)
+    || norm.includes("CONTEUDO EXTRAIDO")
+    || norm.includes("DOCUMENTO AUXILIAR DA NOTA FISCAL")
+    || norm.includes("UNIDADE CONSUMIDORA");
+}
+
 function titleCaseFlowName(name: string): string {
   return name
     .trim()
@@ -91,8 +101,22 @@ function extractGreenFirstName(messages: GreenSimulationMessage[], fallbackName?
 }
 
 function extractBillAmount(text: string): number | null {
-  const normalized = String(text || "").replace(/\./g, "").replace(/,/g, ".");
-  const moneyMatch = normalized.match(/(?:R\$\s*)?(\d{2,5}(?:\.\d{1,2})?)\s*(?:REAIS|RS|POR MES|MENSAIS|MENSAL)?/i);
+  const raw = String(text || "").trim();
+  if (!raw || isMediaAnalysisText(raw)) return null;
+
+  const onlyAmount = /^\s*(?:R\$\s*)?\d{2,5}(?:[.,]\d{1,2})?\s*(?:reais|rs)?\s*$/i.test(raw);
+  const hasBillContext = /(R\$|\breais\b|\brs\b|fatura|conta|energia|valor|mensal|mensais|m[eê]s|pago|pagar)/i.test(raw);
+  if (!onlyAmount && !hasBillContext) return null;
+
+  const normalized = raw.replace(/\./g, "").replace(/,/g, ".");
+  const patterns = onlyAmount
+    ? [/(?:R\$\s*)?(\d{2,5}(?:\.\d{1,2})?)/i]
+    : [
+        /R\$\s*(\d{2,5}(?:\.\d{1,2})?)/i,
+        /(?:fatura|conta|energia|valor|mensal|mensais|pago|pagar)[^\d]{0,40}(\d{2,5}(?:\.\d{1,2})?)/i,
+        /(\d{2,5}(?:\.\d{1,2})?)\s*(?:reais|rs|por mes|por mês|mensais|mensal)\b/i,
+      ];
+  const moneyMatch = patterns.map((pattern) => normalized.match(pattern)).find(Boolean);
   if (!moneyMatch) return null;
   const amount = Number(moneyMatch[1]);
   if (!Number.isFinite(amount) || amount < 50 || amount > 50000) return null;
@@ -248,6 +272,7 @@ export function buildGreenDistributorStateReply(opts: {
   ) => { min: number; max: number; min_bill?: number | null } | null;
 }): { reply: string; state: string; distributor: string; foundDiscount: boolean } | null {
   const current = String(opts.currentUserMessage || "");
+  if (isMediaAnalysisText(current)) return null;
   if (!current.trim() || extractBillAmount(current)) return null;
 
   const conversationText = [
