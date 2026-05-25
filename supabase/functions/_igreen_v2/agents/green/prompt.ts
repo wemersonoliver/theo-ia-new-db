@@ -24,6 +24,10 @@ export function buildGreenUserPrompt(args: {
       return baseCtx + "STAGE: request_invoice. Peça a última fatura de energia em PDF ou foto. Explique em 1 frase que é para calcular a economia. Máx 2 frases.";
     case "waiting_invoice":
       return baseCtx + "STAGE: waiting_invoice. Agradeça e diga que aguarda a fatura quando ele puder enviar. Máx 1 frase.";
+    case "validate_invoice":
+      return baseCtx + "STAGE: validate_invoice. Diga em 1 frase que recebeu a fatura e está conferindo.";
+    case "soft_confirm_ask":
+      return baseCtx + "STAGE: soft_confirm_ask. Peça uma confirmação direta (sim/não) sobre o titular da fatura. Máx 1 frase.";
     case "idle":
     default:
       return baseCtx + "STAGE: idle. Responda apenas com uma confirmação curta de 1 frase.";

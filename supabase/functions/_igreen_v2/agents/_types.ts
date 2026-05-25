@@ -21,6 +21,8 @@ export interface AgentContext {
   state: IgreenConversationState;
   message: string;
   intent?: string;
+  correlation_id?: string | null;
+  media?: { url: string; mime_type: string; byte_size: number } | null;
 }
 
 export type AgentRunner = (ctx: AgentContext) => Promise<AgentResult>;

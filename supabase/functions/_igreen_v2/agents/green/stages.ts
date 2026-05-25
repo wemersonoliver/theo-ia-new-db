@@ -10,6 +10,8 @@ export type GreenStage =
   | "qualify"
   | "request_invoice"
   | "waiting_invoice"
+  | "validate_invoice"
+  | "soft_confirm_ask"
   | "idle";
 
 const INVOICE_KEYWORDS = [
@@ -19,10 +21,19 @@ const INVOICE_KEYWORDS = [
 export function decideGreenStage(
   state: Pick<IgreenConversationState, "etapa_funil" | "produto" | "extras">,
   message: string,
+  hasMedia: boolean = false,
+  documentStatus?: string | null,
 ): GreenStage {
   const etapa = (state.etapa_funil ?? "novo").toLowerCase();
   const msg = (message ?? "").toLowerCase();
   const extras = (state.extras ?? {}) as Record<string, unknown>;
+
+  if (hasMedia && (etapa === "qualificacao" || etapa === "fatura_enviada" || etapa === "fatura_rejeitada")) {
+    return "validate_invoice";
+  }
+  if (documentStatus === "awaiting_soft_confirm") {
+    return "soft_confirm_ask";
+  }
 
   if (etapa === "novo") return "discovery";
 
