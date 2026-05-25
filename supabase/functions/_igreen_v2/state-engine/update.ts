@@ -42,6 +42,28 @@ const ALLOWED_FIELDS = new Set<keyof IgreenConversationState>([
   "last_event_at",
 ]);
 
+// Memory safety (D5/D14): extras é jsonb livre; precisa de limite p/ não crescer indefinidamente.
+const MAX_EXTRAS_KEYS = 64;
+const MAX_EXTRAS_BYTES = 16 * 1024; // 16KB serializado
+const MAX_APPLY_RETRIES = 3;
+
+function capExtras(extras: Record<string, unknown>): Record<string, unknown> {
+  const keys = Object.keys(extras);
+  let trimmed = extras;
+  if (keys.length > MAX_EXTRAS_KEYS) {
+    const keep = keys.slice(keys.length - MAX_EXTRAS_KEYS);
+    trimmed = Object.fromEntries(keep.map((k) => [k, extras[k]]));
+  }
+  let serialized = JSON.stringify(trimmed);
+  while (serialized.length > MAX_EXTRAS_BYTES) {
+    const ks = Object.keys(trimmed);
+    if (ks.length === 0) break;
+    delete (trimmed as Record<string, unknown>)[ks[0]];
+    serialized = JSON.stringify(trimmed);
+  }
+  return trimmed;
+}
+
 export async function loadState(
   account_id: string,
   phone: string,
@@ -87,6 +109,9 @@ function sanitizePatch(
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(patch)) {
     if (ALLOWED_FIELDS.has(k as keyof IgreenConversationState)) out[k] = v;
+  }
+  if (out.extras && typeof out.extras === "object") {
+    out.extras = capExtras(out.extras as Record<string, unknown>);
   }
   return out as Partial<IgreenConversationState>;
 }
