@@ -272,6 +272,7 @@ export function buildGreenDistributorStateReply(opts: {
   ) => { min: number; max: number; min_bill?: number | null } | null;
 }): { reply: string; state: string; distributor: string; foundDiscount: boolean } | null {
   const current = String(opts.currentUserMessage || "");
+  if (isMediaAnalysisText(current)) return null;
   if (!current.trim() || extractBillAmount(current)) return null;
 
   const conversationText = [
