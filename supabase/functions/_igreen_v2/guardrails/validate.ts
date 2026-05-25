@@ -12,8 +12,9 @@ const TOOL_STAGE_COMPAT: Record<string, string[]> = {
   send_discovery_video: ["novo", "qualificacao"],
   request_invoice: ["qualificacao", "fatura_enviada"],
   set_product: ["novo", "qualificacao"],
-  set_stage: ["novo", "qualificacao", "fatura_enviada", "fatura_validada", "documento_enviado", "documento_validado"],
-  noop: ["novo", "qualificacao", "fatura_enviada", "fatura_validada", "documento_enviado", "documento_validado", "handoff", "fechado", "descartado"],
+  set_stage: ["novo", "qualificacao", "fatura_enviada", "fatura_rejeitada", "fatura_validada", "documento_enviado", "documento_validado"],
+  validate_green_invoice: ["qualificacao", "fatura_enviada", "fatura_rejeitada"],
+  noop: ["novo", "qualificacao", "fatura_enviada", "fatura_rejeitada", "fatura_validada", "documento_enviado", "documento_validado", "handoff", "fechado", "descartado"],
 };
 
 export interface GuardrailReport {
