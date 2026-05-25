@@ -31,6 +31,9 @@ interface IncomingPayload {
   phone?: string;
   message?: string;
   ping?: boolean;
+  /** Quando presente, roda apenas a tool informada (debug/teste do tool-router). */
+  tool?: string;
+  tool_args?: unknown;
 }
 
 serve(async (req) => {
@@ -65,6 +68,17 @@ serve(async (req) => {
       },
       403,
     );
+  }
+
+  // Modo debug: dispara apenas uma tool isolada.
+  if (body.tool) {
+    const state = await ensureState(account_id, phone);
+    const result = await executeTool({
+      ctx: { account_id, phone, state, message: body.message },
+      tool_name: body.tool,
+      args: body.tool_args ?? {},
+    });
+    return json({ ok: true, phase: 2, mode: "tool", tool: body.tool, result });
   }
 
   const t0 = Date.now();
