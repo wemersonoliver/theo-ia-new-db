@@ -159,47 +159,68 @@ export async function applyPatch(args: {
     return null;
   }
 
-  const next = {
-    ...clean,
-    last_event_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    version: (current.version ?? 1) + 1,
-  };
+  // Retry com re-read em caso de conflito de versão (D14 hardening).
+  let attempt = 0;
+  let working = current;
+  let data: IgreenConversationState | null = null;
+  let lastError: { message?: string } | null = null;
+  while (attempt < MAX_APPLY_RETRIES) {
+    attempt++;
+    const next = {
+      ...clean,
+      last_event_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      version: (working.version ?? 1) + 1,
+    };
+    const res = await svc()
+      .from("igreen_conversation_state")
+      .update(next)
+      .eq("account_id", account_id)
+      .eq("phone", phone)
+      .eq("version", working.version ?? 1)
+      .select("*")
+      .maybeSingle();
+    if (res.data && !res.error) {
+      data = res.data as IgreenConversationState;
+      break;
+    }
+    lastError = res.error ?? { message: "version_conflict" };
+    // Re-read e revalida transição antes de tentar de novo
+    const fresh = await loadState(account_id, phone);
+    if (!fresh) break;
+    if (clean.etapa_funil && !validateTransition(fresh.etapa_funil, clean.etapa_funil as string)) {
+      lastError = { message: "transition_invalidated_after_conflict" };
+      break;
+    }
+    working = fresh;
+  }
 
-  const { data, error } = await svc()
-    .from("igreen_conversation_state")
-    .update(next)
-    .eq("account_id", account_id)
-    .eq("phone", phone)
-    .eq("version", current.version ?? 1) // optimistic lock
-    .select("*")
-    .maybeSingle();
-
-  if (error || !data) {
+  if (!data) {
     await trace({
       account_id,
       phone,
       step: "state_engine.apply_patch.rejected",
       level: "standard",
-      payload: { reason: error?.message ?? "version_conflict", attempted: clean },
+      payload: { reason: lastError?.message ?? "version_conflict", attempted: clean, attempts: attempt },
     });
     await emitEvents(account_id, phone, [
       {
         type: "invalid_state_patch",
         priority: "high",
         source: "state_engine",
-        payload: { reason: error?.message ?? "version_conflict", attempted: clean },
+        payload: { reason: lastError?.message ?? "version_conflict", attempted: clean, attempts: attempt },
       },
     ]);
     return null;
   }
 
+  const finalVersion = (data as { version?: number }).version ?? (working.version ?? 1) + 1;
   await trace({
     account_id,
     phone,
     step: "state_engine.apply_patch.ok",
     level: "standard",
-    payload: { patch: clean, source: args.source ?? null },
+    payload: { patch: clean, source: args.source ?? null, attempts: attempt },
   });
   await emitEvents(account_id, phone, [
     ...(events ?? []),
@@ -207,9 +228,9 @@ export async function applyPatch(args: {
       type: "state_version_incremented",
       priority: "low",
       source: "state_engine",
-      payload: { from: current.version ?? 1, to: next.version, fields: Object.keys(clean) },
+      payload: { from: working.version ?? 1, to: finalVersion, fields: Object.keys(clean), attempts: attempt },
     },
   ]);
 
-  return data as IgreenConversationState;
+  return data;
 }
