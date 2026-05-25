@@ -1,0 +1,161 @@
+// D14 — ÚNICO ponto de escrita em public.igreen_conversation_state.
+//
+// NENHUM outro arquivo do projeto pode conter:
+//   from("igreen_conversation_state").update(...)
+//   from("igreen_conversation_state").upsert(...)
+//
+// Toda mudança de estado passa por applyPatch() abaixo:
+//   - valida shape do patch
+//   - (próximas fases) valida transição contra transitions whitelist
+//   - emite trace + events
+//   - persiste com optimistic locking (version)
+//   - aplicar o mesmo patch 2x é no-op (D14 + D4)
+
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { IgreenConversationState, IgreenEvent } from "../types.ts";
+import { emitEvents, trace } from "../observability/trace.ts";
+
+let _client: SupabaseClient | null = null;
+function svc() {
+  if (_client) return _client;
+  _client = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { persistSession: false } },
+  );
+  return _client;
+}
+
+const ALLOWED_FIELDS = new Set<keyof IgreenConversationState>([
+  "produto",
+  "etapa_funil",
+  "specialist",
+  "intent",
+  "handoff_ativo",
+  "fatura_valida",
+  "identidade_validada",
+  "holder_match",
+  "lead_score",
+  "lead_temperature",
+  "extras",
+  "last_event_at",
+]);
+
+export async function loadState(
+  account_id: string,
+  phone: string,
+): Promise<IgreenConversationState | null> {
+  const { data, error } = await svc()
+    .from("igreen_conversation_state")
+    .select("*")
+    .eq("account_id", account_id)
+    .eq("phone", phone)
+    .maybeSingle();
+  if (error) {
+    console.error("[state-engine] loadState error", error);
+    return null;
+  }
+  return data as IgreenConversationState | null;
+}
+
+export async function ensureState(
+  account_id: string,
+  phone: string,
+): Promise<IgreenConversationState> {
+  const existing = await loadState(account_id, phone);
+  if (existing) return existing;
+
+  const { data, error } = await svc()
+    .from("igreen_conversation_state")
+    .insert({ account_id, phone })
+    .select("*")
+    .single();
+  if (error) {
+    // Pode ter sido criado em paralelo — tenta carregar de novo.
+    const again = await loadState(account_id, phone);
+    if (again) return again;
+    throw error;
+  }
+  return data as IgreenConversationState;
+}
+
+function sanitizePatch(
+  patch: Partial<IgreenConversationState> | undefined,
+): Partial<IgreenConversationState> {
+  if (!patch) return {};
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (ALLOWED_FIELDS.has(k as keyof IgreenConversationState)) out[k] = v;
+  }
+  return out as Partial<IgreenConversationState>;
+}
+
+/**
+ * Aplica um patch ao state. Único caminho autorizado para UPDATE em igreen_conversation_state (D14).
+ * Retorna o novo state após a aplicação ou null se rejeitado.
+ */
+export async function applyPatch(args: {
+  account_id: string;
+  phone: string;
+  patch?: Partial<IgreenConversationState>;
+  events?: IgreenEvent[];
+  source?: string;
+}): Promise<IgreenConversationState | null> {
+  const { account_id, phone, events } = args;
+  const clean = sanitizePatch(args.patch);
+  const hasPatch = Object.keys(clean).length > 0;
+
+  // Sempre garante existência do state
+  const current = await ensureState(account_id, phone);
+
+  if (!hasPatch) {
+    await emitEvents(account_id, phone, events);
+    return current;
+  }
+
+  const next = {
+    ...clean,
+    last_event_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    version: (current.version ?? 1) + 1,
+  };
+
+  const { data, error } = await svc()
+    .from("igreen_conversation_state")
+    .update(next)
+    .eq("account_id", account_id)
+    .eq("phone", phone)
+    .eq("version", current.version ?? 1) // optimistic lock
+    .select("*")
+    .maybeSingle();
+
+  if (error || !data) {
+    await trace({
+      account_id,
+      phone,
+      step: "state_engine.apply_patch.rejected",
+      level: "standard",
+      payload: { reason: error?.message ?? "version_conflict", attempted: clean },
+    });
+    await emitEvents(account_id, phone, [
+      {
+        type: "invalid_state_patch",
+        priority: "high",
+        source: "state_engine",
+        payload: { reason: error?.message ?? "version_conflict", attempted: clean },
+      },
+    ]);
+    return null;
+  }
+
+  await trace({
+    account_id,
+    phone,
+    step: "state_engine.apply_patch.ok",
+    level: "standard",
+    payload: { patch: clean, source: args.source ?? null },
+  });
+  await emitEvents(account_id, phone, events);
+
+  return data as IgreenConversationState;
+}
