@@ -127,3 +127,12 @@ verify_jwt = false
 
 [functions.igreen-phase4-runner]
 verify_jwt = false
+
+[functions.igreen-rag-ingest]
+verify_jwt = false
+
+[functions.igreen-memory-gc]
+verify_jwt = false
+
+[functions.igreen-phase5-runner]
+verify_jwt = false
