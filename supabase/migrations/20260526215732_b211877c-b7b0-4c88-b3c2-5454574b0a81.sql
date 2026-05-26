@@ -1,0 +1,1 @@
+ALTER VIEW public.igreen_phase5_metrics SET (security_invoker = on);
