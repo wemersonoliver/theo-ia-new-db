@@ -151,20 +151,26 @@ export async function applyPatch(args: {
     await trace({
       account_id,
       phone,
-      step: "state_engine.apply_patch.invalid_transition",
+      step: "state_engine.apply_patch.invalid_transition_dropped",
       level: "standard",
-      payload: { from: current.etapa_funil, to: clean.etapa_funil },
+      payload: { from: current.etapa_funil, to: clean.etapa_funil, other_fields: Object.keys(clean).filter(k=>k!=="etapa_funil") },
       correlation_id,
     });
     await emitEvents(account_id, phone, [
       {
-        type: "invalid_transition",
+        type: "etapa_funil_transition_skipped",
         priority: "high",
         source: "state_engine",
         payload: { from: current.etapa_funil, to: clean.etapa_funil },
       },
     ], correlation_id);
-    return null;
+    // Hardening: NÃO descarta o patch inteiro. Drop apenas etapa_funil e
+    // persiste demais campos (document_status, document_confidence, etc.).
+    delete (clean as Record<string, unknown>).etapa_funil;
+    if (Object.keys(clean).length === 0) {
+      await emitEvents(account_id, phone, events, correlation_id);
+      return current;
+    }
   }
 
   // Retry com re-read em caso de conflito de versão (D14 hardening).
@@ -208,9 +214,12 @@ export async function applyPatch(args: {
       account_id,
       phone,
       step: "state_engine.apply_patch.rejected",
-      level: "standard",
+      level: "minimal",
       payload: { reason: lastError?.message ?? "version_conflict", attempted: clean, attempts: attempt },
       correlation_id,
+    });
+    console.error("[state-engine] applyPatch REJECTED", {
+      account_id, phone, reason: lastError?.message, attempted: clean, attempts: attempt,
     });
     await emitEvents(account_id, phone, [
       {
