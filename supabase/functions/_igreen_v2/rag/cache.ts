@@ -24,9 +24,10 @@ export async function getCached(query_hash: string): Promise<{ result: unknown; 
       .gt("expires_at", new Date().toISOString())
       .maybeSingle();
     if (!data) return null;
-    // bump hit_count
-    await svc().from("igreen_rag_cache").update({ hit_count: ((data as { hit_count: number }).hit_count ?? 0) + 1 }).eq("query_hash", query_hash);
-    return { result: (data as { result: unknown }).result, hit_count: (data as { hit_count: number }).hit_count + 1 };
+    // bump hit_count fire-and-forget (não bloqueia hit-path)
+    const cur = (data as { hit_count: number }).hit_count ?? 0;
+    svc().from("igreen_rag_cache").update({ hit_count: cur + 1 }).eq("query_hash", query_hash).then(() => {}, () => {});
+    return { result: (data as { result: unknown }).result, hit_count: cur + 1 };
   } catch {
     return null;
   }
