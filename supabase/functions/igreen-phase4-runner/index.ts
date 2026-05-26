@@ -35,6 +35,11 @@ async function reset(n: number) {
   await svc.from("igreen_conversation_state").delete().eq("account_id", ACCOUNT_ID).eq("phone", p);
   await svc.from("igreen_lead_data").delete().eq("account_id", ACCOUNT_ID).eq("phone", p);
   await svc.from("igreen_tool_locks").delete().eq("account_id", ACCOUNT_ID).eq("phone", p);
+  await svc.from("igreen_document_validations").delete().eq("account_id", ACCOUNT_ID).eq("phone", p);
+  await svc.from("igreen_automation_executions").delete().eq("account_id", ACCOUNT_ID).eq("phone", p);
+  await svc.from("igreen_state_snapshots").delete().eq("account_id", ACCOUNT_ID).eq("phone", p);
+  await svc.from("igreen_traces").delete().eq("account_id", ACCOUNT_ID).eq("phone", p);
+  await svc.from("igreen_state_events").delete().eq("account_id", ACCOUNT_ID).eq("phone", p);
 }
 
 async function seedStateFaturaEnviada(n: number) {
