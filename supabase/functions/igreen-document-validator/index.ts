@@ -83,6 +83,42 @@ serve(async (req) => {
 
   if (!media_url) return json(failBody(correlation_id, "missing_media_url", 0), 400);
 
+  // ───────────────────────────────────────────────────────────────────────
+  // TEST-ONLY mock branch (opt-in; production never uses mock:// URLs).
+  // Allows Phase 4 operational validation to exercise classification /
+  // confidence / holder paths deterministically without burning Gemini quota
+  // or requiring real Green invoices. Real URLs are unaffected.
+  //   mock://?classification=green_invoice&confidence=0.92&holder=João%20Silva
+  //         &doc=12345678901&distributor=ENEL&kwh=180&attempts=1
+  //         &delay_ms=0
+  // ───────────────────────────────────────────────────────────────────────
+  if (media_url.startsWith("mock://")) {
+    const qs = new URLSearchParams(media_url.replace(/^mock:\/\/\??/, ""));
+    const delay = Number(qs.get("delay_ms") ?? 0);
+    if (delay > 0) await sleep(Math.min(delay, 15000));
+    if (qs.get("force_error") === "1") {
+      return json(failBody(correlation_id, qs.get("error") ?? "mock_forced_error", Number(qs.get("attempts") ?? 3)), 200);
+    }
+    const cls = normalizeClassification(qs.get("classification") ?? "green_invoice");
+    const conf = clamp01(Number(qs.get("confidence") ?? "0.95"));
+    const extracted: ExtractedFields = {
+      holder_name: qs.get("holder") ?? undefined,
+      document_id: qs.get("doc") ?? undefined,
+      address: qs.get("addr") ?? undefined,
+      distributor: qs.get("distributor") ?? undefined,
+      energy_consumption_kwh: qs.get("kwh") ? Number(qs.get("kwh")) : undefined,
+    };
+    return json({
+      correlation_id,
+      pipeline_version: CURRENT_PIPELINE_VERSION,
+      provider: "gemini",
+      classification: cls,
+      confidence: conf,
+      extracted,
+      attempts: Number(qs.get("attempts") ?? 1),
+    } as ValidatorResponse, 200);
+  }
+
   const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
   if (!apiKey) return json(failBody(correlation_id, "no_api_key", 0), 200);
 

@@ -142,11 +142,11 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
     try {
       const { data: lead } = await svc()
         .from("igreen_lead_data")
-        .select("client_name")
+        .select("nome_cliente")
         .eq("account_id", ctx.account_id)
         .eq("phone", ctx.phone)
         .maybeSingle();
-      clientName = (lead?.client_name as string | undefined) ?? null;
+      clientName = (lead?.nome_cliente as string | undefined) ?? null;
     } catch { /* non-blocking */ }
     const holder = matchHolder(holderName, clientName);
 
