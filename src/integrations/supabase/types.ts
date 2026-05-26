@@ -5184,6 +5184,21 @@ export type Database = {
       }
       is_account_member: { Args: { _account_id: string }; Returns: boolean }
       is_team_invite_email: { Args: { _email: string }; Returns: boolean }
+      match_igreen_chunks: {
+        Args: {
+          match_count?: number
+          match_threshold?: number
+          p_account_id?: string
+          query_embedding: string
+        }
+        Returns: {
+          content: string
+          id: string
+          similarity: number
+          source_id: string
+          token_count: number
+        }[]
+      }
       must_filter_by_assignment: {
         Args: { _account_id: string }
         Returns: boolean
