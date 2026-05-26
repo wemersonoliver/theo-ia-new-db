@@ -22,10 +22,17 @@ import { runAgent } from "../_igreen_v2/agents/_run.ts";
 import { runFailsafe } from "../_igreen_v2/agents/failsafe/run.ts";
 import { validateAgentResult } from "../_igreen_v2/guardrails/validate.ts";
 import { prepareMessages } from "../_igreen_v2/behavior-engine/prepare.ts";
-import { send as transportSend } from "../_igreen_v2/transport/send.ts";
+import { sendOrchestrated } from "../_igreen_v2/transport/send-orchestrator.ts";
 import { newCorrelationId } from "../_igreen_v2/observability/correlation.ts";
 import { dispatchAutomations } from "../_igreen_v2/automation-router/dispatch.ts";
 import { CURRENT_VALIDATION_VERSION } from "../_igreen_v2/document-rules-engine/version.ts";
+import { withTimeout, DEFAULT_TIMEOUTS, TimeoutError } from "../_igreen_v2/cost-governor/timeout-orchestrator.ts";
+import { appendMessage, getWindow } from "../_igreen_v2/memory/short-term.ts";
+import { getLatestSummary } from "../_igreen_v2/memory/summarizer.ts";
+import { retrieve as ragRetrieve } from "../_igreen_v2/rag/retriever.ts";
+import { buildContext } from "../_igreen_v2/rag/context-builder.ts";
+import { checkPhoneRate } from "../_igreen_v2/cost-governor/rate-limiter.ts";
+import { isCancelled } from "../_igreen_v2/cost-governor/cancel-registry.ts";
 
 // Boot: registra todas as tools (D4 — duplicado quebra o boot).
 registerAllTools();
@@ -62,7 +69,7 @@ serve(async (req) => {
   }
 
   if (body.ping) {
-    return json({ ok: true, service: "whatsapp-igreen-agent-v2", phase: 4, validation_version: CURRENT_VALIDATION_VERSION });
+    return json({ ok: true, service: "whatsapp-igreen-agent-v2", phase: 5, validation_version: CURRENT_VALIDATION_VERSION });
   }
 
   const account_id = (body.account_id ?? "").trim();
@@ -130,6 +137,21 @@ serve(async (req) => {
     correlation_id,
   });
 
+  // Phase 5 — rate limit por phone (8/min) e checagem de cancelamento prévio.
+  const rate = await checkPhoneRate(account_id, phone, 8);
+  if (!rate.allowed) {
+    await trace({ account_id, phone, step: "agent.rate_limited", level: "minimal", payload: { scope: "phone" }, correlation_id });
+    return json({ ok: false, reason: "rate_limited", correlation_id }, 429);
+  }
+  if (await isCancelled(correlation_id)) {
+    return json({ ok: false, reason: "cancelled", correlation_id }, 200);
+  }
+
+  // Phase 5 — registra mensagem do usuário na memória curta (com PII mask interno).
+  if (message) {
+    await appendMessage({ account_id, phone, role: "user", content: message, correlation_id });
+  }
+
   // D8 — FAST PATH antes de qualquer carga pesada (sem histórico, sem LLM)
   const state = await ensureState(account_id, phone);
   const fp = decideFastPath({ state, message });
@@ -174,8 +196,13 @@ serve(async (req) => {
     correlation_id,
   });
 
-  // D1 — supervisor classifica intent + specialist (timeout 8s; fallback failsafe)
-  const sup = await decideSupervisor({ account_id, phone, message, state });
+  // D1 — supervisor classifica intent + specialist (timeout determinístico Phase 5)
+  const sup = await withTimeout(
+    "supervisor",
+    DEFAULT_TIMEOUTS.agentMs,
+    () => decideSupervisor({ account_id, phone, message, state }),
+    () => ({ intent: "unknown", specialist: "failsafe", confidence: 0, source: "timeout" as const }),
+  );
 
   // D14 — única escrita em state via state-engine
   const afterSupervisor = await applyPatch({
@@ -199,11 +226,39 @@ serve(async (req) => {
     correlation_id,
   });
 
-  let agentResult = await runAgent({
-    specialist: resolved.specialist,
-    runner: resolved.runner,
-    ctx: { account_id, phone, state: afterSupervisor, message, intent: sup.intent, correlation_id, media },
+  // Phase 5 — memory injection (window + latest summary) e RAG injection.
+  const [memWindow, memSummaryRow, ragOut] = await Promise.all([
+    getWindow(account_id, phone),
+    getLatestSummary(account_id, phone),
+    message ? ragRetrieve({ query: message, account_id, correlation_id }) : Promise.resolve({ chunks: [], cache_hit: false, latency_ms: 0, query_hash: "" }),
+  ]);
+  const memSummary = memSummaryRow?.summary ?? null;
+
+  // Context Budget Allocator — registra alocações context.* mesmo quando o specialist
+  // não consome o prompt agregado (specialists Igreen têm seus próprios prompts curtos).
+  await buildContext({
+    correlation_id,
+    account_id,
+    system: "igreen-guardrails",
+    conversation: memWindow.map((m) => ({ role: m.role, content: m.content })),
+    memorySummary: memSummary,
+    toolOutputs: [],
+    ragChunks: ragOut.chunks.map((c) => ({ id: c.id, content: c.content, score: c.score })),
   });
+
+  let agentResult = await withTimeout(
+    "specialist",
+    DEFAULT_TIMEOUTS.agentMs,
+    () => runAgent({
+      specialist: resolved.specialist,
+      runner: resolved.runner,
+      ctx: {
+        account_id, phone, state: afterSupervisor, message, intent: sup.intent, correlation_id, media,
+        memory_window: memWindow, memory_summary: memSummary, rag_chunks: ragOut.chunks,
+      } as any,
+    }),
+    () => runFailsafe({ account_id, phone, state: afterSupervisor, message, correlation_id }),
+  );
 
   // Guardrails
   const recent = await loadRecentSent(account_id, phone);
@@ -229,11 +284,16 @@ serve(async (req) => {
   });
   for (const tc of agentResult.tool_calls) {
     const currentState = (await loadState(account_id, phone)) ?? afterSupervisor;
-    const r = await executeTool({
-      ctx: { account_id, phone, state: currentState, message, correlation_id, media },
-      tool_name: tc.name,
-      args: tc.args,
-    });
+    const r = await withTimeout(
+      `tool:${tc.name}`,
+      DEFAULT_TIMEOUTS.toolMs,
+      () => executeTool({
+        ctx: { account_id, phone, state: currentState, message, correlation_id, media },
+        tool_name: tc.name,
+        args: tc.args,
+      }),
+      () => ({ ok: false, error: "tool_timeout", events: [] } as any),
+    );
     toolResults.push({ name: tc.name, ...r });
   }
   await trace({
@@ -268,17 +328,34 @@ serve(async (req) => {
     account_id, phone, step: "behavior_chunks_generated", level: "standard",
     payload: { count: prepared.length }, correlation_id,
   });
-  const sent = await transportSend({ account_id, phone, messages: prepared });
+
+  // Phase 5 — transport orchestrator (lock → typing → send → record).
+  const instance = (state as any)?.whatsapp_instance ?? "default";
+  const dryRun = !Deno.env.get("EVOLUTION_API_URL") || !Deno.env.get("EVOLUTION_API_KEY");
+  const joined = prepared.map((p) => p.text).join("\n\n");
+  const sent = await withTimeout(
+    "transport",
+    DEFAULT_TIMEOUTS.transportMs * Math.max(prepared.length, 1),
+    () => sendOrchestrated({
+      account_id, correlation_id, phone, instance, text: joined, dryRun,
+    }),
+    () => ({ delivered: false, chunks: 0, events: [], lock_acquired: false } as any),
+  );
+
+  // Phase 5 — registra mensagens do assistant na memória curta.
+  if (prepared.length) {
+    await appendMessage({ account_id, phone, role: "assistant", content: joined, correlation_id });
+  }
 
   await trace({
     account_id, phone, step: "agent.completed",
     level: "minimal", duration_ms: Date.now() - t0,
-    payload: { phase: 4, specialist: resolved.specialist, intent: sup.intent, chunks: prepared.length },
+    payload: { phase: 5, specialist: resolved.specialist, intent: sup.intent, chunks: prepared.length, rag_cache_hit: ragOut.cache_hit },
     correlation_id,
   });
 
   return json({
-    ok: true, phase: 4, correlation_id, routed: true,
+    ok: true, phase: 5, correlation_id, routed: true,
     fast_path: { bypass: false },
     supervisor: sup,
     specialist: resolved.specialist,
@@ -286,7 +363,8 @@ serve(async (req) => {
     tool_results: toolResults,
     automations,
     transport: sent,
-    note: "Fase 4 (Document Validator + Holder Match + Thresholds + Automations).",
+    rag: { cache_hit: ragOut.cache_hit, chunks: ragOut.chunks.length, latency_ms: ragOut.latency_ms },
+    note: "Fase 5 v2 (transport orchestrator + memory + RAG + budget allocator + timeouts).",
   });
 });
 
