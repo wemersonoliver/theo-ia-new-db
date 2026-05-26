@@ -72,32 +72,38 @@ async function evidence(n: number) {
 
 const SCENARIOS: Array<{ n: number; name: string; kind: string; setup?: () => Promise<void>; run: () => Promise<any>; expectFn: (ev: any, exec: any) => { pass: boolean; why: string } }> = [
   // 1) MIME inválido (text/html) → media-guard rejeita
-  { n: 1, name: "MIME inválido text/html", kind: "SYNTHETIC-LIVE", run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(1), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ classification: "green_invoice", confidence: 0.95 }), mime_type: "text/html", byte_size: 200_000 } }),
+  { n: 1, name: "MIME inválido text/html", kind: "SYNTHETIC-LIVE",
+    setup: async () => seedStateFaturaEnviada(1),
+    run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(1), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ classification: "green_invoice", confidence: 0.95 }), mime_type: "text/html", byte_size: 200_000 } }),
     expectFn: (ev) => ({ pass: ev.state?.document_status === "rejected" && ev.events?.some((e:any)=>e.event_type==="media_rejected"), why: `status=${ev.state?.document_status}` }) },
   // 2) PDF muito pequeno → too_small
-  { n: 2, name: "PDF muito pequeno (<50KB)", kind: "SYNTHETIC-LIVE", run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(2), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ classification: "green_invoice", confidence: 0.95 }), mime_type: "application/pdf", byte_size: 1024 } }),
+  { n: 2, name: "PDF muito pequeno (<50KB)", kind: "SYNTHETIC-LIVE",
+    setup: async () => seedStateFaturaEnviada(2),
+    run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(2), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ classification: "green_invoice", confidence: 0.95 }), mime_type: "application/pdf", byte_size: 1024 } }),
     expectFn: (ev) => ({ pass: ev.events?.some((e:any)=>e.event_type==="media_rejected" && e.payload?.reason==="too_small"), why: "media_rejected too_small" }) },
   // 3) Confidence 0.65 → request_resend → rejected low_confidence
-  { n: 3, name: "Confidence 0.65 (resend)", kind: "MOCKED-PROVIDER", run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(3), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ classification: "green_invoice", confidence: 0.65 }), mime_type: "image/jpeg", byte_size: 200_000 } }),
+  { n: 3, name: "Confidence 0.65 (resend)", kind: "MOCKED-PROVIDER",
+    setup: async () => seedStateFaturaEnviada(3),
+    run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(3), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ classification: "green_invoice", confidence: 0.65 }), mime_type: "image/jpeg", byte_size: 200_000 } }),
     expectFn: (ev) => ({ pass: ev.state?.document_status === "rejected" && ev.validations?.[0]?.reject_reason === "reject_low_confidence", why: `reject=${ev.validations?.[0]?.reject_reason}` }) },
   // 4) Confidence 0.82 + holder match → soft_confirm
   { n: 4, name: "Confidence 0.82 + holder match (soft)", kind: "MOCKED-PROVIDER",
-    setup: async () => seedLead(4, "João da Silva"),
+    setup: async () => { await seedLead(4, "João da Silva"); await seedStateFaturaEnviada(4); },
     run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(4), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ classification: "green_invoice", confidence: 0.82, holder: "Joao da Silva", doc: "12345678901" }), mime_type: "image/jpeg", byte_size: 200_000 } }),
     expectFn: (ev) => ({ pass: ev.state?.document_status === "awaiting_soft_confirm" && ev.state?.holder_match_status === "match", why: `status=${ev.state?.document_status} hm=${ev.state?.holder_match_status}` }) },
   // 5) Confidence 0.95 + holder match → approve
   { n: 5, name: "Confidence 0.95 + holder match (approve)", kind: "MOCKED-PROVIDER",
-    setup: async () => seedLead(5, "Maria Souza"),
+    setup: async () => { await seedLead(5, "Maria Souza"); await seedStateFaturaEnviada(5); },
     run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(5), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ classification: "green_invoice", confidence: 0.95, holder: "Maria Souza", doc: "98765432100" }), mime_type: "image/jpeg", byte_size: 200_000 } }),
     expectFn: (ev) => ({ pass: ev.state?.document_status === "validated" && ev.state?.fatura_valida === true && ev.state?.holder_match_status === "match", why: `status=${ev.state?.document_status} hm=${ev.state?.holder_match_status}` }) },
   // 6) Holder mismatch bloqueando aprovação
   { n: 6, name: "Holder mismatch bloqueia", kind: "MOCKED-PROVIDER",
-    setup: async () => seedLead(6, "Carlos Pereira"),
+    setup: async () => { await seedLead(6, "Carlos Pereira"); await seedStateFaturaEnviada(6); },
     run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(6), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ classification: "green_invoice", confidence: 0.97, holder: "Outro Nome", doc: "11122233344" }), mime_type: "image/jpeg", byte_size: 200_000 } }),
     expectFn: (ev) => ({ pass: ev.state?.document_status === "rejected" && ev.validations?.[0]?.reject_reason === "reject_holder_mismatch", why: `reject=${ev.validations?.[0]?.reject_reason}` }) },
   // 7) Soft confirmation "sim" via fast-path
   { n: 7, name: "Soft-confirm sim via fast-path", kind: "SYNTHETIC-LIVE",
-    setup: async () => seedLead(7, "Ana Lima"),
+    setup: async () => { await seedLead(7, "Ana Lima"); await seedStateFaturaEnviada(7); },
     run: async () => {
       // primeiro: gera soft-confirm
       await callAgent({ account_id: ACCOUNT_ID, phone: ph(7), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ classification: "green_invoice", confidence: 0.80, holder: "Ana Lima", doc: "22233344455" }), mime_type: "image/jpeg", byte_size: 200_000 } });
@@ -107,7 +113,7 @@ const SCENARIOS: Array<{ n: number; name: string; kind: string; setup?: () => Pr
     expectFn: (ev) => ({ pass: ev.state?.document_status === "validated" && ev.state?.fatura_valida === true, why: `final=${ev.state?.document_status}` }) },
   // 8) Concorrência: 5 chamadas simultâneas → lock idempotente
   { n: 8, name: "5 concurrent invoices (lock)", kind: "SYNTHETIC-LIVE",
-    setup: async () => seedLead(8, "Pedro Concorrente"),
+    setup: async () => { await seedLead(8, "Pedro Concorrente"); await seedStateFaturaEnviada(8); },
     run: async () => {
       const url = mockUrl({ classification: "green_invoice", confidence: 0.95, holder: "Pedro Concorrente", doc: "33344455566", delay_ms: 800 });
       const calls = Array.from({ length: 5 }, () => callAgent({ account_id: ACCOUNT_ID, phone: ph(8), tool: "validate_green_invoice", tool_args: { media_url: url, mime_type: "image/jpeg", byte_size: 200_000 } }));
@@ -120,14 +126,18 @@ const SCENARIOS: Array<{ n: number; name: string; kind: string; setup?: () => Pr
       return { pass: executed === 1 && skipped === 4 && ev.validations?.length === 1, why: `exec=${executed} skip=${skipped} validations=${ev.validations?.length}` };
     } },
   // 9) Validator timeout simulado (delay > 12s? não — não dá em 60s); usamos force_error
-  { n: 9, name: "Validator error → unreadable", kind: "MOCKED-PROVIDER", run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(9), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ force_error: 1, error: "gemini_timeout", attempts: 3 }), mime_type: "image/jpeg", byte_size: 200_000 } }),
+  { n: 9, name: "Validator error → unreadable", kind: "MOCKED-PROVIDER",
+    setup: async () => seedStateFaturaEnviada(9),
+    run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(9), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ force_error: 1, error: "gemini_timeout", attempts: 3 }), mime_type: "image/jpeg", byte_size: 200_000 } }),
     expectFn: (ev) => ({ pass: ev.state?.document_status === "rejected" && ev.events?.some((e:any)=>e.event_type==="validation_failed"), why: `events have validation_failed` }) },
   // 10) Validator HTTP error (mock force_error 500-like)
-  { n: 10, name: "Validator forced error path", kind: "MOCKED-PROVIDER", run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(10), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ force_error: 1, error: "gemini_500", attempts: 3 }), mime_type: "image/jpeg", byte_size: 200_000 } }),
+  { n: 10, name: "Validator forced error path", kind: "MOCKED-PROVIDER",
+    setup: async () => seedStateFaturaEnviada(10),
+    run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(10), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ force_error: 1, error: "gemini_500", attempts: 3 }), mime_type: "image/jpeg", byte_size: 200_000 } }),
     expectFn: (ev) => ({ pass: ev.validations?.[0]?.classification === "unreadable", why: `class=${ev.validations?.[0]?.classification}` }) },
   // 11) Duplicate media (same URL, sequential) → lock conflict on 2nd
   { n: 11, name: "Duplicate media sequential", kind: "SYNTHETIC-LIVE",
-    setup: async () => seedLead(11, "Lucas Dup"),
+    setup: async () => { await seedLead(11, "Lucas Dup"); await seedStateFaturaEnviada(11); },
     run: async () => {
       const url = mockUrl({ classification: "green_invoice", confidence: 0.95, holder: "Lucas Dup", doc: "44455566677", delay_ms: 1500 });
       const a = callAgent({ account_id: ACCOUNT_ID, phone: ph(11), tool: "validate_green_invoice", tool_args: { media_url: url, mime_type: "image/jpeg", byte_size: 200_000 } });
@@ -140,7 +150,7 @@ const SCENARIOS: Array<{ n: number; name: string; kind: string; setup?: () => Pr
     expectFn: (ev, exec) => ({ pass: (exec.a === false && exec.b === true) || (exec.a === true && exec.b === false), why: `a_skip=${exec.a} b_skip=${exec.b}` }) },
   // 12) Duplicate automation idempotency — invoke approve twice, expect 1 automation row per type
   { n: 12, name: "Duplicate automation idempotency", kind: "SYNTHETIC-LIVE",
-    setup: async () => seedLead(12, "Rita Idem"),
+    setup: async () => { await seedLead(12, "Rita Idem"); await seedStateFaturaEnviada(12); },
     run: async () => {
       const url = mockUrl({ classification: "green_invoice", confidence: 0.95, holder: "Rita Idem", doc: "55566677788" });
       await callAgent({ account_id: ACCOUNT_ID, phone: ph(12), tool: "validate_green_invoice", tool_args: { media_url: url, mime_type: "image/jpeg", byte_size: 200_000 } });
@@ -149,8 +159,8 @@ const SCENARIOS: Array<{ n: number; name: string; kind: string; setup?: () => Pr
       return callAgent({ account_id: ACCOUNT_ID, phone: ph(12), tool: "validate_green_invoice", tool_args: { media_url: url2, mime_type: "image/jpeg", byte_size: 200_000 } });
     },
     expectFn: (ev) => {
-      // automation type 'tagging' (approve event) should only have one successful per idempotency_key class
-      const tags = (ev.automations ?? []).filter((a:any)=>a.automation_type==="tagging");
+      // automation 'tagging' (approve event) should only have one successful per idempotency_key class
+      const tags = (ev.automations ?? []).filter((a:any)=>a.automation==="tagging");
       const uniqueKeys = new Set(tags.map((t:any)=>t.idempotency_key));
       return { pass: tags.length >= 1 && tags.length === uniqueKeys.size, why: `tagging_rows=${tags.length} unique_keys=${uniqueKeys.size}` };
     } },
@@ -165,7 +175,7 @@ const SCENARIOS: Array<{ n: number; name: string; kind: string; setup?: () => Pr
     expectFn: (ev, exec) => ({ pass: exec.a_cid !== exec.b_cid && /^igr_\d+_[0-9a-f]{6}$/.test(exec.a_cid ?? ""), why: `distinct cids ok` }) },
   // 14) Snapshot before/after exists for a real validation
   { n: 14, name: "Snapshots before+after", kind: "SYNTHETIC-LIVE",
-    setup: async () => seedLead(14, "Snap Test"),
+    setup: async () => { await seedLead(14, "Snap Test"); await seedStateFaturaEnviada(14); },
     run: async () => callAgent({ account_id: ACCOUNT_ID, phone: ph(14), tool: "validate_green_invoice", tool_args: { media_url: mockUrl({ classification: "green_invoice", confidence: 0.95, holder: "Snap Test", doc: "66677788899" }), mime_type: "image/jpeg", byte_size: 200_000 } }),
     expectFn: (ev) => {
       const reasons = (ev.snapshots ?? []).map((s:any)=>s.reason);
