@@ -2001,6 +2001,42 @@ export type Database = {
         }
         Relationships: []
       }
+      igreen_account_limits: {
+        Row: {
+          account_id: string
+          context_total_budget: number
+          daily_input_tokens: number
+          daily_output_tokens: number
+          per_turn_input_tokens: number
+          per_turn_output_tokens: number
+          rate_per_account_per_min: number
+          rate_per_phone_per_min: number
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          context_total_budget?: number
+          daily_input_tokens?: number
+          daily_output_tokens?: number
+          per_turn_input_tokens?: number
+          per_turn_output_tokens?: number
+          rate_per_account_per_min?: number
+          rate_per_phone_per_min?: number
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          context_total_budget?: number
+          daily_input_tokens?: number
+          daily_output_tokens?: number
+          per_turn_input_tokens?: number
+          per_turn_output_tokens?: number
+          rate_per_account_per_min?: number
+          rate_per_phone_per_min?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       igreen_account_products: {
         Row: {
           account_id: string
@@ -2097,6 +2133,69 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      igreen_cancellations: {
+        Row: {
+          account_id: string | null
+          cancelled_at: string
+          correlation_id: string
+          phone: string | null
+          reason: string
+        }
+        Insert: {
+          account_id?: string | null
+          cancelled_at?: string
+          correlation_id: string
+          phone?: string | null
+          reason?: string
+        }
+        Update: {
+          account_id?: string | null
+          cancelled_at?: string
+          correlation_id?: string
+          phone?: string | null
+          reason?: string
+        }
+        Relationships: []
+      }
+      igreen_context_allocations: {
+        Row: {
+          account_id: string | null
+          budget: number
+          correlation_id: string
+          created_at: string
+          id: string
+          metadata: Json
+          section: string
+          truncated: boolean
+          truncation_strategy: string | null
+          used: number
+        }
+        Insert: {
+          account_id?: string | null
+          budget: number
+          correlation_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          section: string
+          truncated?: boolean
+          truncation_strategy?: string | null
+          used: number
+        }
+        Update: {
+          account_id?: string | null
+          budget?: number
+          correlation_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          section?: string
+          truncated?: boolean
+          truncation_strategy?: string | null
+          used?: number
+        }
+        Relationships: []
       }
       igreen_conversation_state: {
         Row: {
@@ -2336,6 +2435,42 @@ export type Database = {
           },
         ]
       }
+      igreen_knowledge_chunks: {
+        Row: {
+          account_id: string | null
+          chunk_index: number
+          content: string
+          created_at: string
+          embedding: string | null
+          id: string
+          metadata: Json
+          source_id: string
+          token_count: number | null
+        }
+        Insert: {
+          account_id?: string | null
+          chunk_index?: number
+          content: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          metadata?: Json
+          source_id: string
+          token_count?: number | null
+        }
+        Update: {
+          account_id?: string | null
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          metadata?: Json
+          source_id?: string
+          token_count?: number | null
+        }
+        Relationships: []
+      }
       igreen_lead_data: {
         Row: {
           account_id: string
@@ -2406,6 +2541,78 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      igreen_memory_summaries: {
+        Row: {
+          account_id: string
+          correlation_id: string | null
+          created_at: string
+          id: string
+          phone: string
+          source_message_count: number | null
+          summary: string
+          token_count: number | null
+        }
+        Insert: {
+          account_id: string
+          correlation_id?: string | null
+          created_at?: string
+          id?: string
+          phone: string
+          source_message_count?: number | null
+          summary: string
+          token_count?: number | null
+        }
+        Update: {
+          account_id?: string
+          correlation_id?: string | null
+          created_at?: string
+          id?: string
+          phone?: string
+          source_message_count?: number | null
+          summary?: string
+          token_count?: number | null
+        }
+        Relationships: []
+      }
+      igreen_memory_window: {
+        Row: {
+          account_id: string
+          content: string
+          correlation_id: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          metadata: Json
+          phone: string
+          role: string
+          token_count: number | null
+        }
+        Insert: {
+          account_id: string
+          content: string
+          correlation_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          metadata?: Json
+          phone: string
+          role: string
+          token_count?: number | null
+        }
+        Update: {
+          account_id?: string
+          content?: string
+          correlation_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          metadata?: Json
+          phone?: string
+          role?: string
+          token_count?: number | null
+        }
+        Relationships: []
       }
       igreen_observability_config: {
         Row: {
@@ -2525,6 +2732,111 @@ export type Database = {
           position?: number
           updated_at?: string
           video_url?: string | null
+        }
+        Relationships: []
+      }
+      igreen_rag_cache: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          expires_at: string
+          hit_count: number
+          query_hash: string
+          query_preview: string | null
+          result: Json
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          expires_at?: string
+          hit_count?: number
+          query_hash: string
+          query_preview?: string | null
+          result: Json
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          expires_at?: string
+          hit_count?: number
+          query_hash?: string
+          query_preview?: string | null
+          result?: Json
+        }
+        Relationships: []
+      }
+      igreen_rag_traces: {
+        Row: {
+          account_id: string | null
+          cache_hit: boolean
+          chunks_returned: number
+          correlation_id: string
+          created_at: string
+          id: string
+          latency_ms: number | null
+          metadata: Json
+          query: string
+          query_hash: string | null
+          tokens_used: number | null
+          top_score: number | null
+        }
+        Insert: {
+          account_id?: string | null
+          cache_hit?: boolean
+          chunks_returned?: number
+          correlation_id: string
+          created_at?: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          query: string
+          query_hash?: string | null
+          tokens_used?: number | null
+          top_score?: number | null
+        }
+        Update: {
+          account_id?: string | null
+          cache_hit?: boolean
+          chunks_returned?: number
+          correlation_id?: string
+          created_at?: string
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          query?: string
+          query_hash?: string | null
+          tokens_used?: number | null
+          top_score?: number | null
+        }
+        Relationships: []
+      }
+      igreen_rate_buckets: {
+        Row: {
+          bucket_key: string
+          capacity: number
+          last_refill_at: string
+          refill_rate: number
+          scope: string
+          tokens: number
+          updated_at: string
+        }
+        Insert: {
+          bucket_key: string
+          capacity?: number
+          last_refill_at?: string
+          refill_rate?: number
+          scope?: string
+          tokens?: number
+          updated_at?: string
+        }
+        Update: {
+          bucket_key?: string
+          capacity?: number
+          last_refill_at?: string
+          refill_rate?: number
+          scope?: string
+          tokens?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -2956,6 +3268,45 @@ export type Database = {
           },
         ]
       }
+      igreen_token_usage: {
+        Row: {
+          account_id: string
+          correlation_id: string | null
+          cost_usd: number | null
+          created_at: string
+          id: string
+          input_tokens: number
+          metadata: Json
+          model: string | null
+          output_tokens: number
+          phone: string | null
+        }
+        Insert: {
+          account_id: string
+          correlation_id?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          input_tokens?: number
+          metadata?: Json
+          model?: string | null
+          output_tokens?: number
+          phone?: string | null
+        }
+        Update: {
+          account_id?: string
+          correlation_id?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          input_tokens?: number
+          metadata?: Json
+          model?: string | null
+          output_tokens?: number
+          phone?: string | null
+        }
+        Relationships: []
+      }
       igreen_tool_locks: {
         Row: {
           account_id: string
@@ -2993,6 +3344,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      igreen_tool_output_cache: {
+        Row: {
+          created_at: string
+          expires_at: string
+          original_tokens: number
+          output_hash: string
+          summary: string
+          summary_tokens: number
+          tool_name: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          original_tokens: number
+          output_hash: string
+          summary: string
+          summary_tokens: number
+          tool_name: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          original_tokens?: number
+          output_hash?: string
+          summary?: string
+          summary_tokens?: number
+          tool_name?: string
+        }
+        Relationships: []
       }
       igreen_traces: {
         Row: {
@@ -3037,6 +3418,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      igreen_transport_events: {
+        Row: {
+          account_id: string | null
+          chunk_index: number
+          correlation_id: string
+          created_at: string
+          error: string | null
+          id: string
+          kind: string
+          payload: Json
+          phone: string
+          provider_message_id: string | null
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          account_id?: string | null
+          chunk_index?: number
+          correlation_id: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind: string
+          payload?: Json
+          phone: string
+          provider_message_id?: string | null
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          account_id?: string | null
+          chunk_index?: number
+          correlation_id?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind?: string
+          payload?: Json
+          phone?: string
+          provider_message_id?: string | null
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: []
       }
       knowledge_base_documents: {
         Row: {
@@ -4675,7 +5101,20 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      igreen_phase5_metrics: {
+        Row: {
+          context_truncations_24h: number | null
+          input_tokens_24h: number | null
+          output_tokens_24h: number | null
+          rag_cache_hit_rate_pct: number | null
+          rag_cache_hits_24h: number | null
+          rag_calls_24h: number | null
+          rag_latency_p50_ms: number | null
+          rag_latency_p95_ms: number | null
+          transport_events_24h: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       accept_roulette_assignment: {
