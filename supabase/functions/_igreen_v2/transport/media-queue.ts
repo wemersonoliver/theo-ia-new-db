@@ -17,14 +17,14 @@ export interface AcquiredLock {
   acquired: boolean;
 }
 
-export async function acquireTransportLock(phone: string, ttlSec = LOCK_TTL_SEC): Promise<AcquiredLock> {
+export async function acquireTransportLock(phone: string, account_id?: string, ttlSec = LOCK_TTL_SEC): Promise<AcquiredLock> {
   const lock_key = `transport:${phone}`;
   const expires = new Date(Date.now() + ttlSec * 1000).toISOString();
   try {
     await svc().from("igreen_tool_locks").delete().lt("expires_at", new Date().toISOString());
   } catch { /* ignore */ }
   const { data, error } = await svc().from("igreen_tool_locks").insert({
-    account_id: "00000000-0000-0000-0000-000000000000",
+    account_id: account_id ?? "00000000-0000-0000-0000-000000000000",
     phone,
     tool: "transport",
     lock_key,
@@ -42,10 +42,10 @@ export async function releaseTransportLock(lock: AcquiredLock): Promise<void> {
 }
 
 /** Espera ativa simples — retorna após adquirir ou timeoutMs. */
-export async function waitForLock(phone: string, timeoutMs = 30_000): Promise<AcquiredLock | null> {
+export async function waitForLock(phone: string, account_id?: string, timeoutMs = 30_000): Promise<AcquiredLock | null> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const lock = await acquireTransportLock(phone);
+    const lock = await acquireTransportLock(phone, account_id);
     if (lock.acquired) return lock;
     await new Promise((r) => setTimeout(r, 300 + Math.random() * 400));
   }

@@ -77,7 +77,7 @@ async function realSendText(args: { url: string; key: string; instance: string; 
 export async function sendOrchestrated(args: SendOrchestratorArgs): Promise<SendOrchestratorResult> {
   const evolutionUrl = args.evolutionUrl ?? Deno.env.get("EVOLUTION_API_URL") ?? "";
   const evolutionKey = args.evolutionKey ?? Deno.env.get("EVOLUTION_API_KEY") ?? "";
-  const lock = await waitForLock(args.phone, DEFAULT_TIMEOUTS.transportMs * 2);
+  const lock = await waitForLock(args.phone, args.account_id, DEFAULT_TIMEOUTS.transportMs * 2);
   if (!lock) {
     return { delivered: false, chunks: 0, events: [], lock_acquired: false };
   }
