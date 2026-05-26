@@ -124,3 +124,6 @@ verify_jwt = false
 
 [functions.igreen-document-validator]
 verify_jwt = false
+
+[functions.igreen-phase4-runner]
+verify_jwt = false
