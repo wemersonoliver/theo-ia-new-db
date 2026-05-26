@@ -37,6 +37,13 @@ async function reset(n: number) {
   await svc.from("igreen_tool_locks").delete().eq("account_id", ACCOUNT_ID).eq("phone", p);
 }
 
+async function seedStateFaturaEnviada(n: number) {
+  const p = ph(n);
+  await svc.from("igreen_conversation_state").upsert({
+    account_id: ACCOUNT_ID, phone: p, etapa_funil: "fatura_enviada",
+  }, { onConflict: "account_id,phone" });
+}
+
 async function seedLead(n: number, nome: string) {
   await svc.from("igreen_lead_data").upsert({
     account_id: ACCOUNT_ID, phone: ph(n), nome_cliente: nome,
@@ -55,7 +62,7 @@ async function evidence(n: number) {
     svc.from("igreen_traces").select("step,correlation_id,duration_ms").eq("account_id", ACCOUNT_ID).eq("phone", p).order("created_at", { ascending: false }).limit(50),
     svc.from("igreen_state_events").select("event_type,event_priority,correlation_id,payload").eq("account_id", ACCOUNT_ID).eq("phone", p).order("created_at", { ascending: false }).limit(50),
     svc.from("igreen_state_snapshots").select("reason,state").eq("account_id", ACCOUNT_ID).eq("phone", p).order("created_at", { ascending: false }).limit(10),
-    svc.from("igreen_automation_executions").select("automation_type,status,correlation_id,idempotency_key,error").eq("account_id", ACCOUNT_ID).eq("phone", p).order("created_at", { ascending: false }).limit(20),
+    svc.from("igreen_automation_executions").select("automation,correlation_id,idempotency_key,result,executed_at").eq("account_id", ACCOUNT_ID).eq("phone", p).order("executed_at", { ascending: false }).limit(20),
     svc.from("igreen_document_validations").select("classification,confidence,threshold_decision,valid,reject_reason,extracted,correlation_id,pipeline_version").eq("account_id", ACCOUNT_ID).eq("phone", p).order("created_at", { ascending: false }).limit(10),
     svc.from("igreen_conversation_state").select("document_status,document_confidence,holder_match_status,validation_attempts,validation_version,etapa_funil,fatura_valida").eq("account_id", ACCOUNT_ID).eq("phone", p).maybeSingle(),
     svc.from("igreen_tool_locks").select("tool,lock_key,expires_at").eq("account_id", ACCOUNT_ID).eq("phone", p),
