@@ -95,7 +95,15 @@ serve(async (req) => {
       tool_name: body.tool,
       args: body.tool_args ?? {},
     });
-    return json({ ok: true, phase: 4, mode: "tool", correlation_id, tool: body.tool, result });
+    // Dispara automações também em modo tool/debug (mesmo contrato do main path).
+    let automations: unknown = [];
+    if (result?.events?.length) {
+      const refreshed = (await loadState(account_id, phone)) ?? state;
+      automations = await dispatchAutomations({
+        account_id, phone, correlation_id, state: refreshed, events: result.events,
+      });
+    }
+    return json({ ok: true, phase: 4, mode: "tool", correlation_id, tool: body.tool, result, automations });
   }
 
   // Modo debug: roda specialist isolado (sem supervisor).
