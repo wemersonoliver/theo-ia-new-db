@@ -1,267 +1,137 @@
+# Fase 5 v2 — Transport / Memory / RAG / Cost Safety (iGreen v2)
 
-# Igreen V2 — Fase 4 (Plano final)
+Plano aprovado. Execução em BUILD MODE seguindo §8 abaixo.
 
-Document Validator isolado + Confidence Thresholds em código + Holder Match + Soft Confirmation + 3 automações reais idempotentes. Tudo amarrado por `correlation_id` ponta-a-ponta, com `validation_version` e snapshots em torno da validação documental.
+## 0. Invariantes invioláveis
 
-## 1. Correlation ID ponta-a-ponta
-
-**Formato:** `igr_${Date.now()}_${randomHex(6)}` (helper em `observability/correlation.ts`).
-
-**Geração:** no início do handler `whatsapp-igreen-agent-v2/index.ts`. Propagado via parâmetro opcional em:
-
-- `trace()` → coluna nova `correlation_id` em `igreen_traces`
-- `emitEvents()` → coluna nova `correlation_id` em `igreen_state_events`
-- `ToolContext` e `AgentContext` → passa adiante
-- `executeTool()` → grava em `tool_execution_started/finished`
-- `withIdempotency()` e `AutomationResult` → grava em `igreen_automation_executions.correlation_id`
-- `transport.send()` → loga
-- `igreen-document-validator` → recebe no payload e devolve no response
-
-**Migração:** `ALTER TABLE igreen_traces / igreen_state_events / igreen_automation_executions / igreen_document_validations ADD COLUMN correlation_id text` + index.
-
-## 2. Estado documental separado + `validation_version`
-
-Migração em `igreen_conversation_state`:
-
-```
-document_status text          -- pending | awaiting_soft_confirm | validated | rejected | failed
-document_confidence numeric(4,3)
-holder_match_status text      -- match | mismatch | unknown
-validation_attempts int NOT NULL DEFAULT 0
-validation_version int NOT NULL DEFAULT 1
-```
-
-`validation_version` permite evolução do pipeline (v1 Gemini → v2 novo provider/thresholds) sem quebrar estados antigos. Definido em constante `CURRENT_VALIDATION_VERSION = 1` em `document-rules-engine/version.ts`; gravado a cada validação concluída e devolvido pelo validator no response (`pipeline_version`).
-
-Adicionar campos à whitelist `ALLOWED_FIELDS` em `state-engine/update.ts`. Novas transições em `state-engine/transitions.ts` (`qualificacao → fatura_enviada → fatura_validada` + `→ fatura_rejeitada`).
-
-## 3. Edge function isolada `igreen-document-validator`
-
-**Contrato puro (sem Supabase client, sem escrita de estado):**
-
-Request:
-```
-{
-  correlation_id, account_id, phone,
-  kind: "invoice" | "identity",
-  media_url, mime_type, byte_size,
-  pipeline_version: 1
-}
-```
-
-Response:
-```
-{
-  correlation_id,
-  pipeline_version: 1,
-  provider: "gemini",
-  classification: "green_invoice" | "other_invoice" | "unreadable" | "not_invoice",
-  confidence: number,
-  extracted: { holder_name?, document_id?, address?, energy_consumption_kwh?, distributor? },
-  error?: string
-}
-```
-
-**Restrições (hard):** sem `applyPatch`, sem `emitEvents`, sem `transport.send`, sem decisão de fluxo. Retorna **só JSON**.
-
-**Resiliência:** timeout hard **12 s**, **2 retries** com backoff exponencial (1 s, 3 s), fallback `{classification:"unreadable", confidence:0, error}`. `verify_jwt = false` no `config.toml`.
-
-## 4. Guardrail de MIME/tamanho
-
-`document-rules-engine/media-guard.ts`:
-- MIME whitelist: `image/jpeg`, `image/png`, `image/webp`, `application/pdf`
-- Tamanho: 50 KB ≤ x ≤ 10 MB
-- Roda **antes** do validator. Falha → evento `media_rejected:high`, specialist pede reenvio.
-
-## 5. Confidence thresholds em código puro
-
-`document-rules-engine/confidence-thresholds.ts` (função pura, sem prompt):
-
-```
->= 0.90 → "auto_approve"
-0.70..0.899 → "request_soft_confirmation"
-<  0.70 → "request_resend"
-```
-
-## 6. Holder match isolado
-
-`document-rules-engine/holder-match.ts` — normaliza (lowercase + sem acento), Jaccard + Levenshtein no token principal. Output: `"match" | "mismatch" | "unknown"` + score. **Mismatch bloqueia aprovação** mesmo com confidence 0.95.
-
-## 7. Soft confirmation (faixa 0.70–0.89)
-
-Nova etapa `awaiting_soft_confirm`. Fluxo:
-1. Validator → `confidence 0.82, holder_name="Maria O."`
-2. Threshold → `request_soft_confirmation`
-3. Specialist: *"Confirma que essa fatura está no nome de Maria Oliveira?"*
-4. Patch: `document_status="awaiting_soft_confirm"` (sem `etapa_funil=fatura_validada`)
-5. Fast-path detecta "sim/não" na próxima mensagem
-6. Sim → `applyPatch({etapa_funil:"fatura_validada", document_status:"validated"})` + automações
-7. Não → reenvio
-
-## 8. Lock por `media_url` no validate
-
-Tool `tools/validate-green-invoice.ts`:
-- `idempotencyKey = "validate_invoice:" + sha1(media_url)`
-- Lock TTL **120 s** via `igreen_tool_locks`
-- Conflito → `skipped:lock_conflict`
-- Internamente: `media-guard → validator → thresholds → holder-match` → devolve `suggested_state_patch` + `events`
-- **Não** envia mensagem (specialist decide texto)
-
-## 9. Snapshots automáticos em torno da validação
-
-Mantém alinhado com D9 (state = fonte da verdade) e habilita recovery/debug em race, retry, timeout, divergência de provider.
-
-Novo helper `state-engine/snapshot.ts` → grava em `igreen_state_snapshots` (tabela já existente; criada na migração da Fase 1):
-
-```
-snapshot({ account_id, phone, label, correlation_id })
-```
-
-Disparado em 2 pontos **dentro de `validate-green-invoice.ts`** (não no specialist, garante atomicidade):
-- **Antes** da chamada ao validator: `label="before_document_validation"`
-- **Depois** do resultado final (com ou sem erro/skip): `label="after_document_validation"`
-
-Cada snapshot inclui `state_version`, `correlation_id`, `validation_version` e `attempt`.
-
-## 10. Automações reais idempotentes
-
-Pasta `automations/`:
-
-| Automação | idempotency_key | Função |
+| # | Regra | Enforcement |
 |---|---|---|
-| `handoff` | `handoff:${account}:${phone}:${reason}` | `handoff_ativo=true`, evento `critical` |
-| `tagging` | `tag:${account}:${phone}:${tag}` | Adiciona tag em `contacts.tags` via `tag_contact_reserved` |
-| `media-dispatch` | `media:${account}:${phone}:${media_key}` | Marca envio em `extras.dispatched_media[]` |
+| D13 | `state-engine/update.ts` é o **único writer** de `igreen_lead_data` | Nenhum módulo novo escreve direto; só emite `suggested_state_patch` |
+| D14 | Automações idempotentes por `correlation_id + automation_key` | Reuso de `_idempotency.ts` |
+| D15 | `whatsapp-ai-agent` genérico intocado | Toda lógica iGreen em `_igreen_v2/` |
+| — | `correlation_id` propagado em 100% dos novos módulos | Tipado em todas as assinaturas |
+| — | CPF/document masking em todos os logs novos | Reuso de `pii-guard` |
+| — | Sem Redis/Upstash; Postgres-only | `igreen_rate_buckets` com `UPDATE…RETURNING` |
+| — | Sem long-term memory | Apenas window + summary |
 
-Todas: `AutomationResult`, `withIdempotency()`, state-aware (no-op se já feito), recebem `correlation_id`. Registro central `automations/_register-all.ts` quebra em duplicata.
+## 1. Módulos novos (`supabase/functions/_igreen_v2/`)
 
-**Fora de escopo Fase 4:** roleta, CRM stage move, enrollment, follow-up cancel.
-
-## 11. Logs mínimos do OCR (LGPD + custo)
-
-`igreen_document_validations` recebe apenas:
-- `provider, classification, confidence, threshold_decision`
-- `extracted` mínimo: `holder_name`, `document_id_masked` (`***.456.***-89`), `distributor`, `kwh`
-- `media_url` (referência, não conteúdo)
-- `correlation_id`, `pipeline_version`, `attempts`
-
-Sem `raw_response`, sem base64, sem payload Gemini completo.
-
-## 12. Pipeline atualizado (edge principal)
-
-```
-1. gerar correlation_id
-2. fast-path (inclui detector "sim/não" quando document_status=awaiting_soft_confirm)
-3. supervisor
-4. specialist green
-   ├─ mensagem com mídia → tool_calls = [{name:"validate_green_invoice", args:{media_url, mime, size}}]
-   └─ else fluxo atual
-5. tool-router executa
-   └─ validate_green_invoice:
-        snapshot("before_document_validation")
-        → media-guard → validator → thresholds → holder-match
-        snapshot("after_document_validation")
-        → suggested_state_patch + events
-6. guardrails
-7. state-engine.applyPatch (único writer)
-8. automation-router (NOVO): lê events da rodada, dispara handoff/tagging/media-dispatch
-9. behavior-engine → transport
-10. trace.complete com correlation_id
+```text
+transport/        typing.ts · humanize.ts · media-queue.ts · send-orchestrator.ts
+memory/           short-term.ts · summarizer.ts · pii-guard.ts
+rag/              retriever.ts · cache.ts · context-builder.ts · embedding-worker.ts
+cost-governor/    token-budget.ts · rate-limiter.ts · timeout-orchestrator.ts · cancel-registry.ts
+retry/            backoff.ts
 ```
 
-## 13. Testes obrigatórios
+Edge functions novas: `igreen-rag-ingest`, `igreen-memory-gc` (pg_cron 10min), `igreen-phase5-runner`.
 
-Script `/tmp/phase4_tests.sh`:
+## 2. Context Budget Allocator (oficial)
 
-| # | Cenário | Esperado |
-|---|---|---|
-| 1 | MIME `text/html` | `media_rejected:high`, validator não chamado |
-| 2 | PDF 10 bytes | Bloqueado por `media-guard` |
-| 3 | Confidence 0.65 | `request_resend`, sem `fatura_validada` |
-| 4 | 0.82 + holder match | `awaiting_soft_confirm`, pergunta de confirmação |
-| 5 | 0.95 + holder **mismatch** | Bloqueia aprovação |
-| 6 | 0.95 + holder match | `validated`, `tagging("fatura_ok")` 1× |
-| 7 | Provider timeout | 2 retries, fallback, `validation_failed:high`, pipeline OK |
-| 8 | Mesma `media_url` 2× paralelo | 1 exec + 1 `skipped:lock_conflict` |
-| 9 | Webhook duplicado | Automações `skipped:already_executed` |
-| 10 | Soft confirm "sim" | `applyPatch(fatura_validada)` + automações |
-| 11 | 5 msgs com mídia em paralelo | 0 perdas de patch |
-| 12 | Conta `is_igreen=false` | 403 (D13) |
-| 13 | Snapshots gravados | 2 linhas em `igreen_state_snapshots` por validação (before+after) |
-| 14 | `validation_version` propagada | request/response/state/validations todos com `1` |
+`rag/context-builder.ts` aplica alocação por seção com prioridades. Orçamento padrão **8.000 tokens** (configurável por `account_id`).
 
-Relatório final em `/mnt/documents/igreen_v2_phase4_test_report.md`.
+| # | Seção | Budget | Truncável | Ordem trunc. | Estratégia |
+|---|---|---:|---|---:|---|
+| 1 | system_prompt + guardrails | 1.200 | **NÃO** | — | Overflow → abort + fallback |
+| 2 | safety_reserve (output) | 1.400 | NÃO | — | Reservado |
+| 3 | current_conversation | 1.600 | parcial | 5º | Mantém ≥ 2 últimas íntegras |
+| 4 | memory_summaries | 600 | sim | 4º | Mantém o mais recente |
+| 5 | tool_outputs | 1.400 | sim (com resumo) | 3º | >800 tokens → summarize |
+| 6 | rag_chunks | 1.800 | sim | **1º** | Remove menor score primeiro |
 
-## 14. Arquivos
+Eventos: `context.budget_allocated`, `context.section_truncated`, `context.guardrails_overflow`, `context.tool_output_summarized`. Assertion final: soma ≤ total_budget.
 
-**Novos:**
-```
-supabase/functions/
-├── igreen-document-validator/index.ts
-└── _igreen_v2/
-    ├── observability/correlation.ts
-    ├── document-rules-engine/
-    │   ├── version.ts                       (CURRENT_VALIDATION_VERSION=1)
-    │   ├── confidence-thresholds.ts
-    │   ├── holder-match.ts
-    │   ├── invoice-rules.ts
-    │   └── media-guard.ts
-    ├── state-engine/snapshot.ts             (helper labels before/after)
-    ├── tools/validate-green-invoice.ts
-    ├── automations/
-    │   ├── _register-all.ts
-    │   ├── handoff.ts
-    │   ├── tagging.ts
-    │   └── media-dispatch.ts
-    └── automation-router/
-        ├── registry.ts
-        └── dispatch.ts
+## 3. Schema (1 migration, 12 tabelas + view)
+
+Todas com GRANT + RLS + índices.
+
+```text
+igreen_transport_events       UNIQUE(correlation_id, chunk_index)
+igreen_memory_window          BTREE(account_id, phone, created_at), expires_at parcial
+igreen_memory_summaries       BTREE(account_id, phone, created_at)
+igreen_knowledge_chunks       HNSW(embedding vector(1536))
+igreen_rag_cache              PK(query_hash), expires_at parcial
+igreen_rag_traces             BTREE(correlation_id)
+igreen_account_limits         PK(account_id)
+igreen_rate_buckets           PK(key); UPDATE…RETURNING atômico
+igreen_cancellations          PK(correlation_id)
+igreen_token_usage            BTREE(account_id, created_at)
+igreen_context_allocations    BTREE(correlation_id, section)
+igreen_tool_output_cache      PK(output_hash), expires_at parcial
+view igreen_phase5_metrics    p50/p95 por fase + RAG hit-rate + tokens/seção
 ```
 
-**Editados:**
-- `_igreen_v2/observability/trace.ts` — aceita `correlation_id`
-- `_igreen_v2/state-engine/update.ts` — whitelist + transições + grava `validation_version` quando vier no patch
-- `_igreen_v2/state-engine/transitions.ts`
-- `_igreen_v2/tool-router/{types.ts,execute.ts}` — propaga correlation_id
-- `_igreen_v2/automations/_idempotency.ts`
-- `_igreen_v2/agents/green/{run.ts,prompt.ts,stages.ts}` — detecta mídia, soft-confirm, mismatch
-- `_igreen_v2/fast-path/decide.ts` — detector "sim/não"
-- `_igreen_v2/tools/_register-all.ts`
-- `whatsapp-igreen-agent-v2/index.ts` — gera correlation_id, chama automation-router após state-engine
-- `supabase/config.toml` — `[functions.igreen-document-validator] verify_jwt=false`
+RLS: `account_id` scope; `service_role` bypass para edge functions.
 
-**Migração SQL (uma única):**
-```sql
-ALTER TABLE public.igreen_conversation_state
-  ADD COLUMN IF NOT EXISTS document_status text,
-  ADD COLUMN IF NOT EXISTS document_confidence numeric(4,3),
-  ADD COLUMN IF NOT EXISTS holder_match_status text,
-  ADD COLUMN IF NOT EXISTS validation_attempts int NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS validation_version int NOT NULL DEFAULT 1;
+## 4. Cost Governor
 
-ALTER TABLE public.igreen_traces                ADD COLUMN IF NOT EXISTS correlation_id text;
-ALTER TABLE public.igreen_state_events          ADD COLUMN IF NOT EXISTS correlation_id text;
-ALTER TABLE public.igreen_automation_executions ADD COLUMN IF NOT EXISTS correlation_id text;
-ALTER TABLE public.igreen_document_validations
-  ADD COLUMN IF NOT EXISTS correlation_id text,
-  ADD COLUMN IF NOT EXISTS pipeline_version int NOT NULL DEFAULT 1;
+- `token-budget`: input 6.000 / output 1.200 por turno; 400k/dia por `account_id` (`igreen_account_limits`).
+- `rate-limiter`: 8/min por phone, 120/min por account (token-bucket Postgres atômico).
+- `timeout-orchestrator`: tool=12s, agent=25s, transport=8s, RAG=4s. Fallback determinístico em timeout.
+- `cancel-registry`: `igreen_cancellations` consultado pelo follow-up scheduler.
 
-CREATE INDEX IF NOT EXISTS idx_igreen_traces_corr ON public.igreen_traces(correlation_id);
-CREATE INDEX IF NOT EXISTS idx_igreen_events_corr ON public.igreen_state_events(correlation_id);
-```
+## 5. Retry / Backoff
 
-**Diretivas preservadas:** D1, D4, D5, D9 (snapshots), D10, D13, D14 (único writer), D15 (idempotência).
+`base=400ms, factor=2, max=8s, attempts=3`. Classes: `transient`, `provider_4xx` (no-retry), `budget` (no-retry). Aplicado em Gemini, Evolution, embeddings, validator HTTP.
 
-## 15. Critério de pronto
+## 6. Transport
 
-- [ ] Documento atravessa pipeline completo (mídia → guard → validator → thresholds → holder → state → automações)
-- [ ] Thresholds funcionando (3 faixas)
-- [ ] Soft confirmation funcionando (4 + 10)
-- [ ] Holder mismatch bloqueia (5)
-- [ ] Automações idempotentes (6 + 9)
-- [ ] `correlation_id` presente em traces/events/automations/validations
-- [ ] `validation_version` presente em state + validations + response do validator
-- [ ] Snapshots `before_document_validation` e `after_document_validation` gravados em toda validação
-- [ ] Failsafe validado (7)
-- [ ] Zero impacto no `whatsapp-ai-agent` genérico
-- [ ] Relatório final em `/mnt/documents/`
+- `typing`: presence=composing, duração `min(8s, chars/45)`
+- `humanize`: split 220 chars + jitter 1.2–2.8s + pausa em `?`
+- `media-queue`: FIFO por phone com lock `transport:{phone}` em `igreen_locks`
+- `send-orchestrator`: wrapper único; registra `igreen_transport_events`
+
+## 7. Memory
+
+- `short-term`: N=12, TTL 24h, em `igreen_memory_window`
+- `summarizer`: comprime 8 mais antigas em ≤400 tokens via Gemini Flash Lite
+- `pii-guard`: mascara CPF/RG/document_id antes de persistir
+- Sem LTM nesta fase
+
+## 8. Ordem de execução (autorizada)
+
+1. **Migration única** (12 tabelas + GRANT + RLS + índices + view)
+2. **cost-governor** (token + rate + timeout + cancel)
+3. **retry/backoff**
+4. **transport** (typing → humanize → media-queue → send-orchestrator)
+5. **memory** (short-term → pii-guard → summarizer)
+6. **rag** (cache → retriever → **context-builder com Budget Allocator** → ingest)
+7. **Integração no `whatsapp-igreen-agent-v2`** (timeout-orchestrator wrappa agent.run; transport substitui send direto)
+8. **`igreen-phase5-runner`** — 19 cenários ao vivo
+9. **Relatório** `/mnt/documents/igreen_v2_phase5_live_validation_report.md`
+
+Cada etapa fecha com smoke test isolado antes de avançar.
+
+## 9. 19 cenários (gate de PASS)
+
+1. Typing antes de cada chunk
+2. Ordem preservada texto+áudio paralelos
+3. Media-queue lock impede concorrência
+4. Memory window respeita N=12
+5. Summarizer comprime + mantém continuidade
+6. PII mascarada (CPF nunca cru)
+7. RAG cache hit reduz latência >40%
+8. RAG threshold pula chunks ruins
+9. RAG budget corta excedente
+10. Context budget: RAG cai primeiro sob pressão
+11. Context budget: guardrails nunca truncados → abort + fallback
+12. Tool output longo é resumido, não dropado
+13. Token budget bloqueia turno acima do cap diário
+14. Rate limit por phone (8/min)
+15. Rate limit por account (120/min)
+16. Timeout em tool → fallback determinístico
+17. Cancel registry aborta follow-up quando lead responde
+18. Retry exponencial em 429 do Gemini
+19. Multi-instância: 2 workers em rate_buckets sem corrida
+
+**Critério READY-FOR-PHASE-6**: 19/19 PASS · correlation 100% · zero patch perdido · zero guardrails_overflow não tratado · zero write fora do state-engine · zero regressão nas Fases 1–4.
+
+## 10. Entregáveis
+
+- 5 módulos + 3 edge functions novas
+- 1 migration (12 tabelas + view + GRANT + RLS + índices)
+- `igreen-phase5-runner` com 19/19 PASS
+- Relatório com latências p50/p95, RAG hit-rate, tokens por seção, evidências SQL
+- Memory index atualizado (D16–D21 + Context Budget Allocation)
+
+Aguardando handoff para BUILD MODE — primeiro passo será a migration única.
