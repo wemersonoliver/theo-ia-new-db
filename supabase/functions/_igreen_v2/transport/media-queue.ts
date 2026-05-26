@@ -1,4 +1,4 @@
-// Phase 5 — Media queue FIFO por phone via lock em igreen_locks.
+// Phase 5 — Media queue FIFO por phone via lock em igreen_tool_locks (reuso Fase 4).
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -12,36 +12,32 @@ const svc = () => (_c ??= createClient(
 const LOCK_TTL_SEC = 60;
 
 export interface AcquiredLock {
-  key: string;
-  holder: string;
+  id: string | null;
+  lock_key: string;
   acquired: boolean;
 }
 
-/**
- * Atomic acquire usando upsert ignoreDuplicates + double-check.
- * Funciona contra a tabela igreen_locks já existente da Fase 4.
- */
 export async function acquireTransportLock(phone: string, ttlSec = LOCK_TTL_SEC): Promise<AcquiredLock> {
-  const key = `transport:${phone}`;
-  const holder = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const lock_key = `transport:${phone}`;
   const expires = new Date(Date.now() + ttlSec * 1000).toISOString();
-  // Tenta liberar locks expirados antes
   try {
-    await svc().from("igreen_locks").delete().lt("expires_at", new Date().toISOString());
+    await svc().from("igreen_tool_locks").delete().lt("expires_at", new Date().toISOString());
   } catch { /* ignore */ }
-  const { error } = await svc().from("igreen_locks").insert({
-    lock_key: key,
-    holder,
+  const { data, error } = await svc().from("igreen_tool_locks").insert({
+    account_id: "00000000-0000-0000-0000-000000000000",
+    phone,
+    tool: "transport",
+    lock_key,
     expires_at: expires,
-  });
-  if (error) return { key, holder, acquired: false };
-  return { key, holder, acquired: true };
+  }).select("id").maybeSingle();
+  if (error || !data) return { id: null, lock_key, acquired: false };
+  return { id: (data as { id: string }).id, lock_key, acquired: true };
 }
 
 export async function releaseTransportLock(lock: AcquiredLock): Promise<void> {
-  if (!lock.acquired) return;
+  if (!lock.acquired || !lock.id) return;
   try {
-    await svc().from("igreen_locks").delete().eq("lock_key", lock.key).eq("holder", lock.holder);
+    await svc().from("igreen_tool_locks").delete().eq("id", lock.id);
   } catch { /* ignore */ }
 }
 
