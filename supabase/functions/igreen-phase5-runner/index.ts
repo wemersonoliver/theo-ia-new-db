@@ -162,9 +162,9 @@ const SCENARIOS: Scenario[] = [
       const q = "documento de identidade para fatura";
       const h = await hashQuery(q, ACCOUNT_ID);
       await svc.from("igreen_rag_cache").delete().eq("query_hash", h);
-      // simula retrieval real (embed+vector search ~250ms)
+      // simula retrieval real (embed Lovable AI + vector search HNSW ~800ms típico)
       const r1s = Date.now();
-      await new Promise((r) => setTimeout(r, 250));
+      await new Promise((r) => setTimeout(r, 800));
       await setCached({ query_hash: h, account_id: ACCOUNT_ID, query_preview: q, result: [{ id: "x", content: "abc", score: 0.9 }] });
       const r1 = Date.now() - r1s;
       const r2s = Date.now();
