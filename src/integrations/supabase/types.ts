@@ -2197,6 +2197,33 @@ export type Database = {
         }
         Relationships: []
       }
+      igreen_conversation_priority: {
+        Row: {
+          account_id: string
+          last_scored_at: string
+          phone: string
+          reasons: Json
+          score: number
+          tier: string
+        }
+        Insert: {
+          account_id: string
+          last_scored_at?: string
+          phone: string
+          reasons?: Json
+          score?: number
+          tier?: string
+        }
+        Update: {
+          account_id?: string
+          last_scored_at?: string
+          phone?: string
+          reasons?: Json
+          score?: number
+          tier?: string
+        }
+        Relationships: []
+      }
       igreen_conversation_state: {
         Row: {
           account_id: string
@@ -2282,6 +2309,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      igreen_cost_profiles: {
+        Row: {
+          account_id: string
+          daily_budget_cents: number | null
+          overrides: Json
+          profile: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          daily_budget_cents?: number | null
+          overrides?: Json
+          profile?: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          daily_budget_cents?: number | null
+          overrides?: Json
+          profile?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       igreen_default_ai_config: {
         Row: {
@@ -2614,6 +2665,48 @@ export type Database = {
         }
         Relationships: []
       }
+      igreen_model_routing: {
+        Row: {
+          account_id: string
+          correlation_id: string
+          created_at: string
+          escalated_from: string | null
+          estimated_cost_cents: number
+          estimated_savings_cents: number
+          id: string
+          phone: string | null
+          reason: string | null
+          selected_model: string
+          task_type: string
+        }
+        Insert: {
+          account_id: string
+          correlation_id: string
+          created_at?: string
+          escalated_from?: string | null
+          estimated_cost_cents?: number
+          estimated_savings_cents?: number
+          id?: string
+          phone?: string | null
+          reason?: string | null
+          selected_model: string
+          task_type: string
+        }
+        Update: {
+          account_id?: string
+          correlation_id?: string
+          created_at?: string
+          escalated_from?: string | null
+          estimated_cost_cents?: number
+          estimated_savings_cents?: number
+          id?: string
+          phone?: string | null
+          reason?: string | null
+          selected_model?: string
+          task_type?: string
+        }
+        Relationships: []
+      }
       igreen_observability_config: {
         Row: {
           account_id: string
@@ -2642,6 +2735,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      igreen_operational_metrics: {
+        Row: {
+          account_id: string | null
+          correlation_id: string | null
+          created_at: string
+          dims: Json
+          id: string
+          metric: string
+          value: number
+        }
+        Insert: {
+          account_id?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          dims?: Json
+          id?: string
+          metric: string
+          value: number
+        }
+        Update: {
+          account_id?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          dims?: Json
+          id?: string
+          metric?: string
+          value?: number
+        }
+        Relationships: []
       }
       igreen_product_video_followups: {
         Row: {
@@ -2732,6 +2855,147 @@ export type Database = {
           position?: number
           updated_at?: string
           video_url?: string | null
+        }
+        Relationships: []
+      }
+      igreen_prompt_compression: {
+        Row: {
+          account_id: string
+          correlation_id: string
+          created_at: string
+          id: string
+          ratio: number
+          sections_collapsed: Json
+          tokens_in: number
+          tokens_out: number
+        }
+        Insert: {
+          account_id: string
+          correlation_id: string
+          created_at?: string
+          id?: string
+          ratio: number
+          sections_collapsed?: Json
+          tokens_in: number
+          tokens_out: number
+        }
+        Update: {
+          account_id?: string
+          correlation_id?: string
+          created_at?: string
+          id?: string
+          ratio?: number
+          sections_collapsed?: Json
+          tokens_in?: number
+          tokens_out?: number
+        }
+        Relationships: []
+      }
+      igreen_provider_circuit_breakers: {
+        Row: {
+          consecutive_failures: number
+          cooldown_until: string | null
+          model: string
+          opened_at: string | null
+          provider: string
+          reason: string | null
+          state: string
+          updated_at: string
+        }
+        Insert: {
+          consecutive_failures?: number
+          cooldown_until?: string | null
+          model: string
+          opened_at?: string | null
+          provider: string
+          reason?: string | null
+          state?: string
+          updated_at?: string
+        }
+        Update: {
+          consecutive_failures?: number
+          cooldown_until?: string | null
+          model?: string
+          opened_at?: string | null
+          provider?: string
+          reason?: string | null
+          state?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      igreen_provider_health: {
+        Row: {
+          failure_count: number
+          last_error: string | null
+          last_failure_at: string | null
+          last_success_at: string | null
+          latency_p50_ms: number
+          latency_p95_ms: number
+          model: string
+          provider: string
+          success_count: number
+          timeout_count: number
+          updated_at: string
+          window_start: string
+        }
+        Insert: {
+          failure_count?: number
+          last_error?: string | null
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          latency_p50_ms?: number
+          latency_p95_ms?: number
+          model: string
+          provider: string
+          success_count?: number
+          timeout_count?: number
+          updated_at?: string
+          window_start?: string
+        }
+        Update: {
+          failure_count?: number
+          last_error?: string | null
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          latency_p50_ms?: number
+          latency_p95_ms?: number
+          model?: string
+          provider?: string
+          success_count?: number
+          timeout_count?: number
+          updated_at?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
+      igreen_queue_pressure: {
+        Row: {
+          account_id: string
+          created_at: string
+          id: string
+          in_flight: number
+          mode: string
+          pressure_level: string
+          queued: number
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          id?: string
+          in_flight?: number
+          mode?: string
+          pressure_level: string
+          queued?: number
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          id?: string
+          in_flight?: number
+          mode?: string
+          pressure_level?: string
+          queued?: number
         }
         Relationships: []
       }
@@ -5112,6 +5376,19 @@ export type Database = {
           rag_latency_p50_ms: number | null
           rag_latency_p95_ms: number | null
           transport_events_24h: number | null
+        }
+        Relationships: []
+      }
+      igreen_phase6_metrics: {
+        Row: {
+          account_id: string | null
+          avg_value: number | null
+          bucket_hour: string | null
+          metric: string | null
+          p50: number | null
+          p95: number | null
+          samples: number | null
+          sum_value: number | null
         }
         Relationships: []
       }
