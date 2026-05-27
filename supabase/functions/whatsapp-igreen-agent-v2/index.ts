@@ -47,6 +47,39 @@ import { recordBreakerOutcome } from "../_igreen_v2/provider-health/circuit-brea
 import { trackTurnCost } from "../_igreen_v2/analytics/cost-tracker.ts";
 import { recordMetric } from "../_igreen_v2/analytics/recorder.ts";
 import { timed } from "../_igreen_v2/operational-metrics/emitter.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Cliente service-role para resolver instance_name a partir da account.
+const _svcClient = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  { auth: { persistSession: false } },
+);
+
+// Resolve o instance_name real para a account. Prioriza:
+//   1) state.whatsapp_instance (se já fixado)
+//   2) instância conectada (status=connected) marcada como is_primary
+//   3) qualquer instância conectada da account
+async function resolveInstanceName(
+  accountId: string,
+  stateHint: string | null,
+): Promise<string> {
+  if (stateHint && stateHint !== "default") return stateHint;
+  try {
+    const { data } = await _svcClient
+      .from("whatsapp_instances")
+      .select("instance_name, status, is_primary")
+      .eq("account_id", accountId)
+      .order("is_primary", { ascending: false })
+      .order("updated_at", { ascending: false });
+    const connected = (data ?? []).find((i: any) => i.status === "connected");
+    if (connected?.instance_name) return connected.instance_name as string;
+    if ((data ?? [])[0]?.instance_name) return (data as any)[0].instance_name;
+  } catch (e) {
+    console.error("[igreen-v2] resolveInstanceName error", e);
+  }
+  return "default";
+}
 
 function intentToTaskType(intent: string): TaskType {
   const i = (intent ?? "").toLowerCase();
