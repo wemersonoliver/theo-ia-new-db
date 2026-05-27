@@ -33,6 +33,31 @@ import { retrieve as ragRetrieve } from "../_igreen_v2/rag/retriever.ts";
 import { buildContext } from "../_igreen_v2/rag/context-builder.ts";
 import { checkPhoneRate } from "../_igreen_v2/cost-governor/rate-limiter.ts";
 import { isCancelled } from "../_igreen_v2/cost-governor/cancel-registry.ts";
+// Phase 6 — Optimization / Scalability / Operational Intelligence
+import { measurePressure } from "../_igreen_v2/queue-pressure/monitor.ts";
+import { shouldShed } from "../_igreen_v2/queue-pressure/shed-load.ts";
+import { degradedOpts } from "../_igreen_v2/queue-pressure/degraded-mode.ts";
+import { scoreAndPersist } from "../_igreen_v2/conversation-priority/scorer.ts";
+import { loadProfile } from "../_igreen_v2/adaptive-cost/profile-loader.ts";
+import { adjustForPressure } from "../_igreen_v2/adaptive-cost/adjuster.ts";
+import { selectModel, type TaskType } from "../_igreen_v2/model-router/selector.ts";
+import { compressPrompt } from "../_igreen_v2/prompt-compression/compressor.ts";
+import { recordProviderResult } from "../_igreen_v2/provider-health/recorder.ts";
+import { recordBreakerOutcome } from "../_igreen_v2/provider-health/circuit-breaker.ts";
+import { trackTurnCost } from "../_igreen_v2/analytics/cost-tracker.ts";
+import { recordMetric } from "../_igreen_v2/analytics/recorder.ts";
+import { timed } from "../_igreen_v2/operational-metrics/emitter.ts";
+
+function intentToTaskType(intent: string): TaskType {
+  const i = (intent ?? "").toLowerCase();
+  if (i.includes("confirm") || i.includes("sim_nao") || i.includes("soft")) return "simple_confirm";
+  if (i.includes("small_talk") || i.includes("saudacao") || i.includes("greeting")) return "small_talk";
+  if (i.includes("classif")) return "classification";
+  if (i.includes("resum") || i.includes("summary")) return "summary";
+  if (i.includes("objec") || i.includes("duvida_pesada") || i.includes("negoc")) return "objection_handling";
+  if (i.includes("analise") || i.includes("long")) return "long_analysis";
+  return "rag_synthesis";
+}
 
 // Boot: registra todas as tools (D4 — duplicado quebra o boot).
 registerAllTools();
@@ -69,7 +94,7 @@ serve(async (req) => {
   }
 
   if (body.ping) {
-    return json({ ok: true, service: "whatsapp-igreen-agent-v2", phase: 5, validation_version: CURRENT_VALIDATION_VERSION });
+    return json({ ok: true, service: "whatsapp-igreen-agent-v2", phase: 6, validation_version: CURRENT_VALIDATION_VERSION });
   }
 
   const account_id = (body.account_id ?? "").trim();
@@ -147,13 +172,35 @@ serve(async (req) => {
     return json({ ok: false, reason: "cancelled", correlation_id }, 200);
   }
 
+  // Phase 6 — queue pressure + adaptive cost + conversation priority (before heavy work).
+  const [pressure, profileBase] = await Promise.all([
+    measurePressure(account_id),
+    loadProfile(account_id),
+  ]);
+  const profile = adjustForPressure(profileBase, pressure.pressure_level);
+  const degraded = degradedOpts(pressure.mode);
+  const priorState = await ensureState(account_id, phone);
+  const priority = await scoreAndPersist({
+    account_id, phone, state: priorState,
+    last_message_at: (priorState as any)?.last_user_message_at ?? new Date().toISOString(),
+  });
+  const shed = shouldShed(pressure, priority.tier);
+  if (shed.shed) {
+    await trace({ account_id, phone, step: "queue.shed", level: "minimal",
+      payload: { tier: priority.tier, pressure: pressure.pressure_level, reason: shed.reason }, correlation_id });
+    await recordMetric({ account_id, correlation_id, metric: "queue.shed", value: 1,
+      dims: { tier: priority.tier, pressure: pressure.pressure_level } });
+    return json({ ok: false, reason: "shed_load", retry_after_ms: shed.retry_after_ms,
+      correlation_id, pressure: pressure.pressure_level, tier: priority.tier }, 503);
+  }
+
   // Phase 5 — registra mensagem do usuário na memória curta (com PII mask interno).
   if (message) {
     await appendMessage({ account_id, phone, role: "user", content: message, correlation_id });
   }
 
   // D8 — FAST PATH antes de qualquer carga pesada (sem histórico, sem LLM)
-  const state = await ensureState(account_id, phone);
+  const state = priorState;
   const fp = decideFastPath({ state, message });
   if (fp.bypass) {
     await emitEvents(account_id, phone, [
@@ -226,13 +273,36 @@ serve(async (req) => {
     correlation_id,
   });
 
-  // Phase 5 — memory injection (window + latest summary) e RAG injection.
+  // Phase 5/6 — memory + RAG (RAG é suprimido sob degraded/shed_load).
+  const skipRag = degraded.skip_rag || profile.rag_top_k === 0;
   const [memWindow, memSummaryRow, ragOut] = await Promise.all([
     getWindow(account_id, phone),
     getLatestSummary(account_id, phone),
-    message ? ragRetrieve({ query: message, account_id, correlation_id }) : Promise.resolve({ chunks: [], cache_hit: false, latency_ms: 0, query_hash: "" }),
+    (!skipRag && message)
+      ? timed("rag.retrieve", account_id, correlation_id,
+          () => ragRetrieve({ query: message, account_id, correlation_id }))
+      : Promise.resolve({ chunks: [], cache_hit: false, latency_ms: 0, query_hash: "" }),
   ]);
   const memSummary = memSummaryRow?.summary ?? null;
+
+  // Phase 6 — Model routing decision (task_type derivado do intent).
+  const taskType = intentToTaskType(sup.intent);
+  const routeDecision = await selectModel({
+    account_id, correlation_id, phone,
+    task_type: taskType,
+    profile: profile.profile,
+    tokens_in_estimate: 1500,
+    tokens_out_estimate: 400,
+  });
+
+  // Phase 6 — Prompt compression (telemetria + redução real do payload contextual).
+  const compression = await compressPrompt({
+    correlation_id, account_id,
+    guardrails: "igreen-guardrails-v6",
+    conversation: memWindow.map((m) => ({ role: m.role as any, content: m.content })),
+    tool_outputs: [],
+    rag_chunks: ragOut.chunks.map((c) => c.content),
+  });
 
   // Context Budget Allocator — registra alocações context.* mesmo quando o specialist
   // não consome o prompt agregado (specialists Igreen têm seus próprios prompts curtos).
@@ -240,25 +310,43 @@ serve(async (req) => {
     correlation_id,
     account_id,
     system: "igreen-guardrails",
-    conversation: memWindow.map((m) => ({ role: m.role, content: m.content })),
+    conversation: compression.conversation,
     memorySummary: memSummary,
-    toolOutputs: [],
-    ragChunks: ragOut.chunks.map((c) => ({ id: c.id, content: c.content, score: c.score })),
+    toolOutputs: compression.tool_outputs,
+    ragChunks: ragOut.chunks
+      .slice(0, compression.rag_chunks.length)
+      .map((c, i) => ({ id: c.id, content: compression.rag_chunks[i] ?? c.content, score: c.score })),
   });
 
+  const specialistT0 = Date.now();
+  let specialistOk = true;
   let agentResult = await withTimeout(
     "specialist",
     DEFAULT_TIMEOUTS.agentMs,
-    () => runAgent({
+    () => timed("specialist.run", account_id, correlation_id, () => runAgent({
       specialist: resolved.specialist,
       runner: resolved.runner,
       ctx: {
         account_id, phone, state: afterSupervisor, message, intent: sup.intent, correlation_id, media,
         memory_window: memWindow, memory_summary: memSummary, rag_chunks: ragOut.chunks,
+        route: routeDecision, compression: { ratio: compression.ratio, tokens_in: compression.tokens_in, tokens_out: compression.tokens_out },
       } as any,
-    }),
-    () => runFailsafe({ account_id, phone, state: afterSupervisor, message, correlation_id }),
+    })),
+    () => { specialistOk = false; return runFailsafe({ account_id, phone, state: afterSupervisor, message, correlation_id }); },
   );
+  // Phase 6 — provider health + circuit breaker outcome.
+  const specialistLatency = Date.now() - specialistT0;
+  await Promise.all([
+    recordProviderResult({ provider: "google", model: routeDecision.selected_model,
+      outcome: specialistOk ? "success" : "timeout", latency_ms: specialistLatency,
+      error: specialistOk ? undefined : "specialist_timeout" }),
+    recordBreakerOutcome({ provider: "google", model: routeDecision.selected_model,
+      success: specialistOk, reason: specialistOk ? undefined : "specialist_timeout", correlation_id }),
+    trackTurnCost({ account_id, correlation_id,
+      estimated_cost_cents: routeDecision.estimated_cost_cents,
+      estimated_savings_cents: routeDecision.estimated_savings_cents,
+      model: routeDecision.selected_model }),
+  ]);
 
   // Guardrails
   const recent = await loadRecentSent(account_id, phone);
@@ -324,47 +412,68 @@ serve(async (req) => {
 
   // Behavior engine → transport
   const prepared = prepareMessages(agentResult.messages);
+  // Phase 6 — degraded mode limita número de chunks enviados.
+  const chunkLimited = prepared.slice(0, Math.max(1, degraded.chunk_limit));
   await trace({
     account_id, phone, step: "behavior_chunks_generated", level: "standard",
-    payload: { count: prepared.length }, correlation_id,
+    payload: { count: chunkLimited.length, original: prepared.length, degraded_mode: pressure.mode }, correlation_id,
   });
 
   // Phase 5 — transport orchestrator (lock → typing → send → record).
   const instance = (state as any)?.whatsapp_instance ?? "default";
   const dryRun = !Deno.env.get("EVOLUTION_API_URL") || !Deno.env.get("EVOLUTION_API_KEY");
-  const joined = prepared.map((p) => p.text).join("\n\n");
+  const joined = chunkLimited.map((p) => p.text).join("\n\n");
   const sent = await withTimeout(
     "transport",
-    DEFAULT_TIMEOUTS.transportMs * Math.max(prepared.length, 1),
-    () => sendOrchestrated({
+    DEFAULT_TIMEOUTS.transportMs * Math.max(chunkLimited.length, 1),
+    () => timed("transport.send", account_id, correlation_id, () => sendOrchestrated({
       account_id, correlation_id, phone, instance, text: joined, dryRun,
-    }),
+    })),
     () => ({ delivered: false, chunks: 0, events: [], lock_acquired: false } as any),
   );
 
   // Phase 5 — registra mensagens do assistant na memória curta.
-  if (prepared.length) {
+  if (chunkLimited.length) {
     await appendMessage({ account_id, phone, role: "assistant", content: joined, correlation_id });
   }
 
   await trace({
     account_id, phone, step: "agent.completed",
     level: "minimal", duration_ms: Date.now() - t0,
-    payload: { phase: 5, specialist: resolved.specialist, intent: sup.intent, chunks: prepared.length, rag_cache_hit: ragOut.cache_hit },
+    payload: {
+      phase: 6, specialist: resolved.specialist, intent: sup.intent,
+      chunks: chunkLimited.length, rag_cache_hit: ragOut.cache_hit,
+      model: routeDecision.selected_model, escalated_from: routeDecision.escalated_from ?? null,
+      compression_ratio: compression.ratio, pressure: pressure.pressure_level,
+      tier: priority.tier, cost_cents: routeDecision.estimated_cost_cents,
+      savings_cents: routeDecision.estimated_savings_cents,
+    },
     correlation_id,
   });
 
+  await recordMetric({ account_id, correlation_id, metric: "turn.total_ms",
+    value: Date.now() - t0, dims: { phase: 6, specialist: resolved.specialist } });
+
   return json({
-    ok: true, phase: 5, correlation_id, routed: true,
+    ok: true, phase: 6, correlation_id, routed: true,
     fast_path: { bypass: false },
     supervisor: sup,
     specialist: resolved.specialist,
-    messages: prepared.map((p) => p.text),
+    messages: chunkLimited.map((p) => p.text),
     tool_results: toolResults,
     automations,
     transport: sent,
     rag: { cache_hit: ragOut.cache_hit, chunks: ragOut.chunks.length, latency_ms: ragOut.latency_ms },
-    note: "Fase 5 v2 (transport orchestrator + memory + RAG + budget allocator + timeouts).",
+    phase6: {
+      pressure: pressure.pressure_level, mode: pressure.mode,
+      tier: priority.tier, score: priority.score,
+      profile: profile.profile, model: routeDecision.selected_model,
+      escalated_from: routeDecision.escalated_from ?? null,
+      compression_ratio: compression.ratio,
+      cost_cents: routeDecision.estimated_cost_cents,
+      savings_cents: routeDecision.estimated_savings_cents,
+    },
+    note: "Fase 6 v2 (model router + compression + queue pressure + adaptive cost + analytics).",
   });
 });
 
