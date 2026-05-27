@@ -202,7 +202,7 @@ serve(async (req) => {
     // Get contact name from conversation
     const { data: convForName } = await supabase
       .from("whatsapp_conversations")
-      .select("id, contact_name, ai_processing_until")
+      .select("id, contact_name, ai_processing_until, account_id")
       .eq("user_id", userId)
       .eq("phone", phone)
       .maybeSingle();
@@ -268,7 +268,19 @@ serve(async (req) => {
 
     let aiResult: any = null;
     try {
-      const aiResponse = await fetch(`${supabaseUrl}/functions/v1/whatsapp-ai-agent`, {
+      // D13 routing — accounts with is_igreen=true go to the v2 pipeline (Phase 1–6).
+      let targetFn = "whatsapp-ai-agent";
+      const accountId = (pending as any).account_id ?? (convForName as any)?.account_id ?? null;
+      if (accountId) {
+        const { data: acc } = await supabase
+          .from("accounts")
+          .select("is_igreen")
+          .eq("id", accountId)
+          .maybeSingle();
+        if (acc?.is_igreen === true) targetFn = "whatsapp-igreen-agent-v2";
+      }
+      console.log(`[router] account=${accountId} → ${targetFn}`);
+      const aiResponse = await fetch(`${supabaseUrl}/functions/v1/${targetFn}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -276,6 +288,7 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           userId,
+          accountId,
           phone,
           messageContent: latestIncomingText,
           contactName,
