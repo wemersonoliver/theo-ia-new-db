@@ -1,41 +1,47 @@
-## Diagnóstico confirmado
+## Causa raiz
 
-- Conta da Thays com `is_igreen=true`: `2cf994fc-…` (instância `biz1027_principal` conectada).
-- Conversa do teste `5594981091975` chegou na conta correta (34 mensagens nas últimas 2h).
-- Mas **zero** linhas em `igreen_state_events`, `igreen_traces`, `igreen_operational_metrics`, `igreen_conversation_state` — pipeline v2 nunca executou.
-- Causa: `whatsapp-webhook` e `process-pending-ai` chamam **sempre** `whatsapp-ai-agent` (antigo), sem checar `accounts.is_igreen`. A função `whatsapp-igreen-agent-v2` existe e está deployada, mas nada do tráfego real entra nela.
+A função `delete-contact-cascade` apaga a `whatsapp_conversations` e algumas tabelas Igreen antigas, mas **não limpa o estado persistente do pipeline v2**. O contato `5594981091975` tem hoje em `igreen_conversation_state`:
 
-## Correção (2 arquivos, mínima, sem regressão)
+- `handoff_ativo = true`
+- `specialist = "failsafe"`
 
-### 1) `supabase/functions/process-pending-ai/index.ts`
-Antes do `fetch` que dispara o agente:
-- Resolver `accountId` a partir de `pending.account_id` (ou da própria `whatsapp_conversations`).
-- Consultar `accounts.is_igreen`.
-- Se `true` → `targetFn = "whatsapp-igreen-agent-v2"`.
-- Senão → `targetFn = "whatsapp-ai-agent"` (mantém o comportamento atual).
-- Passar `accountId` no body para o v2.
-- Log `[router] account=… → <fn>` para evidência.
+Quando o contato volta a mandar mensagem após ser excluído, o v2 (`whatsapp-igreen-agent-v2`) lê esse state e responde com `fast_path: { bypass: true, action: "noop", reason: "handoff_active" }` — ou seja, a IA fica "desativada" mesmo depois da exclusão. Os logs confirmam exatamente isso na última execução.
 
-### 2) `supabase/functions/whatsapp-webhook/index.ts`
-No fallback "no delay configured, call AI immediately" (linha ~1096):
-- Mesmo check em `accounts.is_igreen` (o `accountId` já está em escopo na função `triggerAIResponse`).
-- Roteia para `whatsapp-igreen-agent-v2` quando aplicável.
+Além do `igreen_conversation_state`, o cascade também ignora outras tabelas v2 escopadas por `(account_id, phone)` que carregam memória/locks/métricas do contato (`igreen_memory_window`, `igreen_memory_summaries`, `igreen_state_events`, `igreen_state_snapshots`, `igreen_traces`, `igreen_transport_events`, `igreen_tool_locks`, `igreen_timeouts`, `igreen_token_usage`, `igreen_model_routing`, `igreen_conversation_priority`, `igreen_automation_executions`, `igreen_document_validations`, `igreen_cancellations`).
 
-Nenhuma outra função, schema, RLS, frontend ou comportamento de contas não-iGreen muda.
+## Correção (1 arquivo)
 
-## Validação ao vivo após o deploy
+**`supabase/functions/delete-contact-cascade/index.ts`**
 
-1. Pedir nova mensagem da Thays (ou re-disparar manualmente).
-2. Conferir nas tabelas (filtrando `account_id = 2cf994fc-…` e janela de minutos):
-   - `igreen_traces` — passos do pipeline.
-   - `igreen_state_events` — eventos do state-engine.
-   - `igreen_operational_metrics` — custo/latência por turno.
-   - `igreen_conversation_state` — snapshot atualizado da conversa `5594981091975`.
-3. Conferir nos logs do `process-pending-ai` a linha `[router] account=2cf994fc-… → whatsapp-igreen-agent-v2`.
-4. Conferir nos logs do `whatsapp-ai-agent` **ausência** de invocações para essa account na janela.
+Adicionar à constante `PHONE_TABLES` todas as tabelas Igreen v2 escopadas por `(account_id, phone)`, para que o "Excluir contato" realmente zere o estado do pipeline novo:
 
-## Entregáveis ao final
+```ts
+{ table: "igreen_conversation_state", phoneCol: "phone" },
+{ table: "igreen_conversation_priority", phoneCol: "phone" },
+{ table: "igreen_state_events", phoneCol: "phone" },
+{ table: "igreen_state_snapshots", phoneCol: "phone" },
+{ table: "igreen_traces", phoneCol: "phone" },
+{ table: "igreen_transport_events", phoneCol: "phone" },
+{ table: "igreen_memory_window", phoneCol: "phone" },
+{ table: "igreen_memory_summaries", phoneCol: "phone" },
+{ table: "igreen_tool_locks", phoneCol: "phone" },
+{ table: "igreen_timeouts", phoneCol: "phone" },
+{ table: "igreen_token_usage", phoneCol: "phone" },
+{ table: "igreen_model_routing", phoneCol: "phone" },
+{ table: "igreen_automation_executions", phoneCol: "phone" },
+{ table: "igreen_document_validations", phoneCol: "phone" },
+{ table: "igreen_cancellations", phoneCol: "phone" },
+```
 
-- Linhas SQL reais (counts + amostras) das 4 tabelas `igreen_*` acima.
-- Trecho dos logs mostrando o roteamento.
-- Confirmação textual de que o agente antigo não foi mais usado para a Thays.
+Nada mais muda. RLS, frontend, contas não-iGreen e o webhook continuam iguais. O insert de nova `whatsapp_conversations` já cria com `ai_active=true` quando não há keyword filter, então sem o `handoff_ativo` órfão o v2 volta a processar normalmente.
+
+## Limpeza pontual do contato da Thays
+
+Como o registro com `handoff_ativo=true` já está no banco (criado no último teste), também precisamos apagar de uma vez as linhas órfãs do `5594981091975` em `account_id = 2cf994fc-4a1b-440c-be8b-c91a5c25fd32`, para que o próximo teste já funcione mesmo sem reexcluir o contato pela UI. Isso vai numa migration de DELETE direcionada (sem alterar schema).
+
+## Validação
+
+1. Excluir o contato `5594981091975` pela UI da Thays.
+2. Confirmar via SQL que `igreen_conversation_state`, `igreen_memory_window`, `igreen_state_events`, `igreen_traces` ficaram **sem linhas** para esse phone+account.
+3. Pedir nova mensagem do contato.
+4. Conferir nos logs do `process-pending-ai` o `[router] … → whatsapp-igreen-agent-v2` e nos logs do v2 que a resposta **não** entra mais em `fast_path bypass handoff_active` — deve seguir o pipeline normal (supervisor → especialista → envio).
