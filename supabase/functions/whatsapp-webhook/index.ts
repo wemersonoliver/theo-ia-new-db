@@ -1104,13 +1104,17 @@ async function triggerAIResponse(supabase: any, userId: string, accountId: strin
       if (acc?.is_igreen === true) targetFn = "whatsapp-igreen-agent-v2";
     }
     console.log(`[router] account=${accountId} → ${targetFn}`);
+    const isV2 = targetFn === "whatsapp-igreen-agent-v2";
+    const payload = isV2
+      ? { account_id: accountId, phone, message: messageContent, media: mediaInfo, userId }
+      : { userId, accountId, phone, messageContent, mediaInfo };
     await fetch(`${supabaseUrl}/functions/v1/${targetFn}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${serviceKey}`,
       },
-      body: JSON.stringify({ userId, accountId, phone, messageContent, mediaInfo }),
+      body: JSON.stringify(payload),
     });
   } catch (error) {
     console.error("Error triggering AI:", error);

@@ -280,19 +280,23 @@ serve(async (req) => {
         if (acc?.is_igreen === true) targetFn = "whatsapp-igreen-agent-v2";
       }
       console.log(`[router] account=${accountId} → ${targetFn}`);
+      const isV2 = targetFn === "whatsapp-igreen-agent-v2";
+      const payload = isV2
+        ? {
+            account_id: accountId,
+            phone,
+            message: latestIncomingText,
+            contact_name: contactName,
+            userId,
+          }
+        : { userId, accountId, phone, messageContent: latestIncomingText, contactName };
       const aiResponse = await fetch(`${supabaseUrl}/functions/v1/${targetFn}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${supabaseServiceKey}`,
         },
-        body: JSON.stringify({
-          userId,
-          accountId,
-          phone,
-          messageContent: latestIncomingText,
-          contactName,
-        }),
+        body: JSON.stringify(payload),
       });
       aiResult = await aiResponse.json();
       console.log("AI response result:", aiResult);
