@@ -1093,13 +1093,24 @@ async function triggerAIResponse(supabase: any, userId: string, accountId: strin
     }
     
     // No delay configured, call AI immediately (fallback)
-    await fetch(`${supabaseUrl}/functions/v1/whatsapp-ai-agent`, {
+    // D13 routing — accounts with is_igreen=true go to the v2 pipeline.
+    let targetFn = "whatsapp-ai-agent";
+    if (accountId) {
+      const { data: acc } = await supabase
+        .from("accounts")
+        .select("is_igreen")
+        .eq("id", accountId)
+        .maybeSingle();
+      if (acc?.is_igreen === true) targetFn = "whatsapp-igreen-agent-v2";
+    }
+    console.log(`[router] account=${accountId} → ${targetFn}`);
+    await fetch(`${supabaseUrl}/functions/v1/${targetFn}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${serviceKey}`,
       },
-      body: JSON.stringify({ userId, phone, messageContent, mediaInfo }),
+      body: JSON.stringify({ userId, accountId, phone, messageContent, mediaInfo }),
     });
   } catch (error) {
     console.error("Error triggering AI:", error);
