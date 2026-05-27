@@ -1,137 +1,187 @@
-# Fase 5 v2 — Transport / Memory / RAG / Cost Safety (iGreen v2)
+# Fase 6 v2 — Optimization, Scalability & Operational Intelligence
 
-Plano aprovado. Execução em BUILD MODE seguindo §8 abaixo.
+## 0. Invariantes preservados (D13–D15 + Fase 5)
 
-## 0. Invariantes invioláveis
+- `state-engine/update.ts` permanece **único writer** de `igreen_lead_data`
+- Toda automação continua idempotente por `correlation_id + automation_key`
+- `whatsapp-ai-agent` genérico intocado; toda lógica nova em `_igreen_v2/`
+- `correlation_id` propagado em 100% dos novos módulos
+- PII masking via `memory/pii-guard.ts` reutilizado
+- Postgres-only; sem Redis; sem LTM
+- Context Budget Allocator (Fase 5) continua autoridade final sobre tokens
 
-| # | Regra | Enforcement |
-|---|---|---|
-| D13 | `state-engine/update.ts` é o **único writer** de `igreen_lead_data` | Nenhum módulo novo escreve direto; só emite `suggested_state_patch` |
-| D14 | Automações idempotentes por `correlation_id + automation_key` | Reuso de `_idempotency.ts` |
-| D15 | `whatsapp-ai-agent` genérico intocado | Toda lógica iGreen em `_igreen_v2/` |
-| — | `correlation_id` propagado em 100% dos novos módulos | Tipado em todas as assinaturas |
-| — | CPF/document masking em todos os logs novos | Reuso de `pii-guard` |
-| — | Sem Redis/Upstash; Postgres-only | `igreen_rate_buckets` com `UPDATE…RETURNING` |
-| — | Sem long-term memory | Apenas window + summary |
+## 1. Migration única (8 tabelas + view)
 
-## 1. Módulos novos (`supabase/functions/_igreen_v2/`)
+Todas com GRANT + RLS + índices + `account_id` + `correlation_id` onde aplicável.
 
 ```text
-transport/        typing.ts · humanize.ts · media-queue.ts · send-orchestrator.ts
-memory/           short-term.ts · summarizer.ts · pii-guard.ts
-rag/              retriever.ts · cache.ts · context-builder.ts · embedding-worker.ts
-cost-governor/    token-budget.ts · rate-limiter.ts · timeout-orchestrator.ts · cancel-registry.ts
-retry/            backoff.ts
+igreen_provider_health           PK(provider, model); window contadores success/fail/latency
+igreen_provider_circuit_breakers PK(provider, model); state(closed|open|half_open), opened_at, cooldown_until
+igreen_model_routing             BTREE(correlation_id); selected_model, reason, escalated_from, estimated_cost_cents
+igreen_prompt_compression        BTREE(correlation_id); tokens_in, tokens_out, ratio, sections_collapsed jsonb
+igreen_queue_pressure            BTREE(account_id, created_at); pressure_level(low|med|high), in_flight, queued, mode
+igreen_conversation_priority     PK(account_id, phone); score int, tier(hot|warm|cold), last_scored_at
+igreen_cost_profiles             PK(account_id); profile(balanced|economy|performance), overrides jsonb
+igreen_operational_metrics       BTREE(account_id, created_at); metric, value, dims jsonb
+view igreen_phase6_metrics       p50/p95 por módulo + cost/lead + savings + degradation + cache hits
 ```
 
-Edge functions novas: `igreen-rag-ingest`, `igreen-memory-gc` (pg_cron 10min), `igreen-phase5-runner`.
+RLS: scope `account_id`; service_role bypass.
 
-## 2. Context Budget Allocator (oficial)
-
-`rag/context-builder.ts` aplica alocação por seção com prioridades. Orçamento padrão **8.000 tokens** (configurável por `account_id`).
-
-| # | Seção | Budget | Truncável | Ordem trunc. | Estratégia |
-|---|---|---:|---|---:|---|
-| 1 | system_prompt + guardrails | 1.200 | **NÃO** | — | Overflow → abort + fallback |
-| 2 | safety_reserve (output) | 1.400 | NÃO | — | Reservado |
-| 3 | current_conversation | 1.600 | parcial | 5º | Mantém ≥ 2 últimas íntegras |
-| 4 | memory_summaries | 600 | sim | 4º | Mantém o mais recente |
-| 5 | tool_outputs | 1.400 | sim (com resumo) | 3º | >800 tokens → summarize |
-| 6 | rag_chunks | 1.800 | sim | **1º** | Remove menor score primeiro |
-
-Eventos: `context.budget_allocated`, `context.section_truncated`, `context.guardrails_overflow`, `context.tool_output_summarized`. Assertion final: soma ≤ total_budget.
-
-## 3. Schema (1 migration, 12 tabelas + view)
-
-Todas com GRANT + RLS + índices.
+## 2. Módulos novos (`supabase/functions/_igreen_v2/`)
 
 ```text
-igreen_transport_events       UNIQUE(correlation_id, chunk_index)
-igreen_memory_window          BTREE(account_id, phone, created_at), expires_at parcial
-igreen_memory_summaries       BTREE(account_id, phone, created_at)
-igreen_knowledge_chunks       HNSW(embedding vector(1536))
-igreen_rag_cache              PK(query_hash), expires_at parcial
-igreen_rag_traces             BTREE(correlation_id)
-igreen_account_limits         PK(account_id)
-igreen_rate_buckets           PK(key); UPDATE…RETURNING atômico
-igreen_cancellations          PK(correlation_id)
-igreen_token_usage            BTREE(account_id, created_at)
-igreen_context_allocations    BTREE(correlation_id, section)
-igreen_tool_output_cache      PK(output_hash), expires_at parcial
-view igreen_phase5_metrics    p50/p95 por fase + RAG hit-rate + tokens/seção
+model-router/           selector.ts · cost-estimator.ts · escalation.ts
+prompt-compression/     compressor.ts · section-collapser.ts · redundancy.ts
+provider-health/        recorder.ts · circuit-breaker.ts · degradation-detector.ts
+adaptive-cost/          profile-loader.ts · adjuster.ts (RAG depth / top-k / retries)
+queue-pressure/         monitor.ts · shed-load.ts · degraded-mode.ts
+conversation-priority/  scorer.ts · tier-resolver.ts
+analytics/              recorder.ts · cost-tracker.ts
+operational-metrics/    emitter.ts · aggregator.ts
 ```
 
-RLS: `account_id` scope; `service_role` bypass para edge functions.
+## 3. Smart Model Routing
 
-## 4. Cost Governor
+| Tarefa | Modelo padrão |
+|---|---|
+| confirmação simples / small talk / classificação / resumo | Gemini Flash Lite |
+| RAG synthesis | Gemini Flash |
+| objection handling complexo / análise longa | Gemini Pro |
 
-- `token-budget`: input 6.000 / output 1.200 por turno; 400k/dia por `account_id` (`igreen_account_limits`).
-- `rate-limiter`: 8/min por phone, 120/min por account (token-bucket Postgres atômico).
-- `timeout-orchestrator`: tool=12s, agent=25s, transport=8s, RAG=4s. Fallback determinístico em timeout.
-- `cancel-registry`: `igreen_cancellations` consultado pelo follow-up scheduler.
+Roteamento por: estágio do funil, tamanho do contexto, criticidade, tool usage, confidence, token budget restante, perfil de custo, estado do circuit breaker.
 
-## 5. Retry / Backoff
+Eventos: `model_router.selected`, `model_router.escalated`, `model_router.cost_saved_estimate`.
 
-`base=400ms, factor=2, max=8s, attempts=3`. Classes: `transient`, `provider_4xx` (no-retry), `budget` (no-retry). Aplicado em Gemini, Evolution, embeddings, validator HTTP.
+## 4. Prompt Compression Engine
 
-## 6. Transport
+Meta: **≥35% redução de tokens médios por turno**.
 
-- `typing`: presence=composing, duração `min(8s, chars/45)`
-- `humanize`: split 220 chars + jitter 1.2–2.8s + pausa em `?`
-- `media-queue`: FIFO por phone com lock `transport:{phone}` em `igreen_locks`
-- `send-orchestrator`: wrapper único; registra `igreen_transport_events`
+Operações: dedup, colapso de histórico repetitivo, sumarização de mensagens emocionais longas, redução de tool outputs antigos, listas → resumo estruturado.
 
-## 7. Memory
+Invioláveis (nunca comprimir): últimas 2 mensagens, guardrails, pending actions, soft confirmations, dados críticos (CPF, valores, datas confirmadas).
 
-- `short-term`: N=12, TTL 24h, em `igreen_memory_window`
-- `summarizer`: comprime 8 mais antigas em ≤400 tokens via Gemini Flash Lite
-- `pii-guard`: mascara CPF/RG/document_id antes de persistir
-- Sem LTM nesta fase
+Eventos: `prompt.compressed`, `prompt.compression_ratio`, `prompt.section_collapsed`.
 
-## 8. Ordem de execução (autorizada)
+## 5. Provider Health + Circuit Breaker
 
-1. **Migration única** (12 tabelas + GRANT + RLS + índices + view)
-2. **cost-governor** (token + rate + timeout + cancel)
-3. **retry/backoff**
-4. **transport** (typing → humanize → media-queue → send-orchestrator)
-5. **memory** (short-term → pii-guard → summarizer)
-6. **rag** (cache → retriever → **context-builder com Budget Allocator** → ingest)
-7. **Integração no `whatsapp-igreen-agent-v2`** (timeout-orchestrator wrappa agent.run; transport substitui send direto)
-8. **`igreen-phase5-runner`** — 19 cenários ao vivo
-9. **Relatório** `/mnt/documents/igreen_v2_phase5_live_validation_report.md`
+- `recorder.ts`: registra latência e erros por `(provider, model)` em janela deslizante
+- `circuit-breaker.ts`: estados closed/open/half-open com cooldown automático
+- `degradation-detector.ts`: detecta degradação e força fallback de modelo via model-router
+
+Eventos: `provider.degraded`, `provider.circuit_open`, `provider.fallback_model`.
+
+## 6. Adaptive Cost Engine
+
+Perfis em `igreen_cost_profiles` por `account_id`:
+
+| Modo | RAG top-k | RAG threshold | Retries | Modelo padrão |
+|---|---|---|---|---|
+| balanced | 5 | 0.78 | 3 | Flash |
+| economy | 2 | 0.85 | 1 | Flash Lite |
+| performance | 8 | 0.72 | 3 | Pro |
+
+Ajuste dinâmico quando uso diário ultrapassa thresholds.
+
+## 7. Queue Pressure Management
+
+- `monitor.ts`: lê in-flight + queued por account; calcula pressão
+- Pressão alta → reduzir typing/jitter, simplificar prompts, pausar RAG em baixa prioridade
+- `shed-load.ts`: rejeita/atrasa baixa prioridade com fallback determinístico
+
+Eventos: `queue.pressure_high`, `queue.degraded_mode`, `queue.recovered`.
+
+## 8. Conversation Prioritization
+
+Score por conversa, recalculado a cada turno:
+
+- **Hot**: aguardando pagamento, validação documental, onboarding ativo, resposta pendente <2min
+- **Warm**: lead engajado nas últimas 24h
+- **Cold**: small talk, follow-up frio, ocioso >24h
+
+Usado por queue-pressure (shed-load) e model-router (escalação seletiva).
+
+## 9. Observability avançada
+
+Métricas em `igreen_operational_metrics`:
+
+- **Performance**: latency por módulo, queue wait, retry depth, timeout rate, provider degradation
+- **Financeiro**: custo/lead, custo/account, savings (routing + compression)
+- **Qualidade**: response_success_rate, fallback_rate, automation_success_rate, human_handoff_rate
+
+View `igreen_phase6_metrics` agrega tudo para dashboards.
+
+## 10. Integração no orchestrator (`whatsapp-igreen-agent-v2`)
+
+Nova ordem do pipeline:
+
+```text
+1.  correlation_id
+2.  fast-path
+3.  queue-pressure check (shed-load se crítico)
+4.  rate-limit (Fase 5)
+5.  adaptive-cost profile load
+6.  conversation-priority score
+7.  supervisor decide
+8.  model-router select (respeita circuit-breaker)
+9.  memory + RAG retrieve
+10. context-builder (Fase 5)
+11. prompt-compression
+12. timeout-orchestrator wrap
+13. agent.run
+14. tools (com provider-health recording)
+15. transport.send (orchestrator Fase 5)
+16. analytics + operational-metrics emit
+17. state-engine.applyPatch (único writer)
+```
+
+## 11. Ordem de execução autorizada (§8)
+
+1. **Migration única** (8 tabelas + view + GRANT + RLS + índices)
+2. **provider-health** (recorder + circuit-breaker + degradation-detector)
+3. **model-router** (selector + cost-estimator + escalation)
+4. **prompt-compression** (compressor + section-collapser + redundancy)
+5. **adaptive-cost** (profile-loader + adjuster)
+6. **conversation-priority** (scorer + tier-resolver)
+7. **queue-pressure** (monitor + shed-load + degraded-mode)
+8. **analytics + operational-metrics**
+9. **Integração no `whatsapp-igreen-agent-v2`**
+10. **`igreen-phase6-runner`** — 15 cenários ao vivo
+11. **Relatório** `/mnt/documents/igreen_v2_phase6_live_validation_report.md`
 
 Cada etapa fecha com smoke test isolado antes de avançar.
 
-## 9. 19 cenários (gate de PASS)
+## 12. Gate READY-FOR-PHASE-7 — 15 cenários
 
-1. Typing antes de cada chunk
-2. Ordem preservada texto+áudio paralelos
-3. Media-queue lock impede concorrência
-4. Memory window respeita N=12
-5. Summarizer comprime + mantém continuidade
-6. PII mascarada (CPF nunca cru)
-7. RAG cache hit reduz latência >40%
-8. RAG threshold pula chunks ruins
-9. RAG budget corta excedente
-10. Context budget: RAG cai primeiro sob pressão
-11. Context budget: guardrails nunca truncados → abort + fallback
-12. Tool output longo é resumido, não dropado
-13. Token budget bloqueia turno acima do cap diário
-14. Rate limit por phone (8/min)
-15. Rate limit por account (120/min)
-16. Timeout em tool → fallback determinístico
-17. Cancel registry aborta follow-up quando lead responde
-18. Retry exponencial em 429 do Gemini
-19. Multi-instância: 2 workers em rate_buckets sem corrida
+1. Model routing seleciona Flash Lite para confirmação simples
+2. Model routing escala para Pro em objeção complexa
+3. Provider degradado → fallback automático de modelo
+4. Circuit breaker abre após N falhas consecutivas
+5. Compression reduz ≥35% tokens médios
+6. Compression nunca toca últimas 2 msgs nem guardrails
+7. Queue pressure alta ativa degraded_mode
+8. Shed-load rejeita cold antes de hot
+9. Economy mode reduz custo medido vs balanced
+10. Performance mode aumenta qualidade sem quebrar budget
+11. Zero patches perdidos sob pressão
+12. Retries controlados (sem loop) em 429/timeout
+13. RAG simplificado em pressão alta (top-k reduzido)
+14. Priorização: hot lead processado antes de cold
+15. Throughput alto (N concorrente) sem colapso + correlation 100% + analytics populadas
 
-**Critério READY-FOR-PHASE-6**: 19/19 PASS · correlation 100% · zero patch perdido · zero guardrails_overflow não tratado · zero write fora do state-engine · zero regressão nas Fases 1–4.
+**Critério READY**: 15/15 PASS · correlation 100% · zero write fora do state-engine · zero regressão Fases 1–5 · compression ≥35% · cost savings mensurável.
 
-## 10. Entregáveis
+## 13. Fora de escopo (proibido nesta fase)
 
-- 5 módulos + 3 edge functions novas
-- 1 migration (12 tabelas + view + GRANT + RLS + índices)
-- `igreen-phase5-runner` com 19/19 PASS
-- Relatório com latências p50/p95, RAG hit-rate, tokens por seção, evidências SQL
-- Memory index atualizado (D16–D21 + Context Budget Allocation)
+Voz, chamadas telefônicas, Redis, multi-agent swarm, LTM, canais além do WhatsApp, IA generativa de voz.
 
-Aguardando handoff para BUILD MODE — primeiro passo será a migration única.
+## 14. Entregáveis
+
+- 8 módulos novos em `_igreen_v2/`
+- 1 migration (8 tabelas + view + GRANT + RLS + índices)
+- Orchestrator atualizado com novo pipeline (17 passos)
+- `igreen-phase6-runner` com 15/15 PASS
+- Relatório operacional com p50/p95 por módulo, savings, throughput, cost/lead
+- Memory index atualizado (D22–D28 + Smart Model Routing + Compression + Circuit Breaker + Adaptive Cost + Queue Pressure)
+
+Aguardando handoff para BUILD MODE — primeira etapa: **migration única + provider-health layer**.
