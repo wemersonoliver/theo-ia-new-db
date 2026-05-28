@@ -152,11 +152,15 @@ async function generateText(ctx: AgentContext, stage: string): Promise<string> {
 
 function fallbackText(stage: string): string {
   switch (stage) {
-    case "discovery": return "Olá! Tudo bem? Como posso te chamar?";
+    case "greet": return "Olá! Tudo bem? Como posso te ajudar hoje?";
+    case "explain_solution": return "A Igreen te dá economia na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer entender melhor como funciona?";
     case "send_video": return "Vou te mandar um vídeo curtinho explicando como funciona.";
-    case "qualify": return "Pra te ajudar melhor: qual sua cidade e quanto vem de luz por mês?";
-    case "request_invoice": return "Me manda a sua última fatura (PDF ou foto)? Assim consigo calcular sua economia.";
+    case "ask_consumo": return "Pra eu te ajudar melhor, quanto vem em média na sua conta de luz por mês?";
+    case "ask_cidade": return "Legal! E você mora em qual cidade?";
+    case "ask_name": return "Pra ficar mais fácil, como posso te chamar?";
+    case "request_invoice": return "Me manda sua última fatura (PDF ou foto)? Assim calculo sua economia exata.";
     case "waiting_invoice": return "Perfeito, fico no aguardo da fatura.";
+    case "ask_full_name_cpf": return "Pra preparar seu contrato, me passa por favor seu nome completo e CPF?";
     default: return "Beleza!";
   }
 }
