@@ -7,21 +7,27 @@ import { SUPERVISOR_SYSTEM_PROMPT, buildSupervisorUserPrompt } from "./prompt.ts
 
 const SUPERVISOR_TIMEOUT_MS = 8000;
 const VALID_SPECIALISTS = new Set(["green", "telecom", "expansao", "qualifier", "failsafe"]);
+// Specialists que podem manter o turno em fallback "sticky" (continuidade de fluxo).
+const STICKY_SPECIALISTS = new Set(["green", "telecom", "expansao", "qualifier"]);
 
 export interface SupervisorDecision {
   intent: string;
   specialist: string;
   confidence: number;
-  source: "llm" | "timeout" | "error" | "low_confidence";
+  source: "llm" | "timeout" | "error" | "low_confidence" | "low_confidence_sticky";
 }
 
 export async function decideSupervisor(args: {
   account_id: string;
   phone: string;
   message: string;
-  state: Pick<IgreenConversationState, "produto">;
+  state: Pick<IgreenConversationState, "produto" | "specialist" | "etapa_funil">;
+  last_ai_question?: string | null;
 }): Promise<SupervisorDecision> {
   const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
+  const currentSpecialist = (args.state as any)?.specialist ?? null;
+  const etapaFunil = (args.state as any)?.etapa_funil ?? null;
+  const lastAiQ = args.last_ai_question ?? null;
   if (!apiKey) {
     return { intent: "other", specialist: "failsafe", confidence: 0, source: "error" };
   }
@@ -39,7 +45,11 @@ export async function decideSupervisor(args: {
         signal: controller.signal,
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: SUPERVISOR_SYSTEM_PROMPT }] },
-          contents: [{ role: "user", parts: [{ text: buildSupervisorUserPrompt(args.message, args.state.produto) }] }],
+          contents: [{ role: "user", parts: [{ text: buildSupervisorUserPrompt(
+            args.message,
+            args.state.produto,
+            { current_specialist: currentSpecialist, last_ai_question: lastAiQ, etapa_funil: etapaFunil },
+          ) }] }],
           generationConfig: {
             temperature: 0.1,
             maxOutputTokens: 200,
@@ -67,6 +77,22 @@ export async function decideSupervisor(args: {
     if (!VALID_SPECIALISTS.has(specialist)) specialist = "failsafe";
 
     if (confidence < 0.5) {
+      // Sticky specialist: se a conversa já tem um specialist ativo de fluxo,
+      // não derruba para failsafe (evita handoff em respostas curtas legítimas).
+      if (currentSpecialist && STICKY_SPECIALISTS.has(String(currentSpecialist).toLowerCase())) {
+        await trace({
+          account_id: args.account_id, phone: args.phone,
+          step: "supervisor.low_confidence_sticky",
+          level: "standard", duration_ms: Date.now() - t0,
+          payload: { intent, specialist_llm: specialist, sticky_to: currentSpecialist, confidence },
+        });
+        return {
+          intent: intent || "other",
+          specialist: String(currentSpecialist),
+          confidence,
+          source: "low_confidence_sticky",
+        };
+      }
       await trace({ account_id: args.account_id, phone: args.phone, step: "supervisor.low_confidence",
         level: "standard", duration_ms: Date.now() - t0, payload: { intent, specialist, confidence } });
       return { intent, specialist: "failsafe", confidence, source: "low_confidence" };

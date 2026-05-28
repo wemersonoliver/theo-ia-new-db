@@ -16,12 +16,29 @@ Intents possíveis:
 "greeting", "ask_info", "send_invoice", "send_document", "price_question",
 "complaint", "handoff_request", "off_topic", "other".
 
+REGRA DE CONTEXTO (IMPORTANTE):
+Se o cliente está respondendo a uma pergunta anterior do atendente
+(ex.: nome, cidade, valor da conta, "sim"/"não", "tenho"/"não tenho"),
+você DEVE manter o "current_specialist" informado e usar confidence >= 0.8.
+Respostas curtas de continuidade NÃO são "off_topic" nem motivo para failsafe.
+
 Saída OBRIGATÓRIA (apenas o JSON, sem comentário, sem cercas):
 {"intent":"<intent>","specialist":"<specialist>","confidence":<0..1>}`;
 
-export function buildSupervisorUserPrompt(message: string, currentProduct?: string | null): string {
+export function buildSupervisorUserPrompt(
+  message: string,
+  currentProduct?: string | null,
+  ctx?: {
+    current_specialist?: string | null;
+    last_ai_question?: string | null;
+    etapa_funil?: string | null;
+  },
+): string {
   return JSON.stringify({
     message: message.slice(0, 1000),
     current_product: currentProduct ?? null,
+    current_specialist: ctx?.current_specialist ?? null,
+    last_ai_question: (ctx?.last_ai_question ?? "").slice(0, 500) || null,
+    etapa_funil: ctx?.etapa_funil ?? null,
   });
 }
