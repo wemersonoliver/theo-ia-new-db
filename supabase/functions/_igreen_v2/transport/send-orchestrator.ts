@@ -74,6 +74,62 @@ async function realSendText(args: { url: string; key: string; instance: string; 
   return (j as { key?: { id?: string } })?.key?.id ?? null;
 }
 
+async function persistOutboundChunk(args: {
+  account_id: string;
+  phone: string;
+  correlation_id: string;
+  chunk_index: number;
+  text: string;
+  provider_message_id: string | null;
+}): Promise<void> {
+  try {
+    const client = svc();
+    const msg = {
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      from_me: true,
+      content: args.text,
+      type: "text",
+      sent_by: "ai",
+      provider_message_id: args.provider_message_id,
+      correlation_id: args.correlation_id,
+      chunk_index: args.chunk_index,
+    };
+
+    const { data: conv } = await client
+      .from("whatsapp_conversations")
+      .select("id, messages, total_messages")
+      .eq("account_id", args.account_id)
+      .eq("phone", args.phone)
+      .maybeSingle();
+
+    if (conv) {
+      const existing = Array.isArray((conv as any).messages) ? (conv as any).messages : [];
+      const updated = [...existing, msg];
+      await client
+        .from("whatsapp_conversations")
+        .update({
+          messages: updated,
+          last_message_at: new Date().toISOString(),
+          total_messages: ((conv as any).total_messages ?? existing.length) + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", (conv as any).id);
+    } else {
+      await client.from("whatsapp_conversations").insert({
+        account_id: args.account_id,
+        phone: args.phone,
+        messages: [msg],
+        last_message_at: new Date().toISOString(),
+        total_messages: 1,
+        ai_active: true,
+      });
+    }
+  } catch (e) {
+    console.error("[send-orch] persistOutboundChunk failed", e);
+  }
+}
+
 export async function sendOrchestrated(args: SendOrchestratorArgs): Promise<SendOrchestratorResult> {
   const evolutionUrl = args.evolutionUrl ?? Deno.env.get("EVOLUTION_API_URL") ?? "";
   const evolutionKey = args.evolutionKey ?? Deno.env.get("EVOLUTION_API_KEY") ?? "";
@@ -121,6 +177,14 @@ export async function sendOrchestrated(args: SendOrchestratorArgs): Promise<Send
           chunk_index: c.index,
           kind: "text",
           status: "sent",
+          provider_message_id: id,
+        });
+        await persistOutboundChunk({
+          account_id: args.account_id,
+          phone: args.phone,
+          correlation_id: args.correlation_id,
+          chunk_index: c.index,
+          text: c.text,
           provider_message_id: id,
         });
         events.push({ chunk_index: c.index, status: "sent", provider_message_id: id });
