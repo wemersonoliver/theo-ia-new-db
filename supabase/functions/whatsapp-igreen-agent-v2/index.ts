@@ -277,10 +277,30 @@ serve(async (req) => {
   });
 
   // D1 — supervisor classifica intent + specialist (timeout determinístico Phase 5)
+  // Busca a última pergunta da IA para dar contexto ao supervisor (evita
+  // baixa-confiança em respostas curtas como "Wemerson", "Sim", "Tenho").
+  let lastAiQuestion: string | null = null;
+  try {
+    const { data: convRow } = await _svcClient
+      .from("whatsapp_conversations")
+      .select("messages")
+      .eq("account_id", account_id)
+      .eq("phone", phone)
+      .maybeSingle();
+    const msgs = (convRow?.messages as any[] | null) ?? [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (m?.from_me === true && (m?.type ?? "text") === "text" && typeof m?.content === "string") {
+        lastAiQuestion = m.content as string;
+        break;
+      }
+    }
+  } catch (_) { /* non-blocking */ }
+
   const sup = await withTimeout(
     "supervisor",
     DEFAULT_TIMEOUTS.agentMs,
-    () => decideSupervisor({ account_id, phone, message, state }),
+    () => decideSupervisor({ account_id, phone, message, state, last_ai_question: lastAiQuestion }),
     () => ({ intent: "unknown", specialist: "failsafe", confidence: 0, source: "timeout" as const }),
   );
 
