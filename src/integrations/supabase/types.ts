@@ -2134,6 +2134,51 @@ export type Database = {
           },
         ]
       }
+      igreen_behavior_audits: {
+        Row: {
+          account_id: string | null
+          confidence: number | null
+          conversation_snapshot: Json | null
+          correlation_id: string | null
+          created_at: string
+          decision_source: string | null
+          id: string
+          intent: string | null
+          phone: string | null
+          specialist_after: string | null
+          specialist_before: string | null
+          trigger_reason: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          confidence?: number | null
+          conversation_snapshot?: Json | null
+          correlation_id?: string | null
+          created_at?: string
+          decision_source?: string | null
+          id?: string
+          intent?: string | null
+          phone?: string | null
+          specialist_after?: string | null
+          specialist_before?: string | null
+          trigger_reason?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          confidence?: number | null
+          conversation_snapshot?: Json | null
+          correlation_id?: string | null
+          created_at?: string
+          decision_source?: string | null
+          id?: string
+          intent?: string | null
+          phone?: string | null
+          specialist_after?: string | null
+          specialist_before?: string | null
+          trigger_reason?: string | null
+        }
+        Relationships: []
+      }
       igreen_cancellations: {
         Row: {
           account_id: string | null
