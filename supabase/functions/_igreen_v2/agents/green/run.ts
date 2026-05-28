@@ -21,9 +21,35 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   ];
   const patch: AgentResult["suggested_state_patch"] = {};
 
-  if (stage === "discovery") {
-    // ainda em "novo"; deixa o supervisor/tool set_product mover etapa.
+  const currentExtras = (ctx.state.extras ?? {}) as Record<string, unknown>;
+
+  if (stage === "greet") {
+    // marca que já saudamos para na próxima entrarmos em explain_solution
     patch.produto = "green";
+    patch.extras = { ...currentExtras, greeted: true };
+  }
+
+  if (stage === "explain_solution") {
+    // já entendemos que há interesse — avança o funil para qualificacao
+    patch.produto = "green";
+    tool_calls.push({ name: "set_product", args: { produto: "green" } });
+  }
+
+  if (stage === "ask_consumo") {
+    // tenta capturar consumo na mensagem atual (números seguidos de kwh/r$/reais)
+    const consumo = extractConsumo(ctx.message);
+    if (consumo) patch.extras = { ...currentExtras, consumo_medio: consumo };
+  }
+
+  if (stage === "ask_cidade") {
+    // se a mensagem parecer uma cidade (texto curto sem números), salva
+    const cidade = extractCidade(ctx.message);
+    if (cidade) patch.extras = { ...(patch.extras as object ?? currentExtras), cidade };
+  }
+
+  if (stage === "ask_name") {
+    const nome = extractFirstName(ctx.message);
+    if (nome) patch.extras = { ...(patch.extras as object ?? currentExtras), client_name: nome };
   }
 
   if (stage === "send_video") {
@@ -57,6 +83,29 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     tool_calls,
     suggested_state_patch: patch,
   };
+}
+
+function extractConsumo(msg: string): string | null {
+  if (!msg) return null;
+  const m = msg.match(/(\d{2,5})\s*(kwh|kw|reais|r\$|\$|conta)?/i);
+  return m ? m[0].trim() : null;
+}
+
+function extractCidade(msg: string): string | null {
+  if (!msg) return null;
+  const t = msg.trim();
+  if (t.length < 2 || t.length > 60) return null;
+  if (/\d/.test(t)) return null;
+  return t;
+}
+
+function extractFirstName(msg: string): string | null {
+  if (!msg) return null;
+  const t = msg.trim().replace(/[^\p{L}\s]/gu, "");
+  if (!t) return null;
+  const first = t.split(/\s+/)[0];
+  if (first.length < 2 || first.length > 30) return null;
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
 }
 
 async function generateText(ctx: AgentContext, stage: string): Promise<string> {
@@ -103,11 +152,15 @@ async function generateText(ctx: AgentContext, stage: string): Promise<string> {
 
 function fallbackText(stage: string): string {
   switch (stage) {
-    case "discovery": return "Olá! Tudo bem? Como posso te chamar?";
+    case "greet": return "Olá! Tudo bem? Como posso te ajudar hoje?";
+    case "explain_solution": return "A Igreen te dá economia na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer entender melhor como funciona?";
     case "send_video": return "Vou te mandar um vídeo curtinho explicando como funciona.";
-    case "qualify": return "Pra te ajudar melhor: qual sua cidade e quanto vem de luz por mês?";
-    case "request_invoice": return "Me manda a sua última fatura (PDF ou foto)? Assim consigo calcular sua economia.";
+    case "ask_consumo": return "Pra eu te ajudar melhor, quanto vem em média na sua conta de luz por mês?";
+    case "ask_cidade": return "Legal! E você mora em qual cidade?";
+    case "ask_name": return "Pra ficar mais fácil, como posso te chamar?";
+    case "request_invoice": return "Me manda sua última fatura (PDF ou foto)? Assim calculo sua economia exata.";
     case "waiting_invoice": return "Perfeito, fico no aguardo da fatura.";
+    case "ask_full_name_cpf": return "Pra preparar seu contrato, me passa por favor seu nome completo e CPF?";
     default: return "Beleza!";
   }
 }
