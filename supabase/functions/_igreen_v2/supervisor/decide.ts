@@ -3,6 +3,7 @@
 
 import type { IgreenConversationState } from "../types.ts";
 import { trace } from "../observability/trace.ts";
+import { auditDecision } from "../observability/behavior-audit.ts";
 import { SUPERVISOR_SYSTEM_PROMPT, buildSupervisorUserPrompt } from "./prompt.ts";
 
 const SUPERVISOR_TIMEOUT_MS = 8000;
@@ -23,12 +24,26 @@ export async function decideSupervisor(args: {
   message: string;
   state: Pick<IgreenConversationState, "produto" | "specialist" | "etapa_funil">;
   last_ai_question?: string | null;
+  correlation_id?: string | null;
 }): Promise<SupervisorDecision> {
   const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
   const currentSpecialist = (args.state as any)?.specialist ?? null;
   const etapaFunil = (args.state as any)?.etapa_funil ?? null;
   const lastAiQ = args.last_ai_question ?? null;
+  const auditBase = {
+    account_id: args.account_id, phone: args.phone,
+    correlation_id: args.correlation_id ?? null,
+    specialist_before: currentSpecialist,
+    conversation_snapshot: {
+      message: (args.message ?? "").slice(0, 500),
+      etapa_funil: etapaFunil,
+      last_ai_question: (lastAiQ ?? "").slice(0, 300),
+      produto: args.state.produto ?? null,
+    },
+  };
   if (!apiKey) {
+    auditDecision({ ...auditBase, specialist_after: "failsafe", intent: "other",
+      confidence: 0, decision_source: "error", trigger_reason: "missing GOOGLE_GEMINI_API_KEY" });
     return { intent: "other", specialist: "failsafe", confidence: 0, source: "error" };
   }
 
@@ -63,6 +78,8 @@ export async function decideSupervisor(args: {
     if (!res.ok) {
       await trace({ account_id: args.account_id, phone: args.phone, step: "supervisor.http_error",
         level: "standard", duration_ms: Date.now() - t0, payload: { status: res.status } });
+      auditDecision({ ...auditBase, specialist_after: "failsafe", intent: "other",
+        confidence: 0, decision_source: "error", trigger_reason: `http_${res.status}` });
       return { intent: "other", specialist: "failsafe", confidence: 0, source: "error" };
     }
 
@@ -86,6 +103,9 @@ export async function decideSupervisor(args: {
           level: "standard", duration_ms: Date.now() - t0,
           payload: { intent, specialist_llm: specialist, sticky_to: currentSpecialist, confidence },
         });
+        auditDecision({ ...auditBase, specialist_after: String(currentSpecialist),
+          intent, confidence, decision_source: "low_confidence_sticky",
+          trigger_reason: `sticky_to=${currentSpecialist} llm_said=${specialist}` });
         return {
           intent: intent || "other",
           specialist: String(currentSpecialist),
@@ -95,12 +115,17 @@ export async function decideSupervisor(args: {
       }
       await trace({ account_id: args.account_id, phone: args.phone, step: "supervisor.low_confidence",
         level: "standard", duration_ms: Date.now() - t0, payload: { intent, specialist, confidence } });
+      auditDecision({ ...auditBase, specialist_after: "failsafe",
+        intent, confidence, decision_source: "low_confidence",
+        trigger_reason: `confidence<0.5 llm_said=${specialist}` });
       return { intent, specialist: "failsafe", confidence, source: "low_confidence" };
     }
 
     await trace({ account_id: args.account_id, phone: args.phone, step: "supervisor.decided",
       level: "standard", duration_ms: Date.now() - t0, payload: { intent, specialist, confidence } });
 
+    auditDecision({ ...auditBase, specialist_after: specialist,
+      intent, confidence, decision_source: "llm", trigger_reason: "ok" });
     return { intent, specialist, confidence, source: "llm" };
   } catch (e) {
     clearTimeout(timer);
@@ -111,6 +136,9 @@ export async function decideSupervisor(args: {
       level: "standard", duration_ms: Date.now() - t0,
       payload: { error: (e as Error).message, timeout_ms: SUPERVISOR_TIMEOUT_MS },
     });
+    auditDecision({ ...auditBase, specialist_after: "failsafe", intent: "other",
+      confidence: 0, decision_source: aborted ? "timeout" : "error",
+      trigger_reason: (e as Error).message?.slice(0, 200) ?? "" });
     return {
       intent: "other", specialist: "failsafe", confidence: 0,
       source: aborted ? "timeout" : "error",
