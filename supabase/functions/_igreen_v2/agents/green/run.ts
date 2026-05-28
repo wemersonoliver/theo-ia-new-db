@@ -63,11 +63,15 @@ async function generateText(ctx: AgentContext, stage: string): Promise<string> {
   const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
   if (!apiKey) return fallbackText(stage);
 
+  // Modelo: usa lite (mais barato e sem thinking pesado). Sempre desliga
+  // thinkingBudget para evitar que tokens de raciocínio consumam o
+  // maxOutputTokens e produzam texto truncado nas respostas curtas.
+  const model = (ctx as any).selected_model || "gemini-2.5-flash-lite";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -78,7 +82,11 @@ async function generateText(ctx: AgentContext, stage: string): Promise<string> {
             role: "user",
             parts: [{ text: buildGreenUserPrompt({ stage: stage as any, message: ctx.message, produto: ctx.state.produto }) }],
           }],
-          generationConfig: { temperature: 0.4, maxOutputTokens: 200 },
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: 600,
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         }),
       },
     );
