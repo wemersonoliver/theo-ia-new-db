@@ -22,6 +22,13 @@ Se o cliente está respondendo a uma pergunta anterior do atendente
 você DEVE manter o "current_specialist" informado e usar confidence >= 0.8.
 Respostas curtas de continuidade NÃO são "off_topic" nem motivo para failsafe.
 
+REGRA DE AFIRMAÇÕES CURTAS:
+Mensagens curtas como "sim", "claro", "quero", "pode ser", "entendi",
+"bora", "vamos", "ok", "beleza", "fechado", "isso", quando existe
+"last_ai_question" ou "current_specialist" definido, NUNCA são "greeting".
+Classifique como "ask_info" (ou intent contextual) mantendo o
+"current_specialist" e confidence >= 0.85.
+
 Saída OBRIGATÓRIA (apenas o JSON, sem comentário, sem cercas):
 {"intent":"<intent>","specialist":"<specialist>","confidence":<0..1>}`;
 
