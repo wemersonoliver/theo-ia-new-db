@@ -178,8 +178,3 @@ export const SCENARIOS: Scenario[] = [
     },
   },
 ];
-
-// Backward-compat default export removed below (keep array continuation).
-const _appended = true;
-void _appended;
-];
