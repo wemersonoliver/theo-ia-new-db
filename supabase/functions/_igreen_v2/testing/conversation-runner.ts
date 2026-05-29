@@ -90,10 +90,9 @@ export async function runScenario(steps: ScenarioStep[], opts: RunnerOptions = {
       patch = result.suggested_state_patch;
       events = result.events.map((e) => ({ type: e.type, payload: e.payload }));
     } else if (opts.mockGreen) {
-      const gStage = decideGreenStage(state, step.user, !!step.media, (state as any).document_status ?? null);
+      let gStage = decideGreenStage(state, step.user, !!step.media, (state as any).document_status ?? null);
       stage = gStage;
       // Espelha tool_calls e patches críticos de run.ts sem custo de LLM
-      messages = [MOCK_TEXTS[gStage]];
       const currentExtras = (state.extras ?? {}) as Record<string, unknown>;
       if (gStage === "greet") patch = { produto: "green", extras: { ...currentExtras, greeted: true } };
       if (gStage === "explain_solution") {
@@ -130,6 +129,27 @@ export async function runScenario(steps: ScenarioStep[], opts: RunnerOptions = {
         const t = step.user.trim().replace(/[^\p{L}\s]/gu, "").split(/\s+/)[0];
         if (t && t.length >= 2) patch = { extras: { ...currentExtras, client_name: t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() } };
       }
+      // Post-capture re-decision (espelha run.ts)
+      const REDECIDABLE = new Set(["ask_consumo", "ask_estado", "ask_distribuidora", "engage_check"]);
+      if (REDECIDABLE.has(gStage)) {
+        const mergedExtras = (patch.extras as Record<string, unknown>) ?? currentExtras;
+        const mergedState = { ...state, extras: mergedExtras, etapa_funil: patch.etapa_funil ?? state.etapa_funil } as IgreenConversationState;
+        const next = decideGreenStage(mergedState, step.user, !!step.media, (state as any).document_status ?? null);
+        if (next !== gStage) {
+          gStage = next;
+          stage = next;
+          // Side-effects do novo stage (engaged/video_sent/tools de stages terminais)
+          if (next === "send_video") {
+            const e = (patch.extras as Record<string, unknown>) ?? currentExtras;
+            patch = { ...patch, extras: { ...e, video_sent: true } };
+            toolCalls.push({ name: "send_discovery_video", args: { produto: "green" } });
+          }
+          if (next === "request_invoice") {
+            toolCalls.push({ name: "request_invoice", args: { reason: "calculo_economia" } });
+          }
+        }
+      }
+      messages = [MOCK_TEXTS[gStage]];
       events = [{ type: "green_stage_decided", payload: { stage: gStage } }];
       specialist = "green";
     } else {
