@@ -3,7 +3,7 @@
 // LLM só preenche texto curto. Stage e tool_calls são decididos em código (D1).
 
 import type { AgentContext, AgentResult } from "../_types.ts";
-import { decideGreenStage } from "./stages.ts";
+import { decideGreenStage, isAffirmation } from "./stages.ts";
 import { GREEN_SYSTEM, buildGreenUserPrompt } from "./prompt.ts";
 
 const LLM_TIMEOUT_MS = 8000;
@@ -30,9 +30,21 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   }
 
   if (stage === "explain_solution") {
-    // já entendemos que há interesse — avança o funil para qualificacao
+    // Marca que já explicamos para o stage-engine progredir no próximo turno
+    // mesmo se set_product retornar skipped.
     patch.produto = "green";
+    patch.extras = { ...currentExtras, explained: true };
     tool_calls.push({ name: "set_product", args: { produto: "green" } });
+    if (isAffirmation(ctx.message)) {
+      patch.extras = { ...(patch.extras as object), solution_confirmed: true };
+    }
+  }
+
+  // Promoção determinística novo → qualificacao quando entramos em send_video
+  // ainda em etapa "novo". Não dependemos mais de set_product(skipped:false).
+  if (stage === "send_video" && (ctx.state.etapa_funil ?? "novo").toLowerCase() === "novo") {
+    patch.etapa_funil = "qualificacao";
+    tool_calls.push({ name: "set_stage", args: { etapa: "qualificacao" } });
   }
 
   if (stage === "ask_consumo") {
@@ -152,7 +164,7 @@ async function generateText(ctx: AgentContext, stage: string): Promise<string> {
 
 function fallbackText(stage: string): string {
   switch (stage) {
-    case "greet": return "Olá! Tudo bem? Como posso te ajudar hoje?";
+    case "greet": return "Olá! Como posso te ajudar hoje?";
     case "explain_solution": return "A Igreen te dá economia na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer entender melhor como funciona?";
     case "send_video": return "Vou te mandar um vídeo curtinho explicando como funciona.";
     case "ask_consumo": return "Pra eu te ajudar melhor, quanto vem em média na sua conta de luz por mês?";

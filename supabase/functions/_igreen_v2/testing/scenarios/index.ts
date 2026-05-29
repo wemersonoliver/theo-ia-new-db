@@ -116,4 +116,65 @@ export const SCENARIOS: Scenario[] = [
     ],
     run: baseRun(),
   },
+  {
+    id: "11-affirmation-after-explain",
+    title: "Afirmação 'Sim' após explicação avança para qualificacao",
+    steps: [
+      { user: "Bom dia" },
+      { user: "Conexão green" },
+      { user: "Sim" },
+    ],
+    run: baseRun(),
+  },
+  {
+    id: "12-stage-progression",
+    title: "Stages progridem deterministicamente sem voltar ao explain",
+    steps: [
+      { user: "Boa tarde" },
+      { user: "quero saber sobre igreen" },
+      { user: "claro" },
+      { user: "550 reais" },
+    ],
+    run: baseRun(),
+  },
+  {
+    id: "13-no-stage-stall",
+    title: "etapa_funil sai de novo após confirmação de interesse",
+    steps: [
+      { user: "oi" },
+      { user: "tenho interesse" },
+      { user: "pode ser" },
+    ],
+    run: baseRun(),
+  },
+  {
+    id: "14-repeated-semantic-response",
+    title: "IA não repete semanticamente a mesma explicação 3x",
+    steps: [
+      { user: "Bom dia" },
+      { user: "Conexão green" },
+      { user: "Sim" },
+      { user: "ok" },
+    ],
+    run: baseRun(),
+  },
+  {
+    id: "15-explain-then-advance",
+    title: "explain_solution aparece no máximo uma vez e depois avança",
+    steps: [
+      { user: "Bom dia" },
+      { user: "quero economizar" },
+      { user: "entendi" },
+    ],
+    run: (turns) => {
+      const base = baseRun()(turns);
+      const explainCount = turns.filter((t) => t.stage === "explain_solution").length;
+      base.push({
+        name: "assertExplainOnce",
+        ok: explainCount <= 1,
+        reason: explainCount > 1 ? `explain_solution apareceu ${explainCount}x` : undefined,
+      });
+      return base;
+    },
+  },
 ];
