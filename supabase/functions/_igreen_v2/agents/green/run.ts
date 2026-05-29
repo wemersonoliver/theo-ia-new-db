@@ -9,19 +9,18 @@ import { GREEN_SYSTEM, buildGreenUserPrompt } from "./prompt.ts";
 const LLM_TIMEOUT_MS = 8000;
 
 export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
-  const stage = decideGreenStage(
+  const initialStage = decideGreenStage(
     ctx.state, ctx.message,
     !!ctx.media, (ctx.state as any).document_status ?? null,
   );
-  const text = await generateText(ctx, stage);
-
   const tool_calls: AgentResult["tool_calls"] = [];
   const events: AgentResult["events"] = [
-    { type: "green_stage_decided", priority: "low", source: "specialist", payload: { stage } },
+    { type: "green_stage_decided", priority: "low", source: "specialist", payload: { stage: initialStage } },
   ];
   const patch: AgentResult["suggested_state_patch"] = {};
 
   const currentExtras = (ctx.state.extras ?? {}) as Record<string, unknown>;
+  let stage = initialStage;
 
   if (stage === "greet") {
     // marca que já saudamos para na próxima entrarmos em explain_solution
@@ -100,6 +99,24 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
       },
     });
   }
+
+  // Post-capture re-decision: se acabamos de capturar um dado em extras,
+  // re-decidimos o stage para evitar repetir a pergunta no próximo turno.
+  // Não aplicamos para stages que disparam tool_calls (send_video/validate_invoice/request_invoice)
+  // — esses precisam manter o stage original.
+  const STAGES_REDECIDABLE = new Set(["ask_consumo", "ask_estado", "ask_distribuidora", "engage_check"]);
+  if (STAGES_REDECIDABLE.has(stage)) {
+    const mergedExtras = (patch.extras as Record<string, unknown>) ?? currentExtras;
+    const mergedState = { ...ctx.state, extras: mergedExtras, etapa_funil: patch.etapa_funil ?? ctx.state.etapa_funil };
+    const nextStage = decideGreenStage(mergedState, ctx.message, !!ctx.media, (ctx.state as any).document_status ?? null);
+    if (nextStage !== stage) {
+      events.push({ type: "green_stage_advanced", priority: "low", source: "specialist",
+        payload: { from: stage, to: nextStage } });
+      stage = nextStage;
+    }
+  }
+
+  const text = await generateText(ctx, stage);
 
   return {
     messages: text ? [text] : [],

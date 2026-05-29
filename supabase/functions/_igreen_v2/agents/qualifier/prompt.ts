@@ -21,7 +21,7 @@ export const MENU_SHORT_TEXT = `Pra te direcionar certinho, me diz qual faz mais
 
 Você prefere qual?`;
 
-export const GREET_OPEN_TEXT = `Olá! Tudo bem? Como posso te ajudar hoje?`;
+export const GREET_OPEN_TEXT = `Olá! Como posso te ajudar hoje?`;
 
 export const ROUTE_GREEN_TEXT = `Show, energia limpa é nossa praia 😊 A iGreen te dá economia na conta de luz com energia solar, sem obra e sem trocar de distribuidora. Quer entender melhor como funciona?`;
 
