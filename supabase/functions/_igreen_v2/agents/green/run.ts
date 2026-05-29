@@ -53,10 +53,21 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     if (consumo) patch.extras = { ...currentExtras, consumo_medio: consumo };
   }
 
-  if (stage === "ask_cidade") {
-    // se a mensagem parecer uma cidade (texto curto sem números), salva
-    const cidade = extractCidade(ctx.message);
-    if (cidade) patch.extras = { ...(patch.extras as object ?? currentExtras), cidade };
+  if (stage === "engage_check") {
+    // Marca engaged=true para destravar coleta de dados no próximo turno,
+    // independentemente da resposta — o objetivo é dar respiro humano entre
+    // o vídeo e o início da qualificação.
+    patch.extras = { ...currentExtras, engaged: true };
+  }
+
+  if (stage === "ask_estado") {
+    const uf = extractEstado(ctx.message);
+    if (uf) patch.extras = { ...currentExtras, estado: uf };
+  }
+
+  if (stage === "ask_distribuidora") {
+    const d = extractDistribuidora(ctx.message);
+    if (d) patch.extras = { ...(patch.extras as object ?? currentExtras), distribuidora: d };
   }
 
   if (stage === "ask_name") {
@@ -65,6 +76,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   }
 
   if (stage === "send_video") {
+    patch.extras = { ...(patch.extras as object ?? currentExtras), video_sent: true };
     tool_calls.push({
       name: "send_discovery_video",
       args: { produto: "green" },
@@ -103,11 +115,39 @@ function extractConsumo(msg: string): string | null {
   return m ? m[0].trim() : null;
 }
 
-function extractCidade(msg: string): string | null {
+const UF_SET = new Set([
+  "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB",
+  "PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO",
+]);
+const ESTADO_NOMES: Record<string, string> = {
+  "acre":"AC","alagoas":"AL","amapa":"AP","amapá":"AP","amazonas":"AM","bahia":"BA",
+  "ceara":"CE","ceará":"CE","distrito federal":"DF","espirito santo":"ES","espírito santo":"ES",
+  "goias":"GO","goiás":"GO","maranhao":"MA","maranhão":"MA","mato grosso":"MT",
+  "mato grosso do sul":"MS","minas gerais":"MG","para":"PA","pará":"PA","paraiba":"PB",
+  "paraíba":"PB","parana":"PR","paraná":"PR","pernambuco":"PE","piaui":"PI","piauí":"PI",
+  "rio de janeiro":"RJ","rio grande do norte":"RN","rio grande do sul":"RS",
+  "rondonia":"RO","rondônia":"RO","roraima":"RR","santa catarina":"SC",
+  "sao paulo":"SP","são paulo":"SP","sergipe":"SE","tocantins":"TO",
+};
+function extractEstado(msg: string): string | null {
+  if (!msg) return null;
+  const t = msg.trim();
+  if (!t) return null;
+  const upper = t.toUpperCase().replace(/[^A-Z]/g, "");
+  if (upper.length === 2 && UF_SET.has(upper)) return upper;
+  const lower = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  for (const [name, uf] of Object.entries(ESTADO_NOMES)) {
+    if (lower.includes(name.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))) return uf;
+  }
+  return null;
+}
+
+function extractDistribuidora(msg: string): string | null {
   if (!msg) return null;
   const t = msg.trim();
   if (t.length < 2 || t.length > 60) return null;
-  if (/\d/.test(t)) return null;
+  // Aceita nome livre da distribuidora (texto sem números longos).
+  if (/^\d+$/.test(t)) return null;
   return t;
 }
 
