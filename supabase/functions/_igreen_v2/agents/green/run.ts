@@ -3,8 +3,7 @@
 // LLM só preenche texto curto. Stage e tool_calls são decididos em código (D1).
 
 import type { AgentContext, AgentResult } from "../_types.ts";
-import { decideGreenStage } from "./stages.ts";
-import { isAffirmation } from "./stages.ts";
+import { decideGreenStage, isAffirmation } from "./stages.ts";
 import { GREEN_SYSTEM, buildGreenUserPrompt } from "./prompt.ts";
 
 const LLM_TIMEOUT_MS = 8000;
