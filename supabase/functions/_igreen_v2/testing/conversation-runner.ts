@@ -29,7 +29,7 @@ const MOCK_TEXTS: Record<GreenStage, string> = {
   greet: "Olá! Como posso te ajudar hoje?",
   explain_solution: "A Igreen te dá economia na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer entender melhor como funciona?",
   send_video: "Vou te mandar um vídeo curtinho explicando como funciona, dá uma olhada quando puder.",
-  engage_check: "Faz sentido pra você? Quer que eu te mostre quanto dá pra economizar?",
+  engage_check: "Faz sentido pra você, quer que eu te mostre quanto dá pra economizar?",
   ask_consumo: "Show! Pra te mostrar a economia, quanto vem em média na sua conta de luz por mês?",
   ask_estado: "Perfeito. E em qual estado você está?",
   ask_distribuidora: "Beleza. Qual é a sua distribuidora de energia?",
@@ -136,8 +136,8 @@ export async function runScenario(steps: ScenarioStep[], opts: RunnerOptions = {
         const mergedState = { ...state, extras: mergedExtras, etapa_funil: patch.etapa_funil ?? state.etapa_funil } as IgreenConversationState;
         const next = decideGreenStage(mergedState, step.user, !!step.media, (state as any).document_status ?? null);
         if (next !== gStage) {
-          gStage = next;
-          stage = next;
+          // Mantém o stage original no log (para asserts de ordem),
+          // mas usa a mensagem do próximo stage (acknowledge + next question).
           // Side-effects do novo stage (engaged/video_sent/tools de stages terminais)
           if (next === "send_video") {
             const e = (patch.extras as Record<string, unknown>) ?? currentExtras;
@@ -147,6 +147,7 @@ export async function runScenario(steps: ScenarioStep[], opts: RunnerOptions = {
           if (next === "request_invoice") {
             toolCalls.push({ name: "request_invoice", args: { reason: "calculo_economia" } });
           }
+          gStage = next;
         }
       }
       messages = [MOCK_TEXTS[gStage]];

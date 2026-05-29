@@ -231,7 +231,7 @@ function fallbackText(stage: string): string {
     case "greet": return "Olá! Como posso te ajudar hoje?";
     case "explain_solution": return "A Igreen te dá economia na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer entender melhor como funciona?";
     case "send_video": return "Vou te mandar um vídeo curtinho explicando como funciona, dá uma olhada quando puder.";
-    case "engage_check": return "Faz sentido pra você? Quer que eu te mostre quanto dá pra economizar?";
+    case "engage_check": return "Faz sentido pra você, quer que eu te mostre quanto dá pra economizar?";
     case "ask_consumo": return "Show! Pra te mostrar a economia, quanto vem em média na sua conta de luz por mês?";
     case "ask_estado": return "Perfeito. E em qual estado você está?";
     case "ask_distribuidora": return "Beleza. Qual é a sua distribuidora de energia?";
