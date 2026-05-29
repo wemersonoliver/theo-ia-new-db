@@ -164,7 +164,7 @@ async function generateText(ctx: AgentContext, stage: string): Promise<string> {
 
 function fallbackText(stage: string): string {
   switch (stage) {
-    case "greet": return "Olá! Tudo bem? Como posso te ajudar hoje?";
+    case "greet": return "Olá! Como posso te ajudar hoje?";
     case "explain_solution": return "A Igreen te dá economia na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer entender melhor como funciona?";
     case "send_video": return "Vou te mandar um vídeo curtinho explicando como funciona.";
     case "ask_consumo": return "Pra eu te ajudar melhor, quanto vem em média na sua conta de luz por mês?";

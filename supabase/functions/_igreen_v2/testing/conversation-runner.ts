@@ -20,7 +20,7 @@ export interface RunnerOptions {
 
 // Templates determinísticos espelhando os fallbacks reais de run.ts
 const MOCK_TEXTS: Record<GreenStage, string> = {
-  greet: "Olá! Tudo bem? Como posso te ajudar hoje?",
+  greet: "Olá! Como posso te ajudar hoje?",
   explain_solution: "A Igreen te dá economia na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer entender melhor como funciona?",
   send_video: "Vou te mandar um vídeo curtinho explicando como funciona.",
   ask_consumo: "Pra eu te ajudar melhor, quanto vem em média na sua conta de luz por mês?",
