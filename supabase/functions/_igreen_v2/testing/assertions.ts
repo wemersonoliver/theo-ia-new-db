@@ -188,8 +188,87 @@ export function assertSemanticMemory(turns: Turn[]): AssertionResult {
   return { name: "assertSemanticMemory", ok: true };
 }
 
+const CITY_RX = /\b(qual.{0,5}cidade|em qual cidade|onde voc[eê] mora|mora em qual|sua cidade|cidade voc[eê])\b/i;
+export function assertNoCityQuestion(turns: Turn[]): AssertionResult {
+  for (let i = 0; i < turns.length; i++) {
+    const text = turns[i].messages.join(" ");
+    if (CITY_RX.test(text)) {
+      return { name: "assertNoCityQuestion", ok: false,
+        reason: `Turno ${i}: IA perguntou cidade — proibido: "${text.slice(0, 160)}"` };
+    }
+  }
+  return { name: "assertNoCityQuestion", ok: true };
+}
+
+const GREETING_START_RX = /^\s*(opa\b|ol[aá]\b|oi\b|tudo bem)/i;
+export function assertNoRepeatedGreeting(turns: Turn[]): AssertionResult {
+  for (let i = 1; i < turns.length; i++) {
+    for (const m of turns[i].messages) {
+      if (GREETING_START_RX.test(m ?? "")) {
+        return { name: "assertNoRepeatedGreeting", ok: false,
+          reason: `Turno ${i}: IA reabriu saudação ("${(m ?? "").slice(0, 60)}")` };
+      }
+    }
+  }
+  return { name: "assertNoRepeatedGreeting", ok: true };
+}
+
+const MENU_NUMBERED_RX = /1\s*-\s*[^\n]*\n[\s\S]*2\s*-\s*[^\n]*\n[\s\S]*3\s*-/;
+const GENERIC_FIRST_RX = /^\s*(oi|ola|olá|bom dia|boa tarde|boa noite|tudo bem|tenho interesse|quero saber|como funciona|me explica|info|informa)/i;
+export function assertMenuPresentedWhenGeneric(turns: Turn[]): AssertionResult {
+  if (!turns.length) return { name: "assertMenuPresentedWhenGeneric", ok: true };
+  const first = turns[0].user ?? "";
+  if (!GENERIC_FIRST_RX.test(first)) return { name: "assertMenuPresentedWhenGeneric", ok: true };
+  const allText = turns.map((t) => t.messages.join("\n")).join("\n");
+  if (!MENU_NUMBERED_RX.test(allText)) {
+    return { name: "assertMenuPresentedWhenGeneric", ok: false,
+      reason: `Cliente entrou genérico ("${first}") mas IA não apresentou menu numerado 1/2/3` };
+  }
+  return { name: "assertMenuPresentedWhenGeneric", ok: true };
+}
+
+export function assertNoPrematureDataCollection(turns: Turn[]): AssertionResult {
+  // Antes de extras.engaged=true, IA não pode pedir consumo/estado/distribuidora/fatura.
+  const DATA_RX = /\b(quanto.{0,10}conta|consumo|m[eé]dia.{0,10}conta|qual.{0,5}estado|distribuidora|fatura|conta de luz)\b/i;
+  let engaged = false;
+  for (let i = 0; i < turns.length; i++) {
+    const extras = turns[i].extras_after ?? {};
+    if (extras.engaged) { engaged = true; continue; }
+    if (engaged) continue;
+    // Só fiscaliza após o vídeo (extras.video_sent), antes disso é normal não ter engaged.
+    if (!extras.video_sent) continue;
+    const text = turns[i].messages.join(" ");
+    if (DATA_RX.test(text)) {
+      return { name: "assertNoPrematureDataCollection", ok: false,
+        reason: `Turno ${i}: pediu dado antes de engage_check ("${text.slice(0, 120)}")` };
+    }
+  }
+  return { name: "assertNoPrematureDataCollection", ok: true };
+}
+
+const COMMERCIAL_ORDER = [
+  "greet_open","present_menu","greet","explain_solution","route_green",
+  "send_video","engage_check","ask_consumo","ask_estado","ask_distribuidora",
+  "request_invoice","validate_invoice","ask_full_name_cpf","idle",
+];
+export function assertCommercialProgression(turns: Turn[]): AssertionResult {
+  let lastIdx = -1;
+  for (let i = 0; i < turns.length; i++) {
+    const idx = COMMERCIAL_ORDER.indexOf(turns[i].stage);
+    if (idx < 0) continue;
+    // Permite repetir o mesmo (já coberto por assertNoLoop) ou avançar.
+    if (idx < lastIdx) {
+      return { name: "assertCommercialProgression", ok: false,
+        reason: `Turno ${i}: stage "${turns[i].stage}" retrocedeu de "${COMMERCIAL_ORDER[lastIdx]}"` };
+    }
+    lastIdx = Math.max(lastIdx, idx);
+  }
+  return { name: "assertCommercialProgression", ok: true };
+}
+
 export const ALL_ASSERTIONS = [
   assertNoRepeatedQuestion, assertNoLoop, assertNoUnexpectedHandoff,
   assertSingleIntentPerTurn, assertValidStageTransition, assertNoFormBehavior,
   assertResponseNotTruncated, assertConversationProgressing, assertSemanticMemory,
+  assertNoCityQuestion, assertNoRepeatedGreeting, assertCommercialProgression,
 ];

@@ -8,7 +8,10 @@ export type GreenStage =
   | "greet"
   | "explain_solution"
   | "send_video"
+  | "engage_check"
   | "ask_consumo"
+  | "ask_estado"
+  | "ask_distribuidora"
   | "ask_cidade"
   | "ask_name"
   | "request_invoice"
@@ -61,9 +64,13 @@ export function decideGreenStage(
 
   if (etapa === "qualificacao") {
     if (!extras.video_sent) return "send_video";
+    // Engage check entre vídeo e coleta de dados — evita sensação de formulário.
+    if (!extras.engaged) return "engage_check";
     if (!extras.consumo_medio) return "ask_consumo";
-    if (!extras.cidade) return "ask_cidade";
-    if (!extras.client_name) return "ask_name";
+    if (!extras.estado) return "ask_estado";
+    if (!extras.distribuidora) return "ask_distribuidora";
+    // ask_name e ask_cidade foram removidos do fluxo de qualificação.
+    // Nome só na fase de contrato (ask_full_name_cpf). Cidade nunca é perguntada.
     return "request_invoice";
   }
 

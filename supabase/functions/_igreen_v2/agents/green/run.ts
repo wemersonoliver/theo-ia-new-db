@@ -9,19 +9,18 @@ import { GREEN_SYSTEM, buildGreenUserPrompt } from "./prompt.ts";
 const LLM_TIMEOUT_MS = 8000;
 
 export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
-  const stage = decideGreenStage(
+  const initialStage = decideGreenStage(
     ctx.state, ctx.message,
     !!ctx.media, (ctx.state as any).document_status ?? null,
   );
-  const text = await generateText(ctx, stage);
-
   const tool_calls: AgentResult["tool_calls"] = [];
   const events: AgentResult["events"] = [
-    { type: "green_stage_decided", priority: "low", source: "specialist", payload: { stage } },
+    { type: "green_stage_decided", priority: "low", source: "specialist", payload: { stage: initialStage } },
   ];
   const patch: AgentResult["suggested_state_patch"] = {};
 
   const currentExtras = (ctx.state.extras ?? {}) as Record<string, unknown>;
+  let stage = initialStage;
 
   if (stage === "greet") {
     // marca que já saudamos para na próxima entrarmos em explain_solution
@@ -53,10 +52,21 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     if (consumo) patch.extras = { ...currentExtras, consumo_medio: consumo };
   }
 
-  if (stage === "ask_cidade") {
-    // se a mensagem parecer uma cidade (texto curto sem números), salva
-    const cidade = extractCidade(ctx.message);
-    if (cidade) patch.extras = { ...(patch.extras as object ?? currentExtras), cidade };
+  if (stage === "engage_check") {
+    // Marca engaged=true para destravar coleta de dados no próximo turno,
+    // independentemente da resposta — o objetivo é dar respiro humano entre
+    // o vídeo e o início da qualificação.
+    patch.extras = { ...currentExtras, engaged: true };
+  }
+
+  if (stage === "ask_estado") {
+    const uf = extractEstado(ctx.message);
+    if (uf) patch.extras = { ...currentExtras, estado: uf };
+  }
+
+  if (stage === "ask_distribuidora") {
+    const d = extractDistribuidora(ctx.message);
+    if (d) patch.extras = { ...(patch.extras as object ?? currentExtras), distribuidora: d };
   }
 
   if (stage === "ask_name") {
@@ -65,6 +75,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   }
 
   if (stage === "send_video") {
+    patch.extras = { ...(patch.extras as object ?? currentExtras), video_sent: true };
     tool_calls.push({
       name: "send_discovery_video",
       args: { produto: "green" },
@@ -89,6 +100,24 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     });
   }
 
+  // Post-capture re-decision: se acabamos de capturar um dado em extras,
+  // re-decidimos o stage para evitar repetir a pergunta no próximo turno.
+  // Não aplicamos para stages que disparam tool_calls (send_video/validate_invoice/request_invoice)
+  // — esses precisam manter o stage original.
+  const STAGES_REDECIDABLE = new Set(["ask_consumo", "ask_estado", "ask_distribuidora"]);
+  if (STAGES_REDECIDABLE.has(stage)) {
+    const mergedExtras = (patch.extras as Record<string, unknown>) ?? currentExtras;
+    const mergedState = { ...ctx.state, extras: mergedExtras, etapa_funil: patch.etapa_funil ?? ctx.state.etapa_funil };
+    const nextStage = decideGreenStage(mergedState, ctx.message, !!ctx.media, (ctx.state as any).document_status ?? null);
+    if (nextStage !== stage) {
+      events.push({ type: "green_stage_advanced", priority: "low", source: "specialist",
+        payload: { from: stage, to: nextStage } });
+      stage = nextStage;
+    }
+  }
+
+  const text = await generateText(ctx, stage);
+
   return {
     messages: text ? [text] : [],
     events,
@@ -103,11 +132,39 @@ function extractConsumo(msg: string): string | null {
   return m ? m[0].trim() : null;
 }
 
-function extractCidade(msg: string): string | null {
+const UF_SET = new Set([
+  "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB",
+  "PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO",
+]);
+const ESTADO_NOMES: Record<string, string> = {
+  "acre":"AC","alagoas":"AL","amapa":"AP","amapá":"AP","amazonas":"AM","bahia":"BA",
+  "ceara":"CE","ceará":"CE","distrito federal":"DF","espirito santo":"ES","espírito santo":"ES",
+  "goias":"GO","goiás":"GO","maranhao":"MA","maranhão":"MA","mato grosso":"MT",
+  "mato grosso do sul":"MS","minas gerais":"MG","para":"PA","pará":"PA","paraiba":"PB",
+  "paraíba":"PB","parana":"PR","paraná":"PR","pernambuco":"PE","piaui":"PI","piauí":"PI",
+  "rio de janeiro":"RJ","rio grande do norte":"RN","rio grande do sul":"RS",
+  "rondonia":"RO","rondônia":"RO","roraima":"RR","santa catarina":"SC",
+  "sao paulo":"SP","são paulo":"SP","sergipe":"SE","tocantins":"TO",
+};
+function extractEstado(msg: string): string | null {
+  if (!msg) return null;
+  const t = msg.trim();
+  if (!t) return null;
+  const upper = t.toUpperCase().replace(/[^A-Z]/g, "");
+  if (upper.length === 2 && UF_SET.has(upper)) return upper;
+  const lower = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  for (const [name, uf] of Object.entries(ESTADO_NOMES)) {
+    if (lower.includes(name.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))) return uf;
+  }
+  return null;
+}
+
+function extractDistribuidora(msg: string): string | null {
   if (!msg) return null;
   const t = msg.trim();
   if (t.length < 2 || t.length > 60) return null;
-  if (/\d/.test(t)) return null;
+  // Aceita nome livre da distribuidora (texto sem números longos).
+  if (/^\d+$/.test(t)) return null;
   return t;
 }
 
@@ -141,7 +198,14 @@ async function generateText(ctx: AgentContext, stage: string): Promise<string> {
           systemInstruction: { parts: [{ text: GREEN_SYSTEM }] },
           contents: [{
             role: "user",
-            parts: [{ text: buildGreenUserPrompt({ stage: stage as any, message: ctx.message, produto: ctx.state.produto }) }],
+            parts: [{ text: buildGreenUserPrompt({
+              stage: stage as any,
+              message: ctx.message,
+              produto: ctx.state.produto,
+              extras: (ctx.state.extras ?? {}) as Record<string, unknown>,
+              last_ai_question: (ctx.state as any).last_ai_question ?? null,
+              turn_index: (ctx.state as any).turn_index ?? undefined,
+            }) }],
           }],
           generationConfig: {
             temperature: 0.4,
@@ -166,11 +230,13 @@ function fallbackText(stage: string): string {
   switch (stage) {
     case "greet": return "Olá! Como posso te ajudar hoje?";
     case "explain_solution": return "A Igreen te dá economia na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer entender melhor como funciona?";
-    case "send_video": return "Vou te mandar um vídeo curtinho explicando como funciona.";
-    case "ask_consumo": return "Pra eu te ajudar melhor, quanto vem em média na sua conta de luz por mês?";
-    case "ask_cidade": return "Legal! E você mora em qual cidade?";
+    case "send_video": return "Vou te mandar um vídeo curtinho explicando como funciona, dá uma olhada quando puder.";
+    case "engage_check": return "Faz sentido pra você, quer que eu te mostre quanto dá pra economizar?";
+    case "ask_consumo": return "Show! Pra te mostrar a economia, quanto vem em média na sua conta de luz por mês?";
+    case "ask_estado": return "Perfeito. E em qual estado você está?";
+    case "ask_distribuidora": return "Beleza. Qual é a sua distribuidora de energia?";
     case "ask_name": return "Pra ficar mais fácil, como posso te chamar?";
-    case "request_invoice": return "Me manda sua última fatura (PDF ou foto)? Assim calculo sua economia exata.";
+    case "request_invoice": return "Agora me manda sua última fatura (PDF ou foto)? Assim eu calculo sua economia exata.";
     case "waiting_invoice": return "Perfeito, fico no aguardo da fatura.";
     case "ask_full_name_cpf": return "Pra preparar seu contrato, me passa por favor seu nome completo e CPF?";
     default: return "Beleza!";
