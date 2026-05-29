@@ -104,7 +104,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   // re-decidimos o stage para evitar repetir a pergunta no próximo turno.
   // Não aplicamos para stages que disparam tool_calls (send_video/validate_invoice/request_invoice)
   // — esses precisam manter o stage original.
-  const STAGES_REDECIDABLE = new Set(["ask_consumo", "ask_estado", "ask_distribuidora", "engage_check"]);
+  const STAGES_REDECIDABLE = new Set(["ask_consumo", "ask_estado", "ask_distribuidora"]);
   if (STAGES_REDECIDABLE.has(stage)) {
     const mergedExtras = (patch.extras as Record<string, unknown>) ?? currentExtras;
     const mergedState = { ...ctx.state, extras: mergedExtras, etapa_funil: patch.etapa_funil ?? ctx.state.etapa_funil };

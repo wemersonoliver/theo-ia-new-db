@@ -130,7 +130,7 @@ export async function runScenario(steps: ScenarioStep[], opts: RunnerOptions = {
         if (t && t.length >= 2) patch = { extras: { ...currentExtras, client_name: t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() } };
       }
       // Post-capture re-decision (espelha run.ts)
-      const REDECIDABLE = new Set(["ask_consumo", "ask_estado", "ask_distribuidora", "engage_check"]);
+      const REDECIDABLE = new Set(["ask_consumo", "ask_estado", "ask_distribuidora"]);
       if (REDECIDABLE.has(gStage)) {
         const mergedExtras = (patch.extras as Record<string, unknown>) ?? currentExtras;
         const mergedState = { ...state, extras: mergedExtras, etapa_funil: patch.etapa_funil ?? state.etapa_funil } as IgreenConversationState;
