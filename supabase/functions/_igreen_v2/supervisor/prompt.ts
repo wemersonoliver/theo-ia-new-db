@@ -16,6 +16,19 @@ Intents possíveis:
 "greeting", "ask_info", "send_invoice", "send_document", "price_question",
 "complaint", "handoff_request", "off_topic", "other".
 
+REGRA DE ROTEAMENTO DEFAULT (CRÍTICA):
+Se NÃO há "current_specialist" definido (cliente novo) E a mensagem é genérica
+("oi", "olá", "bom dia", "boa noite", "tudo bem", "tenho interesse", "quero saber",
+"quero saber mais", "como funciona", "me explica", "quero economizar", "info",
+"informações", "atendimento"), o specialist DEVE ser "qualifier", NUNCA "green"
+por default. O qualifier vai apresentar o menu de produtos.
+
+Só roteie diretamente para "green", "telecom" ou "expansao" quando o cliente
+mencionar EXPLICITAMENTE pistas fortes do produto:
+- green: "energia por assinatura", "conta de luz", "fatura de luz", "energia solar", "solar", "placa solar", "conexão green", "economizar na luz/energia"
+- telecom: "telefonia", "internet", "celular", "chip", "plano de telefone", "telecom"
+- expansao: "licenciado", "franquia", "vender placa", "ganhar dinheiro", "expansão", "representante"
+
 REGRA DE CONTEXTO (IMPORTANTE):
 Se o cliente está respondendo a uma pergunta anterior do atendente
 (ex.: nome, cidade, valor da conta, "sim"/"não", "tenho"/"não tenho"),
