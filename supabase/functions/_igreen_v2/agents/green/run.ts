@@ -181,7 +181,14 @@ async function generateText(ctx: AgentContext, stage: string): Promise<string> {
           systemInstruction: { parts: [{ text: GREEN_SYSTEM }] },
           contents: [{
             role: "user",
-            parts: [{ text: buildGreenUserPrompt({ stage: stage as any, message: ctx.message, produto: ctx.state.produto }) }],
+            parts: [{ text: buildGreenUserPrompt({
+              stage: stage as any,
+              message: ctx.message,
+              produto: ctx.state.produto,
+              extras: (ctx.state.extras ?? {}) as Record<string, unknown>,
+              last_ai_question: (ctx.state as any).last_ai_question ?? null,
+              turn_index: (ctx.state as any).turn_index ?? undefined,
+            }) }],
           }],
           generationConfig: {
             temperature: 0.4,
