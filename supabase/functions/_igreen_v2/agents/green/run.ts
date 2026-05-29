@@ -4,6 +4,7 @@
 
 import type { AgentContext, AgentResult } from "../_types.ts";
 import { decideGreenStage } from "./stages.ts";
+import { isAffirmation } from "./stages.ts";
 import { GREEN_SYSTEM, buildGreenUserPrompt } from "./prompt.ts";
 
 const LLM_TIMEOUT_MS = 8000;
@@ -30,9 +31,21 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   }
 
   if (stage === "explain_solution") {
-    // já entendemos que há interesse — avança o funil para qualificacao
+    // Marca que já explicamos para o stage-engine progredir no próximo turno
+    // mesmo se set_product retornar skipped.
     patch.produto = "green";
+    patch.extras = { ...currentExtras, explained: true };
     tool_calls.push({ name: "set_product", args: { produto: "green" } });
+    if (isAffirmation(ctx.message)) {
+      patch.extras = { ...(patch.extras as object), solution_confirmed: true };
+    }
+  }
+
+  // Promoção determinística novo → qualificacao quando entramos em send_video
+  // ainda em etapa "novo". Não dependemos mais de set_product(skipped:false).
+  if (stage === "send_video" && (ctx.state.etapa_funil ?? "novo").toLowerCase() === "novo") {
+    patch.etapa_funil = "qualificacao";
+    tool_calls.push({ name: "set_stage", args: { etapa: "qualificacao" } });
   }
 
   if (stage === "ask_consumo") {
