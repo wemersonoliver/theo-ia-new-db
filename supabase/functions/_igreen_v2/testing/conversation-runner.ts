@@ -2,7 +2,7 @@
 // Permite mockLLM determinístico (rápido) ou modo "live" usando Gemini real via runGreen.
 
 import type { IgreenConversationState } from "../types.ts";
-import { decideGreenStage, type GreenStage } from "../agents/green/stages.ts";
+import { decideGreenStage, isAffirmation, type GreenStage } from "../agents/green/stages.ts";
 import { runGreen } from "../agents/green/run.ts";
 import type { Turn } from "./assertions.ts";
 
@@ -70,12 +70,18 @@ export async function runScenario(steps: ScenarioStep[], opts: RunnerOptions = {
       const currentExtras = (state.extras ?? {}) as Record<string, unknown>;
       if (stage === "greet") patch = { produto: "green", extras: { ...currentExtras, greeted: true } };
       if (stage === "explain_solution") {
-        patch = { produto: "green" };
+        const nextExtras: Record<string, unknown> = { ...currentExtras, explained: true };
+        if (isAffirmation(step.user)) nextExtras.solution_confirmed = true;
+        patch = { produto: "green", extras: nextExtras };
         toolCalls = [{ name: "set_product", args: { produto: "green" } }];
       }
       if (stage === "send_video") {
         toolCalls = [{ name: "send_discovery_video", args: { produto: "green" } }];
         patch = { extras: { ...currentExtras, video_sent: true } };
+        if ((state.etapa_funil ?? "novo").toLowerCase() === "novo") {
+          patch.etapa_funil = "qualificacao";
+          toolCalls.push({ name: "set_stage", args: { etapa: "qualificacao" } });
+        }
       }
       if (stage === "ask_consumo") {
         const m = step.user.match(/\d{2,5}/);
@@ -102,9 +108,10 @@ export async function runScenario(steps: ScenarioStep[], opts: RunnerOptions = {
       events = result.events.map((e) => ({ type: e.type, payload: e.payload }));
     }
 
-    // Espelhar efeito do set_product: novo → qualificacao
-    if (toolCalls.some((t) => t.name === "set_product") && (state.etapa_funil ?? "novo") === "novo") {
-      patch = { ...patch, etapa_funil: "qualificacao" };
+    // Espelhar set_stage explícito (novo → qualificacao via promoção determinística)
+    const setStage = toolCalls.find((t) => t.name === "set_stage") as any;
+    if (setStage?.args?.etapa) {
+      patch = { ...patch, etapa_funil: setStage.args.etapa };
     }
 
     const before = state;
