@@ -206,11 +206,13 @@ function fallbackText(stage: string): string {
   switch (stage) {
     case "greet": return "Olá! Como posso te ajudar hoje?";
     case "explain_solution": return "A Igreen te dá economia na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer entender melhor como funciona?";
-    case "send_video": return "Vou te mandar um vídeo curtinho explicando como funciona.";
-    case "ask_consumo": return "Pra eu te ajudar melhor, quanto vem em média na sua conta de luz por mês?";
-    case "ask_cidade": return "Legal! E você mora em qual cidade?";
+    case "send_video": return "Vou te mandar um vídeo curtinho explicando como funciona, dá uma olhada quando puder.";
+    case "engage_check": return "Faz sentido pra você? Quer que eu te mostre quanto dá pra economizar?";
+    case "ask_consumo": return "Show! Pra te mostrar a economia, quanto vem em média na sua conta de luz por mês?";
+    case "ask_estado": return "Perfeito. E em qual estado você está?";
+    case "ask_distribuidora": return "Beleza. Qual é a sua distribuidora de energia?";
     case "ask_name": return "Pra ficar mais fácil, como posso te chamar?";
-    case "request_invoice": return "Me manda sua última fatura (PDF ou foto)? Assim calculo sua economia exata.";
+    case "request_invoice": return "Agora me manda sua última fatura (PDF ou foto)? Assim eu calculo sua economia exata.";
     case "waiting_invoice": return "Perfeito, fico no aguardo da fatura.";
     case "ask_full_name_cpf": return "Pra preparar seu contrato, me passa por favor seu nome completo e CPF?";
     default: return "Beleza!";
