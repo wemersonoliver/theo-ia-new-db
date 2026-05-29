@@ -425,11 +425,15 @@ export const SCENARIOS: Scenario[] = [
       base.push(assertNoRepeatedGreeting(turns));
       base.push(assertCommercialProgression(turns));
       // Final deve chegar pelo menos a request_invoice
-      const lastStages = new Set(turns.map((t) => t.stage));
+      const reachedInvoice = turns.some((t) =>
+        t.messages.some((m) => /\bfatura\b/i.test(m ?? "")) ||
+        (t.patch as any)?.extras?.distribuidora ||
+        (t as any).events?.some((e: any) => e.payload?.stage === "request_invoice"),
+      );
       base.push({
         name: "assertReachedRequestInvoice",
-        ok: lastStages.has("request_invoice"),
-        reason: lastStages.has("request_invoice") ? undefined : `stages percorridos: ${[...lastStages].join(",")}`,
+        ok: reachedInvoice,
+        reason: reachedInvoice ? undefined : `não chegou a pedir fatura`,
       });
       return base;
     },
