@@ -22,6 +22,14 @@ const INVOICE_KEYWORDS = [
   "fatura", "conta de luz", "boleto", "mando", "vou mandar", "enviar fatura",
 ];
 
+// Confirmações curtas / interesse explícito após explicação.
+const AFFIRMATION_RX = /\b(sim|claro|quero|pode ser|bora|vamos|entendi|ok|beleza|certo|com certeza|positivo|isso|isso ai|isso aí|fechado|t[oô] dentro|topo|gostei|me interessei|tenho interesse)\b/i;
+
+export function isAffirmation(msg: string): boolean {
+  if (!msg) return false;
+  return AFFIRMATION_RX.test(msg);
+}
+
 export function decideGreenStage(
   state: Pick<IgreenConversationState, "etapa_funil" | "produto" | "extras">,
   message: string,
@@ -41,7 +49,14 @@ export function decideGreenStage(
 
   if (etapa === "novo") {
     if (!extras.greeted) return "greet";
-    return "explain_solution";
+    if (!extras.explained) return "explain_solution";
+    // Após explicar uma vez, NUNCA voltar a explain_solution.
+    // Se houve confirmação/interesse OU já marcamos solution_confirmed,
+    // promovemos para qualificacao (send_video é o primeiro sub-passo).
+    if (extras.solution_confirmed || isAffirmation(message)) return "send_video";
+    // Mesmo sem afirmação explícita, progredimos após 1 turno de explicação
+    // para evitar loop absorvente em explain_solution.
+    return "send_video";
   }
 
   if (etapa === "qualificacao") {
