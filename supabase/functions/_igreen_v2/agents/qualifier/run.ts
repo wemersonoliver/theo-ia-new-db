@@ -4,8 +4,9 @@
 import type { AgentContext, AgentResult } from "../_types.ts";
 import { decideQualifierStage, extractFirstName, detectProductMention, type QualifierStage } from "./stages.ts";
 import {
-  GREET_OPEN_TEXT, MENU_TEXT, MENU_SHORT_TEXT,
-  ROUTE_GREEN_TEXT, ROUTE_TELECOM_TEXT, ROUTE_EXPANSAO_TEXT,
+  buildGreetOpenText, buildMenuText, buildRouteGreenText,
+  MENU_SHORT_TEXT,
+  ROUTE_TELECOM_TEXT, ROUTE_EXPANSAO_TEXT,
   ASK_NAME_TEXT, ASK_NAME_AFTER_PRODUCT_TEXT,
 } from "./prompt.ts";
 
@@ -40,7 +41,7 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
 
   switch (stage as QualifierStage) {
     case "greet_open": {
-      text = GREET_OPEN_TEXT;
+      text = buildGreetOpenText();
       patch.extras = { ...extras, greeted: true };
       break;
     }
@@ -52,7 +53,11 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
       break;
     }
     case "present_menu": {
-      text = MENU_TEXT;
+      // Usa nome capturado nesta rodada (capturedName) ou já em extras.
+      const nome = (patch.extras as Record<string, unknown> | undefined)?.client_name
+        ?? extras.client_name
+        ?? null;
+      text = buildMenuText(typeof nome === "string" ? nome : null);
       patch.extras = { ...(patch.extras as object ?? extras), menu_presented: true };
       break;
     }
@@ -65,7 +70,10 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
       break;
     }
     case "route_green": {
-      text = ROUTE_GREEN_TEXT;
+      const nome = (patch.extras as Record<string, unknown> | undefined)?.client_name
+        ?? extras.client_name
+        ?? null;
+      text = buildRouteGreenText(typeof nome === "string" ? nome : null);
       patch.produto = "green";
       (patch as any).specialist = "green";
       patch.extras = {
@@ -98,7 +106,7 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
       break;
     }
     default: {
-      text = GREET_OPEN_TEXT;
+      text = buildGreetOpenText();
       patch.extras = { ...extras, greeted: true };
     }
   }
