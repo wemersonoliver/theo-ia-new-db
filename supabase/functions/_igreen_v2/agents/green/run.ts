@@ -69,6 +69,52 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     if (d) patch.extras = { ...(patch.extras as object ?? currentExtras), distribuidora: d };
   }
 
+  if (stage === "simulate_discount") {
+    const estado = (currentExtras.estado as string | undefined) ?? "";
+    const distribuidora = (currentExtras.distribuidora as string | undefined) ?? "";
+    if (estado && distribuidora) {
+      tool_calls.push({
+        name: "get_distributor_discount",
+        args: { state: estado, distributor: distribuidora },
+      });
+    }
+    // Marca lookup como solicitado para evitar reentrada — a tool persiste discount_lookup_done.
+    patch.extras = { ...(patch.extras as object ?? currentExtras), discount_lookup_done: true };
+  }
+
+  if (stage === "intent_send_invoice_ack") {
+    patch.extras = { ...(patch.extras as object ?? currentExtras), intent_send_invoice: true };
+    // Adiciona tag CRM "vai enviar fatura" se a tool estiver disponível.
+    tool_calls.push({
+      name: "add_contact_tag",
+      args: { tag: "vai enviar fatura" },
+    });
+  }
+
+  if (stage === "objection_security") {
+    patch.extras = { ...(patch.extras as object ?? currentExtras), objection_security_handled: true };
+    tool_calls.push({
+      name: "add_contact_tag",
+      args: { tag: "objecao_seguranca" },
+    });
+  }
+
+  if (stage === "request_identity") {
+    patch.extras = { ...(patch.extras as object ?? currentExtras), identity_requested: true };
+  }
+
+  if (stage === "validate_identity" && ctx.media) {
+    tool_calls.push({
+      name: "validate_green_identity",
+      args: {
+        media_url: ctx.media.url,
+        mime_type: ctx.media.mime_type,
+        byte_size: ctx.media.byte_size,
+        expected_name: (currentExtras.client_name as string | undefined) ?? null,
+      },
+    });
+  }
+
   if (stage === "ask_name") {
     const nome = extractFirstName(ctx.message);
     if (nome) patch.extras = { ...(patch.extras as object ?? currentExtras), client_name: nome };
@@ -239,6 +285,13 @@ function fallbackText(stage: string): string {
     case "request_invoice": return "Agora me manda sua última fatura (PDF ou foto)? Assim eu calculo sua economia exata.";
     case "waiting_invoice": return "Perfeito, fico no aguardo da fatura.";
     case "ask_full_name_cpf": return "Pra preparar seu contrato, me passa por favor seu nome completo e CPF?";
+    case "simulate_discount": return "Com base na sua distribuidora e estado, conseguimos aplicar a faixa oficial de economia da iGreen. Posso seguir com o cálculo exato a partir da sua última fatura?";
+    case "ask_valor_fatura": return "Você lembra qual o valor médio da sua conta de luz por mês, em reais?";
+    case "intent_send_invoice_ack": return "Combinado, fico no aguardo da sua fatura.";
+    case "request_identity": return "Sua fatura foi validada com sucesso. Para concluirmos, por favor me envie uma foto do RG ou CNH do titular da conta.";
+    case "validate_identity": return "Recebi seu documento, estou conferindo aqui.";
+    case "family_authorization_check": return "Notei que a conta está em nome de outra pessoa. O titular é alguém da sua família e você tem autorização para seguir com a contratação?";
+    case "objection_security": return "Entendo sua preocupação, é totalmente compreensível.\n\nSe preferir, podemos te enviar o link do aplicativo oficial da iGreen para você fazer o cadastro por conta própria. Quer que eu te envie?";
     default: return "Beleza!";
   }
 }

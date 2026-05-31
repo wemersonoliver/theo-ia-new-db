@@ -40,6 +40,13 @@ const MOCK_TEXTS: Record<GreenStage, string> = {
   validate_invoice: "Recebi sua fatura, tô conferindo aqui rapidinho.",
   soft_confirm_ask: "Confirma pra mim: o titular da conta é você mesmo?",
   ask_full_name_cpf: "Pra preparar seu contrato, me passa por favor seu nome completo e CPF?",
+  simulate_discount: "Com base na sua distribuidora e estado, conseguimos aplicar a faixa oficial de economia da iGreen. Posso seguir com o cálculo exato a partir da sua última fatura?",
+  ask_valor_fatura: "Você lembra qual o valor médio da sua conta de luz por mês, em reais?",
+  intent_send_invoice_ack: "Combinado, fico no aguardo da sua fatura.",
+  request_identity: "Sua fatura foi validada com sucesso. Para concluirmos, por favor me envie uma foto do RG ou CNH do titular da conta.",
+  validate_identity: "Recebi seu documento, estou conferindo aqui.",
+  family_authorization_check: "Notei que a conta está em nome de outra pessoa. O titular é alguém da sua família e você tem autorização para seguir com a contratação?",
+  objection_security: "Entendo sua preocupação, é totalmente compreensível. Se preferir, posso te enviar o link do aplicativo oficial da iGreen para você fazer o cadastro por conta própria. Quer que eu te envie?",
   idle: "Beleza!",
 };
 
@@ -125,6 +132,25 @@ export async function runScenario(steps: ScenarioStep[], opts: RunnerOptions = {
         const t = step.user.trim();
         if (t.length >= 2 && t.length <= 60 && !/^\d+$/.test(t)) patch = { extras: { ...currentExtras, distribuidora: t } };
       }
+      if (gStage === "simulate_discount") {
+        const estado = (currentExtras.estado as string | undefined) ?? "";
+        const distribuidora = (currentExtras.distribuidora as string | undefined) ?? "";
+        if (estado && distribuidora) {
+          toolCalls = [{ name: "get_distributor_discount", args: { state: estado, distributor: distribuidora } }];
+        }
+        patch = { extras: { ...currentExtras, discount_lookup_done: true } };
+      }
+      if (gStage === "intent_send_invoice_ack") {
+        patch = { extras: { ...currentExtras, intent_send_invoice: true } };
+        toolCalls = [{ name: "add_contact_tag", args: { tag: "vai enviar fatura" } }];
+      }
+      if (gStage === "objection_security") {
+        patch = { extras: { ...currentExtras, objection_security_handled: true } };
+        toolCalls = [{ name: "add_contact_tag", args: { tag: "objecao_seguranca" } }];
+      }
+      if (gStage === "request_identity") {
+        patch = { extras: { ...currentExtras, identity_requested: true } };
+      }
       if (gStage === "ask_name") {
         const t = step.user.trim().replace(/[^\p{L}\s]/gu, "").split(/\s+/)[0];
         if (t && t.length >= 2) patch = { extras: { ...currentExtras, client_name: t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() } };
@@ -146,6 +172,15 @@ export async function runScenario(steps: ScenarioStep[], opts: RunnerOptions = {
           }
           if (next === "request_invoice") {
             toolCalls.push({ name: "request_invoice", args: { reason: "calculo_economia" } });
+          }
+          if (next === "simulate_discount") {
+            const e = (patch.extras as Record<string, unknown>) ?? currentExtras;
+            const estado = (e.estado as string | undefined) ?? "";
+            const distribuidora = (e.distribuidora as string | undefined) ?? "";
+            if (estado && distribuidora) {
+              toolCalls.push({ name: "get_distributor_discount", args: { state: estado, distributor: distribuidora } });
+            }
+            patch = { ...patch, extras: { ...e, discount_lookup_done: true } };
           }
           gStage = next;
         }

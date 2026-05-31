@@ -14,16 +14,36 @@ export type GreenStage =
   | "ask_distribuidora"
   | "ask_cidade"
   | "ask_name"
+  | "simulate_discount"
+  | "ask_valor_fatura"
   | "request_invoice"
+  | "intent_send_invoice_ack"
   | "waiting_invoice"
   | "validate_invoice"
   | "soft_confirm_ask"
+  | "request_identity"
+  | "validate_identity"
+  | "family_authorization_check"
+  | "objection_security"
   | "ask_full_name_cpf"
   | "idle";
 
 const INVOICE_KEYWORDS = [
   "fatura", "conta de luz", "boleto", "mando", "vou mandar", "enviar fatura",
 ];
+
+// Cliente diz que vai enviar a fatura SEM anexar nada — não disparar validate.
+const INTENT_SEND_INVOICE_RX = /\b(vou (te )?mandar|vou enviar|j[aá] te envio|j[aá] envio|agora mando|mando (j[aá]|agora)|te mando (j[aá]|agora|daqui)|envio (j[aá]|agora))\b[\s\S]{0,30}\b(fatura|conta|boleto|luz)\b/i;
+
+// Objeção de segurança / golpe.
+const OBJECTION_SECURITY_RX = /\b(golpe|fraude|seguro|por que.{0,15}precis|n[aã]o gosto de mandar|tenho medo|isso[\s\S]{0,5}é seguro|isso[\s\S]{0,5}é confi[aá]vel)\b/i;
+
+export function isIntentSendInvoice(msg: string): boolean {
+  return INTENT_SEND_INVOICE_RX.test(msg ?? "");
+}
+export function isObjectionSecurity(msg: string): boolean {
+  return OBJECTION_SECURITY_RX.test(msg ?? "");
+}
 
 // Confirmações curtas / interesse explícito após explicação.
 const AFFIRMATION_RX = /\b(sim|claro|quero|pode ser|bora|vamos|entendi|ok|beleza|certo|com certeza|positivo|isso|isso ai|isso aí|fechado|t[oô] dentro|topo|gostei|me interessei|tenho interesse)\b/i;
@@ -43,9 +63,21 @@ export function decideGreenStage(
   const msg = (message ?? "").toLowerCase();
   const extras = (state.extras ?? {}) as Record<string, unknown>;
 
+  // PRIORIDADE 0 — objeção de golpe (válida em qualquer etapa, desde que já tenha saudado).
+  if (isObjectionSecurity(message) && !extras.objection_security_handled && extras.greeted) {
+    return "objection_security";
+  }
+
   if (hasMedia && (etapa === "qualificacao" || etapa === "fatura_enviada" || etapa === "fatura_rejeitada")) {
     return "validate_invoice";
   }
+
+  // Cliente sinalizou que vai enviar fatura mas não anexou — só ack, sem validate.
+  if (!hasMedia && isIntentSendInvoice(message) &&
+      (etapa === "qualificacao" || etapa === "fatura_enviada")) {
+    return "intent_send_invoice_ack";
+  }
+
   if (documentStatus === "awaiting_soft_confirm") {
     return "soft_confirm_ask";
   }
@@ -69,8 +101,8 @@ export function decideGreenStage(
     if (!extras.consumo_medio) return "ask_consumo";
     if (!extras.estado) return "ask_estado";
     if (!extras.distribuidora) return "ask_distribuidora";
-    // ask_name e ask_cidade foram removidos do fluxo de qualificação.
-    // Nome só na fase de contrato (ask_full_name_cpf). Cidade nunca é perguntada.
+    // Após capturar distribuidora+estado, simular desconto oficial antes de pedir fatura.
+    if (!extras.discount_lookup_done) return "simulate_discount";
     return "request_invoice";
   }
 
@@ -80,6 +112,14 @@ export function decideGreenStage(
   }
 
   if (etapa === "fatura_validada") {
+    // Novo fluxo: após validate_green_invoice com match=true, pedir RG/CNH do titular.
+    if (extras.invoice_validated_match && !extras.identity_validated) {
+      if (!extras.identity_requested) return "request_identity";
+      return "validate_identity";
+    }
+    if (extras.invoice_match_third_party && !extras.family_authorized) {
+      return "family_authorization_check";
+    }
     if (!extras.full_name || !extras.cpf) return "ask_full_name_cpf";
     return "idle";
   }
