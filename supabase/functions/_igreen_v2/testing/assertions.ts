@@ -143,7 +143,9 @@ export function assertResponseNotTruncated(turns: Turn[]): AssertionResult {
       if (!t) continue;
       if (t.length < 20) return { name: "assertResponseNotTruncated", ok: false,
         reason: `Turno ${i}: resposta curta demais (${t.length} chars): "${t}"` };
-      if (!/[.!?…)]$/.test(t)) return { name: "assertResponseNotTruncated", ok: false,
+      // Permite emojis / whitespace após pontuação final ("? 😉" é OK).
+      const stripped = t.replace(/[\s\p{Extended_Pictographic}\p{Emoji_Component}]+$/u, "");
+      if (!/[.!?…)]$/.test(stripped)) return { name: "assertResponseNotTruncated", ok: false,
         reason: `Turno ${i}: terminação abrupta: "...${t.slice(-40)}"` };
     }
   }
