@@ -71,7 +71,7 @@ export function buildGreenUserPrompt(args: {
     case "ask_full_name_cpf":
       return baseCtx + "STAGE: ask_full_name_cpf. Explique em 1 frase curta que agora precisa do nome completo e CPF para preparar o contrato. Peça os dois juntos, de forma cordial. Máx 2 frases.";
     case "simulate_discount":
-      return baseCtx + "STAGE: simulate_discount. Diga em 1-2 frases que com base na distribuidora e estado informados a iGreen pode oferecer uma faixa de economia oficial. Use os campos extras.discount_min_percent e extras.discount_max_percent se presentes (ex: 'entre X% e Y%'). NÃO invente números. Em seguida pergunte se quer prosseguir enviando a última fatura para o cálculo exato. NÃO use gírias.";
+      return baseCtx + "STAGE: simulate_discount. PROIBIDO citar qualquer percentual, número ou faixa numérica neste turno (sem exceções). Diga em 1-2 frases, sem números: que com a distribuidora e estado informados a iGreen tem uma faixa oficial de economia, e que o valor exato só sai com a última fatura. Pergunte se ele pode enviar a fatura agora. Tom cordial, sem gírias.";
     case "ask_valor_fatura":
       return baseCtx + "STAGE: ask_valor_fatura. Pergunte UMA coisa: qual o valor médio da conta de luz em reais. Máx 1 frase. NÃO use gírias.";
     case "intent_send_invoice_ack":
