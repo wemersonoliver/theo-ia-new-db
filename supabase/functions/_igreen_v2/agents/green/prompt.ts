@@ -67,6 +67,20 @@ export function buildGreenUserPrompt(args: {
       return baseCtx + "STAGE: soft_confirm_ask. Peça uma confirmação direta (sim/não) sobre o titular da fatura. Máx 1 frase.";
     case "ask_full_name_cpf":
       return baseCtx + "STAGE: ask_full_name_cpf. Explique em 1 frase curta que agora precisa do nome completo e CPF para preparar o contrato. Peça os dois juntos, de forma cordial. Máx 2 frases.";
+    case "simulate_discount":
+      return baseCtx + "STAGE: simulate_discount. Diga em 1-2 frases que com base na distribuidora e estado informados a iGreen pode oferecer uma faixa de economia oficial. Use os campos extras.discount_min_percent e extras.discount_max_percent se presentes (ex: 'entre X% e Y%'). NÃO invente números. Em seguida pergunte se quer prosseguir enviando a última fatura para o cálculo exato. NÃO use gírias.";
+    case "ask_valor_fatura":
+      return baseCtx + "STAGE: ask_valor_fatura. Pergunte UMA coisa: qual o valor médio da conta de luz em reais. Máx 1 frase. NÃO use gírias.";
+    case "intent_send_invoice_ack":
+      return baseCtx + "STAGE: intent_send_invoice_ack. Cliente disse que vai mandar a fatura mas ainda não anexou. Em 1 frase curta e cordial, confirme que aguarda. NÃO repita pedido de fatura. NÃO use gírias.";
+    case "request_identity":
+      return baseCtx + "STAGE: request_identity. A fatura foi validada com sucesso. Em 1-2 frases peça uma foto do documento de identidade do titular (RG ou CNH). Tom cordial. NÃO peça CPF agora. NÃO use gírias.";
+    case "validate_identity":
+      return baseCtx + "STAGE: validate_identity. Em 1 frase diga que recebeu o documento e está conferindo.";
+    case "family_authorization_check":
+      return baseCtx + "STAGE: family_authorization_check. A fatura está em nome de outra pessoa. Pergunte em 1 frase cordial se o titular é alguém da família e se você tem autorização para seguir com a contratação em nome dele.";
+    case "objection_security":
+      return baseCtx + "STAGE: objection_security. Cliente demonstrou preocupação com segurança ou medo de golpe. Em 2 blocos curtos: 1) acolha a preocupação sem minimizar; 2) ofereça a alternativa de fazer o cadastro pelo próprio aplicativo oficial da iGreen e diga que pode enviar o link. Pergunte se prefere essa via. NÃO seja informal. NÃO use gírias.";
     case "idle":
     default:
       return baseCtx + "STAGE: idle. Responda apenas com uma confirmação curta de 1 frase.";
