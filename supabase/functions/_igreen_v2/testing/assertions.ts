@@ -249,7 +249,9 @@ export function assertNoPrematureDataCollection(turns: Turn[]): AssertionResult 
 const COMMERCIAL_ORDER = [
   "greet_open","present_menu","greet","explain_solution","route_green",
   "send_video","engage_check","ask_consumo","ask_estado","ask_distribuidora",
-  "request_invoice","validate_invoice","ask_full_name_cpf","idle",
+  "simulate_discount","ask_valor_fatura","request_invoice","intent_send_invoice_ack",
+  "validate_invoice","request_identity","validate_identity",
+  "family_authorization_check","ask_full_name_cpf","idle",
 ];
 export function assertCommercialProgression(turns: Turn[]): AssertionResult {
   let lastIdx = -1;
@@ -272,3 +274,79 @@ export const ALL_ASSERTIONS = [
   assertResponseNotTruncated, assertConversationProgressing, assertSemanticMemory,
   assertNoCityQuestion, assertNoRepeatedGreeting, assertCommercialProgression,
 ];
+
+// ─── Assertions NOVAS (não entram em ALL_ASSERTIONS — usadas só nos cenários novos) ───
+
+const SLANG_RX = /\b(blz|beleza|massa|de boa|t[oô]pa|topo|tranquilo|tranquila|rapidinho|bora|show|maneiro)\b/i;
+export function assertNoSlang(turns: Turn[]): AssertionResult {
+  for (let i = 0; i < turns.length; i++) {
+    for (const m of turns[i].messages) {
+      if (SLANG_RX.test(m ?? "")) {
+        return { name: "assertNoSlang", ok: false,
+          reason: `Turno ${i}: gíria detectada em "${(m ?? "").slice(0, 120)}"` };
+      }
+    }
+  }
+  return { name: "assertNoSlang", ok: true };
+}
+
+const EM_DASH_RX = /[—–]/;
+export function assertNoEmDash(turns: Turn[]): AssertionResult {
+  for (let i = 0; i < turns.length; i++) {
+    for (const m of turns[i].messages) {
+      if (EM_DASH_RX.test(m ?? "")) {
+        return { name: "assertNoEmDash", ok: false,
+          reason: `Turno ${i}: travessão proibido em "${(m ?? "").slice(0, 120)}"` };
+      }
+    }
+  }
+  return { name: "assertNoEmDash", ok: true };
+}
+
+export function assertDiscountToolCalled(turns: Turn[]): AssertionResult {
+  // Se em algum turno extras tem estado E distribuidora, deve haver tool_call get_distributor_discount.
+  let needed = false;
+  let called = false;
+  for (const t of turns) {
+    const e = (t.extras_after ?? {}) as Record<string, unknown>;
+    if (e.estado && e.distribuidora) needed = true;
+    const tc = (t as any).toolCalls ?? (t as any).tool_calls ?? [];
+    if (Array.isArray(tc) && tc.some((c: any) => c?.name === "get_distributor_discount")) called = true;
+    // mock runner não expõe tool_calls em turns; checamos eventos de stage
+    const ev = (t.events ?? []) as Array<{ payload?: any }>;
+    if (ev.some((x) => x.payload?.stage === "simulate_discount")) called = true;
+  }
+  if (needed && !called) {
+    return { name: "assertDiscountToolCalled", ok: false,
+      reason: "estado+distribuidora capturados mas simulate_discount/get_distributor_discount nunca foi chamado" };
+  }
+  return { name: "assertDiscountToolCalled", ok: true };
+}
+
+export function assertIntentSendInvoiceDoesNotValidate(turns: Turn[]): AssertionResult {
+  for (let i = 0; i < turns.length; i++) {
+    if (turns[i].stage === "intent_send_invoice_ack") {
+      const ev = turns[i].events ?? [];
+      const validated = ev.some((e: any) => e.payload?.stage === "validate_invoice");
+      if (validated) {
+        return { name: "assertIntentSendInvoiceDoesNotValidate", ok: false,
+          reason: `Turno ${i}: cliente só disse que vai mandar fatura mas validate_invoice foi disparado` };
+      }
+    }
+  }
+  return { name: "assertIntentSendInvoiceDoesNotValidate", ok: true };
+}
+
+export function assertObjectionSecurityHandled(turns: Turn[]): AssertionResult {
+  const hit = turns.find((t) => t.stage === "objection_security");
+  if (!hit) {
+    return { name: "assertObjectionSecurityHandled", ok: false,
+      reason: "Mensagem de objeção de segurança não disparou stage objection_security" };
+  }
+  const e = (hit.extras_after ?? {}) as Record<string, unknown>;
+  if (!e.objection_security_handled) {
+    return { name: "assertObjectionSecurityHandled", ok: false,
+      reason: "objection_security rodou mas flag objection_security_handled não foi persistida" };
+  }
+  return { name: "assertObjectionSecurityHandled", ok: true };
+}
