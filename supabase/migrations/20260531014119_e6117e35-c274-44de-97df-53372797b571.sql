@@ -1,0 +1,1 @@
+UPDATE public.whatsapp_ai_config SET keyword_activation_enabled = false WHERE keyword_activation_enabled = true;
