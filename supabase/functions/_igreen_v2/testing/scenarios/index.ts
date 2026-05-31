@@ -544,4 +544,98 @@ export const SCENARIOS: Scenario[] = [
       return base;
     },
   },
+  {
+    id: "33-family-authorization-flow",
+    title: "Fatura validada em nome de terceiro → family_authorization_check",
+    initialState: {
+      produto: "green",
+      etapa_funil: "fatura_validada",
+      specialist: "green",
+      extras: {
+        greeted: true, explained: true, video_sent: true, engaged: true,
+        consumo_medio: "500", estado: "SC", distribuidora: "Celesc",
+        discount_lookup_done: true,
+        invoice_match_third_party: true,
+        client_name: "Thays",
+      },
+    },
+    steps: [
+      { user: "sim, é da minha mãe e tenho autorização" },
+    ],
+    run: (turns) => {
+      const base = baseRun()(turns);
+      const emitted = turns.some((t) => t.stage === "family_authorization_check");
+      base.push({
+        name: "assertFamilyAuthStageEmitted",
+        ok: emitted,
+        reason: emitted ? undefined : `stages=${turns.map((t) => t.stage).join(",")}`,
+      });
+      return base;
+    },
+  },
+  {
+    id: "34-autocadastro-link-after-objection",
+    title: "Após objection_security, aceite envia link de auto-cadastro",
+    steps: [
+      { user: "Bom dia" },
+      { user: "quero saber sobre energia por assinatura" },
+      { user: "isso não é golpe?" },
+      { user: "sim, pode me enviar o link" },
+    ],
+    run: (turns) => {
+      const base = baseRun()(turns);
+      base.push(assertObjectionSecurityHandled(turns));
+      base.push(assertAutocadastroLinkSent(turns));
+      return base;
+    },
+  },
+  {
+    id: "35-explicit-handoff-request",
+    title: "Pedido explícito de humano → handoff_human silencia IA",
+    steps: [
+      { user: "Bom dia" },
+      { user: "quero saber sobre energia por assinatura" },
+      { user: "quero falar com um atendente humano" },
+    ],
+    run: (turns) => {
+      const base = baseRun()(turns);
+      base.push(assertHandoffSilencesAI(turns));
+      const emitted = turns.some((t) => t.stage === "handoff_human");
+      base.push({
+        name: "assertHandoffStageEmitted",
+        ok: emitted,
+        reason: emitted ? undefined : `stages=${turns.map((t) => t.stage).join(",")}`,
+      });
+      return base;
+    },
+  },
+  {
+    id: "36-thays-replay-v2",
+    title: "Replay Thays v2 — sem cidade, sem repetição, sem mini-saudação, simulação executada",
+    steps: [
+      { user: "Boa noite" },
+      { user: "Quero saber como funciona a energia por assinatura" },
+      { user: "Sim" },
+      { user: "Ok" },
+      { user: "faz sentido" },
+      { user: "500" },
+      { user: "SC" },
+      { user: "Celesc" },
+    ],
+    run: (turns) => {
+      const base = baseRun()(turns);
+      base.push(assertNoCityQuestion(turns));
+      base.push(assertNoRepeatedGreeting(turns));
+      base.push(assertNoPrematureDataCollection(turns));
+      base.push(assertDiscountToolCalled(turns));
+      const allText = turns.map((t) => t.messages.join("\n")).join("\n");
+      const hasMenu = /1\s*-\s*[^\n]*\n[\s\S]*2\s*-/.test(allText);
+      base.push({
+        name: "assertNoMenuWhenProductCited",
+        ok: !hasMenu,
+        reason: hasMenu ? "Menu apareceu mas cliente já citou produto" : undefined,
+      });
+      return base;
+    },
+  },
 ];
