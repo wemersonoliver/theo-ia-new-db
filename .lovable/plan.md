@@ -1,217 +1,75 @@
-## Análise da conversa com 5547989118695
 
-### Linha do tempo observada
+# Plano — Ajustes no Fluxo Conexão Green (iGreen v2)
 
-- O atendimento começou corretamente:
-  - IA: pediu o nome.
-  - Cliente: informou “Wemerson”.
-  - IA: apresentou o menu.
-  - Cliente: escolheu `1` economia de energia.
+Baseado nos 4 pontos levantados após o último teste com `5547989118695`.
 
-- O vídeo desta vez aparece registrado como mídia real:
-  - Mensagem salva como `type: video`.
-  - `media_url` aponta para um arquivo `.mp4` no Storage.
-  - `provider_message_id`: `3EB01077229B80F54A6B83`.
+---
 
-- Depois do vídeo, o fluxo seguiu corretamente por um tempo:
-  - Cliente: “Já vi”.
-  - IA: perguntou se queria calcular economia.
-  - Cliente informou valor `500`, estado `SC`, distribuidora `Celesc`.
-  - IA pediu a fatura.
+## 1) Mensagem após escolher a opção 1 (Conexão Green)
 
-- O erro principal aconteceu depois que o cliente enviou a fatura:
-  - Cliente enviou `[Documento]` às `02:47:45`.
-  - O OCR leu o PDF com sucesso e extraiu conteúdo da Celesc.
-  - Mesmo assim, a IA respondeu: “Assim que puder, é só me enviar a fatura...”
-  - Depois, quando o cliente disse “Já mandei acima”, a IA repetiu a mesma ideia.
+**Problema:** depois do menu, a IA mandou apenas "Energia limpa é nossa praia… Quer entender melhor como funciona?" e ficou esperando outra confirmação antes de mandar o vídeo. Isso adiciona um passo extra desnecessário.
 
-## Erros encontrados
+**Correção:**
+- Quando o `qualifier` decide produto = `green` (cliente escolheu 1), entrar **direto** no novo stage `green_intro` (substituindo o `explain_solution` atual para o primeiro turno do Green).
+- Texto fixo (sem LLM) usando o nome do cliente já capturado (`extras.client_name`):
+  > Que ótimo seu interesse na Conexão Green, {nome}! 😊
+  >
+  > É a nossa solução de energia por assinatura, que te dá desconto na conta de luz todo mês, sem precisar de obra ou instalação.
+  >
+  > Vou te enviar um vídeo rápido explicando como funciona. Me avisa quando assistir, tá? 😉
+- No **mesmo turno**, disparar `send_discovery_video` e marcar `extras.greeted = true`, `extras.explained = true`, `extras.solution_confirmed = true`, `extras.video_sent = true`, `etapa_funil = qualificacao`.
+- Próximo turno após o "ok" do cliente: `engage_check` → `ask_consumo`.
 
-### 1. O vídeo foi registrado como enviado, mas não há rastro em `igreen_transport_events`
+## 2) Vídeo enviado em duplicidade
 
-Na conversa existe uma mensagem de vídeo com `provider_message_id`, então o envio parece ter ocorrido pela Evolution API.
+**Diagnóstico:** o lock idempotente da tool `send_discovery_video` é `video:${produto}:${phone}`, mas o gate `extras.video_sent` só é setado **depois** do envio. Quando duas mensagens chegam quase simultaneamente (cliente mandando "Sim" e algo logo em seguida), dois runs do agente disparam a tool em paralelo, ambos passam pelo check `if (extras.video_sent)` antes do primeiro persistir, e o vídeo sai duas vezes.
 
-Mas a tabela de eventos de transporte só registrou mensagens de texto; não há evento `kind: video` para esse envio.
+**Correção:**
+- Em `send-discovery-video.ts`, **antes** de chamar a Evolution API, fazer um insert "claim" em `igreen_transport_events` com `kind = video`, `status = sending` e unique constraint em (`account_id`, `phone`, `kind`, `correlation_id_root`) — usar o `phone+produto` como chave anti-duplicação. Se o insert violar unique, retornar `skipped: already_sent`.
+- Alternativa mais simples (e que vou priorizar): consultar `igreen_transport_events` no início da tool por `account_id+phone+kind='video'+status='sent'` nos últimos 10 minutos; se já existe → `skipped`.
+- Reforçar o lock do tool-router para `send_discovery_video` com TTL maior (60s) por `phone` (não só `phone+produto`).
 
-Impacto:
-- Fica difícil auditar se o vídeo foi realmente enviado pelo canal correto.
-- A interface/histórico pode mostrar o vídeo, mas os logs operacionais não confirmam o transporte como mídia.
-- Se a Evolution aceitar a chamada mas o WhatsApp falhar depois, o sistema não teria visibilidade suficiente.
+## 3) IA ignorou "vou procurar a fatura" e pediu de novo
 
-### 2. O sistema não reconheceu a fatura enviada
+**Diagnóstico:** o regex `INTENT_SEND_INVOICE_RX` exige "fatura/conta/boleto/luz" próximo do verbo. Mensagens como "vou procurar", "deixa eu pegar", "só um minuto" não casam → cai no fluxo padrão e repete `request_invoice`. Além disso, sem agregação, cada mensagem dispara um run independente.
 
-O webhook recebeu o documento e a função de OCR processou o PDF:
+**Correção:**
+- Expandir `INTENT_SEND_INVOICE_RX` (e criar `INTENT_SEARCHING_INVOICE_RX`) para cobrir: "vou procurar", "deixa eu (ver|achar|pegar|buscar)", "só um minuto/momento", "já já", "to procurando", "tô vendo aqui", mesmo sem citar "fatura" — desde que o `etapa_funil` esteja em `qualificacao`/`fatura_enviada` e o último stage da IA tenha sido `request_invoice`.
+- Quando casar, ir para `intent_send_invoice_ack` e marcar `extras.invoice_search_ack = true` com **cooldown de 5 min**: enquanto esse flag estiver setado, NUNCA voltar para `request_invoice`; cair em `waiting_invoice` (resposta curta "tranquilo, fico no aguardo") ou silenciar.
+- Confirmar com você se o debouncer (`whatsapp_pending_responses`) já está respeitando os 20s configurados — vou logar isso e validar.
 
-```text
-OCR result: Celesc Distribuição S.A.
-DANF3E - DOCUMENTO AUXILIAR DA NOTA FISCAL DE ENERGIA ELÉTRICA ELETRÔNICA
-...
-```
+## 4) Distribuidoras por estado + simulação de desconto com valor real
 
-Porém:
-- `igreen_document_validations` ficou vazio.
-- `igreen_lead_data.fatura_url` continuou vazio.
-- `igreen_conversation_state.document_status` continuou vazio.
-- O estado final ficou em `etapa_funil: fatura_enviada`, mas sem registrar a fatura de fato.
+**Hoje:** `ask_distribuidora` pergunta abertamente "qual é a sua distribuidora?" sem oferecer opções e o `simulate_discount` é proibido de citar números antes da fatura.
 
-Impacto:
-- A IA continuou achando que ainda estava aguardando a fatura.
-- Por isso respondeu incorretamente “me envie a fatura”, mesmo depois do documento já ter sido enviado.
+**Correção em duas partes:**
 
-### 3. O estágio `fatura_enviada` está sendo usado como se fosse “aguardando fatura”
+**4a — Apresentar distribuidoras do estado:**
+- Após capturar `extras.estado`, antes de perguntar a distribuidora, chamar uma nova tool `list_distributors_by_state` que faz `select distributor from igreen_distributor_discounts where state = ? and enabled = true`.
+- Se vier **1**: mensagem "No seu estado trabalhamos com a {Distribuidora}, essa é sua distribuidora atual?" — espera sim/não.
+- Se vierem **N>1**: mensagem "No seu estado trabalhamos com:\n1 - A\n2 - B\n…\nQual é a sua?" — aceitar resposta por número OU nome.
+- Persistir `extras.distribuidora` quando o cliente confirmar/escolher.
 
-O log mostra o especialista decidindo `stage: waiting_invoice` depois do documento já ter chegado.
+**4b — Simulação com valor real:**
+- Mover a pergunta de `ask_valor_fatura` para **antes** de pedir a fatura: ordem nova vira `ask_consumo` (kWh opcional) → `ask_estado` → `ask_distribuidora` (lista) → `ask_valor_fatura` (R$) → `simulate_discount_concreto` → `request_invoice`.
+- Novo stage `simulate_discount_concreto`: usa `discount_min_percent` e `discount_max_percent` da `get_distributor_discount` + `extras.valor_fatura` capturado e devolve texto determinístico (sem LLM) no formato:
+  > Olha só, {nome}! Pra {Distribuidora} a média de desconto fica entre {min}% e {max}%. Numa conta de R$ {valor}, seu desconto pode chegar a R$ {valor*max/100} todo mês.
+  >
+  > E não é só isso: depois do cadastro, você ainda pode chegar a zerar sua conta indicando novos assinantes pelo nosso programa de cashback.
+  >
+  > Bora fazer seu cadastro agora? Só preciso de uma foto ou PDF da sua fatura pra iniciar.
+- Esse texto libera a regra atual "PROIBIDO citar percentuais" porque os números vêm direto do banco (não da IA).
 
-Isso indica uma confusão de estado:
-- O sistema marcou `etapa_funil: fatura_enviada` quando pediu a fatura.
-- Mas esse nome sugere que a fatura já foi enviada.
-- Na prática, ele está usando esse estado como “fatura solicitada / aguardando envio”.
+---
 
-Impacto:
-- O agente não consegue diferenciar bem:
-  - “pedi a fatura e estou aguardando”
-  - “o cliente já enviou a fatura”
-  - “a fatura foi processada/validada”
+## Detalhes técnicos (arquivos)
 
-### 4. Duas respostas foram geradas muito próximas uma da outra
+- `supabase/functions/_igreen_v2/agents/green/stages.ts` — adicionar stages `green_intro`, `simulate_discount_concreto`; ajustar `decideGreenStage` para nova ordem; ampliar `INTENT_SEND_INVOICE_RX`; adicionar `invoice_search_ack` gate.
+- `supabase/functions/_igreen_v2/agents/green/run.ts` — wiring dos novos stages, captura de `valor_fatura`, chamada da nova tool `list_distributors_by_state`, textos determinísticos para `green_intro` e `simulate_discount_concreto`.
+- `supabase/functions/_igreen_v2/agents/green/prompt.ts` — remover stage `simulate_discount` antigo (ou marcar deprecado), adicionar molde para os novos stages quando LLM precisar.
+- `supabase/functions/_igreen_v2/tools/list-distributors-by-state.ts` (novo) — consulta `igreen_distributor_discounts`.
+- `supabase/functions/_igreen_v2/tools/_register-all.ts` — registrar a nova tool.
+- `supabase/functions/_igreen_v2/tools/send-discovery-video.ts` — check anti-dupe via `igreen_transport_events`.
+- Migração: reset do estado de teste para `5547989118695` ao final, pra você testar do zero.
 
-Quando o cliente enviou “Ok” e “Já mando”, a IA gerou duas respostas parecidas:
-
-- “Beleza, Wemerson! Assim que puder...”
-- “Ok, Wemerson! Fico aguardando...”
-
-Um dos logs mostra `transport.delivered: false` com `lock_acquired: false`, mas a mensagem aparece no histórico, indicando disputa/concorrência entre processamentos.
-
-Impacto:
-- Pode causar respostas duplicadas ou fora de ordem.
-- Pode dar impressão de que o atendimento está “reiniciando” ou ignorando mensagens recentes.
-
-### 5. A resposta “Já mandei acima” foi classificada como baixa confiança
-
-Depois que o cliente disse que já havia mandado a fatura, o supervisor classificou como:
-
-```text
-intent: other
-specialist: green
-confidence: 0
-source: low_confidence_sticky
-```
-
-Impacto:
-- O sistema não entendeu que o cliente estava corrigindo a IA.
-- Ele deveria consultar o histórico recente, detectar o documento anterior e avançar para análise, não pedir o documento novamente.
-
-## Diagnóstico resumido
-
-O problema atual não é mais a saudação inicial, nem o menu, nem necessariamente o upload do vídeo. O erro crítico agora está na etapa da fatura/documento:
-
-```text
-Documento recebido -> OCR processa -> estado do lead não é atualizado -> IA continua aguardando documento
-```
-
-Além disso, o envio de vídeo precisa ganhar auditoria completa em `igreen_transport_events` para não ficarmos dependentes apenas do histórico da conversa.
-
-## Plano de correção
-
-### 1. Corrigir o estado da etapa de fatura
-
-Separar claramente os estados do funil:
-
-```text
-invoice_requested       = IA pediu a fatura e está aguardando
-invoice_received        = cliente enviou documento/foto/PDF
-invoice_ocr_processed   = OCR leu o documento
-invoice_validated       = documento reconhecido como fatura válida
-invoice_needs_review    = OCR leu, mas precisa confirmação humana/cliente
-```
-
-A correção deve evitar usar `fatura_enviada` como estado ambíguo.
-
-### 2. Atualizar estado e lead quando chegar documento/foto
-
-Quando o webhook receber mídia do tipo documento ou imagem desse contato, o fluxo iGreen deve:
-
-- salvar a URL em `igreen_lead_data.fatura_url`;
-- marcar `document_status` como recebido/processado;
-- registrar evento em `igreen_state_events`;
-- criar registro em `igreen_document_validations` quando houver OCR;
-- avançar o funil para análise da fatura.
-
-### 3. Fazer a IA reconhecer “já mandei”, “enviei acima”, “mandei a fatura”
-
-Se o cliente disser algo como:
-
-```text
-já mandei
-mande acima
-enviei
-já enviei a fatura
-```
-
-O agente deve checar se existe documento/imagem recente na conversa.
-
-Se existir, responder seguindo a análise:
-
-```text
-Vi sim, Wemerson. Já recebi sua fatura e estou analisando as informações principais.
-```
-
-Em vez de pedir a fatura novamente.
-
-### 4. Conectar o resultado do OCR ao fluxo iGreen
-
-O OCR já está funcionando. A correção deve integrar o resultado dele ao estado iGreen:
-
-- detectar distribuidora no texto extraído;
-- detectar se é conta de energia;
-- guardar trecho/resultado processado;
-- marcar fatura como recebida;
-- deixar o especialista `green` continuar com validação ou próxima pergunta.
-
-### 5. Melhorar concorrência para evitar respostas duplicadas
-
-Ajustar o processamento pendente para não responder duas vezes quando o cliente manda mensagens em sequência curta, como “Ok” + “Já mando”.
-
-Critério esperado:
-- considerar sempre a mensagem mais recente do cliente;
-- não enviar resposta se outro processamento já respondeu aquele bloco de mensagens;
-- respeitar o lock antes de persistir resposta no histórico.
-
-### 6. Registrar envio de vídeo também em eventos de transporte
-
-Quando o vídeo for enviado pela Evolution API, além de gravar em `whatsapp_conversations`, registrar também em `igreen_transport_events` com:
-
-```text
-kind: video
-status: sent ou failed
-provider_message_id
-media_url
-correlation_id
-```
-
-Assim conseguimos confirmar tecnicamente o envio da mídia.
-
-### 7. Validar com novo teste no número 5547989118695
-
-Após corrigir, resetar apenas o estado interno iGreen desse número e testar a sequência:
-
-```text
-Olá
-Nome
-1
-Sim
-vídeo enviado
-Já vi
-500
-SC
-Celesc
-enviar PDF/foto da fatura
-IA reconhece a fatura e avança
-```
-
-Resultado esperado:
-- vídeo aparece como mídia e com evento de transporte;
-- fatura enviada atualiza o estado do lead;
-- OCR alimenta o fluxo;
-- IA não pede novamente uma fatura já enviada;
-- respostas duplicadas são evitadas.
+Aprova esse plano? Posso aplicar todas as mudanças de uma vez.

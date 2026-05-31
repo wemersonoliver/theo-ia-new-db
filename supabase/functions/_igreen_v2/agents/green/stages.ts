@@ -23,10 +23,12 @@ export type GreenStage =
   | "engage_check"
   | "ask_consumo"
   | "ask_estado"
+  | "present_distributors"
   | "ask_distribuidora"
   | "ask_cidade"
   | "ask_name"
   | "simulate_discount"
+  | "simulate_discount_concreto"
   | "ask_valor_fatura"
   | "request_invoice"
   | "intent_send_invoice_ack"
@@ -49,11 +51,17 @@ const INVOICE_KEYWORDS = [
 // Cliente diz que vai enviar a fatura SEM anexar nada — não disparar validate.
 const INTENT_SEND_INVOICE_RX = /\b(vou (te )?mandar|vou enviar|j[aá] te envio|j[aá] envio|agora mando|mando (j[aá]|agora)|te mando (j[aá]|agora|daqui)|envio (j[aá]|agora))\b[\s\S]{0,30}\b(fatura|conta|boleto|luz)\b/i;
 
+// Cliente sinaliza que está procurando/buscando a fatura (mesmo sem citar a palavra).
+const INTENT_SEARCHING_INVOICE_RX = /\b(vou (procurar|buscar|achar|pegar|ver)|deixa eu (ver|achar|pegar|buscar|procurar)|s[oó] um (minuto|momento|instante|segundo|seg)|j[aá] j[aá]|t[oô] (procurando|vendo|buscando|achando)|aguenta a[ií]|pera[ií]|um momento)\b/i;
+
 // Objeção de segurança / golpe.
 const OBJECTION_SECURITY_RX = /\b(golpe|fraude|seguro|por que.{0,15}precis|n[aã]o gosto de mandar|tenho medo|isso[\s\S]{0,5}é seguro|isso[\s\S]{0,5}é confi[aá]vel)\b/i;
 
 export function isIntentSendInvoice(msg: string): boolean {
   return INTENT_SEND_INVOICE_RX.test(msg ?? "");
+}
+export function isIntentSearchingInvoice(msg: string): boolean {
+  return INTENT_SEARCHING_INVOICE_RX.test(msg ?? "");
 }
 export function isObjectionSecurity(msg: string): boolean {
   return OBJECTION_SECURITY_RX.test(msg ?? "");
@@ -96,8 +104,9 @@ export function decideGreenStage(
     return "validate_invoice";
   }
 
-  // Cliente sinalizou que vai enviar fatura mas não anexou — só ack, sem validate.
-  if (!hasMedia && isIntentSendInvoice(message) &&
+  // Cliente sinalizou que vai enviar / está procurando a fatura mas não anexou.
+  if (!hasMedia &&
+      (isIntentSendInvoice(message) || isIntentSearchingInvoice(message)) &&
       (etapa === "qualificacao" || etapa === "fatura_enviada")) {
     return "intent_send_invoice_ack";
   }
@@ -109,28 +118,26 @@ export function decideGreenStage(
   if (etapa === "novo") {
     if (!extras.greeted) return "greet";
     if (!extras.explained) return "explain_solution";
-    // Após explicar uma vez, NUNCA voltar a explain_solution.
-    // Se houve confirmação/interesse OU já marcamos solution_confirmed,
-    // promovemos para qualificacao (send_video é o primeiro sub-passo).
-    if (extras.solution_confirmed || isAffirmation(message)) return "send_video";
-    // Mesmo sem afirmação explícita, progredimos após 1 turno de explicação
-    // para evitar loop absorvente em explain_solution.
+    if (extras.video_sent) return "engage_check";
     return "send_video";
   }
 
   if (etapa === "qualificacao") {
     if (!extras.video_sent) return "send_video";
-    // Engage check entre vídeo e coleta de dados — evita sensação de formulário.
     if (!extras.engaged) return "engage_check";
     if (!extras.consumo_medio) return "ask_consumo";
     if (!extras.estado) return "ask_estado";
-    if (!extras.distribuidora) return "ask_distribuidora";
-    // Após capturar distribuidora+estado, simular desconto oficial antes de pedir fatura.
-    if (!extras.discount_lookup_done) return "simulate_discount";
+    if (!extras.distribuidora) {
+      if (!extras.distributors_presented) return "present_distributors";
+      return "ask_distribuidora";
+    }
+    if (!extras.valor_fatura) return "ask_valor_fatura";
+    if (!extras.discount_lookup_done) return "simulate_discount_concreto";
     return "request_invoice";
   }
 
   if (etapa === "fatura_enviada") {
+    if (extras.invoice_search_ack) return "waiting_invoice";
     if (INVOICE_KEYWORDS.some((k) => msg.includes(k))) return "waiting_invoice";
     return "waiting_invoice";
   }

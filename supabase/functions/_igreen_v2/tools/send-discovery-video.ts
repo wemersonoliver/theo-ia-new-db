@@ -171,6 +171,33 @@ export const sendDiscoveryVideoTool: ToolDefinition<Args> = {
       return { success: true, skipped: true, skip_reason: "state_unchanged" };
     }
 
+    // Anti-dupe: se já existe transport_event de vídeo enviado nos últimos 10 min,
+    // marca como skipped (lock determinístico inter-runs concorrentes).
+    try {
+      const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const { data: prev } = await svc()
+        .from("igreen_transport_events")
+        .select("id")
+        .eq("account_id", ctx.account_id)
+        .eq("phone", ctx.phone)
+        .eq("kind", "video")
+        .eq("status", "sent")
+        .gte("created_at", since)
+        .limit(1);
+      if (prev && prev.length > 0) {
+        return {
+          success: true,
+          skipped: true,
+          skip_reason: "already_sent_recent",
+          suggested_state_patch: {
+            extras: { ...extras, video_sent: true },
+          },
+        };
+      }
+    } catch (e) {
+      console.error("[send-discovery-video] anti-dupe check failed", e);
+    }
+
     const productKey = PRODUCT_TO_KEY[args.produto] ?? args.produto;
     const videoUrl = await lookupVideoUrl(ctx.account_id, productKey);
     const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
