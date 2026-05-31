@@ -184,6 +184,18 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
       events.push({ type: "green_stage_advanced", priority: "low", source: "specialist",
         payload: { from: stage, to: nextStage } });
       stage = nextStage;
+      // Tool wiring para os stages alcançados por redecide.
+      if (stage === "simulate_discount") {
+        const estado = (mergedExtras.estado as string | undefined) ?? "";
+        const distribuidora = (mergedExtras.distribuidora as string | undefined) ?? "";
+        if (estado && distribuidora) {
+          tool_calls.push({
+            name: "get_distributor_discount",
+            args: { state: estado, distributor: distribuidora },
+          });
+        }
+        patch.extras = { ...(patch.extras as object ?? currentExtras), discount_lookup_done: true };
+      }
     }
   }
 
