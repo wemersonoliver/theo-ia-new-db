@@ -76,14 +76,20 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
       text = buildRouteGreenText(typeof nome === "string" ? nome : null);
       patch.produto = "green";
       (patch as any).specialist = "green";
+      patch.etapa_funil = "qualificacao";
       patch.extras = {
         ...(patch.extras as object ?? extras),
         greeted: true,
         menu_presented: extras.menu_presented ?? false,
         product_choice: "green",
         explained: true,
+        solution_confirmed: true,
+        video_sent: true,
+        video_sent_at: new Date().toISOString(),
       };
       tool_calls.push({ name: "set_product", args: { produto: "green" } });
+      tool_calls.push({ name: "set_stage", args: { etapa: "qualificacao" } });
+      tool_calls.push({ name: "send_discovery_video", args: { produto: "green" } });
       events.push({ type: "product_chosen", priority: "standard", source: "specialist", payload: { product: "green" } });
       break;
     }
