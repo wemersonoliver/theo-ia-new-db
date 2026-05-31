@@ -104,8 +104,9 @@ export function decideGreenStage(
     return "validate_invoice";
   }
 
-  // Cliente sinalizou que vai enviar fatura mas não anexou — só ack, sem validate.
-  if (!hasMedia && isIntentSendInvoice(message) &&
+  // Cliente sinalizou que vai enviar / está procurando a fatura mas não anexou.
+  if (!hasMedia &&
+      (isIntentSendInvoice(message) || isIntentSearchingInvoice(message)) &&
       (etapa === "qualificacao" || etapa === "fatura_enviada")) {
     return "intent_send_invoice_ack";
   }
