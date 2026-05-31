@@ -23,6 +23,12 @@ Você prefere qual?`;
 
 export const GREET_OPEN_TEXT = `Olá! Como posso te ajudar hoje?`;
 
+export const ASK_NAME_TEXT = `Antes de continuar, com quem eu tenho o prazer de falar?`;
+
+export const ASK_NAME_AFTER_PRODUCT_TEXT = `Que ótimo seu interesse 😊
+
+Antes de te explicar tudo, com quem eu tenho o prazer de falar?`;
+
 export const ROUTE_GREEN_TEXT = `Show, energia limpa é nossa praia 😊 A iGreen te dá economia na conta de luz com energia solar, sem obra e sem trocar de distribuidora. Quer entender melhor como funciona?`;
 
 export const ROUTE_TELECOM_TEXT = `Massa! Vou te direcionar pro nosso time de telefonia e internet. Me conta rapidinho: você quer plano novo ou portabilidade?`;
