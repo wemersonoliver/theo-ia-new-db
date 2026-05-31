@@ -103,6 +103,31 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     patch.extras = { ...(patch.extras as object ?? currentExtras), identity_requested: true };
   }
 
+  if (stage === "send_autocadastro_link") {
+    patch.extras = { ...(patch.extras as object ?? currentExtras), autocadastro_sent: true };
+    tool_calls.push({
+      name: "add_contact_tag",
+      args: { tag: "autocadastro_enviado" },
+    });
+    tool_calls.push({
+      name: "save_green_lead_field",
+      args: { field: "auto_cadastro_enviado", value: "true" },
+    });
+  }
+
+  if (stage === "handoff_human") {
+    patch.extras = { ...(patch.extras as object ?? currentExtras), handoff_done: true };
+    (patch as any).handoff_ativo = true;
+    tool_calls.push({
+      name: "request_human_handoff",
+      args: { reason: "explicit_user_request" },
+    });
+    tool_calls.push({
+      name: "add_contact_tag",
+      args: { tag: "handoff_humano" },
+    });
+  }
+
   if (stage === "validate_identity" && ctx.media) {
     tool_calls.push({
       name: "validate_green_identity",
