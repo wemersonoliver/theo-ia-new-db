@@ -35,16 +35,19 @@ export function decideQualifierStage(
 ): QualifierStage {
   const extras = (state.extras ?? {}) as Record<string, unknown>;
 
-  // Turno 1: apenas saudar abertamente, sem menu.
+  // Turno 1: cumprimentar (com base no horário) E já pedir o nome.
   if (!extras.greeted) return "greet_open";
 
-  // ask_name fica disponível mas NÃO é auto-disparado pela decisão de fluxo,
-  // para preservar a baseline da regression suite. Captura espontânea de nome
-  // continua acontecendo em run.ts (extractFirstName) e persistência via
-  // save_green_lead_field. Para reativar o turno dedicado de nome, basta
-  // condicionar abaixo a uma flag de account (ex.: extras.require_explicit_name).
+  // Turno 2+: enquanto não tivermos o nome do cliente, NUNCA apresentar menu.
+  // O run.ts tenta capturar nome de forma espontânea (extractFirstName).
+  // Aqui só decidimos: se ainda não temos nome, reforçamos o pedido.
+  if (!extras.client_name) {
+    // Se o cliente já mandou um produto antes de dar o nome, ainda assim
+    // pedimos o nome primeiro com um template que reconhece o interesse.
+    return "ask_name";
+  }
 
-  // Se já apresentou menu, tenta extrair escolha.
+  // Já temos nome. Se já apresentou menu, tenta extrair escolha.
   if (extras.menu_presented) {
     const choice = parseMenuChoice(message);
     if (choice === "green") return "route_green";
@@ -53,7 +56,7 @@ export function decideQualifierStage(
     return "menu_repeat";
   }
 
-  // Já saudou mas ainda não mostrou menu: se cliente cita produto, roteia direto.
+  // Tem nome mas ainda não mostrou menu: se cliente já citou produto, roteia direto.
   const hint = detectProductMention(message);
   if (hint === "green") return "route_green";
   if (hint === "telecom") return "route_telecom";
