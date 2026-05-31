@@ -49,11 +49,17 @@ const INVOICE_KEYWORDS = [
 // Cliente diz que vai enviar a fatura SEM anexar nada — não disparar validate.
 const INTENT_SEND_INVOICE_RX = /\b(vou (te )?mandar|vou enviar|j[aá] te envio|j[aá] envio|agora mando|mando (j[aá]|agora)|te mando (j[aá]|agora|daqui)|envio (j[aá]|agora))\b[\s\S]{0,30}\b(fatura|conta|boleto|luz)\b/i;
 
+// Cliente sinaliza que está procurando/buscando a fatura (mesmo sem citar a palavra).
+const INTENT_SEARCHING_INVOICE_RX = /\b(vou (procurar|buscar|achar|pegar|ver)|deixa eu (ver|achar|pegar|buscar|procurar)|s[oó] um (minuto|momento|instante|segundo|seg)|j[aá] j[aá]|t[oô] (procurando|vendo|buscando|achando)|aguenta a[ií]|pera[ií]|um momento)\b/i;
+
 // Objeção de segurança / golpe.
 const OBJECTION_SECURITY_RX = /\b(golpe|fraude|seguro|por que.{0,15}precis|n[aã]o gosto de mandar|tenho medo|isso[\s\S]{0,5}é seguro|isso[\s\S]{0,5}é confi[aá]vel)\b/i;
 
 export function isIntentSendInvoice(msg: string): boolean {
   return INTENT_SEND_INVOICE_RX.test(msg ?? "");
+}
+export function isIntentSearchingInvoice(msg: string): boolean {
+  return INTENT_SEARCHING_INVOICE_RX.test(msg ?? "");
 }
 export function isObjectionSecurity(msg: string): boolean {
   return OBJECTION_SECURITY_RX.test(msg ?? "");
