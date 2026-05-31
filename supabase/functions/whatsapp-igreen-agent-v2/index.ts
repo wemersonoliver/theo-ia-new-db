@@ -418,12 +418,22 @@ serve(async (req) => {
 
   // Tool calls solicitadas pelo specialist (state-engine é o único writer)
   const toolResults: any[] = [];
+  // Tools que DEVEM rodar após o envio do texto (para evitar que mídia
+  // saia antes da explicação textual no WhatsApp).
+  const DEFERRED_AFTER_TEXT = new Set(["send_discovery_video"]);
+  const preTextTools = agentResult.tool_calls.filter((t) => !DEFERRED_AFTER_TEXT.has(t.name));
+  const postTextTools = agentResult.tool_calls.filter((t) => DEFERRED_AFTER_TEXT.has(t.name));
   await trace({
     account_id, phone, step: "tools_requested", level: "standard",
-    payload: { count: agentResult.tool_calls.length, tools: agentResult.tool_calls.map((t) => t.name) },
+    payload: {
+      count: agentResult.tool_calls.length,
+      tools: agentResult.tool_calls.map((t) => t.name),
+      pre_text: preTextTools.map((t) => t.name),
+      post_text: postTextTools.map((t) => t.name),
+    },
     correlation_id,
   });
-  for (const tc of agentResult.tool_calls) {
+  for (const tc of preTextTools) {
     const currentState = (await loadState(account_id, phone)) ?? afterSupervisor;
     const r = await withTimeout(
       `tool:${tc.name}`,
@@ -484,6 +494,22 @@ serve(async (req) => {
     })),
     () => ({ delivered: false, chunks: 0, events: [], lock_acquired: false } as any),
   );
+
+  // Tools diferidas (mídia) — rodam APÓS o envio do texto.
+  for (const tc of postTextTools) {
+    const currentState = (await loadState(account_id, phone)) ?? afterSupervisor;
+    const r = await withTimeout(
+      `tool:${tc.name}`,
+      DEFAULT_TIMEOUTS.toolMs,
+      () => executeTool({
+        ctx: { account_id, phone, state: currentState, message, correlation_id, media },
+        tool_name: tc.name,
+        args: tc.args,
+      }),
+      () => ({ ok: false, error: "tool_timeout", events: [] } as any),
+    );
+    toolResults.push({ name: tc.name, ...r });
+  }
 
   // Phase 5 — registra mensagens do assistant na memória curta.
   if (chunkLimited.length) {
