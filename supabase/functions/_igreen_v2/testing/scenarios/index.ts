@@ -598,7 +598,14 @@ export const SCENARIOS: Scenario[] = [
       { user: "quero falar com um atendente humano" },
     ],
     run: (turns) => {
-      const base = baseRun()(turns);
+      // Esse cenário ESPERA handoff_ativo=true — pulamos assertNoUnexpectedHandoff.
+      const { ALL_ASSERTIONS, assertNoUnexpectedFailsafe } = require("../assertions.ts");
+      const base: any[] = [];
+      for (const fn of (require("../assertions.ts").ALL_ASSERTIONS)) {
+        if (fn.name === "assertNoUnexpectedHandoff") continue;
+        base.push(fn(turns));
+      }
+      base.push(require("../assertions.ts").assertNoUnexpectedFailsafe(turns, []));
       base.push(assertHandoffSilencesAI(turns));
       const emitted = turns.some((t) => t.stage === "handoff_human");
       base.push({
