@@ -5,8 +5,50 @@
 import type { AgentContext, AgentResult } from "../_types.ts";
 import { decideGreenStage, isAffirmation } from "./stages.ts";
 import { GREEN_SYSTEM, buildGreenUserPrompt } from "./prompt.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const LLM_TIMEOUT_MS = 8000;
+
+function svc() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { persistSession: false } },
+  );
+}
+
+async function listDistributors(state: string): Promise<Array<{distributor: string; min: number; max: number}>> {
+  try {
+    const { data } = await svc()
+      .from("igreen_distributor_discounts")
+      .select("distributor,discount_min_percent,discount_max_percent")
+      .eq("state", state)
+      .eq("enabled", true)
+      .order("distributor");
+    return (data ?? []).map((r: any) => ({
+      distributor: r.distributor,
+      min: Number(r.discount_min_percent ?? 0),
+      max: Number(r.discount_max_percent ?? 0),
+    }));
+  } catch (e) {
+    console.error("[green] listDistributors failed", e);
+    return [];
+  }
+}
+
+function parseValor(msg: string): number | null {
+  if (!msg) return null;
+  const cleaned = msg.replace(/r\$/gi, "").replace(/reais?/gi, "");
+  const m = cleaned.match(/(\d{2,6}(?:[.,]\d{1,2})?)/);
+  if (!m) return null;
+  const num = Number.parseFloat(m[1].replace(".", "").replace(",", "."));
+  if (!Number.isFinite(num) || num <= 0 || num > 100000) return null;
+  return num;
+}
+
+function formatBRL(n: number): string {
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   const initialStage = decideGreenStage(
@@ -21,6 +63,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
 
   const currentExtras = (ctx.state.extras ?? {}) as Record<string, unknown>;
   let stage = initialStage;
+  let deterministicText: string | null = null;
 
   if (stage === "greet") {
     // marca que já saudamos para na próxima entrarmos em explain_solution
@@ -64,26 +107,117 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     if (uf) patch.extras = { ...currentExtras, estado: uf };
   }
 
-  if (stage === "ask_distribuidora") {
-    const d = extractDistribuidora(ctx.message);
-    if (d) patch.extras = { ...(patch.extras as object ?? currentExtras), distribuidora: d };
+  if (stage === "present_distributors") {
+    const estado = (currentExtras.estado as string | undefined) ?? "";
+    const list = estado ? await listDistributors(estado) : [];
+    const nome = (currentExtras.client_name as string | undefined) ?? "";
+    if (list.length === 0) {
+      deterministicText = `${nome ? nome + ", " : ""}me confirma só uma coisa: qual é a sua distribuidora de energia?`;
+    } else if (list.length === 1) {
+      deterministicText = `No seu estado trabalhamos com a ${list[0].distributor}. Essa é a sua distribuidora atual? 😊`;
+    } else {
+      const opts = list.map((d, i) => `${i + 1} - ${d.distributor}`).join("\n");
+      deterministicText = `No seu estado trabalhamos com:\n\n${opts}\n\nQual dessas é a sua?`;
+    }
+    patch.extras = {
+      ...(patch.extras as object ?? currentExtras),
+      distributors_presented: true,
+      distributors_options: list.map((d) => d.distributor),
+    };
   }
 
-  if (stage === "simulate_discount") {
+  if (stage === "ask_distribuidora") {
+    const opts = (currentExtras.distributors_options as string[] | undefined) ?? [];
+    const msg = ctx.message.trim();
+    let chosen: string | null = null;
+    // 1) resposta numérica (1, 2, 3…)
+    const numMatch = msg.match(/^\s*(\d{1,2})\b/);
+    if (numMatch && opts.length > 0) {
+      const idx = Number(numMatch[1]) - 1;
+      if (idx >= 0 && idx < opts.length) chosen = opts[idx];
+    }
+    // 2) match parcial pelo nome
+    if (!chosen && opts.length > 0) {
+      const low = msg.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      chosen = opts.find((o) => {
+        const ol = o.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        return low.includes(ol) || ol.includes(low);
+      }) ?? null;
+    }
+    // 3) lista de 1 + afirmação → assume essa
+    if (!chosen && opts.length === 1 && isAffirmation(msg)) chosen = opts[0];
+    // 4) fallback: texto livre
+    if (!chosen) {
+      const d = extractDistribuidora(ctx.message);
+      if (d && opts.length === 0) chosen = d;
+    }
+    if (chosen) {
+      patch.extras = { ...(patch.extras as object ?? currentExtras), distribuidora: chosen };
+      tool_calls.push({
+        name: "save_green_lead_field",
+        args: { field: "distribuidora", value: chosen },
+      });
+    }
+  }
+
+  if (stage === "ask_valor_fatura") {
+    const valor = parseValor(ctx.message);
+    if (valor) {
+      patch.extras = { ...(patch.extras as object ?? currentExtras), valor_fatura: valor };
+      tool_calls.push({
+        name: "save_green_lead_field",
+        args: { field: "valor_fatura", value: String(valor) },
+      });
+    }
+  }
+
+  if (stage === "simulate_discount_concreto") {
     const estado = (currentExtras.estado as string | undefined) ?? "";
     const distribuidora = (currentExtras.distribuidora as string | undefined) ?? "";
+    const valor = Number(currentExtras.valor_fatura ?? 0);
+    const nome = (currentExtras.client_name as string | undefined) ?? "";
+    // Busca faixa oficial
+    let min = 0, max = 0;
+    if (estado && distribuidora) {
+      const list = await listDistributors(estado);
+      const found = list.find((d) =>
+        d.distributor.toLowerCase().includes(distribuidora.toLowerCase()) ||
+        distribuidora.toLowerCase().includes(d.distributor.toLowerCase()));
+      if (found) { min = found.min; max = found.max; }
+    }
+    if (min > 0 && max > 0 && valor > 0) {
+      const economia = (valor * max) / 100;
+      deterministicText =
+`Olha só${nome ? `, ${nome}` : ""}! Pra ${distribuidora} a média de desconto fica entre ${min}% e ${max}%. Numa conta de R$ ${formatBRL(valor)}, seu desconto pode chegar a R$ ${formatBRL(economia)} todo mês. 🤑
+
+E não é só isso: depois do seu cadastro, você ainda pode chegar a zerar sua conta de luz indicando novos assinantes pelo nosso programa de cashback.
+
+Bora fazer seu cadastro agora? Pra iniciar, só preciso de uma foto ou PDF da sua fatura. 😉`;
+    } else {
+      deterministicText = `${nome ? nome + ", " : ""}com a ${distribuidora || "sua distribuidora"} a iGreen tem uma faixa oficial de economia. Me envia uma foto ou PDF da sua última fatura que eu já calculo o valor exato. 😊`;
+    }
+    patch.extras = {
+      ...(patch.extras as object ?? currentExtras),
+      discount_lookup_done: true,
+      discount_min_percent: min || null,
+      discount_max_percent: max || null,
+    };
+    // Log oficial via tool (mantém compat)
     if (estado && distribuidora) {
       tool_calls.push({
         name: "get_distributor_discount",
         args: { state: estado, distributor: distribuidora },
       });
     }
-    // Marca lookup como solicitado para evitar reentrada — a tool persiste discount_lookup_done.
-    patch.extras = { ...(patch.extras as object ?? currentExtras), discount_lookup_done: true };
   }
 
   if (stage === "intent_send_invoice_ack") {
-    patch.extras = { ...(patch.extras as object ?? currentExtras), intent_send_invoice: true };
+    patch.extras = {
+      ...(patch.extras as object ?? currentExtras),
+      intent_send_invoice: true,
+      invoice_search_ack: true,
+      invoice_search_ack_at: new Date().toISOString(),
+    };
     // Adiciona tag CRM "vai enviar fatura" se a tool estiver disponível.
     tool_calls.push({
       name: "add_contact_tag",
@@ -175,7 +309,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   // re-decidimos o stage para evitar repetir a pergunta no próximo turno.
   // Não aplicamos para stages que disparam tool_calls (send_video/validate_invoice/request_invoice)
   // — esses precisam manter o stage original.
-  const STAGES_REDECIDABLE = new Set(["ask_consumo", "ask_estado", "ask_distribuidora"]);
+  const STAGES_REDECIDABLE = new Set(["ask_consumo", "ask_estado", "ask_distribuidora", "ask_valor_fatura"]);
   if (STAGES_REDECIDABLE.has(stage)) {
     const mergedExtras = (patch.extras as Record<string, unknown>) ?? currentExtras;
     const mergedState = { ...ctx.state, extras: mergedExtras, etapa_funil: patch.etapa_funil ?? ctx.state.etapa_funil };
@@ -185,22 +319,31 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
         payload: { from: stage, to: nextStage } });
       stage = nextStage;
       // Tool wiring para os stages alcançados por redecide.
-      if (stage === "simulate_discount") {
+      if (stage === "present_distributors") {
         const estado = (mergedExtras.estado as string | undefined) ?? "";
-        const distribuidora = (mergedExtras.distribuidora as string | undefined) ?? "";
-        if (estado && distribuidora) {
-          tool_calls.push({
-            name: "get_distributor_discount",
-            args: { state: estado, distributor: distribuidora },
-          });
+        const list = estado ? await listDistributors(estado) : [];
+        const nome = (mergedExtras.client_name as string | undefined) ?? "";
+        if (list.length === 0) {
+          deterministicText = `${nome ? nome + ", " : ""}me confirma só uma coisa: qual é a sua distribuidora de energia?`;
+        } else if (list.length === 1) {
+          deterministicText = `No seu estado trabalhamos com a ${list[0].distributor}. Essa é a sua distribuidora atual? 😊`;
+        } else {
+          const opts = list.map((d, i) => `${i + 1} - ${d.distributor}`).join("\n");
+          deterministicText = `No seu estado trabalhamos com:\n\n${opts}\n\nQual dessas é a sua?`;
         }
-        patch.extras = { ...(patch.extras as object ?? currentExtras), discount_lookup_done: true };
+        patch.extras = {
+          ...(patch.extras as object ?? mergedExtras),
+          distributors_presented: true,
+          distributors_options: list.map((d) => d.distributor),
+        };
       }
     }
   }
 
   // Handoff humano: IA silencia (sem texto).
-  const text = stage === "handoff_human" ? "" : await generateText(ctx, stage);
+  const text = stage === "handoff_human"
+    ? ""
+    : deterministicText ?? await generateText(ctx, stage);
 
   return {
     messages: text ? [text] : [],
