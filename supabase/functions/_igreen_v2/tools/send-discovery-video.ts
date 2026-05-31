@@ -219,6 +219,15 @@ export const sendDiscoveryVideoTool: ToolDefinition<Args> = {
 
     if (!send.ok) {
       console.error("[send-discovery-video] send failed", send.error);
+      await recordTransportEvent({
+        account_id: ctx.account_id,
+        phone: ctx.phone,
+        correlation_id: ctx.correlation_id ?? null,
+        status: "failed",
+        provider_message_id: null,
+        video_url: videoUrl,
+        error: send.error ?? "send_failed",
+      });
       return {
         success: false,
         error: send.error ?? "send_failed",
@@ -236,6 +245,15 @@ export const sendDiscoveryVideoTool: ToolDefinition<Args> = {
       phone: ctx.phone,
       video_url: videoUrl,
       provider_message_id: send.provider_message_id,
+    });
+    await recordTransportEvent({
+      account_id: ctx.account_id,
+      phone: ctx.phone,
+      correlation_id: ctx.correlation_id ?? null,
+      status: "sent",
+      provider_message_id: send.provider_message_id,
+      video_url: videoUrl,
+      error: null,
     });
 
     return {
