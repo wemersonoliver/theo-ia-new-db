@@ -1,5 +1,5 @@
 // Pedido explícito de handoff humano.
-const HANDOFF_RX = /\b(falar com (atendente|humano|pessoa|algu[eé]m)|quero (um )?(atendente|humano)|me passa pra (algu[eé]m|humano|atendente)|atendimento humano|n[aã]o quero (falar|conversar) com (rob[oô]|ia|m[aá]quina))\b/i;
+const HANDOFF_RX = /\b(falar com (um |uma )?(atendente|humano|pessoa|algu[eé]m)|quero (um |uma )?(atendente|humano)|me passa (pra|para) (algu[eé]m|humano|atendente)|atendimento humano|n[aã]o quero (falar|conversar) com (rob[oô]|ia|m[aá]quina))\b/i;
 export function isHandoffRequest(msg: string): boolean {
   return HANDOFF_RX.test(msg ?? "");
 }
