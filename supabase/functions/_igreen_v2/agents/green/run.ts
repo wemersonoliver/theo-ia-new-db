@@ -93,6 +93,21 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     // tenta capturar consumo na mensagem atual (números seguidos de kwh/r$/reais)
     const consumo = extractConsumo(ctx.message);
     if (consumo) patch.extras = { ...currentExtras, consumo_medio: consumo };
+    // Se o cliente respondeu em reais (R$/reais), também já preenchemos valor_fatura
+    // para evitar perguntar de novo no próximo passo.
+    if (/\b(r\$|reais?)\b/i.test(ctx.message)) {
+      const v = parseValor(ctx.message);
+      if (v) {
+        patch.extras = {
+          ...(patch.extras as object ?? currentExtras),
+          valor_fatura: v,
+        };
+        tool_calls.push({
+          name: "save_green_lead_field",
+          args: { field: "valor_fatura", value: String(v) },
+        });
+      }
+    }
   }
 
   if (stage === "engage_check") {
@@ -100,6 +115,18 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     // independentemente da resposta — o objetivo é dar respiro humano entre
     // o vídeo e o início da qualificação.
     patch.extras = { ...currentExtras, engaged: true };
+    // Resposta do cliente APÓS o vídeo → adiciona tag "em atendimento",
+    // o que move o card no CRM de "Novo Lead" para "Iniciou atendimento".
+    if (!currentExtras.atendimento_started) {
+      patch.extras = {
+        ...(patch.extras as object ?? currentExtras),
+        atendimento_started: true,
+      };
+      tool_calls.push({
+        name: "add_contact_tag",
+        args: { tag: "em atendimento" },
+      });
+    }
   }
 
   if (stage === "ask_estado") {
