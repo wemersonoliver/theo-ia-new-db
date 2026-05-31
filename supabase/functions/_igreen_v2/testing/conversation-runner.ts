@@ -234,7 +234,8 @@ export async function runScenario(steps: ScenarioStep[], opts: RunnerOptions = {
       etapa_funil_before, etapa_funil_after: state.etapa_funil ?? null,
       extras_after: (state.extras ?? {}) as Record<string, unknown>,
       handoff_ativo: !!state.handoff_ativo,
-    });
+      tool_calls: toolCalls,
+    } as any);
   }
 
   return turns;
