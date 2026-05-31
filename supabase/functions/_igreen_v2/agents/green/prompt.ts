@@ -54,7 +54,7 @@ export function buildGreenUserPrompt(args: {
     case "ask_estado":
       return baseCtx + "STAGE: ask_estado. Agradeça curto pelo dado anterior e pergunte UMA coisa: em qual estado o cliente está. Aceite UF ou nome. NÃO pergunte cidade. Máx 1 frase.";
     case "ask_distribuidora":
-      return baseCtx + "STAGE: ask_distribuidora. Reconheça curto e pergunte UMA coisa: qual é a distribuidora de energia. Máx 1 frase. NÃO pergunte cidade.";
+      return baseCtx + "STAGE: ask_distribuidora. Reconheça curto o estado informado citando EXATAMENTE o valor de extras.estado (não invente outro estado, NUNCA troque a UF). Em seguida pergunte UMA coisa: qual é a distribuidora de energia. Máx 1 frase. NÃO pergunte cidade.";
     case "ask_cidade":
       return baseCtx + "STAGE: ask_cidade. DEPRECADO — nunca pergunte cidade. Responda apenas confirmando algo curto.";
     case "ask_name":
