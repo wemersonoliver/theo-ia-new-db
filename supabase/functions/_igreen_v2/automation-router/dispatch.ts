@@ -37,9 +37,12 @@ function planFromEvents(events: IgreenEvent[]): PlannedAutomation[] {
       case "invoice_rejected":
         plan.push({ name: "tagging", args: { tag: "fatura_rejeitada" } });
         break;
-      case "discovery_video_sent":
-        plan.push({ name: "media-dispatch", args: { media_key: "discovery_video" } });
+      case "contact_tag_added":
+        plan.push({ name: "tagging", args: { tag: String(p.tag ?? "") } });
         break;
+      // NOTA: 'discovery_video_sent' NÃO dispara mais 'media-dispatch'.
+      // O envio do vídeo é feito apenas pela tool send_discovery_video.
+      // Anteriormente, isso causava envio duplicado.
     }
   }
   return plan;
