@@ -32,9 +32,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Plus, Package, Save, Trash2, BookOpen } from "lucide-react";
+import { Loader2, Plus, Package, Save, Trash2, BookOpen, Video, Upload, X } from "lucide-react";
 import { useIgreenAccountProducts, type IgreenAccountProduct } from "@/hooks/useIgreenAccountProducts";
 import { KnowledgeBaseTab } from "./KnowledgeBaseTab";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export function IgreenProductsTab() {
   const { productsQ, createProduct, updateProduct, deleteProduct } = useIgreenAccountProducts();
@@ -168,11 +170,46 @@ function ProductRow({
 }) {
   const [name, setName] = useState(product.name);
   const [description, setDescription] = useState(product.description ?? "");
+  const [uploading, setUploading] = useState(false);
+  const videoUrl = (product as any).video_url as string | null | undefined;
 
   useEffect(() => {
     setName(product.name);
     setDescription(product.description ?? "");
   }, [product.name, product.description]);
+
+  const handleUpload = async (file: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("video/")) {
+      toast.error("Selecione um arquivo de vídeo.");
+      return;
+    }
+    const maxBytes = 16 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      toast.error("Vídeo muito grande. Limite: 16MB (WhatsApp).");
+      return;
+    }
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
+      const path = `igreen-products/${product.account_id}/${product.id}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("whatsapp-media")
+        .upload(path, file, { contentType: file.type, upsert: true });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("whatsapp-media").getPublicUrl(path);
+      onSave({ video_url: pub.publicUrl } as Partial<IgreenAccountProduct>);
+      toast.success("Vídeo enviado");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao enviar vídeo");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemoveVideo = () => {
+    onSave({ video_url: null } as Partial<IgreenAccountProduct>);
+  };
 
   return (
     <AccordionItem value={product.id} className="rounded-lg border bg-card">
@@ -214,6 +251,61 @@ function ProductRow({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="min-h-[80px]"
+              />
+            </div>
+            <div className="space-y-2 pt-2 border-t">
+              <Label className="text-xs flex items-center gap-2">
+                <Video className="h-3.5 w-3.5" /> Vídeo de apresentação
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Envie um arquivo de vídeo (até 16MB). Será enviado pelo WhatsApp como vídeo nativo, não como link.
+              </p>
+              {videoUrl ? (
+                <div className="space-y-2">
+                  <video src={videoUrl} controls className="w-full max-w-sm rounded border" />
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      disabled={uploading}
+                      onClick={() => document.getElementById(`video-${product.id}`)?.click()}
+                    >
+                      <Upload className="h-4 w-4" /> Substituir vídeo
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-2 text-destructive"
+                      disabled={uploading}
+                      onClick={handleRemoveVideo}
+                    >
+                      <X className="h-4 w-4" /> Remover
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  disabled={uploading}
+                  onClick={() => document.getElementById(`video-${product.id}`)?.click()}
+                >
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {uploading ? "Enviando..." : "Enviar vídeo"}
+                </Button>
+              )}
+              <input
+                id={`video-${product.id}`}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleUpload(f);
+                  e.target.value = "";
+                }}
               />
             </div>
             <div className="flex justify-between gap-2">
