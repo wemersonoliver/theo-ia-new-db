@@ -13,6 +13,7 @@ REGRAS HARD (NUNCA QUEBRE):
 - NUNCA repita uma pergunta cujo dado já está em extras (consumo_medio, estado, distribuidora, client_name). Se o valor está lá, agradeça curto e avance.
 - NUNCA peça CPF ou nome completo antes do stage ask_full_name_cpf.
 - NUNCA invente valores, descontos ou prazos.
+- NUNCA invente nem troque valores que já foram informados pelo cliente (estado/UF, distribuidora, consumo, nome). Se for citar algum desses dados na resposta, copie EXATAMENTE o que está em extras (extras.estado, extras.distribuidora, extras.consumo_medio, extras.client_name). Se não tiver certeza, não cite.
 - NUNCA cite percentuais de desconto, faixas ("entre X% e Y%"), valores em reais ou prazos sem que esses números estejam explicitamente presentes em extras (discount_min_percent, discount_max_percent, etc.). Se não estiverem, fale apenas qualitativamente ("dá pra economizar bastante").
 - TERMINE TODA mensagem com pontuação final (".", "!" ou "?"). Emoji NUNCA é o último caractere — se usar emoji, coloque a pontuação depois.
 - Sempre referencie em 1 frase curta a resposta anterior do cliente antes da próxima pergunta (continuidade contextual).
@@ -54,7 +55,7 @@ export function buildGreenUserPrompt(args: {
     case "ask_estado":
       return baseCtx + "STAGE: ask_estado. Agradeça curto pelo dado anterior e pergunte UMA coisa: em qual estado o cliente está. Aceite UF ou nome. NÃO pergunte cidade. Máx 1 frase.";
     case "ask_distribuidora":
-      return baseCtx + "STAGE: ask_distribuidora. Reconheça curto e pergunte UMA coisa: qual é a distribuidora de energia. Máx 1 frase. NÃO pergunte cidade.";
+      return baseCtx + "STAGE: ask_distribuidora. Reconheça curto o estado informado citando EXATAMENTE o valor de extras.estado (não invente outro estado, NUNCA troque a UF). Em seguida pergunte UMA coisa: qual é a distribuidora de energia. Máx 1 frase. NÃO pergunte cidade.";
     case "ask_cidade":
       return baseCtx + "STAGE: ask_cidade. DEPRECADO — nunca pergunte cidade. Responda apenas confirmando algo curto.";
     case "ask_name":
@@ -70,7 +71,7 @@ export function buildGreenUserPrompt(args: {
     case "ask_full_name_cpf":
       return baseCtx + "STAGE: ask_full_name_cpf. Explique em 1 frase curta que agora precisa do nome completo e CPF para preparar o contrato. Peça os dois juntos, de forma cordial. Máx 2 frases.";
     case "simulate_discount":
-      return baseCtx + "STAGE: simulate_discount. Diga em 1-2 frases que com base na distribuidora e estado informados a iGreen pode oferecer uma faixa de economia oficial. Use os campos extras.discount_min_percent e extras.discount_max_percent se presentes (ex: 'entre X% e Y%'). NÃO invente números. Em seguida pergunte se quer prosseguir enviando a última fatura para o cálculo exato. NÃO use gírias.";
+      return baseCtx + "STAGE: simulate_discount. PROIBIDO citar qualquer percentual, número ou faixa numérica neste turno (sem exceções). Diga em 1-2 frases, sem números: que com a distribuidora e estado informados a iGreen tem uma faixa oficial de economia, e que o valor exato só sai com a última fatura. Pergunte se ele pode enviar a fatura agora. Tom cordial, sem gírias.";
     case "ask_valor_fatura":
       return baseCtx + "STAGE: ask_valor_fatura. Pergunte UMA coisa: qual o valor médio da conta de luz em reais. Máx 1 frase. NÃO use gírias.";
     case "intent_send_invoice_ack":
