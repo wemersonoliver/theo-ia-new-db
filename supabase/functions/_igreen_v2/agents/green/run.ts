@@ -69,6 +69,52 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     if (d) patch.extras = { ...(patch.extras as object ?? currentExtras), distribuidora: d };
   }
 
+  if (stage === "simulate_discount") {
+    const estado = (currentExtras.estado as string | undefined) ?? "";
+    const distribuidora = (currentExtras.distribuidora as string | undefined) ?? "";
+    if (estado && distribuidora) {
+      tool_calls.push({
+        name: "get_distributor_discount",
+        args: { state: estado, distributor: distribuidora },
+      });
+    }
+    // Marca lookup como solicitado para evitar reentrada — a tool persiste discount_lookup_done.
+    patch.extras = { ...(patch.extras as object ?? currentExtras), discount_lookup_done: true };
+  }
+
+  if (stage === "intent_send_invoice_ack") {
+    patch.extras = { ...(patch.extras as object ?? currentExtras), intent_send_invoice: true };
+    // Adiciona tag CRM "vai enviar fatura" se a tool estiver disponível.
+    tool_calls.push({
+      name: "add_contact_tag",
+      args: { tag: "vai enviar fatura" },
+    });
+  }
+
+  if (stage === "objection_security") {
+    patch.extras = { ...(patch.extras as object ?? currentExtras), objection_security_handled: true };
+    tool_calls.push({
+      name: "add_contact_tag",
+      args: { tag: "objecao_seguranca" },
+    });
+  }
+
+  if (stage === "request_identity") {
+    patch.extras = { ...(patch.extras as object ?? currentExtras), identity_requested: true };
+  }
+
+  if (stage === "validate_identity" && ctx.media) {
+    tool_calls.push({
+      name: "validate_green_identity",
+      args: {
+        media_url: ctx.media.url,
+        mime_type: ctx.media.mime_type,
+        byte_size: ctx.media.byte_size,
+        expected_name: (currentExtras.client_name as string | undefined) ?? null,
+      },
+    });
+  }
+
   if (stage === "ask_name") {
     const nome = extractFirstName(ctx.message);
     if (nome) patch.extras = { ...(patch.extras as object ?? currentExtras), client_name: nome };
