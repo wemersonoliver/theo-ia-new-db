@@ -285,6 +285,13 @@ function fallbackText(stage: string): string {
     case "request_invoice": return "Agora me manda sua última fatura (PDF ou foto)? Assim eu calculo sua economia exata.";
     case "waiting_invoice": return "Perfeito, fico no aguardo da fatura.";
     case "ask_full_name_cpf": return "Pra preparar seu contrato, me passa por favor seu nome completo e CPF?";
+    case "simulate_discount": return "Com base na sua distribuidora e estado, conseguimos aplicar a faixa oficial de economia da iGreen. Posso seguir com o cálculo exato a partir da sua última fatura?";
+    case "ask_valor_fatura": return "Você lembra qual o valor médio da sua conta de luz por mês, em reais?";
+    case "intent_send_invoice_ack": return "Combinado, fico no aguardo da sua fatura.";
+    case "request_identity": return "Sua fatura foi validada com sucesso. Para concluirmos, por favor me envie uma foto do RG ou CNH do titular da conta.";
+    case "validate_identity": return "Recebi seu documento, estou conferindo aqui.";
+    case "family_authorization_check": return "Notei que a conta está em nome de outra pessoa. O titular é alguém da sua família e você tem autorização para seguir com a contratação?";
+    case "objection_security": return "Entendo sua preocupação, é totalmente compreensível.\n\nSe preferir, podemos te enviar o link do aplicativo oficial da iGreen para você fazer o cadastro por conta própria. Quer que eu te envie?";
     default: return "Beleza!";
   }
 }
