@@ -63,8 +63,8 @@ export function decideGreenStage(
   const msg = (message ?? "").toLowerCase();
   const extras = (state.extras ?? {}) as Record<string, unknown>;
 
-  // PRIORIDADE 0 — objeção de golpe (válida em qualquer etapa pós-novo).
-  if (etapa !== "novo" && isObjectionSecurity(message) && !extras.objection_security_handled) {
+  // PRIORIDADE 0 — objeção de golpe (válida em qualquer etapa, desde que já tenha saudado).
+  if (isObjectionSecurity(message) && !extras.objection_security_handled && extras.greeted) {
     return "objection_security";
   }
 
