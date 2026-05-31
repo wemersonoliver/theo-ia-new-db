@@ -127,6 +127,33 @@ async function persistOutboundVideoMessage(args: {
   }
 }
 
+async function recordTransportEvent(args: {
+  account_id: string;
+  phone: string;
+  correlation_id: string | null;
+  status: "sent" | "failed";
+  provider_message_id: string | null;
+  video_url: string | null;
+  error: string | null;
+}): Promise<void> {
+  try {
+    await svc().from("igreen_transport_events").insert({
+      account_id: args.account_id,
+      phone: args.phone,
+      correlation_id: args.correlation_id ?? "send_discovery_video",
+      chunk_index: 0,
+      kind: "video",
+      status: args.status,
+      payload: { media_url: args.video_url },
+      provider_message_id: args.provider_message_id,
+      error: args.error,
+      sent_at: args.status === "sent" ? new Date().toISOString() : null,
+    });
+  } catch (e) {
+    console.error("[send-discovery-video] recordTransportEvent failed", e);
+  }
+}
+
 interface Args { produto: string }
 
 export const sendDiscoveryVideoTool: ToolDefinition<Args> = {
