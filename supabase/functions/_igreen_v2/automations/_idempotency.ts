@@ -95,9 +95,29 @@ export async function withIdempotency(
 
   try {
     const result = await fn();
+    // Atualiza o registro com o resultado final para facilitar depuração.
+    try {
+      await svc().from("igreen_automation_executions").update({
+        result: {
+          status: "done",
+          success: result.success ?? !result.error,
+          skipped: result.skipped ?? false,
+          reason: result.reason ?? null,
+          error: result.error ?? null,
+          finished_at: new Date().toISOString(),
+        },
+      }).eq("idempotency_key", args.idempotency_key);
+    } catch (e) {
+      console.error("[idempotency] finalize update failed (non-blocking)", e);
+    }
     return result;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    try {
+      await svc().from("igreen_automation_executions").update({
+        result: { status: "error", error: msg, finished_at: new Date().toISOString() },
+      }).eq("idempotency_key", args.idempotency_key);
+    } catch (_) { /* non-blocking */ }
     return { success: false, error: msg };
   }
 }

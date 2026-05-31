@@ -93,6 +93,21 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     // tenta capturar consumo na mensagem atual (números seguidos de kwh/r$/reais)
     const consumo = extractConsumo(ctx.message);
     if (consumo) patch.extras = { ...currentExtras, consumo_medio: consumo };
+    // Se o cliente respondeu em reais (R$/reais), também já preenchemos valor_fatura
+    // para evitar perguntar de novo no próximo passo.
+    if (/\b(r\$|reais?)\b/i.test(ctx.message)) {
+      const v = parseValor(ctx.message);
+      if (v) {
+        patch.extras = {
+          ...(patch.extras as object ?? currentExtras),
+          valor_fatura: v,
+        };
+        tool_calls.push({
+          name: "save_green_lead_field",
+          args: { field: "valor_fatura", value: String(v) },
+        });
+      }
+    }
   }
 
   if (stage === "engage_check") {
@@ -100,6 +115,18 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     // independentemente da resposta — o objetivo é dar respiro humano entre
     // o vídeo e o início da qualificação.
     patch.extras = { ...currentExtras, engaged: true };
+    // Resposta do cliente APÓS o vídeo → adiciona tag "em atendimento",
+    // o que move o card no CRM de "Novo Lead" para "Iniciou atendimento".
+    if (!currentExtras.atendimento_started) {
+      patch.extras = {
+        ...(patch.extras as object ?? currentExtras),
+        atendimento_started: true,
+      };
+      tool_calls.push({
+        name: "add_contact_tag",
+        args: { tag: "em atendimento" },
+      });
+    }
   }
 
   if (stage === "ask_estado") {
@@ -336,6 +363,43 @@ Bora fazer seu cadastro agora? Pra iniciar, só preciso de uma foto ou PDF da su
           distributors_presented: true,
           distributors_options: list.map((d) => d.distributor),
         };
+      }
+      if (stage === "simulate_discount_concreto") {
+        const estado = (mergedExtras.estado as string | undefined) ?? "";
+        const distribuidora = (mergedExtras.distribuidora as string | undefined) ?? "";
+        const valor = Number(mergedExtras.valor_fatura ?? 0);
+        const nome = (mergedExtras.client_name as string | undefined) ?? "";
+        let min = 0, max = 0;
+        if (estado && distribuidora) {
+          const list = await listDistributors(estado);
+          const found = list.find((d) =>
+            d.distributor.toLowerCase().includes(distribuidora.toLowerCase()) ||
+            distribuidora.toLowerCase().includes(d.distributor.toLowerCase()));
+          if (found) { min = found.min; max = found.max; }
+        }
+        if (min > 0 && max > 0 && valor > 0) {
+          const economia = (valor * max) / 100;
+          deterministicText =
+`Olha só${nome ? `, ${nome}` : ""}! Pra ${distribuidora} a média de desconto fica entre ${min}% e ${max}%. Numa conta de R$ ${formatBRL(valor)}, seu desconto pode chegar a R$ ${formatBRL(economia)} todo mês. 🤑
+
+E não é só isso: depois do seu cadastro, você ainda pode chegar a zerar sua conta de luz indicando novos assinantes pelo nosso programa de cashback.
+
+Bora fazer seu cadastro agora? Pra iniciar, só preciso de uma foto ou PDF da sua fatura. 😉`;
+        } else {
+          deterministicText = `${nome ? nome + ", " : ""}com a ${distribuidora || "sua distribuidora"} a iGreen tem uma faixa oficial de economia. Me envia uma foto ou PDF da sua última fatura que eu já calculo o valor exato. 😊`;
+        }
+        patch.extras = {
+          ...(patch.extras as object ?? mergedExtras),
+          discount_lookup_done: true,
+          discount_min_percent: min || null,
+          discount_max_percent: max || null,
+        };
+        if (estado && distribuidora) {
+          tool_calls.push({
+            name: "get_distributor_discount",
+            args: { state: estado, distributor: distribuidora },
+          });
+        }
       }
     }
   }
