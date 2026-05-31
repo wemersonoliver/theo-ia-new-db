@@ -13,6 +13,7 @@ export interface IgreenAccountProduct {
   position: number;
   created_at: string;
   updated_at: string;
+  video_url: string | null;
 }
 
 function slugify(s: string) {
