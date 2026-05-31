@@ -16,6 +16,14 @@ Intents possíveis:
 "greeting", "ask_info", "send_invoice", "send_document", "price_question",
 "complaint", "handoff_request", "off_topic", "other".
 
+REGRA DE HANDOFF EXPLÍCITO (CRÍTICA — PRIORIDADE MÁXIMA):
+Se o cliente pedir EXPLICITAMENTE para falar com humano/atendente/pessoa real
+("quero falar com um atendente", "me passa pra alguém", "humano", "atendente",
+"pessoa de verdade", "operador", "preciso falar com um humano"), o intent
+DEVE ser "handoff_request" e o specialist DEVE ser "failsafe" com
+confidence 0.95+. Failsafe vai disparar request_human_handoff. Essa regra
+sobrescreve qualquer sticky de specialist.
+
 REGRA DE ROTEAMENTO DEFAULT (CRÍTICA):
 Se NÃO há "current_specialist" definido (cliente novo) E a mensagem é genérica
 ("oi", "olá", "bom dia", "boa noite", "tudo bem", "tenho interesse", "quero saber",
