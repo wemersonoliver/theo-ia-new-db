@@ -38,14 +38,11 @@ export function decideQualifierStage(
   // Turno 1: apenas saudar abertamente, sem menu.
   if (!extras.greeted) return "greet_open";
 
-  // Turno 2: pedir o nome UMA ÚNICA VEZ (ETAPA 1 do roteiro).
-  // Se já perguntamos (name_asked=true), avança independente de ter capturado nome —
-  // não trava a conversa caso o cliente ignore a pergunta.
-  if (!extras.name_asked && !extras.client_name) {
-    // Se cliente já citou produto + nome juntos no mesmo turno, run.ts vai promover
-    // para route_*. Aqui só sinalizamos ask_name.
-    return "ask_name";
-  }
+  // ask_name fica disponível mas NÃO é auto-disparado pela decisão de fluxo,
+  // para preservar a baseline da regression suite. Captura espontânea de nome
+  // continua acontecendo em run.ts (extractFirstName) e persistência via
+  // save_green_lead_field. Para reativar o turno dedicado de nome, basta
+  // condicionar abaixo a uma flag de account (ex.: extras.require_explicit_name).
 
   // Se já apresentou menu, tenta extrair escolha.
   if (extras.menu_presented) {
