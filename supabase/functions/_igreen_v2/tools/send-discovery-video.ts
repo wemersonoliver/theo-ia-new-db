@@ -137,10 +137,13 @@ async function recordTransportEvent(args: {
   error: string | null;
 }): Promise<void> {
   try {
+    // Usa chave única dedicada para vídeo, separada dos chunks de texto,
+    // para evitar conflito com a constraint UNIQUE (correlation_id, chunk_index).
+    const corr = `${args.correlation_id ?? "send_discovery_video"}:video`;
     await svc().from("igreen_transport_events").insert({
       account_id: args.account_id,
       phone: args.phone,
-      correlation_id: args.correlation_id ?? "send_discovery_video",
+      correlation_id: corr,
       chunk_index: 0,
       kind: "video",
       status: args.status,
