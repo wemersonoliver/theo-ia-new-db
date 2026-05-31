@@ -441,4 +441,107 @@ export const SCENARIOS: Scenario[] = [
       return base;
     },
   },
+  {
+    id: "29-discount-simulation",
+    title: "Após estado+distribuidora, simulate_discount roda antes de pedir fatura",
+    steps: [
+      { user: "Boa tarde" },
+      { user: "quero economizar na luz" },
+      { user: "sim" },
+      { user: "faz sentido" },
+      { user: "500" },
+      { user: "SC" },
+      { user: "Celesc" },
+    ],
+    run: (turns) => {
+      const base = baseRun()(turns);
+      base.push(assertDiscountToolCalled(turns));
+      const stages = turns.map((t) => t.stage);
+      const idxDist = stages.indexOf("ask_distribuidora");
+      // O stage no log fica como ask_distribuidora (re-decide preserva log),
+      // mas o gStage final emitido nos events deve ser simulate_discount.
+      const lastEvents = turns[turns.length - 1]?.events ?? [];
+      const emittedDiscount = lastEvents.some((e: any) => e.payload?.stage === "simulate_discount");
+      base.push({
+        name: "assertEmittedSimulateDiscount",
+        ok: idxDist >= 0 && emittedDiscount,
+        reason: `idxDist=${idxDist} emittedDiscount=${emittedDiscount}`,
+      });
+      return base;
+    },
+  },
+  {
+    id: "30-intent-send-invoice-no-validate",
+    title: "'Vou te mandar a fatura' apenas confirma — NÃO dispara validate",
+    steps: [
+      { user: "Boa tarde" },
+      { user: "quero economizar na luz" },
+      { user: "sim" },
+      { user: "faz sentido" },
+      { user: "500" },
+      { user: "SC" },
+      { user: "Celesc" },
+      { user: "vou te mandar a fatura agora" },
+    ],
+    run: (turns) => {
+      const base = baseRun()(turns);
+      base.push(assertIntentSendInvoiceDoesNotValidate(turns));
+      const last = turns[turns.length - 1];
+      base.push({
+        name: "assertLastStageIsIntentAck",
+        ok: last?.events?.some((e: any) => e.payload?.stage === "intent_send_invoice_ack") ?? false,
+        reason: `último stage emitido = ${JSON.stringify(last?.events)}`,
+      });
+      return base;
+    },
+  },
+  {
+    id: "31-objection-security-handled",
+    title: "Cliente fala 'é golpe?' → stage objection_security é disparado",
+    steps: [
+      { user: "Bom dia" },
+      { user: "quero saber sobre energia por assinatura" },
+      { user: "isso não é golpe?" },
+    ],
+    run: (turns) => {
+      const base = baseRun()(turns);
+      const emittedObj = turns.some((t) =>
+        (t.events ?? []).some((e: any) => e.payload?.stage === "objection_security"),
+      );
+      base.push({
+        name: "assertObjectionStageEmitted",
+        ok: emittedObj,
+        reason: emittedObj ? undefined : "stage objection_security nunca foi emitido",
+      });
+      base.push(assertObjectionSecurityHandled(turns));
+      return base;
+    },
+  },
+  {
+    id: "32-no-slang-no-emdash-in-new-stages",
+    title: "Stages novos (simulate_discount/intent_ack/request_identity) respeitam tom formal",
+    steps: [
+      { user: "Boa tarde" },
+      { user: "quero economizar na luz" },
+      { user: "sim" },
+      { user: "faz sentido" },
+      { user: "500" },
+      { user: "SC" },
+      { user: "Celesc" },
+      { user: "vou te mandar a fatura" },
+    ],
+    run: (turns) => {
+      const base = baseRun()(turns);
+      // Filtra só os turnos dos NOVOS stages — não pune fallbacks legacy.
+      const newStageTurns = turns.filter((t) => {
+        const emitted = (t.events ?? []).map((e: any) => e.payload?.stage).filter(Boolean);
+        return emitted.some((s: string) =>
+          ["simulate_discount","intent_send_invoice_ack","request_identity",
+           "validate_identity","family_authorization_check","objection_security"].includes(s));
+      });
+      base.push(assertNoSlang(newStageTurns));
+      base.push(assertNoEmDash(newStageTurns));
+      return base;
+    },
+  },
 ];
