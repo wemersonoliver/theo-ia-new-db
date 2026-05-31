@@ -187,7 +187,8 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     }
   }
 
-  const text = await generateText(ctx, stage);
+  // Handoff humano: IA silencia (sem texto).
+  const text = stage === "handoff_human" ? "" : await generateText(ctx, stage);
 
   return {
     messages: text ? [text] : [],
