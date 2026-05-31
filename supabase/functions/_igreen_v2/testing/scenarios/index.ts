@@ -8,7 +8,7 @@ import {
   assertCommercialProgression,
   assertNoSlang, assertNoEmDash,
   assertDiscountToolCalled, assertIntentSendInvoiceDoesNotValidate,
-  assertObjectionSecurityHandled,
+  assertObjectionSecurityHandled, assertHandoffSilencesAI, assertAutocadastroLinkSent,
   type AssertionResult, type Turn,
 } from "../assertions.ts";
 import type { ScenarioStep } from "../conversation-runner.ts";
