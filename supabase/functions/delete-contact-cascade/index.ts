@@ -55,8 +55,16 @@ Deno.serve(async (req) => {
     const authClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: userData, error: userErr } = await authClient.auth.getUser(token);
-    if (userErr || !userData?.user) return json({ error: "unauthorized" }, 401);
+    let userId: string | null = null;
+    try {
+      const { data: claimsData } = await authClient.auth.getClaims(token);
+      userId = (claimsData?.claims as any)?.sub ?? null;
+    } catch (_) { /* fallback below */ }
+    if (!userId) {
+      const { data: userData } = await authClient.auth.getUser(token);
+      userId = userData?.user?.id ?? null;
+    }
+    if (!userId) return json({ error: "unauthorized" }, 401);
 
     const body = await req.json().catch(() => ({}));
     const contactId: string | undefined = body.contact_id;
@@ -87,7 +95,7 @@ Deno.serve(async (req) => {
       .from("account_members")
       .select("role")
       .eq("account_id", contact.account_id)
-      .eq("user_id", userData.user.id)
+      .eq("user_id", userId)
       .eq("status", "active")
       .maybeSingle();
     if (!membership) return json({ error: "forbidden" }, 403);
