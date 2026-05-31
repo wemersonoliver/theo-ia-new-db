@@ -38,23 +38,13 @@ export function decideQualifierStage(
   // Turno 1: apenas saudar abertamente, sem menu.
   if (!extras.greeted) return "greet_open";
 
-  // Turno 2 (default): pedir o nome antes de qualquer coisa (ETAPA 1 do roteiro).
-  // Se cliente já citou produto E forneceu nome (ou push name foi capturado),
-  // pula direto para roteamento.
-  if (!extras.client_name) {
-    // Tenta extrair nome desta mensagem mesmo. Se a mensagem é só uma saudação
-    // ou citação de produto, continua em ask_name.
-    const hintNow = detectProductMention(message);
-    const possibleName = extractFirstName(message);
-    if (possibleName) {
-      // captura nome neste turno e segue para menu/rota
-      // (handled em run.ts; aqui só decidimos o stage)
-    } else if (hintNow) {
-      // cliente citou produto sem nome — pede o nome antes de avançar
-      return "ask_name";
-    } else {
-      return "ask_name";
-    }
+  // Turno 2: pedir o nome UMA ÚNICA VEZ (ETAPA 1 do roteiro).
+  // Se já perguntamos (name_asked=true), avança independente de ter capturado nome —
+  // não trava a conversa caso o cliente ignore a pergunta.
+  if (!extras.name_asked && !extras.client_name) {
+    // Se cliente já citou produto + nome juntos no mesmo turno, run.ts vai promover
+    // para route_*. Aqui só sinalizamos ask_name.
+    return "ask_name";
   }
 
   // Se já apresentou menu, tenta extrair escolha.
