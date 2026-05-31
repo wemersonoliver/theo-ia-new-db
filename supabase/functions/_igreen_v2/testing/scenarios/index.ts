@@ -6,6 +6,9 @@ import {
   assertNoCityQuestion, assertNoRepeatedGreeting,
   assertMenuPresentedWhenGeneric, assertNoPrematureDataCollection,
   assertCommercialProgression,
+  assertNoSlang, assertNoEmDash,
+  assertDiscountToolCalled, assertIntentSendInvoiceDoesNotValidate,
+  assertObjectionSecurityHandled,
   type AssertionResult, type Turn,
 } from "../assertions.ts";
 import type { ScenarioStep } from "../conversation-runner.ts";
