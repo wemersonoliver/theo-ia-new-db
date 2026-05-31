@@ -364,6 +364,43 @@ Bora fazer seu cadastro agora? Pra iniciar, só preciso de uma foto ou PDF da su
           distributors_options: list.map((d) => d.distributor),
         };
       }
+      if (stage === "simulate_discount_concreto") {
+        const estado = (mergedExtras.estado as string | undefined) ?? "";
+        const distribuidora = (mergedExtras.distribuidora as string | undefined) ?? "";
+        const valor = Number(mergedExtras.valor_fatura ?? 0);
+        const nome = (mergedExtras.client_name as string | undefined) ?? "";
+        let min = 0, max = 0;
+        if (estado && distribuidora) {
+          const list = await listDistributors(estado);
+          const found = list.find((d) =>
+            d.distributor.toLowerCase().includes(distribuidora.toLowerCase()) ||
+            distribuidora.toLowerCase().includes(d.distributor.toLowerCase()));
+          if (found) { min = found.min; max = found.max; }
+        }
+        if (min > 0 && max > 0 && valor > 0) {
+          const economia = (valor * max) / 100;
+          deterministicText =
+`Olha só${nome ? `, ${nome}` : ""}! Pra ${distribuidora} a média de desconto fica entre ${min}% e ${max}%. Numa conta de R$ ${formatBRL(valor)}, seu desconto pode chegar a R$ ${formatBRL(economia)} todo mês. 🤑
+
+E não é só isso: depois do seu cadastro, você ainda pode chegar a zerar sua conta de luz indicando novos assinantes pelo nosso programa de cashback.
+
+Bora fazer seu cadastro agora? Pra iniciar, só preciso de uma foto ou PDF da sua fatura. 😉`;
+        } else {
+          deterministicText = `${nome ? nome + ", " : ""}com a ${distribuidora || "sua distribuidora"} a iGreen tem uma faixa oficial de economia. Me envia uma foto ou PDF da sua última fatura que eu já calculo o valor exato. 😊`;
+        }
+        patch.extras = {
+          ...(patch.extras as object ?? mergedExtras),
+          discount_lookup_done: true,
+          discount_min_percent: min || null,
+          discount_max_percent: max || null,
+        };
+        if (estado && distribuidora) {
+          tool_calls.push({
+            name: "get_distributor_discount",
+            args: { state: estado, distributor: distribuidora },
+          });
+        }
+      }
     }
   }
 
