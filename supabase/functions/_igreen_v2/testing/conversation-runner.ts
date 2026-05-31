@@ -201,7 +201,7 @@ export async function runScenario(steps: ScenarioStep[], opts: RunnerOptions = {
           gStage = next;
         }
       }
-      messages = [MOCK_TEXTS[gStage]];
+      messages = MOCK_TEXTS[gStage] ? [MOCK_TEXTS[gStage]] : [];
       events = [{ type: "green_stage_decided", payload: { stage: gStage } }];
       specialist = "green";
     } else {
