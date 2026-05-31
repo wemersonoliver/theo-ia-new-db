@@ -199,6 +199,43 @@ serve(async (req) => {
       });
     }
 
+    // Resolve media to forward to v2 agent.
+    // Priority 1: latest incoming message already carries media (PDF/foto/img).
+    // Priority 2: if user just said "já mandei / enviei acima / mandei a fatura"
+    //             but the latest message is text, look back for the most recent
+    //             inbound media message (within the last 8 inbound messages) and
+    //             forward IT — so the AI doesn't re-ask for the invoice.
+    let mediaPayload: { url: string; mime_type: string; byte_size: number } | null = null;
+    const ALREADY_SENT_RX = /\b(j[aá]\s*(te\s*)?(mandei|enviei)|enviei\s*(acima|j[aá])|mandei\s*acima|t[aá]\s*acima|acabei de (mandar|enviar)|j[aá]\s*foi)\b/i;
+    try {
+      const pickMedia = (m: any) =>
+        m && typeof m.media_url === "string" && m.media_url.length > 0
+          ? {
+              url: String(m.media_url),
+              mime_type: String(m.media_mime || ""),
+              byte_size: 0,
+            }
+          : null;
+      const latestMedia = pickMedia(latestIncoming);
+      if (latestMedia) {
+        mediaPayload = latestMedia;
+      } else if (ALREADY_SENT_RX.test(latestIncomingText)) {
+        const lastInbounds = [...messages]
+          .filter((m: any) => !m.from_me)
+          .slice(-8)
+          .reverse();
+        for (const m of lastInbounds) {
+          const cand = pickMedia(m);
+          if (cand) { mediaPayload = cand; break; }
+        }
+        if (mediaPayload) {
+          console.log("[process-pending-ai] reusing previous media due to 'já mandei'-style reply:", phone);
+        }
+      }
+    } catch (e) {
+      console.error("[process-pending-ai] media resolve error:", e);
+    }
+
     // Get contact name from conversation
     const { data: convForName } = await supabase
       .from("whatsapp_conversations")
@@ -288,6 +325,7 @@ serve(async (req) => {
             message: latestIncomingText,
             contact_name: contactName,
             userId,
+            media: mediaPayload ?? undefined,
           }
         : { userId, accountId, phone, messageContent: latestIncomingText, contactName };
       const aiResponse = await fetch(`${supabaseUrl}/functions/v1/${targetFn}`, {
