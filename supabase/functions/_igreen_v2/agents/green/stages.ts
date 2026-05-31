@@ -1,3 +1,15 @@
+// Pedido explícito de handoff humano.
+const HANDOFF_RX = /\b(falar com (atendente|humano|pessoa|algu[eé]m)|quero (um )?(atendente|humano)|me passa pra (algu[eé]m|humano|atendente)|atendimento humano|n[aã]o quero (falar|conversar) com (rob[oô]|ia|m[aá]quina))\b/i;
+export function isHandoffRequest(msg: string): boolean {
+  return HANDOFF_RX.test(msg ?? "");
+}
+
+// Aceite explícito do link de auto-cadastro (após objection_security).
+const AUTOCADASTRO_ACCEPT_RX = /\b(sim|pode|envia|manda|me envia|me manda|por favor|prefiro|quero o link)\b/i;
+export function acceptsAutoCadastro(msg: string): boolean {
+  return AUTOCADASTRO_ACCEPT_RX.test(msg ?? "");
+}
+
 // Heurísticas determinísticas do Green specialist (D1: LLM não controla fluxo).
 // Decide qual sub-passo rodar com base em etapa_funil + última mensagem.
 // LLM só gera texto curto DENTRO do molde escolhido aqui.
