@@ -58,8 +58,12 @@ Antes de te explicar tudo, com quem eu tenho o prazer de falar?`;
 
 export function buildRouteGreenText(clientName?: string | null): string {
   const nome = (clientName ?? "").trim();
-  const prefix = nome ? `Show, ${nome}!` : `Show!`;
-  return `${prefix} Energia limpa é nossa praia 😊 A iGreen te dá economia na conta de luz com energia solar, sem obra e sem trocar de distribuidora. Quer entender melhor como funciona?`;
+  const saud = nome ? `Que ótimo seu interesse na Conexão Green, ${nome}! 😊` : `Que ótimo seu interesse na Conexão Green! 😊`;
+  return `${saud}
+
+É a nossa solução de energia por assinatura, que te dá desconto na conta de luz todo mês, sem precisar de obra ou instalação.
+
+Vou te enviar um vídeo rápido explicando como funciona. Me avisa quando assistir, tá? 😉`;
 }
 
 export const ROUTE_TELECOM_TEXT = `Massa! Vou te direcionar pro nosso time de telefonia e internet. Me conta rapidinho: você quer plano novo ou portabilidade?`;
