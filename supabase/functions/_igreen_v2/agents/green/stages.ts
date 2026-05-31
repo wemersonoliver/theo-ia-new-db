@@ -1,3 +1,15 @@
+// Pedido explícito de handoff humano.
+const HANDOFF_RX = /\b(falar com (um |uma )?(atendente|humano|pessoa|algu[eé]m)|quero (um |uma )?(atendente|humano)|me passa (pra|para) (algu[eé]m|humano|atendente)|atendimento humano|n[aã]o quero (falar|conversar) com (rob[oô]|ia|m[aá]quina))\b/i;
+export function isHandoffRequest(msg: string): boolean {
+  return HANDOFF_RX.test(msg ?? "");
+}
+
+// Aceite explícito do link de auto-cadastro (após objection_security).
+const AUTOCADASTRO_ACCEPT_RX = /\b(sim|pode|envia|manda|me envia|me manda|por favor|prefiro|quero o link)\b/i;
+export function acceptsAutoCadastro(msg: string): boolean {
+  return AUTOCADASTRO_ACCEPT_RX.test(msg ?? "");
+}
+
 // Heurísticas determinísticas do Green specialist (D1: LLM não controla fluxo).
 // Decide qual sub-passo rodar com base em etapa_funil + última mensagem.
 // LLM só gera texto curto DENTRO do molde escolhido aqui.
@@ -25,6 +37,8 @@ export type GreenStage =
   | "validate_identity"
   | "family_authorization_check"
   | "objection_security"
+  | "send_autocadastro_link"
+  | "handoff_human"
   | "ask_full_name_cpf"
   | "idle";
 
@@ -63,9 +77,19 @@ export function decideGreenStage(
   const msg = (message ?? "").toLowerCase();
   const extras = (state.extras ?? {}) as Record<string, unknown>;
 
+  // PRIORIDADE -1 — pedido explícito de humano: handoff imediato.
+  if (isHandoffRequest(message) && !extras.handoff_done) {
+    return "handoff_human";
+  }
+
   // PRIORIDADE 0 — objeção de golpe (válida em qualquer etapa, desde que já tenha saudado).
   if (isObjectionSecurity(message) && !extras.objection_security_handled && extras.greeted) {
     return "objection_security";
+  }
+
+  // Após objeção, se cliente aceitar, enviar link de auto-cadastro (1 vez).
+  if (extras.objection_security_handled && !extras.autocadastro_sent && acceptsAutoCadastro(message)) {
+    return "send_autocadastro_link";
   }
 
   if (hasMedia && (etapa === "qualificacao" || etapa === "fatura_enviada" || etapa === "fatura_rejeitada")) {

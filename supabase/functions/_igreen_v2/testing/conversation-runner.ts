@@ -47,6 +47,8 @@ const MOCK_TEXTS: Record<GreenStage, string> = {
   validate_identity: "Recebi seu documento, estou conferindo aqui.",
   family_authorization_check: "Notei que a conta está em nome de outra pessoa. O titular é alguém da sua família e você tem autorização para seguir com a contratação?",
   objection_security: "Entendo sua preocupação, é totalmente compreensível. Se preferir, posso te enviar o link do aplicativo oficial da iGreen para você fazer o cadastro por conta própria. Quer que eu te envie?",
+  send_autocadastro_link: "Perfeito. Aqui está o link oficial do app iGreen para você fazer o cadastro com calma:\n\nhttps://app.igreen.com.br/autocadastro\n\nFico à disposição caso precise de ajuda em qualquer etapa.",
+  handoff_human: "",
   idle: "Beleza!",
 };
 
@@ -151,6 +153,20 @@ export async function runScenario(steps: ScenarioStep[], opts: RunnerOptions = {
       if (gStage === "request_identity") {
         patch = { extras: { ...currentExtras, identity_requested: true } };
       }
+      if (gStage === "send_autocadastro_link") {
+        patch = { extras: { ...currentExtras, autocadastro_sent: true } };
+        toolCalls = [
+          { name: "add_contact_tag", args: { tag: "autocadastro_enviado" } },
+          { name: "save_green_lead_field", args: { field: "auto_cadastro_enviado", value: "true" } },
+        ];
+      }
+      if (gStage === "handoff_human") {
+        patch = { extras: { ...currentExtras, handoff_done: true }, handoff_ativo: true } as any;
+        toolCalls = [
+          { name: "request_human_handoff", args: { reason: "explicit_user_request" } },
+          { name: "add_contact_tag", args: { tag: "handoff_humano" } },
+        ];
+      }
       if (gStage === "ask_name") {
         const t = step.user.trim().replace(/[^\p{L}\s]/gu, "").split(/\s+/)[0];
         if (t && t.length >= 2) patch = { extras: { ...currentExtras, client_name: t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() } };
@@ -185,7 +201,7 @@ export async function runScenario(steps: ScenarioStep[], opts: RunnerOptions = {
           gStage = next;
         }
       }
-      messages = [MOCK_TEXTS[gStage]];
+      messages = MOCK_TEXTS[gStage] ? [MOCK_TEXTS[gStage]] : [];
       events = [{ type: "green_stage_decided", payload: { stage: gStage } }];
       specialist = "green";
     } else {

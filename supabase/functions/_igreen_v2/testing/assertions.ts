@@ -350,3 +350,33 @@ export function assertObjectionSecurityHandled(turns: Turn[]): AssertionResult {
   }
   return { name: "assertObjectionSecurityHandled", ok: true };
 }
+
+export function assertHandoffSilencesAI(turns: Turn[]): AssertionResult {
+  for (let i = 0; i < turns.length; i++) {
+    if (turns[i].stage === "handoff_human") {
+      if ((turns[i].messages ?? []).length > 0) {
+        return { name: "assertHandoffSilencesAI", ok: false,
+          reason: `Turno ${i}: handoff_human emitiu mensagens (deveria ser silêncio)` };
+      }
+      if (!turns[i].handoff_ativo) {
+        return { name: "assertHandoffSilencesAI", ok: false,
+          reason: `Turno ${i}: handoff_human não ativou handoff_ativo` };
+      }
+    }
+  }
+  return { name: "assertHandoffSilencesAI", ok: true };
+}
+
+export function assertAutocadastroLinkSent(turns: Turn[]): AssertionResult {
+  const hit = turns.find((t) => t.stage === "send_autocadastro_link");
+  if (!hit) {
+    return { name: "assertAutocadastroLinkSent", ok: false,
+      reason: "Stage send_autocadastro_link não foi disparado" };
+  }
+  const hasLink = (hit.messages ?? []).some((m) => /https?:\/\/|app\.igreen/i.test(m ?? ""));
+  if (!hasLink) {
+    return { name: "assertAutocadastroLinkSent", ok: false,
+      reason: `Stage send_autocadastro_link rodou mas não enviou link` };
+  }
+  return { name: "assertAutocadastroLinkSent", ok: true };
+}

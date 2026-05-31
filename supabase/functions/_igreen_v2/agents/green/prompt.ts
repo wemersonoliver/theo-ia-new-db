@@ -81,6 +81,10 @@ export function buildGreenUserPrompt(args: {
       return baseCtx + "STAGE: family_authorization_check. A fatura está em nome de outra pessoa. Pergunte em 1 frase cordial se o titular é alguém da família e se você tem autorização para seguir com a contratação em nome dele.";
     case "objection_security":
       return baseCtx + "STAGE: objection_security. Cliente demonstrou preocupação com segurança ou medo de golpe. Em 2 blocos curtos: 1) acolha a preocupação sem minimizar; 2) ofereça a alternativa de fazer o cadastro pelo próprio aplicativo oficial da iGreen e diga que pode enviar o link. Pergunte se prefere essa via. NÃO seja informal. NÃO use gírias.";
+    case "send_autocadastro_link":
+      return baseCtx + "STAGE: send_autocadastro_link. Cliente aceitou receber o link de auto-cadastro oficial da iGreen. Em 2 frases curtas: 1) envie o link oficial (use o placeholder {{AUTOCADASTRO_URL}} se não tiver o real); 2) diga que fica à disposição caso precise de ajuda no preenchimento. NÃO use gírias.";
+    case "handoff_human":
+      return ""; // IA silencia
     case "idle":
     default:
       return baseCtx + "STAGE: idle. Responda apenas com uma confirmação curta de 1 frase.";
