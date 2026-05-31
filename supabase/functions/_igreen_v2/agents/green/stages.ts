@@ -118,28 +118,26 @@ export function decideGreenStage(
   if (etapa === "novo") {
     if (!extras.greeted) return "greet";
     if (!extras.explained) return "explain_solution";
-    // Após explicar uma vez, NUNCA voltar a explain_solution.
-    // Se houve confirmação/interesse OU já marcamos solution_confirmed,
-    // promovemos para qualificacao (send_video é o primeiro sub-passo).
-    if (extras.solution_confirmed || isAffirmation(message)) return "send_video";
-    // Mesmo sem afirmação explícita, progredimos após 1 turno de explicação
-    // para evitar loop absorvente em explain_solution.
+    if (extras.video_sent) return "engage_check";
     return "send_video";
   }
 
   if (etapa === "qualificacao") {
     if (!extras.video_sent) return "send_video";
-    // Engage check entre vídeo e coleta de dados — evita sensação de formulário.
     if (!extras.engaged) return "engage_check";
     if (!extras.consumo_medio) return "ask_consumo";
     if (!extras.estado) return "ask_estado";
-    if (!extras.distribuidora) return "ask_distribuidora";
-    // Após capturar distribuidora+estado, simular desconto oficial antes de pedir fatura.
-    if (!extras.discount_lookup_done) return "simulate_discount";
+    if (!extras.distribuidora) {
+      if (!extras.distributors_presented) return "present_distributors";
+      return "ask_distribuidora";
+    }
+    if (!extras.valor_fatura) return "ask_valor_fatura";
+    if (!extras.discount_lookup_done) return "simulate_discount_concreto";
     return "request_invoice";
   }
 
   if (etapa === "fatura_enviada") {
+    if (extras.invoice_search_ack) return "waiting_invoice";
     if (INVOICE_KEYWORDS.some((k) => msg.includes(k))) return "waiting_invoice";
     return "waiting_invoice";
   }
