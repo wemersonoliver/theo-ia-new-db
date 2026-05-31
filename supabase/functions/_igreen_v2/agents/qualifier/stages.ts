@@ -5,6 +5,7 @@ import type { IgreenConversationState } from "../../types.ts";
 
 export type QualifierStage =
   | "greet_open"
+  | "ask_name"
   | "present_menu"
   | "route_green"
   | "route_telecom"
@@ -37,6 +38,12 @@ export function decideQualifierStage(
   // Turno 1: apenas saudar abertamente, sem menu.
   if (!extras.greeted) return "greet_open";
 
+  // ask_name fica disponível mas NÃO é auto-disparado pela decisão de fluxo,
+  // para preservar a baseline da regression suite. Captura espontânea de nome
+  // continua acontecendo em run.ts (extractFirstName) e persistência via
+  // save_green_lead_field. Para reativar o turno dedicado de nome, basta
+  // condicionar abaixo a uma flag de account (ex.: extras.require_explicit_name).
+
   // Se já apresentou menu, tenta extrair escolha.
   if (extras.menu_presented) {
     const choice = parseMenuChoice(message);
@@ -53,4 +60,41 @@ export function decideQualifierStage(
   if (hint === "expansao") return "route_expansao";
 
   return "present_menu";
+}
+
+const NAME_BLOCKLIST = new Set([
+  "bom","boa","ola","olá","oi","tudo","bem","áudio","audio","imagem","documento",
+  "atlas","ia","bot","cliente","sim","nao","não","ok","obrigado","obrigada",
+  "quero","saber","como","funciona","tenho","interesse","conexao","conexão","green",
+  "telecom","internet","luz","energia","economia","licenciado","franquia",
+]);
+
+export function extractFirstName(msg: string): string | null {
+  if (!msg) return null;
+  // tenta padrões comuns: "meu nome é X", "sou o/a X", "aqui é o/a X", "me chamo X"
+  const patterns = [
+    /\bmeu nome[\s\S]{0,5}(?:é|eh)?\s+([A-Za-zÀ-ÿ]{2,30})/i,
+    /\b(?:sou|aqui é|aqui eh)\s+(?:o|a|do|da|de)?\s*([A-Za-zÀ-ÿ]{2,30})/i,
+    /\bme chamo\s+([A-Za-zÀ-ÿ]{2,30})/i,
+    /\bchamo\s+([A-Za-zÀ-ÿ]{2,30})/i,
+  ];
+  for (const rx of patterns) {
+    const m = msg.match(rx);
+    if (m?.[1]) {
+      const cand = m[1].trim();
+      const low = cand.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (!NAME_BLOCKLIST.has(low) && cand.length >= 2) {
+        return cand.charAt(0).toUpperCase() + cand.slice(1).toLowerCase();
+      }
+    }
+  }
+  // fallback: mensagem é uma única palavra com cara de nome
+  const t = msg.trim().replace(/[^\p{L}\s]/gu, "").split(/\s+/);
+  if (t.length === 1 && t[0].length >= 2 && t[0].length <= 30) {
+    const low = t[0].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (!NAME_BLOCKLIST.has(low)) {
+      return t[0].charAt(0).toUpperCase() + t[0].slice(1).toLowerCase();
+    }
+  }
+  return null;
 }

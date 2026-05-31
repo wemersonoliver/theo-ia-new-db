@@ -2,15 +2,16 @@
 // 100% determinístico: sem LLM, sem latência.
 
 import type { AgentContext, AgentResult } from "../_types.ts";
-import { decideQualifierStage, type QualifierStage } from "./stages.ts";
+import { decideQualifierStage, extractFirstName, detectProductMention, type QualifierStage } from "./stages.ts";
 import {
   GREET_OPEN_TEXT, MENU_TEXT, MENU_SHORT_TEXT,
   ROUTE_GREEN_TEXT, ROUTE_TELECOM_TEXT, ROUTE_EXPANSAO_TEXT,
+  ASK_NAME_TEXT, ASK_NAME_AFTER_PRODUCT_TEXT,
 } from "./prompt.ts";
 
 export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
   const extras = (ctx.state.extras ?? {}) as Record<string, unknown>;
-  const stage = decideQualifierStage(ctx.state, ctx.message);
+  let stage = decideQualifierStage(ctx.state, ctx.message);
 
   const events: AgentResult["events"] = [
     { type: "qualifier_stage_decided", priority: "low", source: "specialist", payload: { stage } },
@@ -19,15 +20,40 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
   const patch: AgentResult["suggested_state_patch"] = {};
   let text = "";
 
+  // Captura espontânea de nome em qualquer turno do qualifier.
+  const capturedName = !extras.client_name ? extractFirstName(ctx.message) : null;
+  if (capturedName) {
+    patch.extras = { ...extras, client_name: capturedName };
+    tool_calls.push({
+      name: "save_green_lead_field",
+      args: { field: "nome_cliente", value: capturedName },
+    });
+    // Se capturamos nome E o cliente já citou um produto, podemos rotear direto.
+    if (stage === "ask_name") {
+      const hint = detectProductMention(ctx.message);
+      if (hint === "green") stage = "route_green";
+      else if (hint === "telecom") stage = "route_telecom";
+      else if (hint === "expansao") stage = "route_expansao";
+      else stage = "present_menu";
+    }
+  }
+
   switch (stage as QualifierStage) {
     case "greet_open": {
       text = GREET_OPEN_TEXT;
       patch.extras = { ...extras, greeted: true };
       break;
     }
+    case "ask_name": {
+      // Se cliente já citou produto sem nome, usa template com reconhecimento.
+      const hint = detectProductMention(ctx.message);
+      text = hint ? ASK_NAME_AFTER_PRODUCT_TEXT : ASK_NAME_TEXT;
+      patch.extras = { ...extras, name_asked: true };
+      break;
+    }
     case "present_menu": {
       text = MENU_TEXT;
-      patch.extras = { ...extras, menu_presented: true };
+      patch.extras = { ...(patch.extras as object ?? extras), menu_presented: true };
       break;
     }
     case "menu_repeat": {
@@ -42,7 +68,13 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
       text = ROUTE_GREEN_TEXT;
       patch.produto = "green";
       (patch as any).specialist = "green";
-      patch.extras = { ...extras, greeted: true, menu_presented: extras.menu_presented ?? false, product_choice: "green", explained: true };
+      patch.extras = {
+        ...(patch.extras as object ?? extras),
+        greeted: true,
+        menu_presented: extras.menu_presented ?? false,
+        product_choice: "green",
+        explained: true,
+      };
       tool_calls.push({ name: "set_product", args: { produto: "green" } });
       events.push({ type: "product_chosen", priority: "standard", source: "specialist", payload: { product: "green" } });
       break;
@@ -51,7 +83,7 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
       text = ROUTE_TELECOM_TEXT;
       patch.produto = "telecom";
       (patch as any).specialist = "telecom";
-      patch.extras = { ...extras, greeted: true, product_choice: "telecom" };
+      patch.extras = { ...(patch.extras as object ?? extras), greeted: true, product_choice: "telecom" };
       tool_calls.push({ name: "set_product", args: { produto: "telecom" } });
       events.push({ type: "product_chosen", priority: "standard", source: "specialist", payload: { product: "telecom" } });
       break;
@@ -60,7 +92,7 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
       text = ROUTE_EXPANSAO_TEXT;
       patch.produto = "expansao";
       (patch as any).specialist = "expansao";
-      patch.extras = { ...extras, greeted: true, product_choice: "expansao" };
+      patch.extras = { ...(patch.extras as object ?? extras), greeted: true, product_choice: "expansao" };
       tool_calls.push({ name: "set_product", args: { produto: "expansao" } });
       events.push({ type: "product_chosen", priority: "standard", source: "specialist", payload: { product: "expansao" } });
       break;
