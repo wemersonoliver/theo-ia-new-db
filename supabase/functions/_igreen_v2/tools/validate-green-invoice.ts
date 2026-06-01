@@ -140,8 +140,8 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
           phone: ctx.phone,
           kind: "invoice",
           media_url: args.media_url,
-          mime_type: args.mime_type,
-          byte_size: args.byte_size,
+          mime_type: effectiveMime || args.mime_type,
+          byte_size: effectiveByteSize || args.byte_size,
           pipeline_version: CURRENT_VALIDATION_VERSION,
         }),
       });
