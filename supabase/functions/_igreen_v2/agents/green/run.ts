@@ -330,6 +330,9 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
         byte_size: ctx.media.byte_size,
       },
     });
+    // IA silencia neste turno — o texto final (aprovação/pedido de RG OU rejeição)
+    // é gerado pelo orquestrador APÓS o resultado da tool, evitando "tô conferindo".
+    deterministicText = "";
   }
 
   if (stage === "invoice_rejected_reply") {
