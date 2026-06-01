@@ -3,7 +3,7 @@
 // LLM só preenche texto curto. Stage e tool_calls são decididos em código (D1).
 
 import type { AgentContext, AgentResult } from "../_types.ts";
-import { decideGreenStage, isAffirmation } from "./stages.ts";
+import { decideGreenStage, isAffirmation, detectFaqTopic } from "./stages.ts";
 import { GREEN_SYSTEM, buildGreenUserPrompt } from "./prompt.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -330,6 +330,77 @@ Bora fazer seu cadastro agora? Pra iniciar, só preciso de uma foto ou PDF da su
         byte_size: ctx.media.byte_size,
       },
     });
+  }
+
+  if (stage === "invoice_rejected_reply") {
+    const nome = (currentExtras.client_name as string | undefined) ?? "";
+    // Mensagem por motivo conhecido (último evento). Fallback genérico.
+    const lastReason = (ctx.state as any).last_media_reject_reason
+      ?? (currentExtras.last_media_reject_reason as string | undefined)
+      ?? null;
+    let body = "Não consegui abrir o arquivo da fatura aqui. Pode reenviar como PDF ou foto nítida da última conta?";
+    if (lastReason === "invalid_mime") {
+      body = "Esse formato não abre aqui. Pode mandar a fatura como PDF ou foto (jpg/png)?";
+    } else if (lastReason === "too_small") {
+      body = "O arquivo chegou muito pequeno e não consegui ler. Pode mandar a fatura em PDF ou uma foto nítida?";
+    } else if (lastReason === "too_large") {
+      body = "O arquivo ficou muito pesado. Pode reenviar uma foto da fatura ou um PDF menor (até 10MB)?";
+    } else if (lastReason === "reject_unreadable" || lastReason === "reject_low_confidence") {
+      body = "A foto da fatura ficou um pouco baixa. Pode mandar de novo mostrando o nome do titular e o consumo, por favor?";
+    } else if (lastReason === "reject_not_invoice") {
+      body = "O arquivo que recebi não parece ser a fatura de energia. Pode me enviar a última conta de luz (PDF ou foto)?";
+    }
+    deterministicText = `${nome ? nome + ", " : ""}${body}`;
+    // Reseta document_status para destravar próxima validação e marca que já avisamos.
+    (patch as any).document_status = null;
+    patch.extras = {
+      ...(patch.extras as object ?? currentExtras),
+      invoice_rejected_notified: true,
+      invoice_rejected_notified_at: new Date().toISOString(),
+    };
+  }
+
+  if (stage === "faq_answer") {
+    const topic = detectFaqTopic(ctx.message);
+    const nome = (currentExtras.client_name as string | undefined) ?? "";
+    const valor = Number(currentExtras.valor_fatura ?? 0);
+    const distribuidora = (currentExtras.distribuidora as string | undefined) ?? "";
+    // Determina o CTA pendente para amarrar a resposta da FAQ ao próximo passo.
+    const faturaPedida = !!currentExtras.discount_lookup_done || (ctx.state.etapa_funil ?? "") === "fatura_enviada";
+    const cta = faturaPedida
+      ? "Pra eu já calcular sua economia exata, me manda uma foto ou PDF da sua última fatura, pode ser?"
+      : "Quer que eu te mostre quanto dá pra economizar?";
+    let answer = "";
+    switch (topic) {
+      case "cashback":
+        answer = "Funciona assim: cada novo assinante que entrar pela sua indicação te devolve uma parte da fatura dele em cashback todo mês. Quanto mais indicações ativas, mais sua própria conta de luz vai pra perto de zero.";
+        break;
+      case "cancelar":
+        answer = "Você pode sair quando quiser, sem multa nem burocracia. É só avisar a iGreen e o cancelamento é feito.";
+        break;
+      case "fidelidade":
+        answer = "Não tem fidelidade nem multa. Você fica enquanto for bom pra você.";
+        break;
+      case "instalacao":
+        answer = "Não precisa de obra nem instalar nada. A energia continua chegando pela mesma distribuidora, só que com desconto da iGreen aplicado direto na fatura.";
+        break;
+      case "prazo":
+        answer = "Depois do cadastro aprovado, o desconto costuma aparecer já na próxima fatura ou na seguinte, dependendo do ciclo da distribuidora.";
+        break;
+      case "seguro":
+        answer = "É 100% seguro. A iGreen é uma empresa registrada, com mais de 200 mil clientes, e seus dados são usados só pra aplicar o desconto na sua conta.";
+        break;
+      case "como_funciona":
+      default:
+        answer = distribuidora
+          ? `Funciona simples${nome ? `, ${nome}` : ""}: a iGreen aplica um desconto da faixa oficial da ${distribuidora} direto na sua fatura, sem obra e sem trocar de distribuidora.`
+          : "Funciona simples: a iGreen aplica um desconto da faixa oficial da sua distribuidora direto na fatura, sem obra e sem trocar de distribuidora.";
+    }
+    const prefix = nome && topic !== "como_funciona" ? `${nome}, ` : "";
+    deterministicText = valor > 0 && topic === "cashback"
+      ? `${prefix}${answer}\n\n${cta}`
+      : `${prefix}${answer}\n\n${cta}`;
+    // FAQ não muda etapa/extras de qualificação.
   }
 
   // Post-capture re-decision: se acabamos de capturar um dado em extras,
