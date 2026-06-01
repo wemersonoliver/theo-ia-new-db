@@ -243,6 +243,11 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
         patch.holder_match = false;
         events.push({ type: "invoice_rejected", priority: "high", source: "tool",
           payload: { reason: "holder_mismatch" } });
+        patch.extras = {
+          ...((ctx.state.extras ?? {}) as Record<string, unknown>),
+          last_media_reject_reason: "reject_holder_mismatch",
+          invoice_rejected_notified: false,
+        };
         break;
       case "reject_low_confidence":
       case "reject_unreadable":
@@ -251,6 +256,11 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
         patch.etapa_funil = "fatura_rejeitada";
         events.push({ type: "invoice_rejected", priority: "high", source: "tool",
           payload: { reason: final } });
+        patch.extras = {
+          ...((ctx.state.extras ?? {}) as Record<string, unknown>),
+          last_media_reject_reason: final,
+          invoice_rejected_notified: false,
+        };
         break;
     }
 
