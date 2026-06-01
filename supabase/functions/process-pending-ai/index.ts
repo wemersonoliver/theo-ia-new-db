@@ -213,7 +213,7 @@ serve(async (req) => {
           ? {
               url: String(m.media_url),
               mime_type: String(m.media_mime || ""),
-              byte_size: 0,
+              byte_size: Number(m.media_size ?? 0),
             }
           : null;
       const latestMedia = pickMedia(latestIncoming);
