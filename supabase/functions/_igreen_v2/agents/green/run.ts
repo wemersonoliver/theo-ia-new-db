@@ -535,10 +535,29 @@ function extractDistribuidora(msg: string): string | null {
 
 function extractFirstName(msg: string): string | null {
   if (!msg) return null;
-  const t = msg.trim().replace(/[^\p{L}\s]/gu, "");
+  // Remove prefixos de transcrição automática (áudio/imagem).
+  let raw = msg
+    .replace(/\[Áudio transcrito\]/gi, "")
+    .replace(/\[Áudio\]/gi, "")
+    .replace(/\[Documento.*?\]/gi, "")
+    .replace(/\[Imagem.*?\]/gi, "")
+    .trim();
+  if (!raw) return null;
+  // Áudios curtos/perguntas raramente são nomes. Se tem '?' ou termina com
+  // verbo/interrogativo, descarta — peça pra escrever em texto.
+  if (/\?$/.test(raw)) return null;
+  const t = raw.replace(/[^\p{L}\s]/gu, "").trim();
   if (!t) return null;
-  const first = t.split(/\s+/)[0];
-  if (first.length < 2 || first.length > 30) return null;
+  // Stop-words comuns em áudios mal transcritos.
+  const STOP = new Set([
+    "o","a","e","é","eh","ah","oi","ola","olá","sim","nao","não","ok","okay","beleza","blz",
+    "mesmo","tudo","bem","tá","ta","obrigado","obrigada","valeu","tchau","bom","boa",
+  ]);
+  const tokens = t.split(/\s+/).filter(Boolean);
+  // Primeiro token que pareça nome próprio (≥3 letras e não é stop-word).
+  const first = tokens.find((tok) => tok.length >= 3 && !STOP.has(tok.toLowerCase()));
+  if (!first) return null;
+  if (first.length > 30) return null;
   return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
 }
 
