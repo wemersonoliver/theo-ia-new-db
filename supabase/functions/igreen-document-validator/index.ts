@@ -30,6 +30,8 @@ interface ValidatorRequest {
   mime_type?: string;
   byte_size?: number;
   pipeline_version?: number;
+  extracted_text?: string | null;
+  filename?: string | null;
 }
 
 interface ExtractedFields {
@@ -52,7 +54,11 @@ interface ValidatorResponse {
 }
 
 const SYSTEM = `Você é um classificador OCR de faturas de energia elétrica brasileiras.
-Receberá uma imagem ou PDF. Responda APENAS JSON com as chaves:
+Receberá uma imagem ou PDF, e PODE receber também um texto OCR pré-extraído (campo extracted_text).
+Use AMBOS como evidência. Se o extracted_text claramente contiver dados de fatura de energia brasileira
+(distribuidora reconhecida, kWh, valor a pagar, titular), classifique como "green_invoice" mesmo que
+a leitura visual falhe.
+Responda APENAS JSON com as chaves:
 {
   "classification": "green_invoice" | "other_invoice" | "unreadable" | "not_invoice",
   "confidence": number (0..1),
@@ -80,6 +86,8 @@ serve(async (req) => {
   const correlation_id = body.correlation_id ?? null;
   const media_url = body.media_url;
   const mime_type = (body.mime_type ?? "").toLowerCase();
+  const extracted_text = (body.extracted_text ?? null) as string | null;
+  const filename = (body.filename ?? null) as string | null;
 
   if (!media_url) return json(failBody(correlation_id, "missing_media_url", 0), 400);
 
@@ -138,7 +146,26 @@ serve(async (req) => {
   let lastError = "unknown";
   for (let attempt = 1; attempt <= RETRY_DELAYS.length + 1; attempt++) {
     try {
-      const result = await callGemini({ apiKey, base64, mime: actualMime });
+      const result = await callGemini({ apiKey, base64, mime: actualMime, extractedText: extracted_text, filename });
+      // Fallback puro-texto: se Gemini Vision falhou mas temos OCR forte,
+      // tenta classificar pela estrutura do texto.
+      if (
+        (result.classification === "unreadable" || result.confidence < 0.3) &&
+        extracted_text && extracted_text.length > 300
+      ) {
+        const ocr = ocrFallback(extracted_text);
+        if (ocr) {
+          return json({
+            correlation_id,
+            pipeline_version: CURRENT_PIPELINE_VERSION,
+            provider: "gemini",
+            classification: "green_invoice",
+            confidence: 0.75,
+            extracted: ocr,
+            attempts: attempt,
+          } as ValidatorResponse, 200);
+        }
+      }
       return json({
         correlation_id,
         pipeline_version: CURRENT_PIPELINE_VERSION,
@@ -157,13 +184,39 @@ serve(async (req) => {
     }
   }
 
+  // Última tentativa: se Gemini falhou totalmente mas temos OCR, usa fallback.
+  if (extracted_text && extracted_text.length > 300) {
+    const ocr = ocrFallback(extracted_text);
+    if (ocr) {
+      return json({
+        correlation_id,
+        pipeline_version: CURRENT_PIPELINE_VERSION,
+        provider: "gemini",
+        classification: "green_invoice",
+        confidence: 0.7,
+        extracted: ocr,
+        attempts: RETRY_DELAYS.length + 1,
+      } as ValidatorResponse, 200);
+    }
+  }
   return json(failBody(correlation_id, lastError, RETRY_DELAYS.length + 1), 200);
 });
 
-async function callGemini(args: { apiKey: string; base64: string; mime: string }) {
+async function callGemini(args: { apiKey: string; base64: string; mime: string; extractedText?: string | null; filename?: string | null }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
+    const userParts: any[] = [
+      { text: "Classifique a fatura abaixo seguindo o JSON especificado." },
+    ];
+    if (args.filename) {
+      userParts.push({ text: `Nome do arquivo: ${args.filename}` });
+    }
+    if (args.extractedText && args.extractedText.length > 50) {
+      const txt = args.extractedText.length > 8000 ? args.extractedText.slice(0, 8000) : args.extractedText;
+      userParts.push({ text: `OCR pré-extraído do documento:\n${txt}` });
+    }
+    userParts.push({ inlineData: { mimeType: args.mime, data: args.base64 } });
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${args.apiKey}`,
       {
@@ -172,13 +225,7 @@ async function callGemini(args: { apiKey: string; base64: string; mime: string }
         signal: controller.signal,
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: SYSTEM }] },
-          contents: [{
-            role: "user",
-            parts: [
-              { text: "Classifique a fatura abaixo seguindo o JSON especificado." },
-              { inlineData: { mimeType: args.mime, data: args.base64 } },
-            ],
-          }],
+          contents: [{ role: "user", parts: userParts }],
           generationConfig: { temperature: 0.1, maxOutputTokens: 600, responseMimeType: "application/json" },
         }),
       },
@@ -195,6 +242,58 @@ async function callGemini(args: { apiKey: string; base64: string; mime: string }
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Lista de distribuidoras brasileiras reconhecidas (apenas para fallback OCR).
+const KNOWN_DISTRIBUTORS = [
+  "Celesc", "Enel", "CPFL", "Light", "Equatorial", "Energisa", "Neoenergia",
+  "EDP", "Coelba", "Cemig", "Copel", "RGE", "Elektro", "Eletropaulo", "Cosern",
+  "Celpe", "Coelce", "Amazonas Energia", "Roraima Energia", "Boa Vista Energia",
+  "Ceee", "Celg", "Cerr", "Cepisa", "Ceron", "Eletroacre", "Sulgipe",
+];
+
+function ocrFallback(text: string): ExtractedFields | null {
+  const t = text.replace(/\s+/g, " ");
+  // Precisa indicar fatura de energia: presença de kWh + valor a pagar.
+  const hasKwh = /\b\d{2,5}\s*(kwh|kw\/h)\b/i.test(t);
+  const hasTotal = /(total\s+a\s+pagar|valor\s+a\s+pagar|r\$\s*\d{1,3}(\.\d{3})*,\d{2})/i.test(t);
+  if (!hasKwh && !hasTotal) return null;
+
+  // Distribuidora conhecida
+  const distMatch = KNOWN_DISTRIBUTORS.find((d) => new RegExp(`\\b${d}\\b`, "i").test(t));
+  if (!distMatch) return null;
+
+  // Nome do titular: tenta "NOME:" depois palavras maiúsculas (≥2).
+  let holder: string | undefined;
+  const nomeColon = t.match(/\bNOME[:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ' ]{4,80})/);
+  if (nomeColon) {
+    holder = nomeColon[1].trim().split(/\s{2,}|\bCPF\b|\bENDERECO\b|\bENDEREÇO\b/i)[0].trim();
+  }
+  if (!holder) {
+    const upperRun = t.match(/\b([A-ZÁÉÍÓÚÂÊÔÃÕÇ]{2,}(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]{2,}){1,5})\b/);
+    if (upperRun) holder = upperRun[1].trim();
+  }
+
+  // Consumo kWh
+  let kwh: number | undefined;
+  const kwhMatch = t.match(/(\d{2,5})\s*(?:kwh|kw\/h)\b/i)
+    ?? t.match(/total\s+apurado\s+(\d{2,5})/i);
+  if (kwhMatch) {
+    const n = Number(kwhMatch[1]);
+    if (Number.isFinite(n) && n > 0 && n < 50000) kwh = n;
+  }
+
+  // CPF mascarado / qualquer documento
+  let docId: string | undefined;
+  const cpfMatch = t.match(/\b(\d{3}[\.\s]?\*{0,3}\d{0,3}[\.\s]?\d{0,3}[-\s]?\d{2})\b/);
+  if (cpfMatch) docId = cpfMatch[1];
+
+  return {
+    holder_name: holder,
+    document_id: docId,
+    distributor: distMatch,
+    energy_consumption_kwh: kwh,
+  };
 }
 
 function normalizeClassification(c: unknown): ValidatorResponse["classification"] {
