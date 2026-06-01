@@ -35,7 +35,7 @@ const MOCK_TEXTS: Record<GreenStage, string> = {
   ask_distribuidora: "Beleza. Qual é a sua distribuidora de energia?",
   ask_cidade: "(deprecado — nunca usado)",
   ask_name: "Pra ficar mais fácil, como posso te chamar?",
-  request_invoice: "Agora me manda sua última fatura (PDF ou foto)? Assim eu calculo sua economia exata.",
+  request_invoice: "Agora me manda sua última fatura (PDF ou foto)? Assim eu já inicio a verificação do seu cadastro.",
   waiting_invoice: "Perfeito, fico no aguardo da fatura.",
   validate_invoice: "Recebi sua fatura, tô conferindo aqui rapidinho.",
   soft_confirm_ask: "Confirma pra mim: o titular da conta é você mesmo?",
