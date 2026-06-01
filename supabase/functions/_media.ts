@@ -102,6 +102,7 @@ export interface UploadedMedia {
   mime: string;
   filename: string;
   path: string;
+  size: number;
 }
 
 /**
@@ -138,6 +139,7 @@ export async function uploadMediaToStorage(params: UploadMediaParams): Promise<U
       mime: finalMime,
       filename: filename || `${safeId}.${ext}`,
       path,
+      size: bytes.length,
     };
   } catch (e) {
     console.error("uploadMediaToStorage exception:", e);
