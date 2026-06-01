@@ -79,7 +79,28 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
     });
 
     // 1) media-guard
-    const guard = checkMedia({ media_url: args.media_url, mime_type: args.mime_type, byte_size: args.byte_size });
+    let effectiveByteSize = Number(args.byte_size ?? 0);
+    let effectiveMime = String(args.mime_type ?? "");
+    if (!effectiveByteSize || !effectiveMime) {
+      // Fallback: HEAD na URL para obter Content-Length / Content-Type.
+      // Cobre faturas que vieram do webhook sem media_size persistido.
+      try {
+        const head = await fetch(args.media_url, { method: "HEAD" });
+        if (head.ok) {
+          if (!effectiveByteSize) {
+            const cl = Number(head.headers.get("content-length") ?? 0);
+            if (Number.isFinite(cl) && cl > 0) effectiveByteSize = cl;
+          }
+          if (!effectiveMime) {
+            const ct = (head.headers.get("content-type") ?? "").split(";")[0].trim();
+            if (ct) effectiveMime = ct;
+          }
+        }
+      } catch (e) {
+        console.error("[validate_green_invoice] HEAD fallback failed", e);
+      }
+    }
+    const guard = checkMedia({ media_url: args.media_url, mime_type: effectiveMime, byte_size: effectiveByteSize });
     if (!guard.ok) {
       const res: ToolResult = {
         success: true,
