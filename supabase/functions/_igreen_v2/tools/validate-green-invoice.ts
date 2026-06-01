@@ -112,6 +112,11 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
           validation_attempts: attempt,
           document_status: "rejected",
           validation_version: CURRENT_VALIDATION_VERSION,
+          extras: {
+            ...((ctx.state.extras ?? {}) as Record<string, unknown>),
+            last_media_reject_reason: guard.reason,
+            invoice_rejected_notified: false,
+          },
         },
         data: { stage: "media_guard", reason: guard.reason },
       };
