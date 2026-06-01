@@ -1,65 +1,60 @@
-# Plano — Corrigir envio do vídeo no roteamento do qualifier
+## Diagnóstico — conversa 5547989118695 (Wemerson, 01/06)
 
-## Causa raiz confirmada (logs `5547989118695`)
-No `qualifier/run.ts` → `case "route_green"`, o patch grava `video_sent: true` e `video_sent_at` no `extras` **antes** da tool `send_discovery_video` rodar. Como o `ctx.state` é mutado em memória, a tool encontra `extras.video_sent === true` e retorna imediatamente `skipped: true` (`skip_reason: "state_unchanged"`). O vídeo nunca é enviado pela Evolution.
+Linha do tempo + logs (`igreen_state_events`):
 
-## Ajustes
+1. **13:16–14:10** — fluxo de descoberta funcionou (saudação → menu → escolha 1 → vídeo → engajamento → consumo → estado → distribuidora → simulação concreta). OK.
+2. **14:11:49** — cliente pergunta: *"Como funciona esse cashback"*.
+   - Supervisor classifica intent=`other` (confidence 0, sticky) → mantém specialist green.
+   - Green specialist decide stage=`request_invoice` e responde re-pedindo a fatura, **ignorando completamente a pergunta sobre cashback**.
+3. **14:13:21** — cliente envia o PDF da fatura.
+   - Supervisor reconhece `send_invoice` (confidence 0.95). Tool `validate_green_invoice` é chamada.
+   - Evento: `media_rejected` com `reason: "missing_size"`.
+   - O `media-guard` exige `byte_size > 0`. O caller (`process-pending-ai/index.ts` linhas 208–218) envia `byte_size: 0` hard-coded. Por isso o validator nunca roda.
+   - Estado fica em `etapa_funil=fatura_enviada`, `document_status=rejected`, **mas nenhuma mensagem é enviada ao cliente** — silêncio total.
+4. **14:22:28** — cliente manda *"Ok"* sem entender o silêncio. Stage volta a `waiting_invoice` e o AI responde *"Que bom que você tá animado… assim que puder, é só mandar a sua fatura"* — ignorando que a fatura já foi enviada e rejeitada.
 
-### 1. `supabase/functions/_igreen_v2/agents/qualifier/run.ts`
-No `case "route_green"`, remover do `patch.extras`:
-- `video_sent: true`
-- `video_sent_at: new Date().toISOString()`
+## Causas-raiz
 
-Manter:
-- `greeted`, `product_choice: "green"`, `explained: true`, `solution_confirmed: true` (esses só suprimem a re-explicação do green specialist, não afetam o envio do vídeo).
-- A chamada `tool_calls.push({ name: "send_discovery_video", args: { produto: "green" } })`.
+| # | Bug | Arquivo |
+|---|-----|---------|
+| 1 | `byte_size: 0` hard-coded no encaminhamento ao agente v2 → media-guard sempre rejeita com `missing_size` | `supabase/functions/process-pending-ai/index.ts` (208–234) |
+| 2 | Rejeição de mídia não gera mensagem de retorno ao cliente (silêncio) | `supabase/functions/_igreen_v2/agents/green/run.ts` (stage `validate_invoice`) e/ou `stages.ts` |
+| 3 | Green specialist não trata FAQ rápida (`cashback`, `como funciona…`) antes de re-pedir a fatura | `supabase/functions/_igreen_v2/agents/green/stages.ts` + `run.ts` |
+| 4 | Webhook nunca persiste `byte_size` da mídia → mesmo com fix em (1) não temos a fonte real do tamanho | `supabase/functions/whatsapp-webhook/index.ts` (~345, 872 — `persistedMedia`) |
 
-A própria tool, ao enviar com sucesso, grava `video_sent: true` + `video_sent_at` + `video_sent_provider_id` no `extras`. No próximo turno, `green/stages.decideGreenStage` verá `video_sent=true` e seguirá para `engage_check`.
+## Plano de correção
 
-### 2. Anti-duplicação preservada
-A tool já tem dois locks:
-- `idempotencyKey: video:${produto}:${phone}` (impede reentrância concorrente).
-- Consulta `igreen_transport_events` dos últimos 10 min (impede reenvio se já mandou).
+### Etapa 1 — Corrigir contrato de mídia (byte_size real)
+- **whatsapp-webhook/index.ts**: ao persistir mídia (`persistedMedia`), capturar o `fileLength` que a Evolution API envia em `imageMessage/documentMessage/videoMessage` e salvar em `newMessage.media_size` (novo campo do JSON da mensagem). Fallback: `Content-Length` da resposta ao baixar.
+- **process-pending-ai/index.ts**: usar `m.media_size` real ao montar `mediaPayload` em vez de `byte_size: 0`.
+- **validate-green-invoice.ts**: como segurança extra, se `byte_size <= 0` fazer `fetch(media_url, { method: "HEAD" })` para ler `Content-Length` antes de chamar o guard. Evita regressões e cobre faturas antigas.
 
-Sem a flag prematura, ambos continuam funcionando e o duplicado segue prevenido.
+### Etapa 2 — Falar com o cliente quando a fatura é rejeitada
+- Em `agents/green/stages.ts`, expor um stage `invoice_rejected_reply` quando `document_status === "rejected"` e o último turno teve mídia (ou logo após o evento `invoice_rejected`/`media_rejected`).
+- Em `agents/green/run.ts`, montar mensagem deterministica por motivo:
+  - `missing_size` / `too_small` → "Não consegui abrir o arquivo. Pode reenviar a fatura em PDF ou foto nítida?"
+  - `invalid_mime` → "Esse formato não abre aqui. Pode mandar como PDF ou foto?"
+  - `reject_unreadable` / `reject_low_confidence` → "A imagem ficou um pouco baixa. Pode mandar uma foto mais nítida da fatura, mostrando o nome e o consumo?"
+  - `reject_holder_mismatch` → fluxo existente de autorização de terceiros.
+- Resetar `document_status` para `null` depois de pedir reenvio, para destravar próxima validação.
 
-### 3. Garantir ordem texto → vídeo
-Já implementado em `whatsapp-igreen-agent-v2/index.ts` (texto enviado antes da tool de vídeo). Vou conferir após o ajuste para garantir que não foi revertido.
+### Etapa 3 — Mini-FAQ no Green specialist (cashback e dúvidas comuns)
+- Em `stages.ts`, adicionar regex/handler `isFaqQuestion(msg)` que detecta:
+  - `cashback`, `indica(ção|cao)`, `zerar (a )?conta`, `como funciona`, `seguro`, `prazo`, `cancel(ar|amento)`.
+- Antes de cair em `request_invoice`/`waiting_invoice`, se a pergunta bate em um padrão de FAQ e o cliente já está em `qualificacao`/`fatura_enviada`, devolver stage `faq_answer` com resposta curta determinística (1–2 frases) **e** repetir o CTA atual (ex.: "…por isso, assim que me mandar a fatura eu já calculo seu desconto exato 😉").
+- Conteúdo do cashback: "Cada novo assinante que entrar pela sua indicação te devolve uma parte da fatura dele em cashback. Quanto mais indicações, mais sua conta vai pra perto de zero."
 
-### 4. Reset + simulação end-to-end
-Migração para limpar estado do número de teste e validar o fluxo completo:
+### Etapa 4 — Reset e teste do número
+- Migration para limpar estado/eventos/locks/transport/lead do `5547989118695` e voltar o card CRM ao primeiro estágio (mesmo padrão da migration anterior).
+- Smoke test manual: enviar "Oi" → "Wemerson" → "1" → "Sim" → "500" → "SC" → "Sim" → perguntar "como funciona o cashback" → enviar fatura PDF.
+- Verificar em `igreen_state_events`:
+  - sem `media_rejected: missing_size`;
+  - presença de `document_validated` com `final=approve|soft_confirm`;
+  - resposta determinística após FAQ.
 
-```text
-DELETE FROM igreen_conversation_state WHERE phone = '5547989118695';
-DELETE FROM igreen_state_events       WHERE phone = '5547989118695';
-DELETE FROM igreen_transport_events   WHERE phone = '5547989118695';
-DELETE FROM igreen_tool_locks         WHERE phone = '5547989118695';
-DELETE FROM igreen_lead_data          WHERE phone = '5547989118695';
-UPDATE whatsapp_conversations SET messages = '[]'::jsonb, total_messages = 0
- WHERE phone = '5547989118695';
--- card volta para "Novo Lead" para validar a movimentação automática
-UPDATE admin_crm_deals
-   SET stage_id = (SELECT id FROM admin_crm_stages
-                   WHERE position = (SELECT MIN(position) FROM admin_crm_stages))
- WHERE contact_phone = '5547989118695';
-```
+## Detalhes técnicos
 
-### 5. Validação via simulação automatizada
-Após deploy, executar `curl_edge_functions` em `whatsapp-igreen-agent-v2` simulando a sequência:
-1. "Oi" → espera saudação + pedido de nome.
-2. "Wemerson" → espera menu 1/2/3.
-3. "1" → espera **2 mensagens de texto + vídeo entregue** (checar `igreen_transport_events.kind='video', status='sent'`).
-4. "Ok" → espera `engage_check` + tag `em atendimento` + card movido para "Iniciou atendimento" + pergunta de consumo.
-5. "Pago uns 350 reais" + "SP" + "Enel" → espera `simulate_discount_concreto` (texto único com %, valor, cashback) e pedido de fatura.
-
-Critério de sucesso por turno: consultar `igreen_state_events` e `igreen_transport_events` para confirmar eventos esperados e ausência de `skipped:true` indevido em `send_discovery_video`.
-
-### 6. Re-deploy
-- `whatsapp-igreen-agent-v2` (mesma function compila `_igreen_v2/*`).
-
-## Arquivos
-- `supabase/functions/_igreen_v2/agents/qualifier/run.ts` (edição cirúrgica no case `route_green`).
-- Nova migração de reset do número de teste.
-
-## Pós-execução
-Reportar resultado de cada turno simulado (eventos + transport events) e confirmar que o vídeo chegou e o card moveu.
+- `media-guard` permanece como guardião — só relaxamos a obrigatoriedade de tamanho quando conseguimos derivá-lo via HEAD.
+- A mensagem de fallback de rejeição deve passar pelo pipeline normal de chunking (220 chars) e ser registrada em `whatsapp_conversations.messages` como `sent_by:ai`.
+- Mini-FAQ não muda `etapa_funil` nem extras de qualificação — apenas responde e mantém o CTA pendente.
+- Nenhuma alteração de schema necessária além de aceitar `media_size` opcional dentro do JSON `messages` (já é jsonb).
