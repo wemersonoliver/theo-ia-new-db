@@ -51,7 +51,7 @@ export function buildGreenUserPrompt(args: {
     case "engage_check":
       return baseCtx + "STAGE: engage_check. Pergunta leve UMA coisa: se faz sentido / se quer que você mostre quanto dá pra economizar. NÃO peça dado nenhum ainda. Máx 1 frase.";
     case "ask_consumo":
-      return baseCtx + "STAGE: ask_consumo. Reconheça curto a resposta anterior e pergunte UMA coisa: quanto vem em média na conta de luz por mês (R$ ou kWh). Máx 1 frase de pergunta. NÃO comece com 'Opa'.";
+      return baseCtx + "STAGE: ask_consumo. Reconheça curto a resposta anterior e pergunte UMA coisa: quanto vem em média na conta de luz por mês, em reais. NÃO mencione kWh. Máx 1 frase de pergunta. NÃO comece com 'Opa'.";
     case "ask_estado":
       return baseCtx + "STAGE: ask_estado. Agradeça curto pelo dado anterior e pergunte UMA coisa: em qual estado o cliente está. Aceite UF ou nome. NÃO pergunte cidade. Máx 1 frase.";
     case "ask_distribuidora":
@@ -65,11 +65,11 @@ export function buildGreenUserPrompt(args: {
     case "ask_name":
       return baseCtx + "STAGE: ask_name. Agora que já conversaram, pergunte de forma natural e informal apenas como pode chamá-lo (primeiro nome). NÃO peça nome completo. NÃO peça CPF. Máx 1 frase.";
     case "request_invoice":
-      return baseCtx + "STAGE: request_invoice. Reconheça curto a distribuidora e peça a última fatura de energia em PDF ou foto pra calcular a economia exata. Máx 2 frases.";
+      return baseCtx + "STAGE: request_invoice. Reconheça curto a distribuidora e peça a última fatura de energia em PDF ou foto para iniciar a verificação do cadastro. NÃO fale em calcular economia. Máx 2 frases.";
     case "waiting_invoice":
       return baseCtx + "STAGE: waiting_invoice. Agradeça e diga que aguarda a fatura quando ele puder enviar. Máx 1 frase.";
     case "validate_invoice":
-      return baseCtx + "STAGE: validate_invoice. Diga em 1 frase que recebeu a fatura e está conferindo.";
+      return ""; // IA silencia — texto determinístico é gerado após o resultado da tool.
     case "soft_confirm_ask":
       return baseCtx + "STAGE: soft_confirm_ask. Peça uma confirmação direta (sim/não) sobre o titular da fatura. Máx 1 frase.";
     case "ask_full_name_cpf":
