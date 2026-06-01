@@ -34,6 +34,8 @@ export type GreenStage =
   | "intent_send_invoice_ack"
   | "waiting_invoice"
   | "validate_invoice"
+  | "invoice_rejected_reply"
+  | "faq_answer"
   | "soft_confirm_ask"
   | "request_identity"
   | "validate_identity"
@@ -65,6 +67,30 @@ export function isIntentSearchingInvoice(msg: string): boolean {
 }
 export function isObjectionSecurity(msg: string): boolean {
   return OBJECTION_SECURITY_RX.test(msg ?? "");
+}
+
+// FAQ rápida — dúvidas comuns que NÃO devem disparar repetição de pedido de fatura.
+// Mapeamos a categoria para escolher resposta determinística em run.ts.
+export type GreenFaqTopic =
+  | "cashback"
+  | "como_funciona"
+  | "seguro"
+  | "prazo"
+  | "cancelar"
+  | "instalacao"
+  | "fidelidade";
+
+export function detectFaqTopic(msg: string): GreenFaqTopic | null {
+  const m = (msg ?? "").toLowerCase();
+  if (!m) return null;
+  if (/\bcash\s*back|cashback|indica(c|ç)(a|ã)o|indicar|zerar (a )?conta\b/.test(m)) return "cashback";
+  if (/\bcancel(ar|amento|o)|sair (do|da)\b/.test(m)) return "cancelar";
+  if (/\bfidelidade|multa|car(e|ê)ncia\b/.test(m)) return "fidelidade";
+  if (/\binstala(c|ç)(a|ã)o|instala(r|m)|obra|placa\b/.test(m)) return "instalacao";
+  if (/\bprazo|quando come(c|ç)a|come(c|ç)a a valer|quanto tempo\b/.test(m)) return "prazo";
+  if (/\bseguro|confi(a|á)vel|golpe|fraude\b/.test(m)) return "seguro";
+  if (/\bcomo funciona|funciona como|me explica\b/.test(m)) return "como_funciona";
+  return null;
 }
 
 // Confirmações curtas / interesse explícito após explicação.
@@ -102,6 +128,23 @@ export function decideGreenStage(
 
   if (hasMedia && (etapa === "qualificacao" || etapa === "fatura_enviada" || etapa === "fatura_rejeitada")) {
     return "validate_invoice";
+  }
+
+  // Fatura recebida mas rejeitada silenciosamente — precisamos avisar o cliente
+  // e pedir reenvio em vez de repetir "fico aguardando".
+  if (!hasMedia && documentStatus === "rejected" &&
+      (etapa === "qualificacao" || etapa === "fatura_enviada" || etapa === "fatura_rejeitada") &&
+      !extras.invoice_rejected_notified) {
+    return "invoice_rejected_reply";
+  }
+
+  // FAQ rápida (cashback, como funciona, etc.) — só após qualificação iniciada,
+  // sem mídia anexada e sem objeção de segurança ativa neste turno.
+  if (!hasMedia &&
+      (etapa === "qualificacao" || etapa === "fatura_enviada") &&
+      extras.greeted &&
+      detectFaqTopic(message)) {
+    return "faq_answer";
   }
 
   // Cliente sinalizou que vai enviar / está procurando a fatura mas não anexou.

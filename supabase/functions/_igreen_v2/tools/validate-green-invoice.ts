@@ -79,7 +79,28 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
     });
 
     // 1) media-guard
-    const guard = checkMedia({ media_url: args.media_url, mime_type: args.mime_type, byte_size: args.byte_size });
+    let effectiveByteSize = Number(args.byte_size ?? 0);
+    let effectiveMime = String(args.mime_type ?? "");
+    if (!effectiveByteSize || !effectiveMime) {
+      // Fallback: HEAD na URL para obter Content-Length / Content-Type.
+      // Cobre faturas que vieram do webhook sem media_size persistido.
+      try {
+        const head = await fetch(args.media_url, { method: "HEAD" });
+        if (head.ok) {
+          if (!effectiveByteSize) {
+            const cl = Number(head.headers.get("content-length") ?? 0);
+            if (Number.isFinite(cl) && cl > 0) effectiveByteSize = cl;
+          }
+          if (!effectiveMime) {
+            const ct = (head.headers.get("content-type") ?? "").split(";")[0].trim();
+            if (ct) effectiveMime = ct;
+          }
+        }
+      } catch (e) {
+        console.error("[validate_green_invoice] HEAD fallback failed", e);
+      }
+    }
+    const guard = checkMedia({ media_url: args.media_url, mime_type: effectiveMime, byte_size: effectiveByteSize });
     if (!guard.ok) {
       const res: ToolResult = {
         success: true,
@@ -91,6 +112,11 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
           validation_attempts: attempt,
           document_status: "rejected",
           validation_version: CURRENT_VALIDATION_VERSION,
+          extras: {
+            ...((ctx.state.extras ?? {}) as Record<string, unknown>),
+            last_media_reject_reason: guard.reason,
+            invoice_rejected_notified: false,
+          },
         },
         data: { stage: "media_guard", reason: guard.reason },
       };
@@ -119,8 +145,8 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
           phone: ctx.phone,
           kind: "invoice",
           media_url: args.media_url,
-          mime_type: args.mime_type,
-          byte_size: args.byte_size,
+          mime_type: effectiveMime || args.mime_type,
+          byte_size: effectiveByteSize || args.byte_size,
           pipeline_version: CURRENT_VALIDATION_VERSION,
         }),
       });
@@ -217,6 +243,11 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
         patch.holder_match = false;
         events.push({ type: "invoice_rejected", priority: "high", source: "tool",
           payload: { reason: "holder_mismatch" } });
+        patch.extras = {
+          ...((ctx.state.extras ?? {}) as Record<string, unknown>),
+          last_media_reject_reason: "reject_holder_mismatch",
+          invoice_rejected_notified: false,
+        };
         break;
       case "reject_low_confidence":
       case "reject_unreadable":
@@ -225,6 +256,11 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
         patch.etapa_funil = "fatura_rejeitada";
         events.push({ type: "invoice_rejected", priority: "high", source: "tool",
           payload: { reason: final } });
+        patch.extras = {
+          ...((ctx.state.extras ?? {}) as Record<string, unknown>),
+          last_media_reject_reason: final,
+          invoice_rejected_notified: false,
+        };
         break;
     }
 
