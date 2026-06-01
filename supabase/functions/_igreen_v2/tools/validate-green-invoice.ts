@@ -131,6 +131,33 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
 
     // 2) chama validator isolado
     const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/igreen-document-validator`;
+    // Reforço — busca OCR pré-extraído pelo webhook (process-image-ocr / PDF) na
+    // última mensagem da conversa cujo media_url bate com args.media_url.
+    // O validator usará isso como contexto adicional e como fallback puro-texto
+    // caso o Gemini Vision falhe com o inlineData.
+    let extractedText: string | null = null;
+    let filenameHint: string | null = null;
+    try {
+      const { data: conv } = await svc()
+        .from("whatsapp_conversations")
+        .select("messages")
+        .eq("user_id", ctx.account_id)
+        .eq("phone", ctx.phone)
+        .maybeSingle();
+      const msgs = Array.isArray(conv?.messages) ? (conv!.messages as any[]) : [];
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const m = msgs[i] ?? {};
+        if (m.media_url === args.media_url) {
+          if (typeof m.ai_content === "string" && m.ai_content.trim().length > 50) {
+            extractedText = m.ai_content;
+          }
+          if (typeof m.media_filename === "string") filenameHint = m.media_filename;
+          break;
+        }
+      }
+    } catch (e) {
+      console.error("[validate_green_invoice] extracted_text lookup failed", e);
+    }
     let validator: any = { classification: "unreadable", confidence: 0, extracted: {}, attempts: 0, error: "no_response" };
     try {
       const r = await fetch(url, {
@@ -148,6 +175,8 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
           mime_type: effectiveMime || args.mime_type,
           byte_size: effectiveByteSize || args.byte_size,
           pipeline_version: CURRENT_VALIDATION_VERSION,
+          extracted_text: extractedText,
+          filename: filenameHint,
         }),
       });
       validator = await r.json();
