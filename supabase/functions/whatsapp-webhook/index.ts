@@ -221,7 +221,7 @@ serve(async (req) => {
           let content: string;
           let aiContent: string | null = null;
           let messageType: "text" | "audio" | "image" | "video" | "document" = "text";
-          let persistedMedia: { url: string; mime: string; filename: string } | null = null;
+          let persistedMedia: { url: string; mime: string; filename: string; size?: number } | null = null;
           const evolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
           const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
 
@@ -345,6 +345,7 @@ serve(async (req) => {
             newMessage.media_url = persistedMedia.url;
             newMessage.media_mime = persistedMedia.mime;
             newMessage.media_filename = persistedMedia.filename;
+            if (persistedMedia.size) newMessage.media_size = persistedMedia.size;
           }
 
           // Get or create system conversation
