@@ -452,6 +452,67 @@ serve(async (req) => {
     payload: { count: toolResults.length }, correlation_id,
   });
 
+  // Post-tool deterministic rewrite — quando validate_green_invoice rodou,
+  // gera a próxima fala (aprovação+pede RG OU rejeição) no MESMO turno
+  // para evitar "tô conferindo" e silêncio prolongado.
+  const validateResult = toolResults.find((r) => r.name === "validate_green_invoice");
+  if (validateResult) {
+    const refreshedState: any = (await loadState(account_id, phone)) ?? afterSupervisor;
+    const extras = (refreshedState?.extras ?? {}) as Record<string, unknown>;
+    const nome = (extras.client_name as string | undefined) ?? "";
+    const final = String(
+      (validateResult.data?.final as string | undefined)
+        ?? (validateResult.result?.data?.final as string | undefined)
+        ?? "",
+    );
+    const mediaReason = String(
+      (validateResult.data?.reason as string | undefined)
+        ?? (validateResult.result?.data?.reason as string | undefined)
+        ?? "",
+    );
+    const prefix = nome ? `${nome}, ` : "";
+    let postText = "";
+    if (final === "approve" || final === "soft_confirm") {
+      postText = `${prefix}fatura confirmada! ✅ Pra prosseguir com seu cadastro, me manda agora uma foto do RG ou CNH do titular da conta, por favor.`;
+      // marca identity_requested para não repetir o pedido no próximo turno.
+      await applyPatch({
+        account_id, phone,
+        patch: { extras: { ...extras, identity_requested: true } },
+        events: [],
+        source: "post_validate_invoice",
+        correlation_id,
+      });
+    } else if (final.startsWith("reject_") || mediaReason) {
+      const reason = final || `media_${mediaReason}`;
+      let body = "não consegui ler sua fatura aqui. Pode reenviar como PDF ou uma foto bem nítida da última conta, por favor?";
+      if (reason === "media_invalid_mime" || mediaReason === "invalid_mime") {
+        body = "esse formato não abre aqui. Pode mandar a fatura como PDF ou foto (jpg/png)?";
+      } else if (reason === "media_too_small" || mediaReason === "too_small") {
+        body = "o arquivo chegou muito pequeno e não consegui abrir. Pode reenviar a fatura em PDF ou uma foto nítida?";
+      } else if (reason === "media_too_large" || mediaReason === "too_large") {
+        body = "o arquivo ficou muito pesado. Pode reenviar uma foto da fatura ou um PDF menor (até 10MB)?";
+      } else if (final === "reject_unreadable" || final === "reject_low_confidence") {
+        body = "a foto da fatura ficou um pouco baixa. Pode mandar de novo mostrando o nome do titular e o consumo em kWh, por favor?";
+      } else if (final === "reject_not_invoice") {
+        body = "o arquivo que recebi não parece ser a fatura de energia. Pode me enviar a última conta de luz (PDF ou foto)?";
+      } else if (final === "reject_holder_mismatch") {
+        body = "vi que a fatura está em nome de outra pessoa. Você é da família e tem autorização do titular pra seguir com o cadastro?";
+      }
+      postText = `${prefix}${body}`;
+      // marca invoice_rejected_notified para evitar duplicar no próximo turno.
+      await applyPatch({
+        account_id, phone,
+        patch: { extras: { ...extras, invoice_rejected_notified: true, invoice_rejected_notified_at: new Date().toISOString() } },
+        events: [],
+        source: "post_validate_invoice",
+        correlation_id,
+      });
+    }
+    if (postText) {
+      agentResult = { ...agentResult, messages: [postText] };
+    }
+  }
+
   // Patch sugerido pelo specialist (não-tool) via state-engine
   if (Object.keys(agentResult.suggested_state_patch).length || agentResult.events.length) {
     await applyPatch({
