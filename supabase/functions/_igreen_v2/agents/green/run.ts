@@ -601,7 +601,7 @@ function fallbackText(stage: string): string {
     case "ask_estado": return "Perfeito. E em qual estado você está?";
     case "ask_distribuidora": return "Beleza. Qual é a sua distribuidora de energia?";
     case "ask_name": return "Pra ficar mais fácil, como posso te chamar?";
-    case "request_invoice": return "Agora me manda sua última fatura (PDF ou foto)? Assim eu calculo sua economia exata.";
+    case "request_invoice": return "Agora me manda sua última fatura (PDF ou foto)? Assim eu já inicio a verificação do seu cadastro.";
     case "waiting_invoice": return "Perfeito, fico no aguardo da fatura.";
     case "ask_full_name_cpf": return "Pra preparar seu contrato, me passa por favor seu nome completo e CPF?";
     case "simulate_discount": return "Com base na sua distribuidora e estado, conseguimos aplicar a faixa oficial de economia da iGreen. Posso seguir com o cálculo exato a partir da sua última fatura?";
