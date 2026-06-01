@@ -219,9 +219,9 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
 
 E não é só isso: depois do seu cadastro, você ainda pode chegar a zerar sua conta de luz indicando novos assinantes pelo nosso programa de cashback.
 
-Bora fazer seu cadastro agora? Pra iniciar, só preciso de uma foto ou PDF da sua fatura. 😉`;
+Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só preciso de uma foto ou PDF da sua última fatura. 😉`;
     } else {
-      deterministicText = `${nome ? nome + ", " : ""}com a ${distribuidora || "sua distribuidora"} a iGreen tem uma faixa oficial de economia. Me envia uma foto ou PDF da sua última fatura que eu já calculo o valor exato. 😊`;
+      deterministicText = `${nome ? nome + ", " : ""}com a ${distribuidora || "sua distribuidora"} a iGreen tem uma faixa oficial de economia. Me envia uma foto ou PDF da sua última fatura pra eu iniciar a verificação do seu cadastro. 😊`;
     }
     patch.extras = {
       ...(patch.extras as object ?? currentExtras),
