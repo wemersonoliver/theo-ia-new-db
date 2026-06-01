@@ -556,6 +556,56 @@ serve(async (req) => {
     () => ({ delivered: false, chunks: 0, events: [], lock_acquired: false } as any),
   );
 
+  // Resiliência: quando o transporte falha (ex.: Evolution 502 persistente),
+  // re-enfileira o turno para que process-pending-ai chame o agent de novo
+  // em ~20s. Limite máximo de 2 reenfileiramentos para evitar loop.
+  try {
+    if (chunkLimited.length > 0 && !sent.delivered && !dryRun) {
+      const latestState = (await loadState(account_id, phone)) ?? afterSupervisor;
+      const latestExtras = ((latestState as any)?.extras ?? {}) as Record<string, unknown>;
+      const retryCount = Number(latestExtras.send_retry_count ?? 0);
+      if (retryCount < 2) {
+        const failedChunks = (sent.events ?? []).filter((e: any) => e.status === "failed").length;
+        await trace({
+          account_id, phone, step: "transport.send_failed_requeue", level: "minimal",
+          payload: { failed_chunks: failedChunks, retry_count: retryCount + 1 },
+          correlation_id,
+        });
+        await applyPatch({
+          account_id, phone,
+          patch: { extras: { ...latestExtras, send_retry_count: retryCount + 1, last_send_failed_at: new Date().toISOString() } },
+          events: [],
+          source: "transport.send_failed",
+          correlation_id,
+        });
+        await _svcClient.from("whatsapp_pending_responses").insert({
+          account_id,
+          phone,
+          scheduled_at: new Date(Date.now() + 20_000).toISOString(),
+          processed: false,
+        });
+      } else {
+        await trace({
+          account_id, phone, step: "transport.send_failed_permanent", level: "minimal",
+          payload: { retry_count: retryCount }, correlation_id,
+        });
+      }
+    } else if (chunkLimited.length > 0 && sent.delivered) {
+      // Reset contador quando o envio sai com sucesso.
+      const latestState = (await loadState(account_id, phone)) ?? afterSupervisor;
+      const latestExtras = ((latestState as any)?.extras ?? {}) as Record<string, unknown>;
+      if (Number(latestExtras.send_retry_count ?? 0) > 0) {
+        await applyPatch({
+          account_id, phone,
+          patch: { extras: { ...latestExtras, send_retry_count: 0 } },
+          events: [], source: "transport.send_recovered", correlation_id,
+        });
+      }
+    }
+  } catch (e) {
+    console.error("[agent-v2] send_failed_requeue error", e);
+  }
+
   // Tools diferidas (mídia) — rodam APÓS o envio do texto.
   for (const tc of postTextTools) {
     const currentState = (await loadState(account_id, phone)) ?? afterSupervisor;
