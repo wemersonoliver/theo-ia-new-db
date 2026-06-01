@@ -219,9 +219,9 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
 
 E não é só isso: depois do seu cadastro, você ainda pode chegar a zerar sua conta de luz indicando novos assinantes pelo nosso programa de cashback.
 
-Bora fazer seu cadastro agora? Pra iniciar, só preciso de uma foto ou PDF da sua fatura. 😉`;
+Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só preciso de uma foto ou PDF da sua última fatura. 😉`;
     } else {
-      deterministicText = `${nome ? nome + ", " : ""}com a ${distribuidora || "sua distribuidora"} a iGreen tem uma faixa oficial de economia. Me envia uma foto ou PDF da sua última fatura que eu já calculo o valor exato. 😊`;
+      deterministicText = `${nome ? nome + ", " : ""}com a ${distribuidora || "sua distribuidora"} a iGreen tem uma faixa oficial de economia. Me envia uma foto ou PDF da sua última fatura pra eu iniciar a verificação do seu cadastro. 😊`;
     }
     patch.extras = {
       ...(patch.extras as object ?? currentExtras),
@@ -330,6 +330,9 @@ Bora fazer seu cadastro agora? Pra iniciar, só preciso de uma foto ou PDF da su
         byte_size: ctx.media.byte_size,
       },
     });
+    // IA silencia neste turno — o texto final (aprovação/pedido de RG OU rejeição)
+    // é gerado pelo orquestrador APÓS o resultado da tool, evitando "tô conferindo".
+    deterministicText = "";
   }
 
   if (stage === "invoice_rejected_reply") {
@@ -368,7 +371,7 @@ Bora fazer seu cadastro agora? Pra iniciar, só preciso de uma foto ou PDF da su
     // Determina o CTA pendente para amarrar a resposta da FAQ ao próximo passo.
     const faturaPedida = !!currentExtras.discount_lookup_done || (ctx.state.etapa_funil ?? "") === "fatura_enviada";
     const cta = faturaPedida
-      ? "Pra eu já calcular sua economia exata, me manda uma foto ou PDF da sua última fatura, pode ser?"
+      ? "Pra eu iniciar a verificação do seu cadastro, me manda uma foto ou PDF da sua última fatura, pode ser?"
       : "Quer que eu te mostre quanto dá pra economizar?";
     let answer = "";
     switch (topic) {
@@ -455,9 +458,9 @@ Bora fazer seu cadastro agora? Pra iniciar, só preciso de uma foto ou PDF da su
 
 E não é só isso: depois do seu cadastro, você ainda pode chegar a zerar sua conta de luz indicando novos assinantes pelo nosso programa de cashback.
 
-Bora fazer seu cadastro agora? Pra iniciar, só preciso de uma foto ou PDF da sua fatura. 😉`;
+Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só preciso de uma foto ou PDF da sua última fatura. 😉`;
         } else {
-          deterministicText = `${nome ? nome + ", " : ""}com a ${distribuidora || "sua distribuidora"} a iGreen tem uma faixa oficial de economia. Me envia uma foto ou PDF da sua última fatura que eu já calculo o valor exato. 😊`;
+          deterministicText = `${nome ? nome + ", " : ""}com a ${distribuidora || "sua distribuidora"} a iGreen tem uma faixa oficial de economia. Me envia uma foto ou PDF da sua última fatura pra eu iniciar a verificação do seu cadastro. 😊`;
         }
         patch.extras = {
           ...(patch.extras as object ?? mergedExtras),
@@ -598,7 +601,7 @@ function fallbackText(stage: string): string {
     case "ask_estado": return "Perfeito. E em qual estado você está?";
     case "ask_distribuidora": return "Beleza. Qual é a sua distribuidora de energia?";
     case "ask_name": return "Pra ficar mais fácil, como posso te chamar?";
-    case "request_invoice": return "Agora me manda sua última fatura (PDF ou foto)? Assim eu calculo sua economia exata.";
+    case "request_invoice": return "Agora me manda sua última fatura (PDF ou foto)? Assim eu já inicio a verificação do seu cadastro.";
     case "waiting_invoice": return "Perfeito, fico no aguardo da fatura.";
     case "ask_full_name_cpf": return "Pra preparar seu contrato, me passa por favor seu nome completo e CPF?";
     case "simulate_discount": return "Com base na sua distribuidora e estado, conseguimos aplicar a faixa oficial de economia da iGreen. Posso seguir com o cálculo exato a partir da sua última fatura?";
