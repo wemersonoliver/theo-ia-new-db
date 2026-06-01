@@ -15,7 +15,10 @@ export interface RetryOptions {
 
 const defaultClassify = (err: unknown): RetryClass => {
   const msg = String((err as Error)?.message ?? err ?? "");
-  if (/4\d\d|invalid|unauthor|forbid/i.test(msg)) return "provider_4xx";
+  // 5xx → transient (provedor instável). Conferir ANTES de 4xx para não
+  // confundir "502" com classificações 4xx.
+  if (/\b5\d\d\b|evolution_send_5\d\d|timeout|ETIMEDOUT|ECONNRESET|fetch failed|network/i.test(msg)) return "transient";
+  if (/\b4\d\d\b|invalid|unauthor|forbid/i.test(msg)) return "provider_4xx";
   if (/budget|quota|cap/i.test(msg)) return "budget";
   return "transient";
 };
