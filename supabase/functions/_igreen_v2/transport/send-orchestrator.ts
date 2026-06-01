@@ -167,8 +167,13 @@ export async function sendOrchestrated(args: SendOrchestratorArgs): Promise<Send
       await sendTyping({ evolutionUrl, evolutionKey, instance: args.instance, phone: args.phone, durationMs: Math.min(typingMs, c.jitter_ms) });
       await new Promise((r) => setTimeout(r, c.jitter_ms));
       try {
-        const id = await withTimeout("transport.send", DEFAULT_TIMEOUTS.transportMs, () =>
-          withBackoff(() => realSendText({ url: evolutionUrl, key: evolutionKey, instance: args.instance, phone: args.phone, text: c.text })),
+        // Retry mais resiliente para o transporte: 5 tentativas, jitter exponencial
+        // até 15s. Cobre instabilidade momentânea da Evolution (5xx).
+        const id = await withTimeout("transport.send", DEFAULT_TIMEOUTS.transportMs * 3, () =>
+          withBackoff(
+            () => realSendText({ url: evolutionUrl, key: evolutionKey, instance: args.instance, phone: args.phone, text: c.text }),
+            { attempts: 5, baseMs: 800, maxMs: 15000 },
+          ),
         );
         await recordEvent({
           correlation_id: args.correlation_id,
