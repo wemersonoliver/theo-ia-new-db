@@ -371,7 +371,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
     // Determina o CTA pendente para amarrar a resposta da FAQ ao próximo passo.
     const faturaPedida = !!currentExtras.discount_lookup_done || (ctx.state.etapa_funil ?? "") === "fatura_enviada";
     const cta = faturaPedida
-      ? "Pra eu já calcular sua economia exata, me manda uma foto ou PDF da sua última fatura, pode ser?"
+      ? "Pra eu iniciar a verificação do seu cadastro, me manda uma foto ou PDF da sua última fatura, pode ser?"
       : "Quer que eu te mostre quanto dá pra economizar?";
     let answer = "";
     switch (topic) {
