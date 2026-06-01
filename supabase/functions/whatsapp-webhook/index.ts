@@ -613,7 +613,7 @@ serve(async (req) => {
         
         let content: string;
         let messageType: "text" | "audio" | "image" | "video" | "document" = "text";
-        let persistedMedia: { url: string; mime: string; filename: string } | null = null;
+        let persistedMedia: { url: string; mime: string; filename: string; size?: number } | null = null;
         let aiContent: string | null = null;
         const evolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
         const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
@@ -781,6 +781,7 @@ serve(async (req) => {
             outgoingMessage.media_url = persistedMedia.url;
             outgoingMessage.media_mime = persistedMedia.mime;
             outgoingMessage.media_filename = persistedMedia.filename;
+            if (persistedMedia.size) outgoingMessage.media_size = persistedMedia.size;
           }
 
           if (conversation) {
@@ -873,6 +874,7 @@ serve(async (req) => {
           newMessage.media_url = persistedMedia.url;
           newMessage.media_mime = persistedMedia.mime;
           newMessage.media_filename = persistedMedia.filename;
+          if (persistedMedia.size) newMessage.media_size = persistedMedia.size;
         }
 
         // Helper function to check if message contains trigger keywords
