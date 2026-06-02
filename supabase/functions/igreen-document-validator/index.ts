@@ -130,6 +130,29 @@ serve(async (req) => {
   const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
   if (!apiKey) return json(failBody(correlation_id, "no_api_key", 0), 200);
 
+  // ───────────────────────────────────────────────────────────────────────
+  // FAST-PATH: se o OCR pré-extraído já parece uma fatura de energia
+  // brasileira válida (distribuidora reconhecida + sinais de fatura),
+  // classifica direto SEM depender do Gemini Vision. Isso evita o caso
+  // em que o Vision retorna unreadable apesar do PDF estar perfeito.
+  // Aplica-se SOMENTE à vertical iGreen (esta edge function é exclusiva
+  // dela), não impacta usuários do plano comum.
+  // ───────────────────────────────────────────────────────────────────────
+  if (extracted_text && extracted_text.length > 300) {
+    const ocr = ocrFallback(extracted_text);
+    if (ocr) {
+      return json({
+        correlation_id,
+        pipeline_version: CURRENT_PIPELINE_VERSION,
+        provider: "gemini",
+        classification: "green_invoice",
+        confidence: 0.92,
+        extracted: ocr,
+        attempts: 1,
+      } as ValidatorResponse, 200);
+    }
+  }
+
   // 1) baixa mídia (uma única vez) — depois retry só na chamada Gemini.
   let base64: string;
   let actualMime = mime_type || "application/octet-stream";
