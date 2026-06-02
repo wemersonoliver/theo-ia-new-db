@@ -32,6 +32,7 @@ export function buildGreenUserPrompt(args: {
     consumo_medio: extras.consumo_medio ?? null,
     estado: extras.estado ?? null,
     distribuidora: extras.distribuidora ?? null,
+    valor_fatura: extras.valor_fatura ?? null,
     client_name: extras.client_name ?? null,
     greeted: !!extras.greeted,
   };

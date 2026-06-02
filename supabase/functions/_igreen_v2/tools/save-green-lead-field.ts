@@ -30,7 +30,7 @@ interface Args {
   value: string;
 }
 
-function normalize(field: string, value: string): { col: string; payload: Record<string, unknown> } | null {
+function normalize(field: string, value: string): { col: string; payload: Record<string, unknown>; extrasValue?: unknown } | null {
   const v = (value ?? "").toString().trim();
   if (!v) return null;
   switch (field) {
@@ -38,7 +38,14 @@ function normalize(field: string, value: string): { col: string; payload: Record
       const digits = v.replace(/[^0-9.,]/g, "").replace(/\./g, "").replace(",", ".");
       const num = Number.parseFloat(digits);
       if (!Number.isFinite(num) || num <= 0) return null;
-      return { col: "valor_fatura_cents", payload: { valor_fatura_cents: Math.round(num * 100) } };
+      // Persistimos centavos no banco mas devolvemos o valor em REAIS para
+      // o extras (extras.valor_fatura deve ser sempre em reais). Sem isso o
+      // patch gravava 50000 em extras quando o cliente dizia "500".
+      return {
+        col: "valor_fatura_cents",
+        payload: { valor_fatura_cents: Math.round(num * 100) },
+        extrasValue: num,
+      };
     }
     case "estado": {
       const uf = v.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
@@ -99,7 +106,12 @@ export const saveGreenLeadFieldTool: ToolDefinition<Args> = {
         payload: { field: args.field },
       }],
       suggested_state_patch: {
-        extras: { ...currentExtras, [args.field]: norm.payload[Object.keys(norm.payload)[0]] },
+        extras: {
+          ...currentExtras,
+          [args.field]: norm.extrasValue !== undefined
+            ? norm.extrasValue
+            : norm.payload[Object.keys(norm.payload)[0]],
+        },
       },
       data: { field: args.field, persisted: true },
     };

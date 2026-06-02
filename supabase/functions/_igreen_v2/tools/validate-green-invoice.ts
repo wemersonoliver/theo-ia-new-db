@@ -145,9 +145,10 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
         .eq("phone", ctx.phone)
         .maybeSingle();
       const msgs = Array.isArray(conv?.messages) ? (conv!.messages as any[]) : [];
-      for (let i = msgs.length - 1; i >= 0; i--) {
+      // 1) Match exato por media_url.
+      for (let i = msgs.length - 1; i >= 0 && !extractedText; i--) {
         const m = msgs[i] ?? {};
-        if (m.media_url === args.media_url) {
+        if (m.media_url && m.media_url === args.media_url) {
           if (typeof m.ai_content === "string" && m.ai_content.trim().length > 50) {
             extractedText = m.ai_content;
           }
@@ -155,9 +156,37 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
           break;
         }
       }
+      // 2) Fallback: última mensagem recebida com mídia (document/image) que
+      //    tenha ai_content longo. Cobre webhooks que regravam a URL após o OCR.
+      if (!extractedText) {
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const m = msgs[i] ?? {};
+          if (m.from_me === true) continue;
+          if (m.media_type !== "document" && m.media_type !== "image") continue;
+          if (typeof m.ai_content === "string" && m.ai_content.trim().length > 200) {
+            extractedText = m.ai_content;
+            if (!filenameHint && typeof m.media_filename === "string") filenameHint = m.media_filename;
+            break;
+          }
+        }
+      }
     } catch (e) {
       console.error("[validate_green_invoice] extracted_text lookup failed", e);
     }
+    // Trace pra confirmar que o OCR está chegando no validator.
+    try {
+      const { trace } = await import("../observability/trace.ts");
+      await trace({
+        account_id: ctx.account_id, phone: ctx.phone,
+        step: "validate_green_invoice.extracted_text", level: "standard",
+        payload: {
+          found: !!extractedText,
+          length: extractedText?.length ?? 0,
+          filename: filenameHint,
+        },
+        correlation_id,
+      });
+    } catch { /* non-blocking */ }
     let validator: any = { classification: "unreadable", confidence: 0, extracted: {}, attempts: 0, error: "no_response" };
     try {
       const r = await fetch(url, {

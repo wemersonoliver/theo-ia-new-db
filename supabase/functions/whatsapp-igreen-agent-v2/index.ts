@@ -470,6 +470,21 @@ serve(async (req) => {
         ?? (validateResult.result?.data?.reason as string | undefined)
         ?? "",
     );
+    // Trace de diagnóstico — sem isso ficamos cegos quando agentResult.messages
+    // continua vazio após validate_green_invoice.
+    await trace({
+      account_id, phone, step: "post_validate_invoice.inspect", level: "standard",
+      payload: {
+        has_data: !!validateResult.data,
+        success: validateResult.success ?? null,
+        skipped: validateResult.skipped ?? null,
+        final: final || null,
+        media_reason: mediaReason || null,
+        classification: validateResult.data?.classification ?? null,
+        confidence: validateResult.data?.confidence ?? null,
+      },
+      correlation_id,
+    });
     const prefix = nome ? `${nome}, ` : "";
     let postText = "";
     if (final === "approve" || final === "soft_confirm") {
@@ -504,6 +519,27 @@ serve(async (req) => {
         account_id, phone,
         patch: { extras: { ...extras, invoice_rejected_notified: true, invoice_rejected_notified_at: new Date().toISOString() } },
         events: [],
+        source: "post_validate_invoice",
+        correlation_id,
+      });
+    } else if (validateResult.success !== false) {
+      // FAIL-SAFE — tool rodou mas não devolveu `final` reconhecido (ex.: data
+      // undefined ou shape inesperado). Em vez de silenciar o cliente, pedimos
+      // reenvio e marcamos como rejeitado para destravar o próximo turno.
+      postText = `${prefix}não consegui processar sua fatura agora. Pode reenviar como PDF ou uma foto bem nítida da última conta, por favor?`;
+      await applyPatch({
+        account_id, phone,
+        patch: {
+          extras: {
+            ...extras,
+            invoice_rejected_notified: true,
+            invoice_rejected_notified_at: new Date().toISOString(),
+            last_media_reject_reason: "no_validator_result",
+          },
+          document_status: "rejected" as any,
+        },
+        events: [{ type: "invoice_rejected", priority: "high", source: "post_validate_invoice",
+          payload: { reason: "no_validator_result" } }],
         source: "post_validate_invoice",
         correlation_id,
       });
