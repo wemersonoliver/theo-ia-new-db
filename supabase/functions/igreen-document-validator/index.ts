@@ -141,6 +141,7 @@ serve(async (req) => {
   if (extracted_text && extracted_text.length > 300) {
     const ocr = ocrFallback(extracted_text);
     if (ocr) {
+      console.log(`[igreen-document-validator] fast-path HIT distributor=${ocr.distributor ?? "?"} kwh=${ocr.energy_consumption_kwh ?? "?"} len=${extracted_text.length}`);
       return json({
         correlation_id,
         pipeline_version: CURRENT_PIPELINE_VERSION,
@@ -150,7 +151,11 @@ serve(async (req) => {
         extracted: ocr,
         attempts: 1,
       } as ValidatorResponse, 200);
+    } else {
+      console.log(`[igreen-document-validator] fast-path MISS len=${extracted_text.length} reason=ocr_signals_not_matched`);
     }
+  } else {
+    console.log(`[igreen-document-validator] fast-path SKIP extracted_text_len=${extracted_text?.length ?? 0}`);
   }
 
   // 1) baixa mídia (uma única vez) — depois retry só na chamada Gemini.
