@@ -130,6 +130,29 @@ serve(async (req) => {
   const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
   if (!apiKey) return json(failBody(correlation_id, "no_api_key", 0), 200);
 
+  // ───────────────────────────────────────────────────────────────────────
+  // FAST-PATH: se o OCR pré-extraído já parece uma fatura de energia
+  // brasileira válida (distribuidora reconhecida + sinais de fatura),
+  // classifica direto SEM depender do Gemini Vision. Isso evita o caso
+  // em que o Vision retorna unreadable apesar do PDF estar perfeito.
+  // Aplica-se SOMENTE à vertical iGreen (esta edge function é exclusiva
+  // dela), não impacta usuários do plano comum.
+  // ───────────────────────────────────────────────────────────────────────
+  if (extracted_text && extracted_text.length > 300) {
+    const ocr = ocrFallback(extracted_text);
+    if (ocr) {
+      return json({
+        correlation_id,
+        pipeline_version: CURRENT_PIPELINE_VERSION,
+        provider: "gemini",
+        classification: "green_invoice",
+        confidence: 0.92,
+        extracted: ocr,
+        attempts: 1,
+      } as ValidatorResponse, 200);
+    }
+  }
+
   // 1) baixa mídia (uma única vez) — depois retry só na chamada Gemini.
   let base64: string;
   let actualMime = mime_type || "application/octet-stream";
@@ -254,9 +277,11 @@ const KNOWN_DISTRIBUTORS = [
 
 function ocrFallback(text: string): ExtractedFields | null {
   const t = text.replace(/\s+/g, " ");
-  // Precisa indicar fatura de energia: presença de kWh + valor a pagar.
-  const hasKwh = /\b\d{2,5}\s*(kwh|kw\/h)\b/i.test(t);
-  const hasTotal = /(total\s+a\s+pagar|valor\s+a\s+pagar|r\$\s*\d{1,3}(\.\d{3})*,\d{2})/i.test(t);
+  // Sinais de fatura de energia brasileira (qualquer um basta):
+  //  - kWh em qualquer posição (antes OU depois dos dígitos)
+  //  - "Total a pagar", "Valor a pagar", "Total Apurado" ou valor R$ formatado
+  const hasKwh = /\bkwh\b|\bkw\/h\b/i.test(t);
+  const hasTotal = /(total\s+a\s+pagar|valor\s+a\s+pagar|total\s+apurado|r\$\s*\d{1,3}(\.\d{3})*,\d{2})/i.test(t);
   if (!hasKwh && !hasTotal) return null;
 
   // Distribuidora conhecida
@@ -277,16 +302,19 @@ function ocrFallback(text: string): ExtractedFields | null {
   // Consumo kWh
   let kwh: number | undefined;
   const kwhMatch = t.match(/(\d{2,5})\s*(?:kwh|kw\/h)\b/i)
-    ?? t.match(/total\s+apurado\s+(\d{2,5})/i);
+    ?? t.match(/\bkwh\s*\|\s*(\d{2,5})/i)
+    ?? t.match(/total\s+apurado\s+(\d{2,5})/i)
+    ?? t.match(/consumo[^0-9]{0,30}(\d{2,5})\s*kwh/i);
   if (kwhMatch) {
     const n = Number(kwhMatch[1]);
     if (Number.isFinite(n) && n > 0 && n < 50000) kwh = n;
   }
 
-  // CPF mascarado / qualquer documento
+  // CPF mascarado / qualquer documento (aceita formatos com asteriscos)
   let docId: string | undefined;
-  const cpfMatch = t.match(/\b(\d{3}[\.\s]?\*{0,3}\d{0,3}[\.\s]?\d{0,3}[-\s]?\d{2})\b/);
-  if (cpfMatch) docId = cpfMatch[1];
+  const cpfMatch = t.match(/\*{2,3}\.?\d{3}\.?\d{3}-?\*{2}/)
+    ?? t.match(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/);
+  if (cpfMatch) docId = cpfMatch[0];
 
   return {
     holder_name: holder,
