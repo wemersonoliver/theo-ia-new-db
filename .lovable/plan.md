@@ -1,83 +1,89 @@
-## Diagnóstico da conversa `5547989118695`
+# Plano: Fallback OpenAI (ChatGPT) para Gemini
 
-Cruzei `igreen_traces`, `igreen_document_validations` e `whatsapp_conversations`. Três problemas independentes, todos no fluxo iGreen.
+## Objetivo
+Adicionar OpenAI como **fallback automático** sempre que uma chamada ao Gemini falhar (timeout, 429, 5xx, JSON inválido, safety block). Sem mudar comportamento padrão — Gemini continua sendo o provider primário.
 
-### Problema 1 — IA ficou muda após o PDF (o "parou após fatura")
-
-Sequência às 19:15:
-1. Cliente envia PDF da fatura Celesc (PDF perfeito, OCR completo no `ai_content`).
-2. Supervisor decide `send_document → green` (ok).
-3. Specialist green chama `validate_green_invoice` — `specialist_completed messages_count: 0` (já não gerou texto nessa passada).
-4. Tool retorna **rejected/unreadable** (problema 2 abaixo).
-5. State-engine: `apply_patch.invalid_transition_dropped from: qualificacao to: fatura_rejeitada` — transição derrubada.
-6. `behavior_chunks_generated count: 0` → **nenhum chunk de fala foi enviado**.
-
-**Causa:** quando uma fatura é rejeitada o specialist depende de uma segunda passada para falar com o cliente, mas a transição de `etapa_funil` é bloqueada pelo state-machine e o specialist não compõe mensagem nesse turno → silêncio total. Já existe a flag `invoice_rejected_notified: false` em `extras`, mas nada lê isso pra disparar a fala.
-
-### Problema 2 — Validator retornou `unreadable` mesmo com OCR completo
-
-O `ai_content` da mensagem do PDF tem o conteúdo inteiro da fatura Celesc (titular, CPF mascarado, kWh, Total a Pagar). A rodada anterior já tinha implementado o "fast-path" em `igreen-document-validator` para reconhecer esse caso e retornar `green_invoice` confidence 0.92 sem depender do Gemini Vision.
-
-**Mas o validator devolveu `classification: unreadable, confidence: 0`.** Não há **nenhum log** da função `igreen-document-validator` para essa execução (consultei `function_edge_logs`). Indícios fortes de que:
-- ou a última versão do código do validator **não foi efetivamente publicada**, e o cliente está rodando a versão antiga (sem fast-path), ou
-- o `extracted_text` não está chegando até o validator (a busca em `whatsapp_conversations.messages` falhou silenciosamente).
-
-A ação aqui é (a) forçar redeploy do `igreen-document-validator`, (b) instrumentar logs explícitos quando entra/sai do fast-path, (c) endurecer a busca do `extracted_text` em `tools/validate-green-invoice.ts` (procurar também `m.content`, casar por `media_filename` ou pelas últimas 3 mensagens com mídia, não apenas exact-match em `media_url`).
-
-### Problema 3 — Pedidos duplicados de consumo / dados perguntados várias vezes
-
-Entre 18:50 e 19:10 o agent ficou repetindo perguntas. Trace mostra:
-- 18:55:07 `consumo_medio: 500` já salvo.
-- 18:56:09 IA repete pergunta de distribuidora (mesmo já tendo `distributors_options: [Celesc]`).
-- 19:09:53 IA pergunta distribuidora outra vez (já tinha `distribuidora: Celesc`).
-- 19:10:57 valor da fatura salvo como `valor_fatura: 50000` (provavelmente cliente disse "500" e ferramenta multiplicou por 100 esperando centavos) — depois corrigido para `500`.
-
-**Causa:** o prompt do specialist green não está checando `extras.consumo_medio`, `extras.distribuidora`, `extras.valor_fatura` antes de perguntar. Também a normalização do `valor_fatura` em `save_green_lead_field` está inconsistente (às vezes em reais, às vezes em centavos).
+## Princípio central
+Criar **uma única camada** (`_shared/ai-provider`) que todas as edge functions passam a usar. Nada de duplicar lógica de retry/fallback em cada função.
 
 ---
 
-## Plano de correção (apenas vertical iGreen, sem mexer no plano comum)
+## Etapa 1 — Secret
+- Adicionar secret `OPENAI_API_KEY` (via tool de secrets, usuário cola a chave).
+- Opcional: `OPENAI_FALLBACK_MODEL` (default: `gpt-4o-mini` para texto, `gpt-4o` para vision).
 
-### 1. Garantir que o specialist green SEMPRE fale após rejeição de fatura
-Arquivo: `supabase/functions/_igreen_v2/agents/green/run.ts`
+## Etapa 2 — Camada compartilhada
+Criar `supabase/functions/_shared/ai-provider/`:
 
-- Após `validate_green_invoice` retornar com `document_status: rejected` (ou evento `invoice_rejected`), adicionar lógica determinística: se `extras.invoice_rejected_notified !== true`, **forçar** uma mensagem de fala no mesmo turno (não depender de segunda passada do LLM) com o motivo (`reject_unreadable` → "Não consegui ler a fatura, pode reenviar uma foto mais nítida ou outro PDF?"; `reject_holder_mismatch` → mensagem específica; `reject_not_invoice` → idem).
-- Marcar `extras.invoice_rejected_notified: true` no mesmo patch.
-- Não tocar o state-machine de `etapa_funil` quando a transição for inválida (apenas atualizar `extras` + `document_status`).
+- `gemini.ts` — wrapper atual do Gemini (texto, vision, JSON mode, tool calling).
+- `openai.ts` — wrapper equivalente OpenAI (Chat Completions API, vision via `image_url` base64, JSON mode, function calling traduzido).
+- `index.ts` — função `callAI({ task, messages, tools?, json?, image? })` que:
+  1. Tenta Gemini (com retry exponencial já existente para 429).
+  2. Se falhar após N tentativas OU classificar como "erro permanente" → chama OpenAI.
+  3. Loga em `igreen_model_routing` (ou tabela equivalente) com `provider`, `fallback_reason`, `latency_ms`.
+- `translate-tools.ts` — converte schemas de tools Gemini ↔ OpenAI (formato `function` vs `functionDeclarations`).
 
-### 2. Corrigir o state-engine para não engolir o turno
-Arquivo: `supabase/functions/_igreen_v2/state-engine/apply.ts` (ou similar)
+## Etapa 3 — Mapeamento de modelos
+| Tarefa | Gemini (primário) | OpenAI (fallback) |
+|---|---|---|
+| Texto rápido / classificação | gemini-2.5-flash-lite | gpt-4o-mini |
+| Texto balanceado | gemini-2.5-flash | gpt-4o-mini |
+| Reasoning pesado | gemini-2.5-pro | gpt-4o |
+| Vision (OCR fatura) | gemini-2.5-flash (vision) | gpt-4o (vision) |
+| Tool calling (supervisor / agents) | gemini-2.5-flash | gpt-4o-mini |
 
-- Quando `apply_patch.invalid_transition_dropped` ocorrer, ainda assim **aplicar** os campos válidos do patch (já faz) **e emitir um warning trace** (já faz) — adicionar guard no orquestrador para garantir que se o specialist devolveu 0 mensagens E o tool foi terminal (rejection/approval), dispara um fallback de fala (reuso do failsafe).
+## Etapa 4 — Critérios de fallback
+Disparar OpenAI quando Gemini retornar:
+- HTTP 429 após esgotar retries (3x backoff).
+- HTTP 5xx.
+- Timeout (>8s supervisor, >15s specialist, >30s vision).
+- Resposta vazia / `finishReason: SAFETY` / JSON malformado em modo estruturado.
+- Circuit breaker já existente (`provider-health/circuit-breaker.ts`) em estado `open` para o modelo Gemini.
 
-### 3. Validator — garantir fast-path funcional
-Arquivos: `supabase/functions/igreen-document-validator/index.ts`, `supabase/functions/_igreen_v2/tools/validate-green-invoice.ts`
+Integrar com o `model-router/selector.ts` existente: adicionar OpenAI como próximo elo na `FALLBACK_CHAIN` quando todos os Gemini estiverem degradados.
 
-- Adicionar `console.log` explícitos no validator: "fast-path hit" / "fast-path miss reason=<...>" para diagnóstico futuro.
-- Em `validate-green-invoice.ts`, robustecer a busca do texto OCR:
-  - Procurar a mensagem por `media_url` exato OU por `media_filename` OU pela última mensagem com `media_type IN ('document','image')` nas últimas 5 mensagens recebidas (`from_me=false`).
-  - Adicionar trace `validate_green_invoice.extracted_text_found` com `length` para confirmar que o OCR está passando.
-- Forçar redeploy do `igreen-document-validator` (a ausência total de logs sugere que a versão atual não está sendo executada).
+## Etapa 5 — Funções a migrar (ordem)
+Prioridade alta (caminho crítico iGreen):
+1. `_igreen_v2/supervisor/decide.ts`
+2. `_igreen_v2/agents/green/*` (run/stages)
+3. `igreen-document-validator` (vision da fatura)
+4. `whatsapp-ai-agent` (SaaS genérico)
 
-### 4. Evitar repetição de perguntas no specialist green
-Arquivo: `supabase/functions/_igreen_v2/agents/green/prompt.ts` (ou onde monta o contexto)
+Prioridade média:
+5. `process-image-ocr`
+6. `transcribe-audio` (já usa Groq — manter, não precisa fallback aqui)
+7. `interview-ai-agent`, `prompt-generator-ai`, `test-ai-prompt`
 
-- Adicionar no prompt do green um bloco "DADOS JÁ COLETADOS" listando explicitamente `client_name`, `estado`, `distribuidora`, `consumo_medio`, `valor_fatura` quando preenchidos, com instrução: "NÃO pergunte novamente esses campos".
-- Em `save_green_lead_field`, normalizar `valor_fatura` para sempre reais (number, sem multiplicação por 100). Hoje a IA passa 500 e às vezes vira 50000.
+Prioridade baixa:
+8. Funções de geração de texto pontual (`support-ai-agent`, etc.)
 
-### 5. Reset do número de teste após o deploy
-Migration para limpar `igreen_traces`, `igreen_transport_events`, `igreen_document_validations`, `igreen_conversation_state`, `whatsapp_pending_responses` e zerar `messages` da conversa de `5547989118695`. Reaproveita o template das rodadas anteriores.
+Em cada função: trocar `fetch(generativelanguage.googleapis.com...)` por `callAI(...)`.
 
----
+## Etapa 6 — Observabilidade
+- Trace `ai_provider.fallback_triggered` com `{ from: "gemini-x", to: "openai-y", reason, attempts }`.
+- Painel em `/admin/ai-costs`: contador de fallbacks por dia + custo OpenAI.
+- Alerta no admin se taxa de fallback > 10% (sinal de Gemini degradado).
 
-## Validação
+## Etapa 7 — Custos
+Registrar uso OpenAI em `ai_usage` (já existente) com `provider: "openai"`. Reusar `logTextUsage` / `logImageUsage` adicionando campo provider.
 
-- Reenviar a fatura Celesc → validator deve retornar `green_invoice` confidence 0.92 (fast-path), e logs do validator devem mostrar "fast-path hit".
-- Forçar uma fatura ruim (foto borrada) → IA deve responder pedindo reenvio em ≤ 1 turno, nunca ficar muda.
-- Mandar "minha conta vem uns 500 reais" → `valor_fatura` deve ficar `500`, e a IA não deve perguntar valor de novo na próxima mensagem.
+## Etapa 8 — Testes
+- Teste manual: setar `GOOGLE_GEMINI_API_KEY` inválido temporariamente em uma função → verificar fallback.
+- Teste unitário Deno em `_shared/ai-provider/index_test.ts` mockando 429.
+- Validar fluxo iGreen real com o número 5547989118695 após deploy.
 
----
+## Detalhes técnicos
+- **JSON mode OpenAI**: usar `response_format: { type: "json_object" }` (requer "json" no prompt).
+- **Tool calling**: schema OpenAI usa `{ type: "function", function: { name, description, parameters } }`; Gemini usa `functionDeclarations`. O tradutor cuida disso.
+- **Vision OpenAI**: enviar imagem como `{ type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } }` (precisa do prefixo `data:` — oposto da Evolution API).
+- **Streaming**: nenhuma função atual precisa, ignorar.
+- **Não tocar** no Groq (Whisper) nem no ElevenLabs.
 
-## Pergunta pra você antes de implementar
+## Entregáveis
+- 1 secret novo.
+- 1 pasta `_shared/ai-provider/` com 4 arquivos.
+- ~8 funções refatoradas (substituição de chamadas).
+- 1 migração: coluna `provider` em `ai_usage` e `igreen_model_routing`.
+- Painel admin com métrica de fallback.
 
-**Posso prosseguir com este plano?** E sim, se você anexar uma foto borrada / má qualidade da fatura, consigo simular o caminho "rejeitado" e validar o fix #1 com mais segurança — mas não é obrigatório, o reset + reenvio do PDF Celesc atual já cobre o caminho feliz.
+Tempo estimado: 2 sessões. Posso começar pela Etapa 1+2 (camada + supervisor + igreen-document-validator) que já cobre 80% do risco atual.
