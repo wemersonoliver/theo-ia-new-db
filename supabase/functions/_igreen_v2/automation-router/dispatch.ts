@@ -32,7 +32,7 @@ function planFromEvents(events: IgreenEvent[]): PlannedAutomation[] {
         plan.push({ name: "handoff", args: { reason: String(p.reason ?? ev.type) } });
         break;
       case "invoice_approved":
-        plan.push({ name: "tagging", args: { tag: "fatura_ok" } });
+        plan.push({ name: "tagging", args: { tag: "enviou fatura" } });
         break;
       case "invoice_rejected":
         plan.push({ name: "tagging", args: { tag: "fatura_rejeitada" } });

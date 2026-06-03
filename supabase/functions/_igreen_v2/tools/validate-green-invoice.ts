@@ -288,11 +288,23 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
         patch.fatura_valida = true;
         patch.holder_match = holder.status === "match";
         events.push({ type: "invoice_approved", priority: "high", source: "tool", payload: {} });
+        patch.extras = {
+          ...((ctx.state.extras ?? {}) as Record<string, unknown>),
+          invoice_validated_match: holder.status === "match",
+          invoice_match_third_party: holder.status !== "match",
+          invoice_holder_name: holderName ?? null,
+          last_media_reject_reason: null,
+          invoice_rejected_notified: false,
+        };
         break;
       case "soft_confirm":
         patch.document_status = "awaiting_soft_confirm";
         events.push({ type: "invoice_soft_confirm_requested", priority: "high", source: "tool",
           payload: { holder_name: holderName } });
+        patch.extras = {
+          ...((ctx.state.extras ?? {}) as Record<string, unknown>),
+          invoice_holder_name: holderName ?? null,
+        };
         break;
       case "reject_holder_mismatch":
         patch.document_status = "rejected";

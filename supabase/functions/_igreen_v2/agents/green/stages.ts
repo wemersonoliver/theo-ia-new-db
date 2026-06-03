@@ -131,6 +131,12 @@ export function decideGreenStage(
     return "validate_invoice";
   }
 
+  // Mídia recebida APÓS fatura validada → é o documento de identidade (RG/CNH).
+  // Roteia direto para validate_identity, evitando re-disparar validate_invoice.
+  if (hasMedia && etapa === "fatura_validada") {
+    return "validate_identity";
+  }
+
   // Fatura recebida mas rejeitada silenciosamente — precisamos avisar o cliente
   // e pedir reenvio em vez de repetir "fico aguardando".
   if (!hasMedia && documentStatus === "rejected" &&
