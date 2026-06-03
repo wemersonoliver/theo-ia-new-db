@@ -14,6 +14,7 @@ const TOOL_STAGE_COMPAT: Record<string, string[]> = {
   set_product: ["novo", "qualificacao"],
   set_stage: ["novo", "qualificacao", "fatura_enviada", "fatura_rejeitada", "fatura_validada", "documento_enviado", "documento_validado"],
   validate_green_invoice: ["qualificacao", "fatura_enviada", "fatura_rejeitada"],
+  validate_green_identity: ["fatura_validada", "documento_enviado"],
   noop: ["novo", "qualificacao", "fatura_enviada", "fatura_rejeitada", "fatura_validada", "documento_enviado", "documento_validado", "handoff", "fechado", "descartado"],
 };
 

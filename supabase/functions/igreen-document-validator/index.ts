@@ -47,7 +47,9 @@ interface ValidatorResponse {
   correlation_id: string | null;
   pipeline_version: number;
   provider: "gemini" | "openai";
-  classification: "green_invoice" | "other_invoice" | "unreadable" | "not_invoice";
+  classification:
+    | "green_invoice" | "other_invoice" | "unreadable" | "not_invoice"
+    | "cnh" | "rg" | "identity" | "not_identity";
   confidence: number;
   extracted: ExtractedFields;
   attempts: number;
@@ -77,6 +79,26 @@ Responda APENAS JSON com as chaves:
 - "unreadable" se ilegível.
 Não inclua texto fora do JSON.`;
 
+const SYSTEM_IDENTITY = `Você é um classificador OCR de documentos de identidade brasileiros (RG ou CNH).
+Receberá uma imagem ou PDF, e PODE receber também um texto OCR pré-extraído (campo extracted_text).
+Use AMBOS como evidência.
+Responda APENAS JSON com as chaves:
+{
+  "classification": "cnh" | "rg" | "identity" | "not_identity" | "unreadable",
+  "confidence": number (0..1),
+  "extracted": {
+    "holder_name": string,   // nome completo do titular do documento (campo NOME ou equivalente)
+    "document_id": string    // CPF ou RG, sem máscara obrigatória
+  }
+}
+- "cnh" se for Carteira Nacional de Habilitação brasileira.
+- "rg" se for Carteira/Cédula de Identidade (RG/RIC) brasileira.
+- "identity" se for outro documento oficial de identificação com foto (passaporte BR, RNE, CNH digital sem clareza de tipo).
+- "not_identity" se NÃO for documento de identidade (ex.: fatura, comprovante, foto pessoal).
+- "unreadable" se ilegível.
+Confidence alta (>=0.9) quando o nome do titular for legível.
+Não inclua texto fora do JSON.`;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
@@ -89,6 +111,11 @@ serve(async (req) => {
   const mime_type = (body.mime_type ?? "").toLowerCase();
   const extracted_text = (body.extracted_text ?? null) as string | null;
   const filename = (body.filename ?? null) as string | null;
+  const kind = (body.kind ?? "invoice") as "invoice" | "identity";
+  const systemPrompt = kind === "identity" ? SYSTEM_IDENTITY : SYSTEM;
+  const userInstruction = kind === "identity"
+    ? "Classifique o documento de identidade abaixo seguindo o JSON especificado."
+    : "Classifique a fatura abaixo seguindo o JSON especificado.";
 
   if (!media_url) return json(failBody(correlation_id, "missing_media_url", 0), 400);
 
@@ -139,7 +166,7 @@ serve(async (req) => {
   // Aplica-se SOMENTE à vertical iGreen (esta edge function é exclusiva
   // dela), não impacta usuários do plano comum.
   // ───────────────────────────────────────────────────────────────────────
-  if (extracted_text && extracted_text.length > 300) {
+  if (kind === "invoice" && extracted_text && extracted_text.length > 300) {
     const ocr = ocrFallback(extracted_text);
     if (ocr) {
       console.log(`[igreen-document-validator] fast-path HIT distributor=${ocr.distributor ?? "?"} kwh=${ocr.energy_consumption_kwh ?? "?"} len=${extracted_text.length}`);
@@ -175,10 +202,14 @@ serve(async (req) => {
   let lastError = "unknown";
   for (let attempt = 1; attempt <= RETRY_DELAYS.length + 1; attempt++) {
     try {
-      const result = await callGemini({ apiKey, base64, mime: actualMime, extractedText: extracted_text, filename });
+      const result = await callGemini({
+        apiKey, base64, mime: actualMime, extractedText: extracted_text, filename,
+        systemPrompt, userInstruction, kind,
+      });
       // Fallback puro-texto: se Gemini Vision falhou mas temos OCR forte,
       // tenta classificar pela estrutura do texto.
       if (
+        kind === "invoice" &&
         (result.classification === "unreadable" || result.confidence < 0.3) &&
         extracted_text && extracted_text.length > 300
       ) {
@@ -214,7 +245,7 @@ serve(async (req) => {
   }
 
   // Última tentativa: se Gemini falhou totalmente mas temos OCR, usa fallback.
-  if (extracted_text && extracted_text.length > 300) {
+  if (kind === "invoice" && extracted_text && extracted_text.length > 300) {
     const ocr = ocrFallback(extracted_text);
     if (ocr) {
       return json({
@@ -235,8 +266,8 @@ serve(async (req) => {
   // ───────────────────────────────────────────────────────────────────────
   try {
     const fb = await openAIVisionFallback({
-      systemPrompt: SYSTEM,
-      userPrompt: "Classifique a fatura abaixo seguindo o JSON especificado. Retorne JSON puro.",
+      systemPrompt,
+      userPrompt: `${userInstruction} Retorne JSON puro.`,
       imageBase64: base64,
       mime: actualMime,
       extraText: extracted_text && extracted_text.length > 50
@@ -267,12 +298,16 @@ serve(async (req) => {
   return json(failBody(correlation_id, lastError, RETRY_DELAYS.length + 1), 200);
 });
 
-async function callGemini(args: { apiKey: string; base64: string; mime: string; extractedText?: string | null; filename?: string | null }) {
+async function callGemini(args: {
+  apiKey: string; base64: string; mime: string;
+  extractedText?: string | null; filename?: string | null;
+  systemPrompt?: string; userInstruction?: string; kind?: "invoice" | "identity";
+}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const userParts: any[] = [
-      { text: "Classifique a fatura abaixo seguindo o JSON especificado." },
+      { text: args.userInstruction ?? "Classifique a fatura abaixo seguindo o JSON especificado." },
     ];
     if (args.filename) {
       userParts.push({ text: `Nome do arquivo: ${args.filename}` });
@@ -289,7 +324,7 @@ async function callGemini(args: { apiKey: string; base64: string; mime: string; 
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM }] },
+          systemInstruction: { parts: [{ text: args.systemPrompt ?? SYSTEM }] },
           contents: [{ role: "user", parts: userParts }],
           generationConfig: { temperature: 0.1, maxOutputTokens: 600, responseMimeType: "application/json" },
         }),
@@ -300,7 +335,9 @@ async function callGemini(args: { apiKey: string; base64: string; mime: string; 
     const j = await res.json();
     const text = j?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
     const parsed = safeParse(text);
-    const classification = normalizeClassification(parsed.classification);
+    const classification = (args.kind === "identity"
+      ? normalizeIdentityClassification(parsed.classification)
+      : normalizeClassification(parsed.classification));
     const confidence = clamp01(Number(parsed.confidence ?? 0));
     const extracted = (parsed.extracted ?? {}) as ExtractedFields;
     return { classification, confidence, extracted };
@@ -369,6 +406,16 @@ function ocrFallback(text: string): ExtractedFields | null {
 function normalizeClassification(c: unknown): ValidatorResponse["classification"] {
   const s = String(c ?? "").toLowerCase();
   if (s === "green_invoice" || s === "other_invoice" || s === "unreadable" || s === "not_invoice") return s;
+  return "unreadable";
+}
+
+function normalizeIdentityClassification(c: unknown): ValidatorResponse["classification"] {
+  const s = String(c ?? "").toLowerCase().trim();
+  if (s === "cnh" || s === "rg" || s === "identity" || s === "not_identity" || s === "unreadable") return s as any;
+  // Aliases comuns devolvidos pelo LLM.
+  if (s.includes("cnh") || s.includes("habilita")) return "cnh";
+  if (s.includes("rg") || s.includes("identidade") || s.includes("cédula") || s.includes("cedula")) return "rg";
+  if (s.includes("not") || s.includes("fatura") || s.includes("invoice") || s.includes("conta")) return "not_identity";
   return "unreadable";
 }
 

@@ -549,6 +549,44 @@ serve(async (req) => {
     }
   }
 
+  // Post-tool deterministic rewrite — validate_green_identity:
+  // aprovação → confirma e inicia cadastro (handoff já marcado pela tool).
+  // rejeição (não é doc OU titular diferente) → pede reenvio do RG/CNH do titular.
+  const identityResult = toolResults.find((r) => r.name === "validate_green_identity");
+  if (identityResult) {
+    const refreshedState: any = (await loadState(account_id, phone)) ?? afterSupervisor;
+    const extras = (refreshedState?.extras ?? {}) as Record<string, unknown>;
+    const nome = (extras.client_name as string | undefined) ?? "";
+    const data = (identityResult.data ?? identityResult.result?.data ?? {}) as Record<string, unknown>;
+    const match = Boolean(data.match);
+    const isIdDoc = Boolean(data.is_id_document);
+    const expectedName = (data.expected_name as string | undefined) ?? (extras.invoice_holder_name as string | undefined) ?? "";
+    await trace({
+      account_id, phone, step: "post_validate_identity.inspect", level: "standard",
+      payload: {
+        match, is_id_document: isIdDoc,
+        classification: data.classification ?? null,
+        confidence: data.confidence ?? null,
+        doc_name: data.extracted_name ?? null,
+        expected_name: expectedName || null,
+      },
+      correlation_id,
+    });
+    const prefix = nome ? `${nome}, ` : "";
+    let postText = "";
+    if (match) {
+      postText = `${prefix}documento confirmado! ✅ Vou iniciar seu cadastro agora e já retorno por aqui em instantes. 🚀\n\nEm seguida um especialista da nossa equipe vai assumir o atendimento para finalizar com você.`;
+    } else if (isIdDoc && expectedName) {
+      const firstExp = expectedName.split(/\s+/)[0];
+      postText = `${prefix}o documento que recebi parece estar em outro nome. Pra prosseguir preciso do RG ou CNH de ${firstExp}, que é o titular da fatura. Pode me enviar?`;
+    } else if (!isIdDoc) {
+      postText = `${prefix}o arquivo que recebi não parece ser RG ou CNH. Pode me enviar uma foto nítida do RG ou da CNH do titular da fatura, por favor?`;
+    } else {
+      postText = `${prefix}não consegui ler bem o documento. Pode reenviar uma foto nítida do RG ou da CNH do titular, por favor?`;
+    }
+    agentResult = { ...agentResult, messages: [postText] };
+  }
+
   // Patch sugerido pelo specialist (não-tool) via state-engine
   if (Object.keys(agentResult.suggested_state_patch).length || agentResult.events.length) {
     await applyPatch({

@@ -303,9 +303,15 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
         media_url: ctx.media.url,
         mime_type: ctx.media.mime_type,
         byte_size: ctx.media.byte_size,
-        expected_name: (currentExtras.client_name as string | undefined) ?? null,
+        expected_name:
+          (currentExtras.invoice_holder_name as string | undefined)
+          ?? (currentExtras.client_name as string | undefined)
+          ?? null,
       },
     });
+    // Texto final é gerado pelo orquestrador APÓS o resultado da tool
+    // (aprovação inicia cadastro + handoff, rejeição pede reenvio).
+    deterministicText = "";
   }
 
   if (stage === "ask_name") {
@@ -668,6 +674,7 @@ function fallbackText(stage: string): string {
     case "intent_send_invoice_ack": return "Combinado, fico no aguardo da sua fatura.";
     case "request_identity": return "Sua fatura foi validada com sucesso. Para concluirmos, por favor me envie uma foto do RG ou CNH do titular da conta.";
     case "validate_identity": return "Recebi seu documento, estou conferindo aqui.";
+    case "waiting_identity": return "Tô no aguardo da foto do RG ou CNH do titular da fatura pra prosseguir, viu?";
     case "family_authorization_check": return "Notei que a conta está em nome de outra pessoa. O titular é alguém da sua família e você tem autorização para seguir com a contratação?";
     case "objection_security": return "Entendo sua preocupação, é totalmente compreensível.\n\nSe preferir, podemos te enviar o link do aplicativo oficial da iGreen para você fazer o cadastro por conta própria. Quer que eu te envie?";
     case "send_autocadastro_link": return "Perfeito. Aqui está o link oficial do app iGreen para você fazer o cadastro com calma:\n\nhttps://app.igreen.com.br/autocadastro\n\nFico à disposição caso precise de ajuda em qualquer etapa.";

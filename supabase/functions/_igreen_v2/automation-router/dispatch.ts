@@ -37,6 +37,12 @@ function planFromEvents(events: IgreenEvent[]): PlannedAutomation[] {
       case "invoice_rejected":
         plan.push({ name: "tagging", args: { tag: "fatura_rejeitada" } });
         break;
+      case "identity_approved":
+        plan.push({ name: "tagging", args: { tag: "documento validado" } });
+        break;
+      case "identity_rejected":
+        plan.push({ name: "tagging", args: { tag: "documento_rejeitado" } });
+        break;
       case "contact_tag_added":
         plan.push({ name: "tagging", args: { tag: String(p.tag ?? "") } });
         break;

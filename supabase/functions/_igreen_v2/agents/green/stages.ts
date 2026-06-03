@@ -39,6 +39,7 @@ export type GreenStage =
   | "soft_confirm_ask"
   | "request_identity"
   | "validate_identity"
+  | "waiting_identity"
   | "family_authorization_check"
   | "objection_security"
   | "send_autocadastro_link"
@@ -196,7 +197,9 @@ export function decideGreenStage(
     // Novo fluxo: após validate_green_invoice com match=true, pedir RG/CNH do titular.
     if (extras.invoice_validated_match && !extras.identity_validated) {
       if (!extras.identity_requested) return "request_identity";
-      return "validate_identity";
+      // Só dispara validate_identity quando o cliente realmente anexar mídia.
+      // Caso contrário, fica aguardando o RG/CNH sem repetir "estou conferindo".
+      return hasMedia ? "validate_identity" : "waiting_identity";
     }
     if (extras.invoice_match_third_party && !extras.family_authorized) {
       return "family_authorization_check";

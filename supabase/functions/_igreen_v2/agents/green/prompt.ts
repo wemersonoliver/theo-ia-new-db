@@ -85,6 +85,8 @@ export function buildGreenUserPrompt(args: {
       return baseCtx + "STAGE: request_identity. A fatura foi validada com sucesso. Em 1-2 frases peça uma foto do documento de identidade do titular (RG ou CNH). Tom cordial. NÃO peça CPF agora. NÃO use gírias.";
     case "validate_identity":
       return baseCtx + "STAGE: validate_identity. Em 1 frase diga que recebeu o documento e está conferindo.";
+    case "waiting_identity":
+      return baseCtx + "STAGE: waiting_identity. Em 1 frase curta e cordial, diga que está aguardando a foto do RG ou CNH do titular da fatura. NÃO repita instruções longas. NÃO use gírias.";
     case "family_authorization_check":
       return baseCtx + "STAGE: family_authorization_check. A fatura está em nome de outra pessoa. Pergunte em 1 frase cordial se o titular é alguém da família e se você tem autorização para seguir com a contratação em nome dele.";
     case "objection_security":
