@@ -33,6 +33,7 @@ interface ValidatorRequest {
   pipeline_version?: number;
   extracted_text?: string | null;
   filename?: string | null;
+  expected_name?: string | null;
 }
 
 interface ExtractedFields {
@@ -111,6 +112,7 @@ serve(async (req) => {
   const mime_type = (body.mime_type ?? "").toLowerCase();
   const extracted_text = (body.extracted_text ?? null) as string | null;
   const filename = (body.filename ?? null) as string | null;
+  const expected_name = (body.expected_name ?? null) as string | null;
   const kind = (body.kind ?? "invoice") as "invoice" | "identity";
   const systemPrompt = kind === "identity" ? SYSTEM_IDENTITY : SYSTEM;
   const userInstruction = kind === "identity"
@@ -157,6 +159,23 @@ serve(async (req) => {
 
   const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
   if (!apiKey) return json(failBody(correlation_id, "no_api_key", 0), 200);
+
+  if (kind === "identity" && extracted_text && extracted_text.length > 80) {
+    const ocr = identityOcrFallback(extracted_text, expected_name);
+    if (ocr) {
+      console.log(`[igreen-document-validator] identity fast-path HIT cls=${ocr.classification} holder=${ocr.extracted.holder_name ?? "?"} len=${extracted_text.length}`);
+      return json({
+        correlation_id,
+        pipeline_version: CURRENT_PIPELINE_VERSION,
+        provider: "gemini",
+        classification: ocr.classification,
+        confidence: ocr.confidence,
+        extracted: ocr.extracted,
+        attempts: 1,
+      } as ValidatorResponse, 200);
+    }
+    console.log(`[igreen-document-validator] identity fast-path MISS len=${extracted_text.length}`);
+  }
 
   // ───────────────────────────────────────────────────────────────────────
   // FAST-PATH: se o OCR pré-extraído já parece uma fatura de energia
@@ -226,6 +245,24 @@ serve(async (req) => {
           } as ValidatorResponse, 200);
         }
       }
+      if (
+        kind === "identity" &&
+        (result.classification === "unreadable" || result.confidence < 0.4) &&
+        extracted_text && extracted_text.length > 80
+      ) {
+        const ocr = identityOcrFallback(extracted_text, expected_name);
+        if (ocr) {
+          return json({
+            correlation_id,
+            pipeline_version: CURRENT_PIPELINE_VERSION,
+            provider: "gemini",
+            classification: ocr.classification,
+            confidence: Math.max(0.78, ocr.confidence - 0.08),
+            extracted: ocr.extracted,
+            attempts: attempt,
+          } as ValidatorResponse, 200);
+        }
+      }
       return json({
         correlation_id,
         pipeline_version: CURRENT_PIPELINE_VERSION,
@@ -259,6 +296,20 @@ serve(async (req) => {
       } as ValidatorResponse, 200);
     }
   }
+  if (kind === "identity" && extracted_text && extracted_text.length > 80) {
+    const ocr = identityOcrFallback(extracted_text, expected_name);
+    if (ocr) {
+      return json({
+        correlation_id,
+        pipeline_version: CURRENT_PIPELINE_VERSION,
+        provider: "gemini",
+        classification: ocr.classification,
+        confidence: Math.max(0.7, ocr.confidence - 0.15),
+        extracted: ocr.extracted,
+        attempts: RETRY_DELAYS.length + 1,
+      } as ValidatorResponse, 200);
+    }
+  }
 
   // ───────────────────────────────────────────────────────────────────────
   // FALLBACK FINAL: OpenAI Vision (gpt-4o) quando Gemini falhou de vez e
@@ -277,7 +328,9 @@ serve(async (req) => {
       ctx: { account_id: body.account_id, phone: body.phone, correlation_id, reason: `gemini_failed:${lastError}` },
     });
     if (fb) {
-      const classification = normalizeClassification((fb.parsed as any).classification);
+      const classification = kind === "identity"
+        ? normalizeIdentityClassification((fb.parsed as any).classification)
+        : normalizeClassification((fb.parsed as any).classification);
       const confidence = clamp01(Number((fb.parsed as any).confidence ?? 0));
       const extracted = ((fb.parsed as any).extracted ?? {}) as ExtractedFields;
       console.log(`[igreen-document-validator] OPENAI fallback used model=${fb.model} cls=${classification} conf=${confidence}`);
@@ -400,6 +453,83 @@ function ocrFallback(text: string): ExtractedFields | null {
     document_id: docId,
     distributor: distMatch,
     energy_consumption_kwh: kwh,
+  };
+}
+
+function normalizeText(s: string | null | undefined): string {
+  if (!s) return "";
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function nameTokens(s: string | null | undefined): string[] {
+  return normalizeText(s).split(" ").filter((t) => t.length >= 3 && !DOCUMENT_STOPWORDS.has(t));
+}
+
+const DOCUMENT_STOPWORDS = new Set([
+  "republica", "federativa", "brasil", "ministerio", "secretaria", "nacional", "transito",
+  "carteira", "habilitacao", "registro", "geral", "identidade", "validade", "emissao", "nascimento",
+  "doc", "cpf", "nome", "filiacao", "local", "data", "permissao", "categoria", "assinatura", "digital",
+]);
+
+function titleCaseName(s: string): string {
+  return normalizeText(s).split(" ").filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ");
+}
+
+function expectedNameAppears(text: string, expectedName: string | null | undefined): boolean {
+  const expected = nameTokens(expectedName);
+  if (expected.length < 2) return false;
+  const normalized = normalizeText(text);
+  let hits = 0;
+  for (const token of expected) if (normalized.includes(token)) hits++;
+  return hits >= Math.min(2, expected.length);
+}
+
+function extractIdentityName(text: string, expectedName: string | null | undefined): string | undefined {
+  if (expectedNameAppears(text, expectedName)) return titleCaseName(expectedName!);
+  const normalized = text.replace(/\s+/g, " ");
+  const patterns = [
+    /(?:^|\b)nome\s*[:\-]?\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ' ]{6,90})(?=\s+(?:doc|cpf|rg|registro|data|nascimento|filia|validade|permiss))/i,
+    /(?:^|\b)nome\s*[:\-]?\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ' ]{6,90})/i,
+  ];
+  for (const pattern of patterns) {
+    const m = normalized.match(pattern);
+    if (m?.[1]) {
+      const candidate = titleCaseName(m[1].slice(0, 90));
+      if (nameTokens(candidate).length >= 2) return candidate;
+    }
+  }
+  return undefined;
+}
+
+function extractIdentityDocId(text: string): string | undefined {
+  const cpf = text.match(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/);
+  if (cpf) return cpf[0];
+  const rg = text.match(/\b\d{1,2}\.?\d{3}\.?\d{3}[- ]?[0-9Xx]\b/);
+  if (rg) return rg[0];
+  return undefined;
+}
+
+function identityOcrFallback(text: string, expectedName?: string | null): ({ classification: ValidatorResponse["classification"]; confidence: number; extracted: ExtractedFields } | null) {
+  const n = normalizeText(text);
+  const hasBrazilIdSignal = /(republica federativa do brasil|gov br|carteira nacional de habilitacao|registro geral|cedula de identidade|documento nacional de identidade|departamento nacional de transito|denatran)/i.test(n);
+  const isCnh = /(carteira nacional de habilitacao|permissao para dirigir|categoria|denatran|renach)/i.test(n);
+  const isRg = /(registro geral|cedula de identidade|instituto de identificacao|secretaria de seguranca|orgao expedidor)/i.test(n);
+  if (!hasBrazilIdSignal && !isCnh && !isRg) return null;
+  const holder = extractIdentityName(text, expectedName);
+  const docId = extractIdentityDocId(text);
+  if (!holder && !docId && !expectedNameAppears(text, expectedName)) return null;
+  const classification: ValidatorResponse["classification"] = isCnh ? "cnh" : isRg ? "rg" : "identity";
+  const confidence = holder ? (expectedNameAppears(text, expectedName) ? 0.94 : 0.86) : 0.74;
+  return {
+    classification,
+    confidence,
+    extracted: {
+      holder_name: holder,
+      document_id: docId,
+    },
   };
 }
 
