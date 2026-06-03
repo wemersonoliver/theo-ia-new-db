@@ -6,6 +6,7 @@ import type { AgentContext, AgentResult } from "../_types.ts";
 import { decideGreenStage, isAffirmation, detectFaqTopic } from "./stages.ts";
 import { GREEN_SYSTEM, buildGreenUserPrompt } from "./prompt.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { openAITextFallback, isProviderOutOfCredits, markProviderOutOfCredits } from "../../../_shared/ai-fallback/index.ts";
 
 const LLM_TIMEOUT_MS = 8000;
 
@@ -569,7 +570,34 @@ function extractFirstName(msg: string): string | null {
 
 async function generateText(ctx: AgentContext, stage: string): Promise<string> {
   const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
-  if (!apiKey) return fallbackText(stage);
+  const userPrompt = buildGreenUserPrompt({
+    stage: stage as any,
+    message: ctx.message,
+    produto: ctx.state.produto,
+    extras: (ctx.state.extras ?? {}) as Record<string, unknown>,
+    last_ai_question: (ctx.state as any).last_ai_question ?? null,
+    turn_index: (ctx.state as any).turn_index ?? undefined,
+  });
+
+  const tryOpenAI = async (reason: string): Promise<string | null> => {
+    const fb = await openAITextFallback({
+      systemPrompt: GREEN_SYSTEM,
+      userPrompt,
+      model: "gpt-4o-mini",
+      maxTokens: 600,
+      temperature: 0.4,
+      ctx: { reason, phone: (ctx as any).phone, account_id: (ctx as any).account_id },
+    });
+    return fb?.text?.trim() || null;
+  };
+
+  if (!apiKey) {
+    return (await tryOpenAI("gemini_no_api_key")) || fallbackText(stage);
+  }
+  // Se Gemini estiver marcado como sem créditos, pula direto.
+  if (isProviderOutOfCredits("gemini")) {
+    return (await tryOpenAI("gemini_circuit_open_credits")) || fallbackText(stage);
+  }
 
   // Modelo: usa lite (mais barato e sem thinking pesado). Sempre desliga
   // thinkingBudget para evitar que tokens de raciocínio consumam o
@@ -588,14 +616,7 @@ async function generateText(ctx: AgentContext, stage: string): Promise<string> {
           systemInstruction: { parts: [{ text: GREEN_SYSTEM }] },
           contents: [{
             role: "user",
-            parts: [{ text: buildGreenUserPrompt({
-              stage: stage as any,
-              message: ctx.message,
-              produto: ctx.state.produto,
-              extras: (ctx.state.extras ?? {}) as Record<string, unknown>,
-              last_ai_question: (ctx.state as any).last_ai_question ?? null,
-              turn_index: (ctx.state as any).turn_index ?? undefined,
-            }) }],
+            parts: [{ text: userPrompt }],
           }],
           generationConfig: {
             temperature: 0.4,
@@ -606,13 +627,26 @@ async function generateText(ctx: AgentContext, stage: string): Promise<string> {
       },
     );
     clearTimeout(timer);
-    if (!res.ok) return fallbackText(stage);
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      const low = errBody.toLowerCase();
+      // 429 quota_exceeded ou 403 com mensagem de billing → trata como sem crédito
+      if ((res.status === 429 && /quota/.test(low)) || res.status === 402 || /billing|quota.*exceed/.test(low)) {
+        markProviderOutOfCredits("gemini");
+      }
+      const txt = await tryOpenAI(`gemini_${res.status}`);
+      return txt || fallbackText(stage);
+    }
     const json = await res.json();
     const txt = (json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
-    return txt || fallbackText(stage);
-  } catch {
+    if (txt) return txt;
+    const fbTxt = await tryOpenAI("gemini_empty");
+    return fbTxt || fallbackText(stage);
+  } catch (e) {
     clearTimeout(timer);
-    return fallbackText(stage);
+    const reason = (e as Error)?.name === "AbortError" ? "gemini_timeout" : "gemini_error";
+    const fbTxt = await tryOpenAI(reason);
+    return fbTxt || fallbackText(stage);
   }
 }
 
