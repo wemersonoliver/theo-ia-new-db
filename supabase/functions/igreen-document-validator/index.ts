@@ -328,7 +328,9 @@ serve(async (req) => {
       ctx: { account_id: body.account_id, phone: body.phone, correlation_id, reason: `gemini_failed:${lastError}` },
     });
     if (fb) {
-      const classification = normalizeClassification((fb.parsed as any).classification);
+      const classification = kind === "identity"
+        ? normalizeIdentityClassification((fb.parsed as any).classification)
+        : normalizeClassification((fb.parsed as any).classification);
       const confidence = clamp01(Number((fb.parsed as any).confidence ?? 0));
       const extracted = ((fb.parsed as any).extracted ?? {}) as ExtractedFields;
       console.log(`[igreen-document-validator] OPENAI fallback used model=${fb.model} cls=${classification} conf=${confidence}`);
