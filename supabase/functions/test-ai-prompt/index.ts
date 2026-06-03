@@ -507,14 +507,7 @@ serve(async (req) => {
     // Igreen products block (mesma lógica do agente real)
     let igreenProductsBlock = "";
     try {
-      if (accountId) {
-        // PROTEÇÃO: só injeta contexto Igreen em contas Igreen reais.
-        const { data: accRow } = await serviceClient
-          .from("accounts")
-          .select("is_igreen")
-          .eq("id", accountId)
-          .maybeSingle();
-        const isIgreenAccount = !!(accRow as any)?.is_igreen;
+      if (accountId && isIgreenAccount) {
         const { data: igreenProds } = isIgreenAccount
           ? await serviceClient
               .from("igreen_account_products")
@@ -522,7 +515,7 @@ serve(async (req) => {
               .eq("account_id", accountId)
               .order("position", { ascending: true })
           : { data: [] as any[] };
-        if (isIgreenAccount && igreenProds && igreenProds.length > 0) {
+        if (igreenProds && igreenProds.length > 0) {
           igreenProductsBlock = buildIgreenProductsPromptBlock({
             agentName: aiConfig?.agent_name || "seu assistente",
             greeting: brt.greeting,
