@@ -135,6 +135,9 @@ export const validateGreenIdentityTool: ToolDefinition<Args> = {
           media_url: args.media_url,
           mime_type: args.mime_type,
           byte_size: args.byte_size,
+          extracted_text: extractedText,
+          filename: filenameHint,
+          expected_name: titularName,
         }),
       });
       validator = await r.json();
@@ -148,25 +151,6 @@ export const validateGreenIdentityTool: ToolDefinition<Args> = {
     const docName = (extracted.holder_name as string | undefined) ?? (extracted.full_name as string | undefined) ?? null;
 
     const isIdDoc = classification === "rg" || classification === "cnh" || classification === "identity";
-
-    // Holder match: prioriza o titular da fatura validada (extras.invoice_holder_name),
-    // depois expected_name passado pelo agente, depois lead_data, depois nome_cliente.
-    const stateExtras = (ctx.state.extras ?? {}) as Record<string, unknown>;
-    let titularName: string | null = (stateExtras.invoice_holder_name as string | undefined) ?? null;
-    if (!titularName && args.expected_name) titularName = args.expected_name;
-    if (!titularName) {
-      try {
-        const { data: lead } = await svc()
-          .from("igreen_lead_data")
-          .select("nome_titular_fatura, nome_cliente")
-          .eq("account_id", ctx.account_id)
-          .eq("phone", ctx.phone)
-          .maybeSingle();
-        titularName = (lead?.nome_titular_fatura as string | undefined)
-          ?? (lead?.nome_cliente as string | undefined)
-          ?? null;
-      } catch { /* non-blocking */ }
-    }
 
     // Match robusto: primeiro nome igual + pelo menos um sobrenome em comum,
     // OU primeiro nome igual quando o titular tem apenas um nome registrado.
