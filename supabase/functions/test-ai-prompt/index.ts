@@ -294,6 +294,23 @@ serve(async (req) => {
 
     const accountId = await resolveAccountId(serviceClient, userId);
 
+    // PROTEÇÃO CRÍTICA: simulador só executa fluxos Igreen para contas Igreen reais.
+    // Sem isso, qualquer usuário testando prompts ativaria as respostas determinísticas
+    // do agente Green (nome→intro, location/distribuidora, simulação) por padrão.
+    let isIgreenAccount = false;
+    try {
+      if (accountId) {
+        const { data: accRow } = await serviceClient
+          .from("accounts")
+          .select("is_igreen")
+          .eq("id", accountId)
+          .maybeSingle();
+        isIgreenAccount = !!(accRow as any)?.is_igreen;
+      }
+    } catch (e) {
+      console.error("[test-ai-prompt] is_igreen check error:", e);
+    }
+
     // Knowledge base rotulada por produto + RAG (idêntico ao whatsapp-ai-agent)
     let documents: any[] = [];
     let documentsQuery = serviceClient
@@ -395,38 +412,44 @@ serve(async (req) => {
       return { min, max, percent: max, min_bill: row.min_bill_brl ?? null, notes: row.notes ?? null, row };
     }
 
-    const deterministicLocationReply = buildGreenDistributorStateReply({
-      messages: messages || [],
-      currentUserMessage: lastUserMessage,
-      fallbackName: "Simulação",
-      lookupDiscount: (state, distributor) => {
-        const hit = lookupGreenDiscount(state, distributor);
-        return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
-      },
-    });
-    if (deterministicLocationReply) {
+    const deterministicLocationReply = isIgreenAccount
+      ? buildGreenDistributorStateReply({
+          messages: messages || [],
+          currentUserMessage: lastUserMessage,
+          fallbackName: "Simulação",
+          lookupDiscount: (state, distributor) => {
+            const hit = lookupGreenDiscount(state, distributor);
+            return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
+          },
+        })
+      : null;
+    if (isIgreenAccount && deterministicLocationReply) {
       return new Response(JSON.stringify({ message: deterministicLocationReply.reply }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const deterministicGreenSimulation = buildGreenSimulationReply({
-      messages: messages || [],
-      currentUserMessage: lastUserMessage,
-      knowledgeText: docTexts.join("\n\n---\n\n"),
-      lookupDiscount: (state, distributor) => {
-        const hit = lookupGreenDiscount(state, distributor);
-        return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
-      },
-    });
-    if (deterministicGreenSimulation) {
+    const deterministicGreenSimulation = isIgreenAccount
+      ? buildGreenSimulationReply({
+          messages: messages || [],
+          currentUserMessage: lastUserMessage,
+          knowledgeText: docTexts.join("\n\n---\n\n"),
+          lookupDiscount: (state, distributor) => {
+            const hit = lookupGreenDiscount(state, distributor);
+            return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
+          },
+        })
+      : null;
+    if (isIgreenAccount && deterministicGreenSimulation) {
       return new Response(JSON.stringify({ message: deterministicGreenSimulation }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const greenNameStepFirstName = getGreenNameStepFirstName(messages, userMessage);
-    if (greenNameStepFirstName) {
+    const greenNameStepFirstName = isIgreenAccount
+      ? getGreenNameStepFirstName(messages, userMessage)
+      : null;
+    if (isIgreenAccount && greenNameStepFirstName) {
       const intro = buildGreenIntroMessage(greenNameStepFirstName);
       return new Response(JSON.stringify({
         message: intro,
