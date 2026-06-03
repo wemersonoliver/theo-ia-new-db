@@ -92,7 +92,13 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   if (stage === "ask_consumo") {
     // tenta capturar consumo na mensagem atual (números seguidos de kwh/r$/reais)
     const consumo = extractConsumo(ctx.message);
-    if (consumo) patch.extras = { ...currentExtras, consumo_medio: consumo };
+    if (consumo) {
+      patch.extras = { ...currentExtras, consumo_medio: consumo };
+      tool_calls.push({
+        name: "save_green_lead_field",
+        args: { field: "consumo_medio", value: consumo },
+      });
+    }
     // O prompt deste stage pergunta valor médio em reais. Então uma resposta
     // numérica simples como "500" já deve preencher valor_fatura também;
     // caso contrário o fluxo pergunta praticamente a mesma coisa de novo.
