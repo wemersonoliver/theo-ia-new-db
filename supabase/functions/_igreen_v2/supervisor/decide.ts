@@ -5,6 +5,7 @@ import type { IgreenConversationState } from "../types.ts";
 import { trace } from "../observability/trace.ts";
 import { auditDecision } from "../observability/behavior-audit.ts";
 import { SUPERVISOR_SYSTEM_PROMPT, buildSupervisorUserPrompt } from "./prompt.ts";
+import { openAIJsonFallback } from "../../_shared/ai-fallback/index.ts";
 
 const SUPERVISOR_TIMEOUT_MS = 8000;
 const VALID_SPECIALISTS = new Set(["green", "telecom", "expansao", "qualifier", "failsafe"]);
@@ -15,7 +16,7 @@ export interface SupervisorDecision {
   intent: string;
   specialist: string;
   confidence: number;
-  source: "llm" | "timeout" | "error" | "low_confidence" | "low_confidence_sticky";
+  source: "llm" | "timeout" | "error" | "low_confidence" | "low_confidence_sticky" | "openai_fallback";
 }
 
 export async function decideSupervisor(args: {
