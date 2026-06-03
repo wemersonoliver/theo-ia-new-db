@@ -303,7 +303,10 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
         media_url: ctx.media.url,
         mime_type: ctx.media.mime_type,
         byte_size: ctx.media.byte_size,
-        expected_name: (currentExtras.client_name as string | undefined) ?? null,
+        expected_name:
+          (currentExtras.invoice_holder_name as string | undefined)
+          ?? (currentExtras.client_name as string | undefined)
+          ?? null,
       },
     });
     // Texto final é gerado pelo orquestrador APÓS o resultado da tool
