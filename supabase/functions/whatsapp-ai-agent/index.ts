@@ -942,8 +942,10 @@ serve(async (req) => {
         return m;
       });
 
-    const greenNameStepFirstName = getGreenNameStepFirstName(recentMessages, messageContent);
-    if (greenNameStepFirstName) {
+    const greenNameStepFirstName = isIgreenAccountEarly
+      ? getGreenNameStepFirstName(recentMessages, messageContent)
+      : null;
+    if (isIgreenAccountEarly && greenNameStepFirstName) {
       const intro = buildGreenIntroMessage(greenNameStepFirstName);
       try {
         await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "save_green_lead_field", {
@@ -1198,8 +1200,10 @@ serve(async (req) => {
       }
     }
 
-    const detectedGreenInvoice = parseGreenInvoiceFromOcr(messageContent);
-    if (detectedGreenInvoice) {
+    const detectedGreenInvoice = isIgreenAccountEarly
+      ? parseGreenInvoiceFromOcr(messageContent)
+      : null;
+    if (isIgreenAccountEarly && detectedGreenInvoice) {
       const historicalFirstName = String(greenLeadData?.nome_cliente || "").trim() || extractGreenFirstNameFromHistory(recentMessages);
       if (!greenLeadData?.nome_cliente && historicalFirstName) {
         await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "save_green_lead_field", {
@@ -1248,7 +1252,7 @@ serve(async (req) => {
       });
     }
 
-    if (isLikelyGreenInvoiceMediaOcr(messageContent)) {
+    if (isIgreenAccountEarly && isLikelyGreenInvoiceMediaOcr(messageContent)) {
       const retryInvoiceReply = "Recebi sua fatura de energia, mas a leitura automática não conseguiu identificar todos os dados com segurança.\n\nPode me enviar uma foto mais nítida ou o PDF original da fatura completa, por gentileza?";
       await sendAndSaveAIMessageParts(supabase, userId, phone, retryInvoiceReply);
       await supabase
@@ -1267,16 +1271,18 @@ serve(async (req) => {
       });
     }
 
-    const deterministicLocationReply = buildGreenDistributorStateReply({
-      messages: recentMessages,
-      currentUserMessage: messageContent,
-      fallbackName: contactName,
-      lookupDiscount: (state, distributor) => {
-        const hit = lookupGreenDiscount(state, distributor);
-        return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
-      },
-    });
-    if (deterministicLocationReply) {
+    const deterministicLocationReply = isIgreenAccountEarly
+      ? buildGreenDistributorStateReply({
+          messages: recentMessages,
+          currentUserMessage: messageContent,
+          fallbackName: contactName,
+          lookupDiscount: (state, distributor) => {
+            const hit = lookupGreenDiscount(state, distributor);
+            return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
+          },
+        })
+      : null;
+    if (isIgreenAccountEarly && deterministicLocationReply) {
       await executeGreenFlowTool(supabase, userId, accountId, phone, contactName, "save_green_lead_field", {
         field: "estado",
         value: deterministicLocationReply.state,
@@ -1302,17 +1308,19 @@ serve(async (req) => {
       });
     }
 
-    const deterministicGreenSimulation = buildGreenSimulationReply({
-      messages: recentMessages,
-      currentUserMessage: messageContent,
-      knowledgeText: docTexts.join("\n\n---\n\n"),
-      fallbackName: contactName,
-      lookupDiscount: (state, distributor) => {
-        const hit = lookupGreenDiscount(state, distributor);
-        return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
-      },
-    });
-    if (deterministicGreenSimulation) {
+    const deterministicGreenSimulation = isIgreenAccountEarly
+      ? buildGreenSimulationReply({
+          messages: recentMessages,
+          currentUserMessage: messageContent,
+          knowledgeText: docTexts.join("\n\n---\n\n"),
+          fallbackName: contactName,
+          lookupDiscount: (state, distributor) => {
+            const hit = lookupGreenDiscount(state, distributor);
+            return hit ? { min: hit.min, max: hit.max, min_bill: hit.min_bill } : null;
+          },
+        })
+      : null;
+    if (isIgreenAccountEarly && deterministicGreenSimulation) {
       await sendAndSaveAIMessageParts(supabase, userId, phone, deterministicGreenSimulation);
       await supabase
         .from("whatsapp_ai_sessions")
