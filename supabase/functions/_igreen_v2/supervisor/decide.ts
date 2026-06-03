@@ -5,6 +5,7 @@ import type { IgreenConversationState } from "../types.ts";
 import { trace } from "../observability/trace.ts";
 import { auditDecision } from "../observability/behavior-audit.ts";
 import { SUPERVISOR_SYSTEM_PROMPT, buildSupervisorUserPrompt } from "./prompt.ts";
+import { openAIJsonFallback } from "../../_shared/ai-fallback/index.ts";
 
 const SUPERVISOR_TIMEOUT_MS = 8000;
 const VALID_SPECIALISTS = new Set(["green", "telecom", "expansao", "qualifier", "failsafe"]);
@@ -15,7 +16,7 @@ export interface SupervisorDecision {
   intent: string;
   specialist: string;
   confidence: number;
-  source: "llm" | "timeout" | "error" | "low_confidence" | "low_confidence_sticky";
+  source: "llm" | "timeout" | "error" | "low_confidence" | "low_confidence_sticky" | "openai_fallback";
 }
 
 export async function decideSupervisor(args: {
@@ -78,6 +79,18 @@ export async function decideSupervisor(args: {
     if (!res.ok) {
       await trace({ account_id: args.account_id, phone: args.phone, step: "supervisor.http_error",
         level: "standard", duration_ms: Date.now() - t0, payload: { status: res.status } });
+      const fb = await tryOpenAIFallback({
+        message: args.message, produto: args.state.produto,
+        currentSpecialist, lastAiQ, etapaFunil,
+        ctx: { account_id: args.account_id, phone: args.phone, correlation_id: args.correlation_id, reason: `gemini_${res.status}` },
+      });
+      if (fb) {
+        await trace({ account_id: args.account_id, phone: args.phone, step: "supervisor.openai_fallback",
+          level: "standard", duration_ms: Date.now() - t0, payload: { from: `gemini_${res.status}`, ...fb } });
+        auditDecision({ ...auditBase, specialist_after: fb.specialist, intent: fb.intent,
+          confidence: fb.confidence, decision_source: "llm", trigger_reason: `openai_fallback_http_${res.status}` });
+        return { ...fb, source: "openai_fallback" };
+      }
       auditDecision({ ...auditBase, specialist_after: "failsafe", intent: "other",
         confidence: 0, decision_source: "error", trigger_reason: `http_${res.status}` });
       return { intent: "other", specialist: "failsafe", confidence: 0, source: "error" };
@@ -136,6 +149,21 @@ export async function decideSupervisor(args: {
       level: "standard", duration_ms: Date.now() - t0,
       payload: { error: (e as Error).message, timeout_ms: SUPERVISOR_TIMEOUT_MS },
     });
+    const fb = await tryOpenAIFallback({
+      message: args.message, produto: args.state.produto,
+      currentSpecialist, lastAiQ, etapaFunil,
+      ctx: { account_id: args.account_id, phone: args.phone, correlation_id: args.correlation_id,
+        reason: aborted ? "gemini_timeout" : "gemini_error" },
+    });
+    if (fb) {
+      await trace({ account_id: args.account_id, phone: args.phone, step: "supervisor.openai_fallback",
+        level: "standard", duration_ms: Date.now() - t0,
+        payload: { from: aborted ? "timeout" : "error", ...fb } });
+      auditDecision({ ...auditBase, specialist_after: fb.specialist, intent: fb.intent,
+        confidence: fb.confidence, decision_source: "llm",
+        trigger_reason: `openai_fallback_${aborted ? "timeout" : "error"}` });
+      return { ...fb, source: "openai_fallback" };
+    }
     auditDecision({ ...auditBase, specialist_after: "failsafe", intent: "other",
       confidence: 0, decision_source: aborted ? "timeout" : "error",
       trigger_reason: (e as Error).message?.slice(0, 200) ?? "" });
@@ -151,4 +179,37 @@ function safeParse(text: string): Record<string, unknown> {
   const m = text.match(/\{[\s\S]*\}/);
   if (m) { try { return JSON.parse(m[0]); } catch {} }
   return {};
+}
+
+/** Tenta classificar via OpenAI quando o Gemini falhar. Retorna null se indisponível/erro. */
+async function tryOpenAIFallback(args: {
+  message: string;
+  produto: string | null | undefined;
+  currentSpecialist: string | null;
+  lastAiQ: string | null;
+  etapaFunil: string | null;
+  ctx: { account_id?: string; phone?: string; correlation_id?: string | null; reason: string };
+}): Promise<{ intent: string; specialist: string; confidence: number } | null> {
+  const userPrompt = buildSupervisorUserPrompt(
+    args.message,
+    args.produto ?? null,
+    {
+      current_specialist: args.currentSpecialist,
+      last_ai_question: args.lastAiQ,
+      etapa_funil: args.etapaFunil,
+    },
+  ) + "\n\nResponda em JSON.";
+  const fb = await openAIJsonFallback({
+    systemPrompt: SUPERVISOR_SYSTEM_PROMPT,
+    userPrompt,
+    model: "gpt-4o-mini",
+    maxTokens: 200,
+    ctx: args.ctx,
+  });
+  if (!fb) return null;
+  const intent = typeof fb.parsed.intent === "string" ? fb.parsed.intent as string : "other";
+  let specialist = typeof fb.parsed.specialist === "string" ? fb.parsed.specialist as string : "failsafe";
+  const confidence = Number(fb.parsed.confidence ?? 0);
+  if (!VALID_SPECIALISTS.has(specialist)) specialist = "failsafe";
+  return { intent, specialist, confidence };
 }
