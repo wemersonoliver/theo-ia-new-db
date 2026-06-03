@@ -10,7 +10,10 @@
 //   });
 //   if (fb) return fb.parsed;
 
-import { callOpenAI, callOpenAIVision } from "./openai.ts";
+import { callOpenAI, callOpenAIVision, isProviderOutOfCredits, markProviderOutOfCredits, detectCreditError } from "./openai.ts";
+import { geminiContentsToOpenAI, geminiToolsToOpenAI, openAIResultToGeminiJson } from "./tool-adapter.ts";
+
+export { isProviderOutOfCredits, markProviderOutOfCredits, detectCreditError };
 
 export interface FallbackContext {
   account_id?: string;
@@ -25,6 +28,91 @@ export interface FallbackJsonResult {
   provider: "openai";
   model: string;
   latency_ms: number;
+}
+
+export interface FallbackTextResult {
+  text: string;
+  provider: "openai";
+  model: string;
+  latency_ms: number;
+}
+
+/** Fallback de texto livre (sem JSON). Retorna null se OPENAI indisponível/falhou ou breaker aberto. */
+export async function openAITextFallback(args: {
+  systemPrompt: string;
+  userPrompt: string;
+  model?: string;
+  maxTokens?: number;
+  temperature?: number;
+  ctx: FallbackContext;
+}): Promise<FallbackTextResult | null> {
+  if (!Deno.env.get("OPENAI_API_KEY")) return null;
+  if (isProviderOutOfCredits("openai")) {
+    console.warn(`[ai-fallback] openai breaker aberto (sem créditos) — reason=${args.ctx.reason}`);
+    return null;
+  }
+  const t0 = Date.now();
+  try {
+    const r = await callOpenAI({
+      model: args.model ?? "gpt-4o-mini",
+      maxTokens: args.maxTokens ?? 600,
+      temperature: args.temperature ?? 0.4,
+      messages: [
+        { role: "system", content: args.systemPrompt },
+        { role: "user", content: args.userPrompt },
+      ],
+    });
+    console.log(`[ai-fallback] openai_text OK model=${r.model} reason=${args.ctx.reason} latency=${Date.now() - t0}ms`);
+    return { text: r.text, provider: "openai", model: r.model, latency_ms: Date.now() - t0 };
+  } catch (e) {
+    console.error(`[ai-fallback] openai_text FAIL reason=${args.ctx.reason} err=${(e as Error).message}`);
+    return null;
+  }
+}
+
+/**
+ * Fallback para chamadas Gemini com function calling.
+ * Recebe o payload Gemini (systemInstruction + contents + tools), chama OpenAI
+ * e devolve um JSON com o MESMO shape que aiResponse.json() do Gemini.
+ * Retorna null se OPENAI indisponível, sem créditos ou falhou.
+ */
+export async function openAIGeminiShapeFallback(args: {
+  systemPrompt: string;
+  contents: any[];
+  tools?: any; // { functionDeclarations: [...] } no formato Gemini
+  model?: string;
+  maxTokens?: number;
+  temperature?: number;
+  ctx: FallbackContext;
+}): Promise<any | null> {
+  if (!Deno.env.get("OPENAI_API_KEY")) return null;
+  if (isProviderOutOfCredits("openai")) {
+    console.warn(`[ai-fallback] openai breaker aberto — reason=${args.ctx.reason}`);
+    return null;
+  }
+  const t0 = Date.now();
+  try {
+    const messages = geminiContentsToOpenAI(args.contents, args.systemPrompt);
+    const tools = args.tools ? geminiToolsToOpenAI(args.tools) : undefined;
+    const r = await callOpenAI({
+      model: args.model ?? "gpt-4o-mini",
+      maxTokens: args.maxTokens ?? 1500,
+      temperature: args.temperature ?? 0.5,
+      messages: messages as any,
+      tools,
+    });
+    const shaped = openAIResultToGeminiJson({
+      text: r.text,
+      tool_calls: r.tool_calls,
+      model: r.model,
+      raw: r.raw,
+    });
+    console.log(`[ai-fallback] openai_gemini_shape OK model=${r.model} reason=${args.ctx.reason} latency=${Date.now() - t0}ms hasTools=${(r.tool_calls?.length ?? 0) > 0}`);
+    return shaped;
+  } catch (e) {
+    console.error(`[ai-fallback] openai_gemini_shape FAIL reason=${args.ctx.reason} err=${(e as Error).message}`);
+    return null;
+  }
 }
 
 /** Fallback texto/JSON. Retorna null se OPENAI_API_KEY ausente ou se falhar também. */
