@@ -30,6 +30,7 @@ function planFromEvents(events: IgreenEvent[]): PlannedAutomation[] {
       case "handoff_requested":
       case "failsafe_triggered":
         plan.push({ name: "handoff", args: { reason: String(p.reason ?? ev.type) } });
+        plan.push({ name: "tagging", args: { tag: "atendimento humano" } });
         break;
       case "invoice_approved":
         plan.push({ name: "tagging", args: { tag: "enviou fatura" } });
@@ -38,7 +39,7 @@ function planFromEvents(events: IgreenEvent[]): PlannedAutomation[] {
         plan.push({ name: "tagging", args: { tag: "fatura_rejeitada" } });
         break;
       case "identity_approved":
-        plan.push({ name: "tagging", args: { tag: "documento validado" } });
+        plan.push({ name: "tagging", args: { tag: "enviou documento" } });
         break;
       case "identity_rejected":
         plan.push({ name: "tagging", args: { tag: "documento_rejeitado" } });
