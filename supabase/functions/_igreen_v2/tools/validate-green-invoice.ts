@@ -141,7 +141,7 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
       const { data: conv } = await svc()
         .from("whatsapp_conversations")
         .select("messages")
-        .eq("user_id", ctx.account_id)
+        .eq("account_id", ctx.account_id)
         .eq("phone", ctx.phone)
         .maybeSingle();
       const msgs = Array.isArray(conv?.messages) ? (conv!.messages as any[]) : [];
