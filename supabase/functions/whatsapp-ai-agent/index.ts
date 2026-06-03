@@ -1666,9 +1666,11 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
 
     let emptyResponseRetries = 0;
     while (functionCallsProcessed < maxFunctionCalls) {
-      const aiResponse = await fetchGeminiWithRetry(geminiApiKey, geminiPayload);
-
-      const aiData = await aiResponse.json();
+      const llmResult = await callLLMWithToolsFallback(geminiApiKey, geminiPayload, { phone, account_id: userId });
+      const aiData = llmResult.data;
+      if (llmResult.provider === "openai") {
+        console.log(`[whatsapp-ai-agent] turno servido por OpenAI fallback (model=${llmResult.model})`);
+      }
       // Registra custo de IA por usuário (texto Gemini)
       try {
         const t = extractGeminiTokens(aiData);
