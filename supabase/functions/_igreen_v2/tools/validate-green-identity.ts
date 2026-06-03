@@ -67,6 +67,57 @@ export const validateGreenIdentityTool: ToolDefinition<Args> = {
       extra: { media_url_hash: args.media_url.slice(-12) },
     });
 
+    const stateExtras = (ctx.state.extras ?? {}) as Record<string, unknown>;
+    let titularName: string | null = (stateExtras.invoice_holder_name as string | undefined) ?? null;
+    if (!titularName && args.expected_name) titularName = args.expected_name;
+    if (!titularName) {
+      try {
+        const { data: lead } = await svc()
+          .from("igreen_lead_data")
+          .select("nome_titular_fatura, nome_cliente")
+          .eq("account_id", ctx.account_id)
+          .eq("phone", ctx.phone)
+          .maybeSingle();
+        titularName = (lead?.nome_titular_fatura as string | undefined)
+          ?? (lead?.nome_cliente as string | undefined)
+          ?? null;
+      } catch { /* non-blocking */ }
+    }
+
+    let extractedText: string | null = null;
+    let filenameHint: string | null = null;
+    try {
+      const { data: conv } = await svc()
+        .from("whatsapp_conversations")
+        .select("messages")
+        .eq("account_id", ctx.account_id)
+        .eq("phone", ctx.phone)
+        .maybeSingle();
+      const msgs = Array.isArray(conv?.messages) ? (conv!.messages as any[]) : [];
+      for (let i = msgs.length - 1; i >= 0 && !extractedText; i--) {
+        const m = msgs[i] ?? {};
+        if (m.media_url && m.media_url === args.media_url) {
+          if (typeof m.ai_content === "string" && m.ai_content.trim().length > 50) extractedText = m.ai_content;
+          if (typeof m.media_filename === "string") filenameHint = m.media_filename;
+          break;
+        }
+      }
+      if (!extractedText) {
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const m = msgs[i] ?? {};
+          if (m.from_me === true) continue;
+          if (m.media_type !== "document" && m.media_type !== "image") continue;
+          if (typeof m.ai_content === "string" && m.ai_content.trim().length > 80) {
+            extractedText = m.ai_content;
+            if (!filenameHint && typeof m.media_filename === "string") filenameHint = m.media_filename;
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[validate_green_identity] extracted_text lookup failed", e);
+    }
+
     let validator: any = { classification: "unreadable", confidence: 0, extracted: {}, error: "no_response" };
     try {
       const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/igreen-document-validator`;
