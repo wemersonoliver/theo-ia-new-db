@@ -33,6 +33,7 @@ interface ValidatorRequest {
   pipeline_version?: number;
   extracted_text?: string | null;
   filename?: string | null;
+  expected_name?: string | null;
 }
 
 interface ExtractedFields {
@@ -111,6 +112,7 @@ serve(async (req) => {
   const mime_type = (body.mime_type ?? "").toLowerCase();
   const extracted_text = (body.extracted_text ?? null) as string | null;
   const filename = (body.filename ?? null) as string | null;
+  const expected_name = (body.expected_name ?? null) as string | null;
   const kind = (body.kind ?? "invoice") as "invoice" | "identity";
   const systemPrompt = kind === "identity" ? SYSTEM_IDENTITY : SYSTEM;
   const userInstruction = kind === "identity"
@@ -157,6 +159,23 @@ serve(async (req) => {
 
   const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
   if (!apiKey) return json(failBody(correlation_id, "no_api_key", 0), 200);
+
+  if (kind === "identity" && extracted_text && extracted_text.length > 80) {
+    const ocr = identityOcrFallback(extracted_text, expected_name);
+    if (ocr) {
+      console.log(`[igreen-document-validator] identity fast-path HIT cls=${ocr.classification} holder=${ocr.extracted.holder_name ?? "?"} len=${extracted_text.length}`);
+      return json({
+        correlation_id,
+        pipeline_version: CURRENT_PIPELINE_VERSION,
+        provider: "gemini",
+        classification: ocr.classification,
+        confidence: ocr.confidence,
+        extracted: ocr.extracted,
+        attempts: 1,
+      } as ValidatorResponse, 200);
+    }
+    console.log(`[igreen-document-validator] identity fast-path MISS len=${extracted_text.length}`);
+  }
 
   // ───────────────────────────────────────────────────────────────────────
   // FAST-PATH: se o OCR pré-extraído já parece uma fatura de energia
@@ -222,6 +241,24 @@ serve(async (req) => {
             classification: "green_invoice",
             confidence: 0.75,
             extracted: ocr,
+            attempts: attempt,
+          } as ValidatorResponse, 200);
+        }
+      }
+      if (
+        kind === "identity" &&
+        (result.classification === "unreadable" || result.confidence < 0.4) &&
+        extracted_text && extracted_text.length > 80
+      ) {
+        const ocr = identityOcrFallback(extracted_text, expected_name);
+        if (ocr) {
+          return json({
+            correlation_id,
+            pipeline_version: CURRENT_PIPELINE_VERSION,
+            provider: "gemini",
+            classification: ocr.classification,
+            confidence: Math.max(0.78, ocr.confidence - 0.08),
+            extracted: ocr.extracted,
             attempts: attempt,
           } as ValidatorResponse, 200);
         }
