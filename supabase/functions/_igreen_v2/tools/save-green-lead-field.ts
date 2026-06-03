@@ -23,6 +23,7 @@ const ALLOWED_FIELDS = new Set([
   "valor_fatura",
   "nome_titular_fatura",
   "tipo_conta",
+  "consumo_medio",
 ]);
 
 interface Args {

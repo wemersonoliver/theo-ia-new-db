@@ -2570,6 +2570,7 @@ export type Database = {
       igreen_lead_data: {
         Row: {
           account_id: string
+          consumo_medio: string | null
           cpf_documento_masked: string | null
           cpf_titular_fatura_masked: string | null
           created_at: string
@@ -2590,6 +2591,7 @@ export type Database = {
         }
         Insert: {
           account_id: string
+          consumo_medio?: string | null
           cpf_documento_masked?: string | null
           cpf_titular_fatura_masked?: string | null
           created_at?: string
@@ -2610,6 +2612,7 @@ export type Database = {
         }
         Update: {
           account_id?: string
+          consumo_medio?: string | null
           cpf_documento_masked?: string | null
           cpf_titular_fatura_masked?: string | null
           created_at?: string
