@@ -93,20 +93,20 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     // tenta capturar consumo na mensagem atual (números seguidos de kwh/r$/reais)
     const consumo = extractConsumo(ctx.message);
     if (consumo) patch.extras = { ...currentExtras, consumo_medio: consumo };
-    // Se o cliente respondeu em reais (R$/reais), também já preenchemos valor_fatura
-    // para evitar perguntar de novo no próximo passo.
-    if (/\b(r\$|reais?)\b/i.test(ctx.message)) {
-      const v = parseValor(ctx.message);
-      if (v) {
-        patch.extras = {
-          ...(patch.extras as object ?? currentExtras),
-          valor_fatura: v,
-        };
-        tool_calls.push({
-          name: "save_green_lead_field",
-          args: { field: "valor_fatura", value: String(v) },
-        });
-      }
+    // O prompt deste stage pergunta valor médio em reais. Então uma resposta
+    // numérica simples como "500" já deve preencher valor_fatura também;
+    // caso contrário o fluxo pergunta praticamente a mesma coisa de novo.
+    const v = parseValor(ctx.message);
+    if (v) {
+      patch.extras = {
+        ...(patch.extras as object ?? currentExtras),
+        consumo_medio: consumo ?? String(v),
+        valor_fatura: v,
+      };
+      tool_calls.push({
+        name: "save_green_lead_field",
+        args: { field: "valor_fatura", value: String(v) },
+      });
     }
   }
 

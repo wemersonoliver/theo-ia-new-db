@@ -110,6 +110,7 @@ export function decideGreenStage(
   const etapa = (state.etapa_funil ?? "novo").toLowerCase();
   const msg = (message ?? "").toLowerCase();
   const extras = (state.extras ?? {}) as Record<string, unknown>;
+  const hasValue = (value: unknown) => value !== undefined && value !== null && String(value).trim() !== "";
 
   // PRIORIDADE -1 — pedido explícito de humano: handoff imediato.
   if (isHandoffRequest(message) && !extras.handoff_done) {
@@ -168,14 +169,14 @@ export function decideGreenStage(
   if (etapa === "qualificacao") {
     if (!extras.video_sent) return "send_video";
     if (!extras.engaged) return "engage_check";
-    if (!extras.consumo_medio) return "ask_consumo";
-    if (!extras.estado) return "ask_estado";
-    if (!extras.distribuidora) {
-      if (!extras.distributors_presented) return "present_distributors";
+    if (!hasValue(extras.consumo_medio)) return "ask_consumo";
+    if (!hasValue(extras.estado)) return "ask_estado";
+    if (!hasValue(extras.distribuidora)) {
+      if (!hasValue(extras.distributors_presented)) return "present_distributors";
       return "ask_distribuidora";
     }
-    if (!extras.valor_fatura) return "ask_valor_fatura";
-    if (!extras.discount_lookup_done) return "simulate_discount_concreto";
+    if (!hasValue(extras.valor_fatura)) return "ask_valor_fatura";
+    if (!hasValue(extras.discount_lookup_done)) return "simulate_discount_concreto";
     return "request_invoice";
   }
 
