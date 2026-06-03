@@ -208,14 +208,23 @@ serve(async (req) => {
     let mediaPayload: { url: string; mime_type: string; byte_size: number } | null = null;
     const ALREADY_SENT_RX = /\b(j[aá]\s*(te\s*)?(mandei|enviei)|enviei\s*(acima|j[aá])|mandei\s*acima|t[aá]\s*acima|acabei de (mandar|enviar)|j[aá]\s*foi)\b/i;
     try {
-      const pickMedia = (m: any) =>
-        m && typeof m.media_url === "string" && m.media_url.length > 0
-          ? {
-              url: String(m.media_url),
-              mime_type: String(m.media_mime || ""),
-              byte_size: Number(m.media_size ?? 0),
-            }
-          : null;
+      // Apenas documentos/imagens são relevantes para o agente igreen (fatura/RG/CNH).
+      // Áudio e vídeo já vêm transcritos/descritos como texto pelo webhook — NÃO encaminhar
+      // como `media`, senão o media-guard rejeita ("esse formato não abre aqui").
+      const isDocLikeMime = (mime: string) => {
+        const m = (mime || "").toLowerCase();
+        return m.startsWith("image/") || m === "application/pdf";
+      };
+      const pickMedia = (m: any) => {
+        if (!m || typeof m.media_url !== "string" || m.media_url.length === 0) return null;
+        const mime = String(m.media_mime || "");
+        if (!isDocLikeMime(mime)) return null;
+        return {
+          url: String(m.media_url),
+          mime_type: mime,
+          byte_size: Number(m.media_size ?? 0),
+        };
+      };
       const latestMedia = pickMedia(latestIncoming);
       if (latestMedia) {
         mediaPayload = latestMedia;
