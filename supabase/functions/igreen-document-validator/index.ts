@@ -11,6 +11,7 @@
 // Resiliência: timeout 12s, 2 retries com backoff (1s, 3s), fallback unreadable.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { openAIVisionFallback } from "../_shared/ai-fallback/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,7 +46,7 @@ interface ExtractedFields {
 interface ValidatorResponse {
   correlation_id: string | null;
   pipeline_version: number;
-  provider: "gemini";
+  provider: "gemini" | "openai";
   classification: "green_invoice" | "other_invoice" | "unreadable" | "not_invoice";
   confidence: number;
   extracted: ExtractedFields;
@@ -227,6 +228,42 @@ serve(async (req) => {
       } as ValidatorResponse, 200);
     }
   }
+
+  // ───────────────────────────────────────────────────────────────────────
+  // FALLBACK FINAL: OpenAI Vision (gpt-4o) quando Gemini falhou de vez e
+  // o OCR estrutural não bateu. Só roda se OPENAI_API_KEY estiver setado.
+  // ───────────────────────────────────────────────────────────────────────
+  try {
+    const fb = await openAIVisionFallback({
+      systemPrompt: SYSTEM,
+      userPrompt: "Classifique a fatura abaixo seguindo o JSON especificado. Retorne JSON puro.",
+      imageBase64: base64,
+      mime: actualMime,
+      extraText: extracted_text && extracted_text.length > 50
+        ? `OCR pré-extraído do documento:\n${extracted_text.slice(0, 8000)}`
+        : null,
+      model: "gpt-4o",
+      ctx: { account_id: body.account_id, phone: body.phone, correlation_id, reason: `gemini_failed:${lastError}` },
+    });
+    if (fb) {
+      const classification = normalizeClassification((fb.parsed as any).classification);
+      const confidence = clamp01(Number((fb.parsed as any).confidence ?? 0));
+      const extracted = ((fb.parsed as any).extracted ?? {}) as ExtractedFields;
+      console.log(`[igreen-document-validator] OPENAI fallback used model=${fb.model} cls=${classification} conf=${confidence}`);
+      return json({
+        correlation_id,
+        pipeline_version: CURRENT_PIPELINE_VERSION,
+        provider: "openai",
+        classification,
+        confidence,
+        extracted,
+        attempts: RETRY_DELAYS.length + 2,
+      } as ValidatorResponse, 200);
+    }
+  } catch (e) {
+    console.error(`[igreen-document-validator] openai vision fallback threw: ${(e as Error).message}`);
+  }
+
   return json(failBody(correlation_id, lastError, RETRY_DELAYS.length + 1), 200);
 });
 
