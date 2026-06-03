@@ -1,89 +1,61 @@
-# Plano: Fallback OpenAI (ChatGPT) para Gemini
+## Passo 1 — Fallback Gemini ↔ OpenAI no Agente Green + WhatsApp genérico
 
-## Objetivo
-Adicionar OpenAI como **fallback automático** sempre que uma chamada ao Gemini falhar (timeout, 429, 5xx, JSON inválido, safety block). Sem mudar comportamento padrão — Gemini continua sendo o provider primário.
-
-## Princípio central
-Criar **uma única camada** (`_shared/ai-provider`) que todas as edge functions passam a usar. Nada de duplicar lógica de retry/fallback em cada função.
+### Objetivo
+Estender o fallback já criado (`_shared/ai-fallback/`) para os agentes principais de texto, e adicionar **erro de créditos (402)** como gatilho de troca de provedor (bidirecional: Gemini → OpenAI e OpenAI → Gemini).
 
 ---
 
-## Etapa 1 — Secret
-- Adicionar secret `OPENAI_API_KEY` (via tool de secrets, usuário cola a chave).
-- Opcional: `OPENAI_FALLBACK_MODEL` (default: `gpt-4o-mini` para texto, `gpt-4o` para vision).
+### 1. Ampliar gatilhos de fallback no `_shared/ai-fallback/index.ts`
+Hoje o wrapper troca apenas em: 429, 5xx, timeout, resposta vazia, SAFETY, JSON inválido.
 
-## Etapa 2 — Camada compartilhada
-Criar `supabase/functions/_shared/ai-provider/`:
+Adicionar:
+- **402 Payment Required / "insufficient_quota" / "credits"** → marca provedor atual como "sem crédito" por 5 min (circuit breaker em memória) e usa o outro.
+- **Bidirecional**: se OpenAI também retornar 402/429, tenta voltar para Gemini imediatamente (em vez de falhar).
+- Log estruturado: `ai_provider.switched` com `{ from, to, reason: "credits_exhausted" | "rate_limit" | ... }`.
 
-- `gemini.ts` — wrapper atual do Gemini (texto, vision, JSON mode, tool calling).
-- `openai.ts` — wrapper equivalente OpenAI (Chat Completions API, vision via `image_url` base64, JSON mode, function calling traduzido).
-- `index.ts` — função `callAI({ task, messages, tools?, json?, image? })` que:
-  1. Tenta Gemini (com retry exponencial já existente para 429).
-  2. Se falhar após N tentativas OU classificar como "erro permanente" → chama OpenAI.
-  3. Loga em `igreen_model_routing` (ou tabela equivalente) com `provider`, `fallback_reason`, `latency_ms`.
-- `translate-tools.ts` — converte schemas de tools Gemini ↔ OpenAI (formato `function` vs `functionDeclarations`).
+### 2. Agente Green (`_igreen_v2/agents/green/run.ts`)
+Hoje chama Gemini diretamente em `run.ts` (geração de resposta + tool calling).
+- Envolver chamada Gemini com `callWithFallback()` do `_shared/ai-fallback`.
+- Mapear tools do formato Gemini (`functionDeclarations`) para formato OpenAI (`tools: [{type:"function", function:{...}}]`) dentro do wrapper OpenAI.
+- Preservar histórico de conversa e system prompt.
+- Quando fallback for acionado, registrar `source: "openai_fallback"` em `ai_usage` e no log da conversa.
 
-## Etapa 3 — Mapeamento de modelos
-| Tarefa | Gemini (primário) | OpenAI (fallback) |
-|---|---|---|
-| Texto rápido / classificação | gemini-2.5-flash-lite | gpt-4o-mini |
-| Texto balanceado | gemini-2.5-flash | gpt-4o-mini |
-| Reasoning pesado | gemini-2.5-pro | gpt-4o |
-| Vision (OCR fatura) | gemini-2.5-flash (vision) | gpt-4o (vision) |
-| Tool calling (supervisor / agents) | gemini-2.5-flash | gpt-4o-mini |
+### 3. WhatsApp AI genérico (`whatsapp-ai-agent`)
+Mesmo padrão do Green:
+- Substituir chamada direta Gemini pelo `callWithFallback()`.
+- Manter chunking de 220 chars e lógica de áudio inalterados.
+- Preservar function calling (check_available_slots, create_appointment, etc.) traduzindo schema para OpenAI quando necessário.
 
-## Etapa 4 — Critérios de fallback
-Disparar OpenAI quando Gemini retornar:
-- HTTP 429 após esgotar retries (3x backoff).
-- HTTP 5xx.
-- Timeout (>8s supervisor, >15s specialist, >30s vision).
-- Resposta vazia / `finishReason: SAFETY` / JSON malformado em modo estruturado.
-- Circuit breaker já existente (`provider-health/circuit-breaker.ts`) em estado `open` para o modelo Gemini.
+### 4. Tradução de tool/function schemas
+Criar helper `_shared/ai-fallback/tool-adapter.ts`:
+- `geminiToOpenAI(functionDeclarations)` → `tools[]` OpenAI.
+- `openAIToGemini(tools)` → `functionDeclarations` Gemini.
+- Normalizar resposta: ambas retornam `{ text, toolCalls: [{name, args}] }`.
 
-Integrar com o `model-router/selector.ts` existente: adicionar OpenAI como próximo elo na `FALLBACK_CHAIN` quando todos os Gemini estiverem degradados.
+### 5. Registro de uso e custo
+- Em `ai_usage`, adicionar coluna `provider` (`gemini` | `openai`) via migration se ainda não existir.
+- Gravar tokens/modelo correto conforme provedor usado.
 
-## Etapa 5 — Funções a migrar (ordem)
-Prioridade alta (caminho crítico iGreen):
-1. `_igreen_v2/supervisor/decide.ts`
-2. `_igreen_v2/agents/green/*` (run/stages)
-3. `igreen-document-validator` (vision da fatura)
-4. `whatsapp-ai-agent` (SaaS genérico)
+### 6. Observabilidade
+- Endpoint admin `/admin/ai-fallback-stats` (já planejado) recebe contadores: total chamadas, fallbacks acionados, motivo, por agente.
+- Por ora apenas logs estruturados; UI fica para passo posterior.
 
-Prioridade média:
-5. `process-image-ocr`
-6. `transcribe-audio` (já usa Groq — manter, não precisa fallback aqui)
-7. `interview-ai-agent`, `prompt-generator-ai`, `test-ai-prompt`
+### 7. Testes manuais
+- Forçar 402 simulado no Gemini (header override) → confirmar Green responde via OpenAI.
+- Forçar 402 no OpenAI → confirmar volta para Gemini.
+- Testar tool calling (agendamento) funcionando em ambos provedores.
 
-Prioridade baixa:
-8. Funções de geração de texto pontual (`support-ai-agent`, etc.)
+---
 
-Em cada função: trocar `fetch(generativelanguage.googleapis.com...)` por `callAI(...)`.
+### Arquivos a alterar
+- `supabase/functions/_shared/ai-fallback/index.ts` — adicionar 402 + circuit breaker bidirecional
+- `supabase/functions/_shared/ai-fallback/tool-adapter.ts` — **novo**
+- `supabase/functions/_shared/ai-fallback/openai.ts` — suporte a tools
+- `supabase/functions/_igreen_v2/agents/green/run.ts` — usar wrapper
+- `supabase/functions/whatsapp-ai-agent/index.ts` — usar wrapper
+- Migration: `ai_usage.provider` (se faltar)
 
-## Etapa 6 — Observabilidade
-- Trace `ai_provider.fallback_triggered` com `{ from: "gemini-x", to: "openai-y", reason, attempts }`.
-- Painel em `/admin/ai-costs`: contador de fallbacks por dia + custo OpenAI.
-- Alerta no admin se taxa de fallback > 10% (sinal de Gemini degradado).
-
-## Etapa 7 — Custos
-Registrar uso OpenAI em `ai_usage` (já existente) com `provider: "openai"`. Reusar `logTextUsage` / `logImageUsage` adicionando campo provider.
-
-## Etapa 8 — Testes
-- Teste manual: setar `GOOGLE_GEMINI_API_KEY` inválido temporariamente em uma função → verificar fallback.
-- Teste unitário Deno em `_shared/ai-provider/index_test.ts` mockando 429.
-- Validar fluxo iGreen real com o número 5547989118695 após deploy.
-
-## Detalhes técnicos
-- **JSON mode OpenAI**: usar `response_format: { type: "json_object" }` (requer "json" no prompt).
-- **Tool calling**: schema OpenAI usa `{ type: "function", function: { name, description, parameters } }`; Gemini usa `functionDeclarations`. O tradutor cuida disso.
-- **Vision OpenAI**: enviar imagem como `{ type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } }` (precisa do prefixo `data:` — oposto da Evolution API).
-- **Streaming**: nenhuma função atual precisa, ignorar.
-- **Não tocar** no Groq (Whisper) nem no ElevenLabs.
-
-## Entregáveis
-- 1 secret novo.
-- 1 pasta `_shared/ai-provider/` com 4 arquivos.
-- ~8 funções refatoradas (substituição de chamadas).
-- 1 migração: coluna `provider` em `ai_usage` e `igreen_model_routing`.
-- Painel admin com métrica de fallback.
-
-Tempo estimado: 2 sessões. Posso começar pela Etapa 1+2 (camada + supervisor + igreen-document-validator) que já cobre 80% do risco atual.
+### Fora do escopo deste passo
+- UI admin de estatísticas de fallback
+- Migração de OCR de imagem, transcrição de áudio, geração de prompts/entrevistas (passo 2)
+- ElevenLabs e Groq (mantêm-se como estão)

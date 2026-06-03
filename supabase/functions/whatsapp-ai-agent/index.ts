@@ -9,6 +9,7 @@ import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { reportApiFailure, reportApiSuccess } from "../_health.ts";
 import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
 import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock, buildGreenDistributorStateReply } from "../_igreen_flow.ts";
+import { openAIGeminiShapeFallback, markProviderOutOfCredits, isProviderOutOfCredits, detectCreditError } from "../_shared/ai-fallback/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -355,6 +356,10 @@ async function fetchGeminiWithRetry(apiKey: string, payload: any, maxRetries = 3
     if (!response.ok) {
       const errText = await response.text();
       console.error("Gemini error:", errText);
+      if (detectCreditError(response.status, errText)) {
+        markProviderOutOfCredits("gemini");
+        throw new Error(`gemini_credits_exhausted:${errText.slice(0, 200)}`);
+      }
       if (response.status >= 500 || response.status === 401 || response.status === 403) {
         reportApiFailure("gemini", `HTTP ${response.status}: ${errText.slice(0, 200)}`).catch(() => {});
       }
@@ -365,6 +370,52 @@ async function fetchGeminiWithRetry(apiKey: string, payload: any, maxRetries = 3
   }
   reportApiFailure("gemini", "Rate limit exceeded after retries").catch(() => {});
   throw new Error("Gemini API rate limit exceeded after retries");
+}
+
+// Wrapper que tenta Gemini e, em qualquer falha terminal (incluindo 429
+// pós-retries, 5xx, créditos esgotados), cai para OpenAI mantendo o mesmo
+// shape de resposta esperado pelo loop de tool calling.
+async function callLLMWithToolsFallback(
+  apiKey: string,
+  payload: any,
+  ctx: { phone?: string; account_id?: string },
+): Promise<{ data: any; provider: "gemini" | "openai"; model?: string }> {
+  // Se Gemini está em breaker (sem créditos), pula direto para OpenAI.
+  if (apiKey && !isProviderOutOfCredits("gemini")) {
+    try {
+      const res = await fetchGeminiWithRetry(apiKey, payload);
+      const data = await res.json();
+      return { data, provider: "gemini", model: "gemini-2.5-flash" };
+    } catch (e) {
+      const msg = (e as Error).message || "";
+      console.warn(`[whatsapp-ai-agent] Gemini falhou (${msg}); tentando OpenAI...`);
+      const sys = payload?.systemInstruction?.parts?.[0]?.text ?? "";
+      const fb = await openAIGeminiShapeFallback({
+        systemPrompt: sys,
+        contents: payload?.contents ?? [],
+        tools: Array.isArray(payload?.tools) ? payload.tools[0] : payload?.tools,
+        model: "gpt-4o-mini",
+        maxTokens: 2000,
+        temperature: 0.6,
+        ctx: { reason: msg.includes("credits") ? "gemini_credits_exhausted" : "gemini_error", ...ctx },
+      });
+      if (fb) return { data: fb, provider: "openai", model: fb._fallback_model };
+      throw e;
+    }
+  }
+  // Sem Gemini disponível → vai direto pra OpenAI
+  const sys = payload?.systemInstruction?.parts?.[0]?.text ?? "";
+  const fb = await openAIGeminiShapeFallback({
+    systemPrompt: sys,
+    contents: payload?.contents ?? [],
+    tools: Array.isArray(payload?.tools) ? payload.tools[0] : payload?.tools,
+    model: "gpt-4o-mini",
+    maxTokens: 2000,
+    temperature: 0.6,
+    ctx: { reason: apiKey ? "gemini_circuit_open_credits" : "gemini_no_api_key", ...ctx },
+  });
+  if (fb) return { data: fb, provider: "openai", model: fb._fallback_model };
+  throw new Error("All AI providers unavailable");
 }
 
 // Detecta se o texto do cliente é claramente um pedido de atendimento humano.
@@ -1615,9 +1666,11 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
 
     let emptyResponseRetries = 0;
     while (functionCallsProcessed < maxFunctionCalls) {
-      const aiResponse = await fetchGeminiWithRetry(geminiApiKey, geminiPayload);
-
-      const aiData = await aiResponse.json();
+      const llmResult = await callLLMWithToolsFallback(geminiApiKey, geminiPayload, { phone, account_id: userId });
+      const aiData = llmResult.data;
+      if (llmResult.provider === "openai") {
+        console.log(`[whatsapp-ai-agent] turno servido por OpenAI fallback (model=${llmResult.model})`);
+      }
       // Registra custo de IA por usuário (texto Gemini)
       try {
         const t = extractGeminiTokens(aiData);
