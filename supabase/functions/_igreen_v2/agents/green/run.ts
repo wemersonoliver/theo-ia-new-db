@@ -306,6 +306,9 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
         expected_name: (currentExtras.client_name as string | undefined) ?? null,
       },
     });
+    // Texto final é gerado pelo orquestrador APÓS o resultado da tool
+    // (aprovação inicia cadastro + handoff, rejeição pede reenvio).
+    deterministicText = "";
   }
 
   if (stage === "ask_name") {
