@@ -138,6 +138,15 @@ export function decideGreenStage(
     return "validate_identity";
   }
 
+  // Titularidade divergente (third-party) detectada — antes de tratar como rejeição
+  // genérica, oferecer caminho de autorização familiar.
+  const holderMismatchPending =
+    extras.invoice_match_third_party === true ||
+    (etapa === "fatura_rejeitada" && extras.last_media_reject_reason === "reject_holder_mismatch");
+  if (!hasMedia && holderMismatchPending && !extras.family_authorized) {
+    return "family_authorization_check";
+  }
+
   // Fatura recebida mas rejeitada silenciosamente — precisamos avisar o cliente
   // e pedir reenvio em vez de repetir "fico aguardando".
   if (!hasMedia && documentStatus === "rejected" &&
@@ -194,8 +203,12 @@ export function decideGreenStage(
   }
 
   if (etapa === "fatura_validada") {
-    // Novo fluxo: após validate_green_invoice com match=true, pedir RG/CNH do titular.
-    if (extras.invoice_validated_match && !extras.identity_validated) {
+    // Novo fluxo: após validate_green_invoice com match=true OU após autorização
+    // familiar em caso de third-party, pedir RG/CNH do titular.
+    const okForIdentity =
+      extras.invoice_validated_match ||
+      (extras.invoice_match_third_party && extras.family_authorized);
+    if (okForIdentity && !extras.identity_validated) {
       if (!extras.identity_requested) return "request_identity";
       // Só dispara validate_identity quando o cliente realmente anexar mídia.
       // Caso contrário, fica aguardando o RG/CNH sem repetir "estou conferindo".
