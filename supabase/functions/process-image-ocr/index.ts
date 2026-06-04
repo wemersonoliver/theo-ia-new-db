@@ -72,6 +72,16 @@ serve(async (req) => {
     console.log("Media downloaded, size:", base64Media.length, "mimeType:", mimeType);
 
     // 2. Send to Google Gemini Vision API for OCR/Analysis
+    const ocrInstruction = mediaType === "document"
+      ? `Extraia o texto do documento com o máximo de fidelidade possível.
+Priorize e transcreva obrigatoriamente, se existirem: nome do titular/cliente, CPF/CNPJ, unidade consumidora, distribuidora, endereço, consumo em kWh, valor total/a pagar, mês de referência e vencimento.
+Não resuma. Não diga apenas que é uma fatura. Se for uma fatura de energia, copie os campos e linhas relevantes mesmo que algumas partes estejam difíceis.`
+      : `Analise esta imagem e extraia todo o texto visível (OCR).
+Se houver texto, transcreva-o fielmente.
+Se for um documento, extraia todas as informações relevantes.
+Se for uma imagem sem texto (foto, meme, etc), descreva brevemente o conteúdo.
+Responda de forma direta, sem formatação especial.`;
+
     const geminiPayload = {
       contents: [
         {
@@ -82,19 +92,13 @@ serve(async (req) => {
                 data: base64Media,
               },
             },
-            {
-              text: `Analise esta imagem e extraia todo o texto visível (OCR). 
-Se houver texto, transcreva-o fielmente.
-Se for um documento, extraia todas as informações relevantes.
-Se for uma imagem sem texto (foto, meme, etc), descreva brevemente o conteúdo.
-Responda de forma concisa e direta, sem formatação especial.`,
-            },
+            { text: ocrInstruction },
           ],
         },
       ],
       generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 2048,
+        temperature: 0.1,
+        maxOutputTokens: 8192,
       },
     };
 
