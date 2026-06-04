@@ -338,7 +338,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
         byte_size: ctx.media.byte_size,
         expected_name:
           (currentExtras.invoice_holder_name as string | undefined)
-          ?? (currentExtras.client_name as string | undefined)
+          ?? (currentExtras.invoice_match_third_party ? null : (currentExtras.client_name as string | undefined))
           ?? null,
       },
     });
