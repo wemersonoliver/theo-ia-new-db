@@ -185,8 +185,8 @@ serve(async (req) => {
   // Aplica-se SOMENTE à vertical iGreen (esta edge function é exclusiva
   // dela), não impacta usuários do plano comum.
   // ───────────────────────────────────────────────────────────────────────
-  if (kind === "invoice" && extracted_text && extracted_text.length > 300) {
-    const ocr = ocrFallback(extracted_text);
+  if (kind === "invoice" && extracted_text && extracted_text.length > 120) {
+    const ocr = ocrFallback(extracted_text, filename) ?? weakInvoiceOcrFallback(extracted_text, filename);
     if (ocr) {
       console.log(`[igreen-document-validator] fast-path HIT distributor=${ocr.distributor ?? "?"} kwh=${ocr.energy_consumption_kwh ?? "?"} len=${extracted_text.length}`);
       return json({
@@ -194,7 +194,7 @@ serve(async (req) => {
         pipeline_version: CURRENT_PIPELINE_VERSION,
         provider: "gemini",
         classification: "green_invoice",
-        confidence: 0.92,
+        confidence: ocr.energy_consumption_kwh ? 0.92 : 0.76,
         extracted: ocr,
         attempts: 1,
       } as ValidatorResponse, 200);
@@ -230,16 +230,16 @@ serve(async (req) => {
       if (
         kind === "invoice" &&
         (result.classification === "unreadable" || result.confidence < 0.3) &&
-        extracted_text && extracted_text.length > 300
+        extracted_text && extracted_text.length > 120
       ) {
-        const ocr = ocrFallback(extracted_text);
+        const ocr = ocrFallback(extracted_text, filename) ?? weakInvoiceOcrFallback(extracted_text, filename);
         if (ocr) {
           return json({
             correlation_id,
             pipeline_version: CURRENT_PIPELINE_VERSION,
             provider: "gemini",
             classification: "green_invoice",
-            confidence: 0.75,
+            confidence: ocr.energy_consumption_kwh ? 0.75 : 0.72,
             extracted: ocr,
             attempts: attempt,
           } as ValidatorResponse, 200);
@@ -282,15 +282,15 @@ serve(async (req) => {
   }
 
   // Última tentativa: se Gemini falhou totalmente mas temos OCR, usa fallback.
-  if (kind === "invoice" && extracted_text && extracted_text.length > 300) {
-    const ocr = ocrFallback(extracted_text);
+  if (kind === "invoice" && extracted_text && extracted_text.length > 120) {
+    const ocr = ocrFallback(extracted_text, filename) ?? weakInvoiceOcrFallback(extracted_text, filename);
     if (ocr) {
       return json({
         correlation_id,
         pipeline_version: CURRENT_PIPELINE_VERSION,
         provider: "gemini",
         classification: "green_invoice",
-        confidence: 0.7,
+        confidence: ocr.energy_consumption_kwh ? 0.7 : 0.72,
         extracted: ocr,
         attempts: RETRY_DELAYS.length + 1,
       } as ValidatorResponse, 200);
@@ -407,7 +407,7 @@ const KNOWN_DISTRIBUTORS = [
   "Ceee", "Celg", "Cerr", "Cepisa", "Ceron", "Eletroacre", "Sulgipe",
 ];
 
-function ocrFallback(text: string): ExtractedFields | null {
+function ocrFallback(text: string, filename?: string | null): ExtractedFields | null {
   const t = text.replace(/\s+/g, " ");
   // Sinais de fatura de energia brasileira (qualquer um basta):
   //  - kWh em qualquer posição (antes OU depois dos dígitos)
@@ -449,11 +449,37 @@ function ocrFallback(text: string): ExtractedFields | null {
   if (cpfMatch) docId = cpfMatch[0];
 
   return {
-    holder_name: holder,
+    holder_name: holder ?? holderFromFilename(filename),
     document_id: docId,
     distributor: distMatch,
     energy_consumption_kwh: kwh,
   };
+}
+
+function weakInvoiceOcrFallback(text: string, filename?: string | null): ExtractedFields | null {
+  const t = text.replace(/\s+/g, " ");
+  const distMatch = KNOWN_DISTRIBUTORS.find((d) => new RegExp(`\\b${d}\\b`, "i").test(t));
+  const hasEnergyDoc = /(nota fiscal de energia|energia elétrica|energia eletrica|conta de luz|fatura de energia|danf3e)/i.test(t);
+  if (!distMatch || !hasEnergyDoc) return null;
+  return {
+    holder_name: holderFromFilename(filename),
+    distributor: distMatch,
+  };
+}
+
+function holderFromFilename(filename?: string | null): string | undefined {
+  if (!filename) return undefined;
+  const cleaned = filename
+    .replace(/\.[a-z0-9]{2,5}$/i, "")
+    .replace(/\b(fatura|conta|energia|celesc|enel|pdf|documento|doc)\b/gi, " ")
+    .replace(/[_\-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned || cleaned.length < 3) return undefined;
+  return cleaned.split(" ")
+    .filter((p) => p.length >= 2)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join(" ") || undefined;
 }
 
 function normalizeText(s: string | null | undefined): string {
