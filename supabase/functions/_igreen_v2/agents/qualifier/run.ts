@@ -88,7 +88,7 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
       tool_calls.push({ name: "set_product", args: { produto: "green" } });
       tool_calls.push({ name: "set_stage", args: { etapa: "qualificacao" } });
       tool_calls.push({ name: "send_discovery_video", args: { produto: "green" } });
-      events.push({ type: "product_chosen", priority: "standard", source: "specialist", payload: { product: "green" } });
+      events.push({ type: "product_chosen", priority: "medium", source: "specialist", payload: { product: "green" } });
       break;
     }
     case "route_telecom": {
@@ -97,7 +97,7 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
       (patch as any).specialist = "telecom";
       patch.extras = { ...(patch.extras as object ?? extras), greeted: true, product_choice: "telecom" };
       tool_calls.push({ name: "set_product", args: { produto: "telecom" } });
-      events.push({ type: "product_chosen", priority: "standard", source: "specialist", payload: { product: "telecom" } });
+      events.push({ type: "product_chosen", priority: "medium", source: "specialist", payload: { product: "telecom" } });
       break;
     }
     case "route_expansao": {
@@ -106,7 +106,7 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
       (patch as any).specialist = "expansao";
       patch.extras = { ...(patch.extras as object ?? extras), greeted: true, product_choice: "expansao" };
       tool_calls.push({ name: "set_product", args: { produto: "expansao" } });
-      events.push({ type: "product_chosen", priority: "standard", source: "specialist", payload: { product: "expansao" } });
+      events.push({ type: "product_chosen", priority: "medium", source: "specialist", payload: { product: "expansao" } });
       break;
     }
     default: {
