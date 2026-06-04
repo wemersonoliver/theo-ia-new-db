@@ -128,14 +128,19 @@ export function decideGreenStage(
     return "send_autocadastro_link";
   }
 
-  if (hasMedia && (etapa === "qualificacao" || etapa === "fatura_enviada" || etapa === "fatura_rejeitada")) {
-    return "validate_invoice";
+  // Mídia recebida APÓS fatura validada → é o documento de identidade (RG/CNH).
+  // Também cobre recuperação de estado: se já houve autorização familiar e o
+  // pedido de identidade foi feito, a conversa pode ainda estar em
+  // fatura_rejeitada por uma transição antiga bloqueada.
+  const awaitingIdentityMedia =
+    etapa === "fatura_validada" ||
+    (etapa === "fatura_rejeitada" && extras.family_authorized === true && extras.identity_requested === true);
+  if (hasMedia && awaitingIdentityMedia) {
+    return "validate_identity";
   }
 
-  // Mídia recebida APÓS fatura validada → é o documento de identidade (RG/CNH).
-  // Roteia direto para validate_identity, evitando re-disparar validate_invoice.
-  if (hasMedia && etapa === "fatura_validada") {
-    return "validate_identity";
+  if (hasMedia && (etapa === "qualificacao" || etapa === "fatura_enviada" || etapa === "fatura_rejeitada")) {
+    return "validate_invoice";
   }
 
   // Titularidade divergente (third-party) detectada — antes de tratar como rejeição
