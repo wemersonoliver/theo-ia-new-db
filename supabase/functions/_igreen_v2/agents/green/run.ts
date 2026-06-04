@@ -287,6 +287,10 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
       const mergedExtras = patch.extras as Record<string, unknown>;
       const mergedState = { ...ctx.state, extras: mergedExtras, etapa_funil: "fatura_validada" };
       const nextStage = decideGreenStage(mergedState, ctx.message, !!ctx.media, null);
+      // Dispara automação de tagging "enviou fatura" → move card no CRM
+      // (caso de fatura de terceiro autorizado pela família).
+      events.push({ type: "invoice_approved", priority: "high", source: "specialist",
+        payload: { third_party_authorized: true } });
       events.push({ type: "green_stage_advanced", priority: "low", source: "specialist",
         payload: { from: stage, to: nextStage } });
       stage = nextStage;
