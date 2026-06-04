@@ -83,6 +83,21 @@ export const validateGreenIdentityTool: ToolDefinition<Args> = {
           ?? null;
       } catch { /* non-blocking */ }
     }
+    if (!titularName) {
+      try {
+        const { data: lastInvoice } = await svc()
+          .from("igreen_document_validations")
+          .select("extracted")
+          .eq("account_id", ctx.account_id)
+          .eq("phone", ctx.phone)
+          .eq("kind", "invoice")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const extracted = (lastInvoice?.extracted ?? {}) as Record<string, unknown>;
+        titularName = (extracted.holder_name as string | undefined) ?? null;
+      } catch { /* non-blocking */ }
+    }
 
     let extractedText: string | null = null;
     let filenameHint: string | null = null;
