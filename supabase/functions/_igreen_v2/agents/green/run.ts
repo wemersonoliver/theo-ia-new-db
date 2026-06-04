@@ -271,6 +271,35 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
     patch.extras = { ...(patch.extras as object ?? currentExtras), identity_requested: true };
   }
 
+  if (stage === "family_authorization_check") {
+    // Detecta confirmação de autorização do titular (família).
+    const FAMILY_AUTH_RX = /\b(sim|tenho|posso|claro|pode|com certeza|positivo|isso|autoriz(o|ada|ado|açao|ação)|meu marido|minha esposa|meu pai|minha m[aã]e|meu filho|minha filha|meu irm[aã]o|minha irm[aã]|meu(s)? sogro|minha sogra|fam[ií]lia)\b/i;
+    if (FAMILY_AUTH_RX.test(ctx.message ?? "")) {
+      patch.extras = {
+        ...(patch.extras as object ?? currentExtras),
+        family_authorized: true,
+        family_authorized_at: new Date().toISOString(),
+        invoice_match_third_party: true,
+      };
+      // Garante que estamos em fatura_validada para o fluxo de identidade seguir.
+      patch.etapa_funil = "fatura_validada";
+      (patch as any).document_status = "validated";
+      const mergedExtras = patch.extras as Record<string, unknown>;
+      const mergedState = { ...ctx.state, extras: mergedExtras, etapa_funil: "fatura_validada" };
+      const nextStage = decideGreenStage(mergedState, ctx.message, !!ctx.media, null);
+      events.push({ type: "green_stage_advanced", priority: "low", source: "specialist",
+        payload: { from: stage, to: nextStage } });
+      stage = nextStage;
+      if (stage === "request_identity") {
+        patch.extras = { ...(patch.extras as object), identity_requested: true };
+        const nome = (currentExtras.client_name as string | undefined) ?? "";
+        const titular = (currentExtras.invoice_holder_name as string | undefined) ?? "";
+        const titularNome = titular ? titular.split(/\s+/).slice(0, 2).join(" ") : "";
+        deterministicText = `${nome ? nome + ", " : ""}combinado! Pra prosseguir com o cadastro${titularNome ? ` em nome de ${titularNome}` : " do titular"}, me envia agora uma foto do RG ou CNH do titular da conta, por favor.`;
+      }
+    }
+  }
+
   if (stage === "send_autocadastro_link") {
     patch.extras = { ...(patch.extras as object ?? currentExtras), autocadastro_sent: true };
     tool_calls.push({
