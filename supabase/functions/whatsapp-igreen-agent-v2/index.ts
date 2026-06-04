@@ -487,7 +487,7 @@ serve(async (req) => {
     });
     const prefix = nome ? `${nome}, ` : "";
     let postText = "";
-    if (final === "approve" || final === "soft_confirm") {
+    if (final === "approve") {
       postText = `${prefix}fatura confirmada! ✅ Pra prosseguir com seu cadastro, me manda agora uma foto do RG ou CNH do titular da conta, por favor.`;
       // marca identity_requested para não repetir o pedido no próximo turno.
       await applyPatch({
@@ -497,6 +497,16 @@ serve(async (req) => {
         source: "post_validate_invoice",
         correlation_id,
       });
+    } else if (final === "soft_confirm") {
+      const holderName = String(
+        (validateResult.data?.holder_name as string | undefined)
+          ?? (validateResult.result?.data?.holder_name as string | undefined)
+          ?? (extras.invoice_holder_name as string | undefined)
+          ?? "",
+      ).trim();
+      postText = holderName
+        ? `${prefix}consegui identificar a fatura, mas confirma pra mim: o titular da conta é ${holderName}?`
+        : `${prefix}consegui identificar a fatura, mas preciso confirmar: ela está em seu nome?`;
     } else if (final.startsWith("reject_") || mediaReason) {
       const reason = final || `media_${mediaReason}`;
       let body = "não consegui ler sua fatura aqui. Pode reenviar como PDF ou uma foto bem nítida da última conta, por favor?";
