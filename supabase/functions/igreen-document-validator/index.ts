@@ -185,8 +185,8 @@ serve(async (req) => {
   // Aplica-se SOMENTE à vertical iGreen (esta edge function é exclusiva
   // dela), não impacta usuários do plano comum.
   // ───────────────────────────────────────────────────────────────────────
-  if (kind === "invoice" && extracted_text && extracted_text.length > 300) {
-    const ocr = ocrFallback(extracted_text);
+  if (kind === "invoice" && extracted_text && extracted_text.length > 120) {
+    const ocr = ocrFallback(extracted_text, filename) ?? weakInvoiceOcrFallback(extracted_text, filename);
     if (ocr) {
       console.log(`[igreen-document-validator] fast-path HIT distributor=${ocr.distributor ?? "?"} kwh=${ocr.energy_consumption_kwh ?? "?"} len=${extracted_text.length}`);
       return json({
@@ -194,7 +194,7 @@ serve(async (req) => {
         pipeline_version: CURRENT_PIPELINE_VERSION,
         provider: "gemini",
         classification: "green_invoice",
-        confidence: 0.92,
+        confidence: ocr.energy_consumption_kwh ? 0.92 : 0.76,
         extracted: ocr,
         attempts: 1,
       } as ValidatorResponse, 200);
@@ -230,16 +230,16 @@ serve(async (req) => {
       if (
         kind === "invoice" &&
         (result.classification === "unreadable" || result.confidence < 0.3) &&
-        extracted_text && extracted_text.length > 300
+        extracted_text && extracted_text.length > 120
       ) {
-        const ocr = ocrFallback(extracted_text);
+        const ocr = ocrFallback(extracted_text, filename) ?? weakInvoiceOcrFallback(extracted_text, filename);
         if (ocr) {
           return json({
             correlation_id,
             pipeline_version: CURRENT_PIPELINE_VERSION,
             provider: "gemini",
             classification: "green_invoice",
-            confidence: 0.75,
+            confidence: ocr.energy_consumption_kwh ? 0.75 : 0.72,
             extracted: ocr,
             attempts: attempt,
           } as ValidatorResponse, 200);
