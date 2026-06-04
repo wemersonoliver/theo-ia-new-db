@@ -563,7 +563,7 @@ serve(async (req) => {
           },
           document_status: "rejected" as any,
         },
-        events: [{ type: "invoice_rejected", priority: "high", source: "post_validate_invoice",
+        events: [{ type: "invoice_rejected", priority: "high", source: "automation",
           payload: { reason: "no_validator_result" } }],
         source: "post_validate_invoice",
         correlation_id,
