@@ -143,6 +143,10 @@ export function decideGreenStage(
     return "validate_invoice";
   }
 
+  if (!hasMedia && etapa === "fatura_rejeitada" && extras.family_authorized === true && extras.identity_requested === true) {
+    return "waiting_identity";
+  }
+
   // Titularidade divergente (third-party) detectada — antes de tratar como rejeição
   // genérica, oferecer caminho de autorização familiar.
   const holderMismatchPending =
