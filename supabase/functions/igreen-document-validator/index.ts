@@ -420,15 +420,21 @@ function ocrFallback(text: string, filename?: string | null): ExtractedFields | 
   const distMatch = KNOWN_DISTRIBUTORS.find((d) => new RegExp(`\\b${d}\\b`, "i").test(t));
   if (!distMatch) return null;
 
-  // Nome do titular: tenta "NOME:" depois palavras maiúsculas (≥2).
+  // Nome do titular: prioriza rótulos reais da fatura antes de qualquer
+  // sequência em maiúsculas. PDFs da Celesc costumam vir como markdown/OCR:
+  // "**Nome do titular/cliente:** WEMERSON LEITE OLIVEIRA". Antes o fallback
+  // caía no primeiro texto maiúsculo do documento ("DOCUMENTO AUXILIAR...").
   let holder: string | undefined;
-  const nomeColon = t.match(/\bNOME[:\s]+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ' ]{4,80})/);
-  if (nomeColon) {
-    holder = nomeColon[1].trim().split(/\s{2,}|\bCPF\b|\bENDERECO\b|\bENDEREÇO\b/i)[0].trim();
+  const labeledHolder = extractInvoiceHolderName(t);
+  if (labeledHolder) {
+    holder = labeledHolder;
   }
   if (!holder) {
     const upperRun = t.match(/\b([A-ZÁÉÍÓÚÂÊÔÃÕÇ]{2,}(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]{2,}){1,5})\b/);
-    if (upperRun) holder = upperRun[1].trim();
+    if (upperRun) {
+      const candidate = cleanInvoiceHolderCandidate(upperRun[1]);
+      if (candidate) holder = candidate;
+    }
   }
 
   // Consumo kWh
@@ -462,9 +468,38 @@ function weakInvoiceOcrFallback(text: string, filename?: string | null): Extract
   const hasEnergyDoc = /(nota fiscal de energia|energia elétrica|energia eletrica|conta de luz|fatura de energia|danf3e)/i.test(t);
   if (!distMatch || !hasEnergyDoc) return null;
   return {
-    holder_name: holderFromFilename(filename),
+    holder_name: extractInvoiceHolderName(t) ?? holderFromFilename(filename),
     distributor: distMatch,
   };
+}
+
+function extractInvoiceHolderName(text: string): string | undefined {
+  const patterns = [
+    /nome\s*(?:do\s*)?(?:titular|cliente)?\s*(?:\/\s*(?:titular|cliente))?\s*[:\-* ]+\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ' ]{4,90})(?=\s*(?:\*\*|cpf|cnpj|documento|endere[cç]o|unidade|cliente|etapa|refer[eê]ncia|vencimento|total|$))/i,
+    /(?:titular|cliente)\s*[:\-* ]+\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ' ]{4,90})(?=\s*(?:\*\*|cpf|cnpj|documento|endere[cç]o|unidade|cliente|etapa|refer[eê]ncia|vencimento|total|$))/i,
+  ];
+  for (const pattern of patterns) {
+    const m = text.match(pattern);
+    const cleaned = cleanInvoiceHolderCandidate(m?.[1]);
+    if (cleaned) return cleaned;
+  }
+  return undefined;
+}
+
+function cleanInvoiceHolderCandidate(raw?: string | null): string | undefined {
+  if (!raw) return undefined;
+  const cleaned = raw
+    .replace(/\*+/g, " ")
+    .replace(/\b(CPF|CNPJ|ENDERE[CÇ]O|UNIDADE|CONSUMIDORA|CLIENTE|ETAPA|REFER[EÊ]NCIA|VENCIMENTO|TOTAL)\b[\s\S]*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned || cleaned.length < 5) return undefined;
+  if (/(documento auxiliar|nota fiscal|energia eletrica|energia elétrica|distribuidora|classifica[cç][aã]o|modalidade|fornecimento|ilumina[cç][aã]o)/i.test(cleaned)) {
+    return undefined;
+  }
+  const parts = cleaned.split(" ").filter((p) => /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ']{2,}$/i.test(p));
+  if (parts.length < 2) return undefined;
+  return parts.slice(0, 6).join(" ");
 }
 
 function holderFromFilename(filename?: string | null): string | undefined {
