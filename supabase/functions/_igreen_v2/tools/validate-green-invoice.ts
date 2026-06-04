@@ -316,6 +316,8 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
         patch.extras = {
           ...((ctx.state.extras ?? {}) as Record<string, unknown>),
           last_media_reject_reason: "reject_holder_mismatch",
+          invoice_match_third_party: true,
+          invoice_holder_name: holderName ?? null,
           invoice_rejected_notified: false,
         };
         break;
