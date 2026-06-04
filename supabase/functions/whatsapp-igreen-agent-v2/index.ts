@@ -244,7 +244,16 @@ serve(async (req) => {
     if (fp.action === "soft_confirm_yes") {
       await applyPatch({
         account_id, phone,
-        patch: { etapa_funil: "fatura_validada", document_status: "validated", fatura_valida: true } as any,
+        patch: {
+          etapa_funil: "fatura_validada",
+          document_status: "validated",
+          fatura_valida: true,
+          extras: {
+            ...((state.extras ?? {}) as Record<string, unknown>),
+            identity_requested: true,
+            invoice_validated_match: true,
+          },
+        } as any,
         events: [{ type: "invoice_approved", priority: "high", source: "fast_path", payload: { via: "soft_confirm_yes" } }],
         source: "fast_path:soft_confirm_yes",
         correlation_id,
@@ -253,6 +262,12 @@ serve(async (req) => {
       await dispatchAutomations({
         account_id, phone, correlation_id, state: refreshed,
         events: [{ type: "invoice_approved", priority: "high", source: "fast_path" }],
+      });
+      const nome = (((refreshed as any).extras ?? {}) as Record<string, unknown>).client_name as string | undefined;
+      const instance = await resolveInstanceName(account_id, (refreshed as any).whatsapp_instance ?? null);
+      await sendOrchestrated({
+        account_id, phone, correlation_id, instance,
+        text: `${nome ? nome + ", " : ""}fatura confirmada! ✅ Pra prosseguir com seu cadastro, me manda agora uma foto do RG ou CNH do titular da conta, por favor.`,
       });
     } else if (fp.action === "handoff_now") {
       await dispatchAutomations({
