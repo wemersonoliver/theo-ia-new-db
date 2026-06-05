@@ -2436,6 +2436,7 @@ async function executeSendPromotionalImage(
   userId: string,
   phone: string,
   caption: string,
+  clientName: string,
 ): Promise<any> {
   if (!PROMO_IMAGE_ALLOWED_USERS.has(userId)) {
     console.warn(`[send_promotional_image] bloqueado para user_id=${userId}`);
@@ -2477,6 +2478,15 @@ async function executeSendPromotionalImage(
   if (!instance) return { success: false, error: "Instância WhatsApp não encontrada." };
 
   try {
+    // PASSO 1 — envia mensagem-resumo do benefício ANTES da imagem (enforced em código)
+    const nameForSummary = (clientName || "").trim() || "—";
+    const summaryText = `Excelente 👊\n\nSeu benefício ficou registrado:\n\n👤 Nome: ${nameForSummary}\n\n🎁 Benefício: Curso profissionalizante EAD\n\n📌 Status: Lista prioritária para futuras vagas presenciais\n\nAssim que houver novas oportunidades na sua região, a equipe poderá entrar em contato.\n\nComo combinado, vamos honrar nosso compromisso disponibilizando seu acesso ao curso EAD 👊🎁`;
+    try {
+      await sendAndSaveAIMessageParts(supabase, userId, phone, summaryText);
+    } catch (e) {
+      console.error("[send_promotional_image] erro ao enviar resumo:", e);
+    }
+
     const resolvedChatNumber = await resolvePreferredChatNumber(instance.instance_name, phone, evolutionUrl, evolutionKey);
     const tryNumbers = [resolvedChatNumber, phone];
     const variant = getBrazilianPhoneVariant(phone);
