@@ -1818,7 +1818,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
 
         // Handle request_human_handoff (transfere para humano da equipe)
         if (fc.name === "request_human_handoff") {
-          // (placeholder)
+          // (see real handler below)
         }
 
         // Handle send_promotional_image (restrito ao usuário do Fonseca Brothers JJ)
