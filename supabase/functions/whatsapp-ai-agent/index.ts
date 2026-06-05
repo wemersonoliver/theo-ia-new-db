@@ -1825,11 +1825,13 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
         // Handle send_promotional_image (restrito ao usuário do Fonseca Brothers JJ)
         if (fc.name === "send_promotional_image") {
           const caption = typeof fc.args?.caption === "string" ? fc.args.caption.trim() : "";
+          const clientNameArg = typeof fc.args?.client_name === "string" ? fc.args.client_name.trim() : "";
           const promoResult = await executeSendPromotionalImage(
             supabase,
             userId,
             phone,
             caption,
+            clientNameArg,
           );
           lastToolResult = promoResult;
           geminiPayload.contents.push(content);
