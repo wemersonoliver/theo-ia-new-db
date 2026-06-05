@@ -325,6 +325,17 @@ const schedulingTools = {
         },
         required: []
       }
+    },
+    {
+      name: "send_promotional_image",
+      description: "Envia uma imagem promocional pré-cadastrada para o cliente via WhatsApp. Use APENAS quando o fluxo instruir explicitamente (ex.: final da ETAPA 7 do Fonseca Brothers JJ — cliente de outra cidade que aceitou o curso EAD). Após chamar esta tool, NÃO escreva mais nada — a imagem já contém todas as instruções.",
+      parameters: {
+        type: "object",
+        properties: {
+          caption: { type: "string", description: "Texto curto opcional que acompanha a imagem (ex.: 'Segue o passo a passo para acessar seu curso EAD 👊🎁')." }
+        },
+        required: []
+      }
     }
   ]
 };
