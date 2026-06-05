@@ -1818,6 +1818,35 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
 
         // Handle request_human_handoff (transfere para humano da equipe)
         if (fc.name === "request_human_handoff") {
+          // (placeholder)
+        }
+
+        // Handle send_promotional_image (restrito ao usuário do Fonseca Brothers JJ)
+        if (fc.name === "send_promotional_image") {
+          const caption = typeof fc.args?.caption === "string" ? fc.args.caption.trim() : "";
+          const promoResult = await executeSendPromotionalImage(
+            supabase,
+            userId,
+            phone,
+            caption,
+          );
+          lastToolResult = promoResult;
+          geminiPayload.contents.push(content);
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{ functionResponse: { name: fc.name, response: promoResult } }],
+          });
+          if ((promoResult as any)?.success) {
+            aiReply = "";
+            toolOnlyTurnHandled = true;
+            functionCallsProcessed = maxFunctionCalls;
+            break;
+          }
+          functionCallsProcessed++;
+          continue;
+        }
+
+        if (fc.name === "request_human_handoff") {
           const handoffReason = String(fc.args?.reason || "Solicitação de atendimento humano");
           console.log("[HANDOFF] Tool request_human_handoff acionada:", handoffReason);
 
