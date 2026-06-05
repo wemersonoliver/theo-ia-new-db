@@ -328,13 +328,14 @@ const schedulingTools = {
     },
     {
       name: "send_promotional_image",
-      description: "Envia uma imagem promocional pré-cadastrada para o cliente via WhatsApp. Use APENAS quando o fluxo instruir explicitamente (ex.: final da ETAPA 7 do Fonseca Brothers JJ — cliente de outra cidade que aceitou o curso EAD). Após chamar esta tool, NÃO escreva mais nada — a imagem já contém todas as instruções.",
+      description: "Envia AUTOMATICAMENTE a mensagem-resumo do benefício EAD + a imagem promocional pré-cadastrada para o cliente via WhatsApp. Use APENAS no final da ETAPA 7 do Fonseca Brothers JJ (cliente de outra cidade que aceitou o curso EAD), assim que receber o nome completo. A tool já envia o texto de resumo (Excelente / Seu benefício ficou registrado...) E a imagem — você NÃO precisa escrever o resumo antes. Após chamar esta tool, NÃO escreva mais nada.",
       parameters: {
         type: "object",
         properties: {
-          caption: { type: "string", description: "Texto curto opcional que acompanha a imagem (ex.: 'Segue o passo a passo para acessar seu curso EAD 👊🎁')." }
+          client_name: { type: "string", description: "Nome completo do cliente conforme enviado por ele (será usado no resumo do benefício)." },
+          caption: { type: "string", description: "Texto curto opcional que acompanha a imagem (padrão: 'Segue o passo a passo para acessar seu curso EAD 👊🎁')." }
         },
-        required: []
+        required: ["client_name"]
       }
     }
   ]
