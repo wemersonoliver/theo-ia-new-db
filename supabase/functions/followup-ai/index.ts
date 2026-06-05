@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cleanAIText } from "../_ai_text.ts";
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
+import { openAITextFallback } from "../_shared/ai-fallback/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -528,6 +529,22 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
           if (!geminiResponse.ok) {
             const errText = await geminiResponse.text();
             console.error("Gemini generation error:", geminiResponse.status, errText);
+            // Try OpenAI fallback before giving up
+            const fb = await openAITextFallback({
+              systemPrompt: "Você gera mensagens de follow-up curtas e específicas para WhatsApp em PT-BR.",
+              userPrompt: promptToUse,
+              model: "gpt-4o-mini",
+              maxTokens: 400,
+              temperature: 0.7,
+              ctx: { reason: `gemini_${geminiResponse.status}`, phone: item.phone },
+            });
+            if (fb?.text) {
+              const cleaned = cleanAIText(fb.text.trim().replace(/^["'`]+|["'`]+$/g, ""));
+              if (cleaned && !isGenericGreeting(cleaned)) {
+                aiMessage = cleaned;
+                break;
+              }
+            }
             if (geminiResponse.status === 429) { rateLimited = true; break; }
             break;
           }
