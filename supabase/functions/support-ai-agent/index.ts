@@ -2,6 +2,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cleanAIText } from "../_ai_text.ts";
 import { evolutionRequest } from "../_evolution.ts";
+import {
+  openAIGeminiShapeFallback,
+  markProviderOutOfCredits,
+  isProviderOutOfCredits,
+  detectCreditError,
+} from "../_shared/ai-fallback/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1220,27 +1226,71 @@ async function callGeminiWithTools(
       }
     };
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-      }
-    );
+    // Try Gemini first; if it fails terminally (429/5xx/credits), fall back to OpenAI
+    let data: any | null = null;
+    let geminiFailed = false;
+    let geminiFailReason = "";
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini API error:", response.status, errorText);
-      
-      if (response.status === 429) {
-        await new Promise(r => setTimeout(r, 2000 * attempts));
-        continue;
+    if (apiKey && !isProviderOutOfCredits("gemini")) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody),
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Gemini API error:", response.status, errorText);
+
+          if (detectCreditError(response.status, errorText)) {
+            markProviderOutOfCredits("gemini");
+            geminiFailed = true;
+            geminiFailReason = "gemini_credits_exhausted";
+          } else if (response.status === 429) {
+            if (attempts < 2) {
+              await new Promise(r => setTimeout(r, 2000 * attempts));
+              continue;
+            }
+            geminiFailed = true;
+            geminiFailReason = "gemini_429";
+          } else {
+            geminiFailed = true;
+            geminiFailReason = `gemini_http_${response.status}`;
+          }
+        } else {
+          data = await response.json();
+        }
+      } catch (e) {
+        console.error("Gemini fetch error:", (e as Error).message);
+        geminiFailed = true;
+        geminiFailReason = "gemini_fetch_error";
       }
-      throw new Error(`Gemini API error: ${response.status}`);
+    } else {
+      geminiFailed = true;
+      geminiFailReason = apiKey ? "gemini_circuit_open" : "gemini_no_api_key";
     }
 
-    const data = await response.json();
+    if (geminiFailed || !data) {
+      console.warn(`[support-ai-agent] Trying OpenAI fallback (${geminiFailReason})`);
+      const fb = await openAIGeminiShapeFallback({
+        systemPrompt,
+        contents,
+        tools: supportTools,
+        model: "gpt-4o-mini",
+        maxTokens: 1500,
+        temperature: 0.7,
+        ctx: { reason: geminiFailReason, phone },
+      });
+      if (!fb) {
+        throw new Error(`All AI providers unavailable (${geminiFailReason})`);
+      }
+      data = fb;
+    }
+
     const candidate = data.candidates?.[0];
     if (!candidate) throw new Error("No candidate in Gemini response");
 

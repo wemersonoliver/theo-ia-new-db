@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logImageUsage, logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
+import { openAIVisionFallback, detectCreditError, markProviderOutOfCredits, isProviderOutOfCredits } from "../_shared/ai-fallback/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -103,37 +104,65 @@ Responda de forma direta, sem formatação especial.`;
     };
 
     let geminiResponse: Response | null = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(geminiPayload),
+    let geminiFailReason = "";
+    if (!isProviderOutOfCredits("gemini")) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        geminiResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(geminiPayload),
+          }
+        );
+
+        if (geminiResponse.status === 429) {
+          const waitMs = Math.pow(2, attempt) * 2000 + Math.random() * 1000;
+          console.log(`OCR Gemini 429, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/3)`);
+          await new Promise(r => setTimeout(r, waitMs));
+          continue;
         }
-      );
-
-      if (geminiResponse.status === 429) {
-        const waitMs = Math.pow(2, attempt) * 2000 + Math.random() * 1000;
-        console.log(`OCR Gemini 429, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/3)`);
-        await new Promise(r => setTimeout(r, waitMs));
-        continue;
+        break;
       }
-      break;
+    } else {
+      geminiFailReason = "gemini_circuit_open";
     }
 
-    if (!geminiResponse || !geminiResponse.ok) {
-      const errorText = geminiResponse ? await geminiResponse.text() : "No response";
-      console.error("Gemini Vision error:", errorText);
-      
-      return new Response(JSON.stringify({ error: "OCR processing failed" }), { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+    let geminiData: any = null;
+    let extractedText = "";
+    if (geminiResponse && geminiResponse.ok) {
+      geminiData = await geminiResponse.json();
+      extractedText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    } else {
+      if (geminiResponse) {
+        const errorText = await geminiResponse.text();
+        console.error("Gemini Vision error:", geminiResponse.status, errorText);
+        if (detectCreditError(geminiResponse.status, errorText)) {
+          markProviderOutOfCredits("gemini");
+          geminiFailReason = "gemini_credits_exhausted";
+        } else {
+          geminiFailReason = `gemini_http_${geminiResponse.status}`;
+        }
+      } else {
+        geminiFailReason = geminiFailReason || "gemini_no_response";
+      }
+      console.warn(`[process-image-ocr] Trying OpenAI Vision fallback (${geminiFailReason})`);
+      const fb = await openAIVisionFallback({
+        systemPrompt: "Você é um OCR fiel. Retorne apenas o texto extraído.",
+        userPrompt: ocrInstruction,
+        imageBase64: base64Media,
+        mime: mimeType,
+        model: "gpt-4o",
+        ctx: { reason: geminiFailReason, phone },
       });
+      if (!fb) {
+        return new Response(JSON.stringify({ error: "OCR processing failed" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      extractedText = fb.raw_text || "";
     }
-
-    const geminiData = await geminiResponse.json();
-    const extractedText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     // Registra custo: 1 imagem analisada + tokens de saída
     try {
@@ -147,7 +176,7 @@ Responda de forma direta, sem formatação especial.`;
           images: 1,
           referenceId: phone || instanceName,
         });
-        const t = extractGeminiTokens(geminiData);
+        const t = geminiData ? extractGeminiTokens(geminiData) : { input: 0, output: 0 };
         if (t.input || t.output) {
           await logTextUsage(sb, {
             userId,

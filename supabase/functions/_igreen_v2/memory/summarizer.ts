@@ -5,6 +5,7 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
 import { estimateTokens } from "../cost-governor/token-budget.ts";
 import { maskAll } from "./pii-guard.ts";
 import type { MemoryMessage } from "./short-term.ts";
+import { openAITextFallback } from "../../_shared/ai-fallback/index.ts";
 
 let _c: SupabaseClient | null = null;
 const svc = () => (_c ??= createClient(
@@ -40,9 +41,22 @@ export async function summarize(messages: MemoryMessage[]): Promise<string> {
         }),
       },
     );
-    const j = await r.json();
-    const text = j?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    return text || compact.slice(0, MAX_SUMMARY_TOKENS * 4);
+    if (r.ok) {
+      const j = await r.json();
+      const text = j?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      if (text) return text;
+    } else {
+      console.warn(`[summarizer] Gemini ${r.status}; tentando OpenAI`);
+    }
+    // OpenAI fallback
+    const fb = await openAITextFallback({
+      systemPrompt: `Você resume conversas de WhatsApp em PT-BR sem inventar fatos.`,
+      userPrompt: `Resuma a conversa abaixo em PT-BR com no máximo ${MAX_SUMMARY_TOKENS} tokens, preservando fatos relevantes (intenções, dados informados, decisões). Não invente dados.\n\n${compact}`,
+      maxTokens: MAX_SUMMARY_TOKENS,
+      temperature: 0.2,
+      ctx: { reason: "gemini_summarizer_fail" },
+    });
+    return fb?.text || compact.slice(0, MAX_SUMMARY_TOKENS * 4);
   } catch (e) {
     console.error("[summarizer] fallback truncate", e);
     return compact.slice(0, MAX_SUMMARY_TOKENS * 4);
