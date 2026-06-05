@@ -1344,6 +1344,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let phoneForError: string | null = null;
+  let supabaseForError: any = null;
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -1354,6 +1356,7 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    supabaseForError = supabase;
 
     const { phone, messageContent, inputType } = await req.json();
 
@@ -1363,6 +1366,7 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    phoneForError = phone;
 
     console.log(`Support AI processing message from ${phone}: ${messageContent.slice(0, 100)}`);
 
