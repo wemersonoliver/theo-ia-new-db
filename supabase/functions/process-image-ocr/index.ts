@@ -176,7 +176,7 @@ Responda de forma direta, sem formatação especial.`;
           images: 1,
           referenceId: phone || instanceName,
         });
-        const t = extractGeminiTokens(geminiData);
+        const t = geminiData ? extractGeminiTokens(geminiData) : { input: 0, output: 0 };
         if (t.input || t.output) {
           await logTextUsage(sb, {
             userId,
