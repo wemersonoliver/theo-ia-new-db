@@ -77,7 +77,7 @@ verify_jwt = false
 [functions.repair-whatsapp-webhook]
 verify_jwt = false
 
-[functions._diag-evo]
+[functions.diag-evo]
 verify_jwt = false
 
 [functions.followup-generate-sequence]
