@@ -2,6 +2,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cleanAIText } from "../_ai_text.ts";
 import { evolutionRequest } from "../_evolution.ts";
+import {
+  openAIGeminiShapeFallback,
+  markProviderOutOfCredits,
+  isProviderOutOfCredits,
+  detectCreditError,
+} from "../_shared/ai-fallback/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
