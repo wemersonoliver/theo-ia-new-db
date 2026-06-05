@@ -1,61 +1,39 @@
-## Passo 1 — Fallback Gemini ↔ OpenAI no Agente Green + WhatsApp genérico
+## Objetivo
 
-### Objetivo
-Estender o fallback já criado (`_shared/ai-fallback/`) para os agentes principais de texto, e adicionar **erro de créditos (402)** como gatilho de troca de provedor (bidirecional: Gemini → OpenAI e OpenAI → Gemini).
+Quando a IA do André (`andre.fonseca.silva@gmail.com`) finalizar a **ETAPA 7 — OUTRA CIDADE** (cliente fora de Gravataí/Viamão que aceitou o curso EAD e enviou o nome), a IA deve disparar automaticamente o card promocional do Instituto Educando (imagem anexada) para o cliente via WhatsApp — substituindo o placeholder `🖼️ [midia]` que já existe no prompt dele.
 
----
+## Passos
 
-### 1. Ampliar gatilhos de fallback no `_shared/ai-fallback/index.ts`
-Hoje o wrapper troca apenas em: 429, 5xx, timeout, resposta vazia, SAFETY, JSON inválido.
+### 1. Hospedar a imagem
+- Upload da imagem anexada para o bucket público `whatsapp-media` em `andre-fonseca/curso-ead-instituto-educando.jpg`.
+- Resultado: URL pública fixa (`https://gljsifkjwkubxaqgxxul.supabase.co/storage/v1/object/public/whatsapp-media/andre-fonseca/curso-ead-instituto-educando.jpg`).
 
-Adicionar:
-- **402 Payment Required / "insufficient_quota" / "credits"** → marca provedor atual como "sem crédito" por 5 min (circuit breaker em memória) e usa o outro.
-- **Bidirecional**: se OpenAI também retornar 402/429, tenta voltar para Gemini imediatamente (em vez de falhar).
-- Log estruturado: `ai_provider.switched` com `{ from, to, reason: "credits_exhausted" | "rate_limit" | ... }`.
+### 2. Nova tool no agente de IA: `send_promotional_image`
+Em `supabase/functions/whatsapp-ai-agent/index.ts`:
+- Adicionar declaração de tool `send_promotional_image` com 1 parâmetro: `caption` (texto curto opcional para acompanhar a imagem).
+- A tool fica **restrita** ao `user_id` do André (`c753d23b-7f23-4d56-a867-6639897b6767`). Se outro user_id chamar, retorna `{ success: false, error: "not_allowed" }` sem enviar nada (segurança e isolamento multi-tenant).
+- Execução: chama o endpoint Evolution `sendMedia` da instância do usuário enviando a URL pública da imagem (mesmo padrão já usado em `send-whatsapp-media`/`send-discovery-video`).
+- Após envio, retorna `instruction` orientando a IA a NÃO escrever mais nada e encerrar o turno (mesmo padrão do `sendDiscoveryVideo`), evitando duplicar mensagem.
 
-### 2. Agente Green (`_igreen_v2/agents/green/run.ts`)
-Hoje chama Gemini diretamente em `run.ts` (geração de resposta + tool calling).
-- Envolver chamada Gemini com `callWithFallback()` do `_shared/ai-fallback`.
-- Mapear tools do formato Gemini (`functionDeclarations`) para formato OpenAI (`tools: [{type:"function", function:{...}}]`) dentro do wrapper OpenAI.
-- Preservar histórico de conversa e system prompt.
-- Quando fallback for acionado, registrar `source: "openai_fallback"` em `ai_usage` e no log da conversa.
+### 3. Atualizar o prompt do André (`whatsapp_ai_config.custom_prompt`)
+- Trocar o trecho da ETAPA 7 onde aparece `🖼️ [midia]` por instrução explícita:
+  > "Depois de receber o nome completo, **chame OBRIGATORIAMENTE a tool `send_promotional_image`** com uma `caption` curta (ex.: "Segue o passo a passo para acessar seu curso EAD 👊🎁"). Após a tool, não envie outra mensagem — o card já contém todas as instruções (site, cupom, polo)."
 
-### 3. WhatsApp AI genérico (`whatsapp-ai-agent`)
-Mesmo padrão do Green:
-- Substituir chamada direta Gemini pelo `callWithFallback()`.
-- Manter chunking de 220 chars e lógica de áudio inalterados.
-- Preservar function calling (check_available_slots, create_appointment, etc.) traduzindo schema para OpenAI quando necessário.
+### 4. Validação
+- Deploy da edge function `whatsapp-ai-agent`.
+- Teste manual simulando cliente "de outra cidade" no número de teste do André até a ETAPA 7 e confirmar:
+  - Imagem chega no WhatsApp do cliente.
+  - Nenhum outro usuário do sistema consegue acionar a tool (retorno `not_allowed` nos logs).
 
-### 4. Tradução de tool/function schemas
-Criar helper `_shared/ai-fallback/tool-adapter.ts`:
-- `geminiToOpenAI(functionDeclarations)` → `tools[]` OpenAI.
-- `openAIToGemini(tools)` → `functionDeclarations` Gemini.
-- Normalizar resposta: ambas retornam `{ text, toolCalls: [{name, args}] }`.
+## Detalhes técnicos
 
-### 5. Registro de uso e custo
-- Em `ai_usage`, adicionar coluna `provider` (`gemini` | `openai`) via migration se ainda não existir.
-- Gravar tokens/modelo correto conforme provedor usado.
+- **Bucket**: reutilizar `whatsapp-media` (já público) — sem necessidade de migração ou nova policy.
+- **Gating por usuário**: feito em código dentro do `executeFunction`/branch da tool, comparando `userId` recebido no contexto da chamada com o UUID do André. Mantemos a tool declarada globalmente (Gemini precisa do schema) mas inerte para os demais — abordagem mais simples que prompts dinâmicos por usuário.
+- **Caption**: imagem enviada via `sendMedia` com `mediatype: "image"` e `caption` opcional. Sem prefixo de atendente (mensagem da IA, não humana).
+- **Idempotência**: registramos no log de mensagens da conversa (`whatsapp_conversations.messages`) com `sent_by: "ai"` e `type: "image"`, igual ao fluxo do vídeo de descoberta Igreen.
+- **Sem migration de banco** — toda a mudança é em edge function + 1 update no `whatsapp_ai_config` do André + upload do arquivo no Storage.
 
-### 6. Observabilidade
-- Endpoint admin `/admin/ai-fallback-stats` (já planejado) recebe contadores: total chamadas, fallbacks acionados, motivo, por agente.
-- Por ora apenas logs estruturados; UI fica para passo posterior.
-
-### 7. Testes manuais
-- Forçar 402 simulado no Gemini (header override) → confirmar Green responde via OpenAI.
-- Forçar 402 no OpenAI → confirmar volta para Gemini.
-- Testar tool calling (agendamento) funcionando em ambos provedores.
-
----
-
-### Arquivos a alterar
-- `supabase/functions/_shared/ai-fallback/index.ts` — adicionar 402 + circuit breaker bidirecional
-- `supabase/functions/_shared/ai-fallback/tool-adapter.ts` — **novo**
-- `supabase/functions/_shared/ai-fallback/openai.ts` — suporte a tools
-- `supabase/functions/_igreen_v2/agents/green/run.ts` — usar wrapper
-- `supabase/functions/whatsapp-ai-agent/index.ts` — usar wrapper
-- Migration: `ai_usage.provider` (se faltar)
-
-### Fora do escopo deste passo
-- UI admin de estatísticas de fallback
-- Migração de OCR de imagem, transcrição de áudio, geração de prompts/entrevistas (passo 2)
-- ElevenLabs e Groq (mantêm-se como estão)
+## Arquivos afetados
+- `supabase/functions/whatsapp-ai-agent/index.ts` (nova tool + executor)
+- Storage: `whatsapp-media/andre-fonseca/curso-ead-instituto-educando.jpg` (novo)
+- Tabela `whatsapp_ai_config` (UPDATE no `custom_prompt` do André)
