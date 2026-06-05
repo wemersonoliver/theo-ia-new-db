@@ -328,13 +328,14 @@ const schedulingTools = {
     },
     {
       name: "send_promotional_image",
-      description: "Envia uma imagem promocional pré-cadastrada para o cliente via WhatsApp. Use APENAS quando o fluxo instruir explicitamente (ex.: final da ETAPA 7 do Fonseca Brothers JJ — cliente de outra cidade que aceitou o curso EAD). Após chamar esta tool, NÃO escreva mais nada — a imagem já contém todas as instruções.",
+      description: "Envia AUTOMATICAMENTE a mensagem-resumo do benefício EAD + a imagem promocional pré-cadastrada para o cliente via WhatsApp. Use APENAS no final da ETAPA 7 do Fonseca Brothers JJ (cliente de outra cidade que aceitou o curso EAD), assim que receber o nome completo. A tool já envia o texto de resumo (Excelente / Seu benefício ficou registrado...) E a imagem — você NÃO precisa escrever o resumo antes. Após chamar esta tool, NÃO escreva mais nada.",
       parameters: {
         type: "object",
         properties: {
-          caption: { type: "string", description: "Texto curto opcional que acompanha a imagem (ex.: 'Segue o passo a passo para acessar seu curso EAD 👊🎁')." }
+          client_name: { type: "string", description: "Nome completo do cliente conforme enviado por ele (será usado no resumo do benefício)." },
+          caption: { type: "string", description: "Texto curto opcional que acompanha a imagem (padrão: 'Segue o passo a passo para acessar seu curso EAD 👊🎁')." }
         },
-        required: []
+        required: ["client_name"]
       }
     }
   ]
@@ -1824,11 +1825,13 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
         // Handle send_promotional_image (restrito ao usuário do Fonseca Brothers JJ)
         if (fc.name === "send_promotional_image") {
           const caption = typeof fc.args?.caption === "string" ? fc.args.caption.trim() : "";
+          const clientNameArg = typeof fc.args?.client_name === "string" ? fc.args.client_name.trim() : "";
           const promoResult = await executeSendPromotionalImage(
             supabase,
             userId,
             phone,
             caption,
+            clientNameArg,
           );
           lastToolResult = promoResult;
           geminiPayload.contents.push(content);
@@ -2433,6 +2436,7 @@ async function executeSendPromotionalImage(
   userId: string,
   phone: string,
   caption: string,
+  clientName: string,
 ): Promise<any> {
   if (!PROMO_IMAGE_ALLOWED_USERS.has(userId)) {
     console.warn(`[send_promotional_image] bloqueado para user_id=${userId}`);
@@ -2474,6 +2478,15 @@ async function executeSendPromotionalImage(
   if (!instance) return { success: false, error: "Instância WhatsApp não encontrada." };
 
   try {
+    // PASSO 1 — envia mensagem-resumo do benefício ANTES da imagem (enforced em código)
+    const nameForSummary = (clientName || "").trim() || "—";
+    const summaryText = `Excelente 👊\n\nSeu benefício ficou registrado:\n\n👤 Nome: ${nameForSummary}\n\n🎁 Benefício: Curso profissionalizante EAD\n\n📌 Status: Lista prioritária para futuras vagas presenciais\n\nAssim que houver novas oportunidades na sua região, a equipe poderá entrar em contato.\n\nComo combinado, vamos honrar nosso compromisso disponibilizando seu acesso ao curso EAD 👊🎁`;
+    try {
+      await sendAndSaveAIMessageParts(supabase, userId, phone, summaryText);
+    } catch (e) {
+      console.error("[send_promotional_image] erro ao enviar resumo:", e);
+    }
+
     const resolvedChatNumber = await resolvePreferredChatNumber(instance.instance_name, phone, evolutionUrl, evolutionKey);
     const tryNumbers = [resolvedChatNumber, phone];
     const variant = getBrazilianPhoneVariant(phone);
