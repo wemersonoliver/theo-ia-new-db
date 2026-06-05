@@ -2422,6 +2422,98 @@ async function executeSendProductVideo(
   }
 }
 
+// Allowed user IDs for the promotional image tool (Fonseca Brothers JJ / André)
+const PROMO_IMAGE_ALLOWED_USERS = new Set<string>([
+  "c753d23b-7f23-4d56-a867-6639897b6767",
+]);
+const PROMO_IMAGE_URL = "https://theoia.com.br/__l5e/assets-v1/900c9019-949d-4855-8678-c50e18336b4b/curso-ead-instituto-educando.png";
+
+async function executeSendPromotionalImage(
+  supabase: any,
+  userId: string,
+  phone: string,
+  caption: string,
+): Promise<any> {
+  if (!PROMO_IMAGE_ALLOWED_USERS.has(userId)) {
+    console.warn(`[send_promotional_image] bloqueado para user_id=${userId}`);
+    return { success: false, error: "not_allowed", instruction: "Esta tool não está disponível para este atendimento. Siga o fluxo normalmente sem imagem." };
+  }
+
+  const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+  const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+  if (!evolutionUrl || !evolutionKey) {
+    return { success: false, error: "Evolution API não configurada." };
+  }
+
+  const { data: conv } = await supabase
+    .from("whatsapp_conversations")
+    .select("instance_id")
+    .eq("user_id", userId)
+    .eq("phone", phone)
+    .maybeSingle();
+
+  let instance: { instance_name: string } | null = null;
+  if ((conv as any)?.instance_id) {
+    const { data } = await supabase
+      .from("whatsapp_instances")
+      .select("instance_name")
+      .eq("id", (conv as any).instance_id)
+      .maybeSingle();
+    instance = data as any;
+  }
+  if (!instance) {
+    const { data } = await supabase
+      .from("whatsapp_instances")
+      .select("instance_name, is_primary")
+      .eq("user_id", userId)
+      .order("is_primary", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    instance = data as any;
+  }
+  if (!instance) return { success: false, error: "Instância WhatsApp não encontrada." };
+
+  try {
+    const resolvedChatNumber = await resolvePreferredChatNumber(instance.instance_name, phone, evolutionUrl, evolutionKey);
+    const tryNumbers = [resolvedChatNumber, phone];
+    const variant = getBrazilianPhoneVariant(phone);
+    if (variant && variant !== phone) tryNumbers.push(variant);
+
+    let sent = false;
+    let lastError = "";
+    for (const candidate of [...new Set(tryNumbers.filter(Boolean) as string[])]) {
+      const response = await fetch(`${evolutionUrl}/message/sendMedia/${instance.instance_name}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: evolutionKey },
+        body: JSON.stringify({
+          number: candidate,
+          mediatype: "image",
+          mimetype: "image/png",
+          media: PROMO_IMAGE_URL,
+          fileName: "curso-ead-instituto-educando.png",
+          caption: caption || "",
+        }),
+      });
+      const responseText = await response.text();
+      if (response.ok) { sent = true; break; }
+      lastError = responseText;
+      const isInvalidNumber = response.status === 400 || response.status === 404 || /not.?exists|invalid.?number|number.?does.?not|not.?in.?whatsapp|jid/i.test(responseText);
+      if (!isInvalidNumber) break;
+    }
+    if (!sent) {
+      console.error("[send_promotional_image] Evolution sendMedia error:", lastError);
+      return { success: false, error: "Erro ao enviar imagem promocional." };
+    }
+
+    await saveAIMessage(supabase, userId, phone, `🖼️ Imagem promocional enviada (Curso EAD Instituto Educando)${caption ? `: ${caption}` : ""}`, "ai");
+    console.log(`[send_promotional_image] enviada para ${phone}`);
+    return { success: true, instruction: "Imagem enviada com sucesso. NÃO escreva mais nenhuma mensagem agora — o card já contém todas as instruções (site, cupom e polo)." };
+  } catch (error) {
+    console.error("executeSendPromotionalImage error:", error);
+    return { success: false, error: "Falha ao enviar imagem promocional." };
+  }
+}
+
 async function executeFunction(supabase: any, supabaseUrl: string, name: string, args: any): Promise<any> {
   const operation = name === "check_available_slots" ? "check_availability" : name;
   console.log(`[executeFunction] Calling manage-appointment: operation=${operation}, args=`, JSON.stringify(args));
