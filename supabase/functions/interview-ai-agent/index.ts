@@ -10,6 +10,7 @@ const corsHeaders = {
 const GEMINI_API_KEY = Deno.env.get("GOOGLE_GEMINI_API_KEY");
 const GEMINI_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+import { openAITextFallback, detectCreditError, markProviderOutOfCredits, isProviderOutOfCredits } from "../_shared/ai-fallback/index.ts";
 
 async function extractAndSaveBusinessData(
   adminClient: ReturnType<typeof createClient>,
