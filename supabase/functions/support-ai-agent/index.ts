@@ -1344,6 +1344,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let phoneForError: string | null = null;
+  let supabaseForError: any = null;
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -1354,6 +1356,7 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    supabaseForError = supabase;
 
     const { phone, messageContent, inputType } = await req.json();
 
@@ -1363,6 +1366,7 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    phoneForError = phone;
 
     console.log(`Support AI processing message from ${phone}: ${messageContent.slice(0, 100)}`);
 
@@ -1613,6 +1617,48 @@ serve(async (req) => {
   } catch (error) {
     console.error("Support AI Agent error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
+
+    // Notify admins on fatal AI failure + disable AI on this conversation so a human can take over
+    try {
+      if (supabaseForError && phoneForError) {
+        await supabaseForError
+          .from("system_whatsapp_conversations")
+          .update({ ai_active: false, updated_at: new Date().toISOString() })
+          .eq("phone", phoneForError);
+
+        const reason = `Falha na IA de suporte: ${message}`.slice(0, 300);
+        const summary = `A IA não conseguiu responder este atendimento por causa de uma falha técnica (provedores de IA indisponíveis ou sem créditos). A conversa foi colocada em modo manual.\n\nErro: ${message}`;
+        await notifyAdminContacts(supabaseForError, phoneForError, summary, reason);
+
+        // Send a courteous fallback message to the client via the system WA instance
+        try {
+          const { data: sysInstance } = await supabaseForError
+            .from("system_whatsapp_instance")
+            .select("instance_name, status")
+            .limit(1)
+            .maybeSingle();
+          const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+          const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+          if (sysInstance && (sysInstance as any).status === "connected" && evolutionUrl && evolutionKey) {
+            let target = String(phoneForError).replace(/\D/g, "");
+            if (target.length === 10 || target.length === 11) target = "55" + target;
+            await fetch(`${evolutionUrl}/message/sendText/${(sysInstance as any).instance_name}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", apikey: evolutionKey },
+              body: JSON.stringify({
+                number: target,
+                text: "Olá! Estamos com uma instabilidade momentânea no atendimento automático. Já avisamos a equipe e em instantes um humano vai te responder por aqui. 🙏",
+              }),
+            });
+          }
+        } catch (sendErr) {
+          console.error("Failed to send client fallback message:", sendErr);
+        }
+      }
+    } catch (notifyErr) {
+      console.error("Failed to notify admins on AI failure:", notifyErr);
+    }
+
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
