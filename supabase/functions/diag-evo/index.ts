@@ -17,7 +17,8 @@ serve(async (req) => {
 
   const state = await call(`/instance/connectionState/${inst}`);
   const webhook = await call(`/webhook/find/${inst}`);
-  return new Response(JSON.stringify({ base, inst, state, webhook }, null, 2), {
+  const fetchAll = await call(`/instance/fetchInstances?instanceName=${inst}`);
+  return new Response(JSON.stringify({ base, inst, state, webhook, fetchAll }, null, 2), {
     headers: { ...cors, "Content-Type": "application/json" },
   });
 });
