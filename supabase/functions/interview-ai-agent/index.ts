@@ -708,24 +708,43 @@ serve(async (req) => {
       },
     };
 
-    const geminiRes = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(geminiBody),
-    });
-
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      console.error("Gemini error:", errText);
-      throw new Error(`Gemini API error: ${geminiRes.status}`);
+    let aiResponse = "";
+    let geminiOk = false;
+    if (!isProviderOutOfCredits("gemini")) {
+      const geminiRes = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(geminiBody),
+      });
+      if (geminiRes.ok) {
+        const geminiData = await geminiRes.json();
+        aiResponse = geminiData.candidates?.[0]?.content?.parts
+          ?.filter((p: any) => p.text && !p.thought)
+          ?.map((p: any) => p.text)
+          ?.join("") || "";
+        geminiOk = true;
+      } else {
+        const errText = await geminiRes.text();
+        console.error("Gemini error:", geminiRes.status, errText);
+        if (detectCreditError(geminiRes.status, errText)) markProviderOutOfCredits("gemini");
+      }
     }
-
-    const geminiData = await geminiRes.json();
-    const aiResponse =
-      geminiData.candidates?.[0]?.content?.parts
-        ?.filter((p: any) => p.text && !p.thought)
-        ?.map((p: any) => p.text)
-        ?.join("") || "";
+    if (!geminiOk || !aiResponse) {
+      console.warn("[interview-ai-agent] Trying OpenAI fallback");
+      const userTurns = (geminiContents as any[])
+        .map((c) => `${c.role === "model" ? "Assistant" : "User"}: ${c.parts?.[0]?.text ?? ""}`)
+        .join("\n");
+      const fb = await openAITextFallback({
+        systemPrompt: SYSTEM_PROMPT,
+        userPrompt: userTurns,
+        model: "gpt-4o-mini",
+        maxTokens: 2000,
+        temperature: 0.7,
+        ctx: { reason: "gemini_unavailable" },
+      });
+      if (!fb) throw new Error("All AI providers unavailable");
+      aiResponse = fb.text;
+    }
 
     // Detect special tags
     const hasFinished = aiResponse.includes("[FINISH]");
