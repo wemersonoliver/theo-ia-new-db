@@ -358,8 +358,16 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
   }
 
   if (stage === "ask_name") {
+    patch.produto = "green";
+    patch.extras = { ...(patch.extras as object ?? currentExtras), greeted: true };
     const nome = extractFirstName(ctx.message);
-    if (nome) patch.extras = { ...(patch.extras as object ?? currentExtras), client_name: nome };
+    if (nome) {
+      patch.extras = { ...(patch.extras as object), client_name: nome };
+      tool_calls.push({
+        name: "save_green_lead_field",
+        args: { field: "client_name", value: nome },
+      });
+    }
   }
 
   if (stage === "send_video") {

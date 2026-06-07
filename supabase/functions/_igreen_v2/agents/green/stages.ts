@@ -185,7 +185,7 @@ export function decideGreenStage(
   }
 
   if (etapa === "novo") {
-    if (!extras.greeted) return "greet";
+    if (!extras.client_name) return "ask_name";
     if (!extras.explained) return "explain_solution";
     if (extras.video_sent) return "ask_valor_fatura";
     return "send_video";
