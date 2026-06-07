@@ -187,18 +187,18 @@ export function decideGreenStage(
   if (etapa === "novo") {
     if (!extras.greeted) return "greet";
     if (!extras.explained) return "explain_solution";
-    if (extras.video_sent) return "ask_estado";
+    if (extras.video_sent) return "ask_valor_fatura";
     return "send_video";
   }
 
   if (etapa === "qualificacao") {
     if (!extras.video_sent) return "send_video";
+    if (!hasValue(extras.valor_fatura)) return "ask_valor_fatura";
     if (!hasValue(extras.estado)) return "ask_estado";
     if (!hasValue(extras.distribuidora)) {
       if (!hasValue(extras.distributors_presented)) return "present_distributors";
       return "ask_distribuidora";
     }
-    if (!hasValue(extras.valor_fatura)) return "ask_valor_fatura";
     if (!hasValue(extras.discount_lookup_done)) return "simulate_discount_concreto";
     return "request_invoice";
   }
