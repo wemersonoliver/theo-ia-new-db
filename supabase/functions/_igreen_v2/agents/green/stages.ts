@@ -187,14 +187,12 @@ export function decideGreenStage(
   if (etapa === "novo") {
     if (!extras.greeted) return "greet";
     if (!extras.explained) return "explain_solution";
-    if (extras.video_sent) return "engage_check";
+    if (extras.video_sent) return "ask_estado";
     return "send_video";
   }
 
   if (etapa === "qualificacao") {
     if (!extras.video_sent) return "send_video";
-    if (!extras.engaged) return "engage_check";
-    if (!hasValue(extras.consumo_medio)) return "ask_consumo";
     if (!hasValue(extras.estado)) return "ask_estado";
     if (!hasValue(extras.distribuidora)) {
       if (!hasValue(extras.distributors_presented)) return "present_distributors";
