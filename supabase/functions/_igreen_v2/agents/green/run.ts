@@ -539,7 +539,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
           }
         }
       }
-      if (stage === "simulate_discount_concreto") {
+      else if (stage === "simulate_discount_concreto") {
         const estado = (mergedExtras.estado as string | undefined) ?? "";
         const distribuidora = (mergedExtras.distribuidora as string | undefined) ?? "";
         const valor = Number(mergedExtras.valor_fatura ?? 0);
