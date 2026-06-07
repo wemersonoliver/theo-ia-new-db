@@ -147,9 +147,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     const nome = (currentExtras.client_name as string | undefined) ?? "";
     if (list.length === 0) {
       deterministicText = `${nome ? nome + ", " : ""}me confirma só uma coisa: qual é a sua distribuidora de energia?`;
-    } else if (list.length === 1) {
-      deterministicText = `No seu estado trabalhamos com a ${list[0].distributor}. Essa é a sua distribuidora atual? 😊`;
-    } else {
+    } else if (list.length > 1) {
       const opts = list.map((d, i) => `${i + 1} - ${d.distributor}`).join("\n");
       deterministicText = `No seu estado trabalhamos com:\n\n${opts}\n\nQual dessas é a sua?`;
     }
@@ -158,6 +156,18 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
       distributors_presented: true,
       distributors_options: list.map((d) => d.distributor),
     };
+    // Apenas uma distribuidora atende o estado → assume direto e pula confirmação.
+    if (list.length === 1) {
+      const chosen = list[0].distributor;
+      patch.extras = { ...(patch.extras as object), distribuidora: chosen };
+      tool_calls.push({
+        name: "save_green_lead_field",
+        args: { field: "distribuidora", value: chosen },
+      });
+      // O bloco de redecide abaixo (STAGES_REDECIDABLE) cuidará de avançar
+      // pra simulate_discount_concreto / ask_valor_fatura no mesmo turno.
+      stage = "ask_distribuidora";
+    }
   }
 
   if (stage === "ask_distribuidora") {
