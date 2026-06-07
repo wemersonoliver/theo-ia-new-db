@@ -1520,6 +1520,7 @@ serve(async (req) => {
               headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${supabaseServiceKey}`,
+                "x-internal-key": Deno.env.get("INTERNAL_CRON_SECRET") ?? "",
               },
               body: JSON.stringify({
                 text: messageBlocks[i],
