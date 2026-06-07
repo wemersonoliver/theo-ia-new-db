@@ -703,7 +703,7 @@ function fallbackText(stage: string): string {
     case "waiting_invoice": return "Perfeito, fico no aguardo da fatura.";
     case "ask_full_name_cpf": return "Pra preparar seu contrato, me passa por favor seu nome completo e CPF?";
     case "simulate_discount": return "Com base na sua distribuidora e estado, conseguimos aplicar a faixa oficial de economia da iGreen. Posso seguir com o cálculo exato a partir da sua última fatura?";
-    case "ask_valor_fatura": return "Você lembra qual o valor médio da sua conta de luz por mês, em reais?";
+    case "ask_valor_fatura": return "Qual o valor médio da sua fatura mensal? Assim posso te mostrar quanto seria sua economia.";
     case "intent_send_invoice_ack": return "Combinado, fico no aguardo da sua fatura.";
     case "request_identity": return "Sua fatura foi validada com sucesso. Para concluirmos, por favor me envie uma foto do RG ou CNH do titular da conta.";
     case "validate_identity": return "Recebi seu documento, estou conferindo aqui.";
