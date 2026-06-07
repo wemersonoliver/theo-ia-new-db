@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireInternalKeyOrJwt } from "../_cron_auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -64,6 +65,9 @@ async function fetchKiwifySales(
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
+
+  const __authErr = await requireInternalKeyOrJwt(req);
+  if (__authErr) return __authErr;
     return new Response(null, { headers: corsHeaders });
   }
 

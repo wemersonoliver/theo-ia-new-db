@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 import { extractPersonName, cleanRenderedTemplate } from "../_person-name.ts";
+import { requireInternalKey } from "../_cron_auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -230,6 +231,9 @@ async function fireWebhooks(supabase: any, payload: any) {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const __authErr = requireInternalKey(req);
+  if (__authErr) return __authErr;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,

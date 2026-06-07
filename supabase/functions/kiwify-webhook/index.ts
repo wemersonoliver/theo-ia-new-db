@@ -4,8 +4,27 @@ import { resolveAccountId } from "../_account.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-kiwify-signature, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+async function hmacHex(secret: string, message: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function timingSafeEqualStr(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -13,11 +32,36 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Read raw body once so we can verify the signature AND parse it.
+    const rawBody = await req.text();
+
+    // Verify Kiwify signature when secret is configured.
+    const webhookSecret = Deno.env.get("KIWIFY_WEBHOOK_SECRET");
+    if (webhookSecret) {
+      // Kiwify sends the signature either as a header or as a `?signature=` query param.
+      const url = new URL(req.url);
+      const provided =
+        req.headers.get("x-kiwify-signature") ||
+        req.headers.get("X-Kiwify-Signature") ||
+        url.searchParams.get("signature") ||
+        "";
+      const expected = await hmacHex(webhookSecret, rawBody);
+      if (!provided || !timingSafeEqualStr(provided.toLowerCase(), expected.toLowerCase())) {
+        console.error("[kiwify-webhook] invalid signature");
+        return new Response(JSON.stringify({ error: "invalid signature" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } else {
+      console.warn("[kiwify-webhook] KIWIFY_WEBHOOK_SECRET not configured — accepting unverified payload");
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const body = await req.json();
+    const body = JSON.parse(rawBody);
     console.log("Kiwify webhook received:", JSON.stringify(body));
 
     // Kiwify webhook payload fields

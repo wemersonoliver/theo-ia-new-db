@@ -75,7 +75,11 @@ async function tryStartAttendanceFlow(
     const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     fetch(`${url}/functions/v1/attendance-flow-dispatch`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+        "x-internal-key": Deno.env.get("INTERNAL_CRON_SECRET") ?? "",
+      },
       body: "{}",
     }).catch(() => {});
 
@@ -1002,6 +1006,7 @@ serve(async (req) => {
               headers: {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                "x-internal-key": Deno.env.get("INTERNAL_CRON_SECRET") ?? "",
               },
               body: JSON.stringify({ phone, instanceName }),
             }).catch((err) => console.error("Profile picture sync failed:", err));

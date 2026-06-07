@@ -1,11 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import { requireInternalKey } from "../_cron_auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-internal-key",
 };
 
 const API_LABELS: Record<string, string> = {
@@ -17,6 +18,10 @@ const API_LABELS: Record<string, string> = {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // Server-to-server only — block public callers from spamming admin WhatsApp.
+  const authErr = requireInternalKey(req);
+  if (authErr) return authErr;
 
   try {
     const { api_name, kind, error_message, consecutive_failures } = await req.json();

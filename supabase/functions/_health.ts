@@ -43,6 +43,7 @@ export async function reportApiSuccess(apiName: ApiName): Promise<void> {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "x-internal-key": Deno.env.get("INTERNAL_CRON_SECRET") ?? "",
         },
         body: JSON.stringify({ api_name: apiName, kind: "recovery" }),
       }).catch(() => {});
@@ -93,6 +94,7 @@ export async function reportApiFailure(apiName: ApiName, errorMessage: string): 
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "x-internal-key": Deno.env.get("INTERNAL_CRON_SECRET") ?? "",
         },
         body: JSON.stringify({
           api_name: apiName,
