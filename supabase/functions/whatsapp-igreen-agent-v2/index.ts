@@ -645,12 +645,11 @@ serve(async (req) => {
   // Phase 5 — transport orchestrator (lock → typing → send → record).
   const instance = await resolveInstanceName(account_id, (state as any)?.whatsapp_instance ?? null);
   const dryRun = !Deno.env.get("EVOLUTION_API_URL") || !Deno.env.get("EVOLUTION_API_KEY");
-  const joined = chunkLimited.map((p) => p.text).join("\n\n");
   const sent = await withTimeout(
     "transport",
     DEFAULT_TIMEOUTS.transportMs * Math.max(chunkLimited.length, 1),
     () => timed("transport.send", account_id, correlation_id, () => sendOrchestrated({
-      account_id, correlation_id, phone, instance, text: joined, dryRun,
+      account_id, correlation_id, phone, instance, textChunks: chunkLimited.map((p) => p.text), dryRun,
     })),
     () => ({ delivered: false, chunks: 0, events: [], lock_acquired: false } as any),
   );
