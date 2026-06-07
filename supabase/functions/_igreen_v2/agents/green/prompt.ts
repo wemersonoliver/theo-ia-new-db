@@ -64,7 +64,7 @@ export function buildGreenUserPrompt(args: {
     case "ask_cidade":
       return baseCtx + "STAGE: ask_cidade. DEPRECADO — nunca pergunte cidade. Responda apenas confirmando algo curto.";
     case "ask_name":
-      return baseCtx + "STAGE: ask_name. Agora que já conversaram, pergunte de forma natural e informal apenas como pode chamá-lo (primeiro nome). NÃO peça nome completo. NÃO peça CPF. Máx 1 frase.";
+      return baseCtx + "STAGE: ask_name. Cliente acabou de demonstrar interesse no produto. Em 1-2 frases curtas: agradeça/reconheça o interesse de forma calorosa E pergunte apenas como pode chamá-lo (primeiro nome). NÃO peça nome completo. NÃO peça CPF. NÃO peça mais nenhum dado. NÃO comece com 'Opa' se greeted=true.";
     case "request_invoice":
       return baseCtx + "STAGE: request_invoice. Reconheça curto a distribuidora e peça a última fatura de energia em PDF ou foto para iniciar a verificação do cadastro. NÃO fale em calcular economia. Máx 2 frases.";
     case "waiting_invoice":
