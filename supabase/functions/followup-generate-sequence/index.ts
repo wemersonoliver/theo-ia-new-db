@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateScheduleSequence } from "../_followup-window.ts";
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { extractPersonName } from "../_person-name.ts";
+import { requireInternalKey } from "../_cron_auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -134,6 +135,9 @@ Retorne via tool call um array com EXATAMENTE ${TOTAL_STEPS} mensagens em ordem.
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const __authErr = requireInternalKey(req);
+  if (__authErr) return __authErr;
 
   try {
     const supabase = createClient(

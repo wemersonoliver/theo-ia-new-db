@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import { requireInternalKey } from "../_cron_auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,6 +38,9 @@ function slotForPeriod(period: "morning" | "evening", forDay?: Date): Date {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const __authErr = requireInternalKey(req);
+  if (__authErr) return __authErr;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,

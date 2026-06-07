@@ -1,5 +1,6 @@
 // Cron: expira assignments pendentes da Roleta e reatribui ao próximo da fila
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { requireInternalKey } from "../_cron_auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,6 +48,9 @@ async function notify(
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  const __authErr = requireInternalKey(req);
+  if (__authErr) return __authErr;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
