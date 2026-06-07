@@ -1,39 +1,54 @@
-## Objetivo
+## Ajustes no fluxo Igreen — Conexão Green
 
-Quando a IA do André (`andre.fonseca.silva@gmail.com`) finalizar a **ETAPA 7 — OUTRA CIDADE** (cliente fora de Gravataí/Viamão que aceitou o curso EAD e enviou o nome), a IA deve disparar automaticamente o card promocional do Instituto Educando (imagem anexada) para o cliente via WhatsApp — substituindo o placeholder `🖼️ [midia]` que já existe no prompt dele.
+### Ajuste 1 — Menu de opções sem quebra na frase final
 
-## Passos
+**Problema:** `buildMenuText()` em `supabase/functions/_igreen_v2/agents/qualifier/prompt.ts` retorna uma única string longa (~240 chars). O chunker (`prepare.ts` / `humanize.ts`, limite 220 chars) não acha pontuação intermediária e faz hard-split no meio de "Qual dessas opções faz mais sentido para você?", deixando algo como ".../ Qual dessas opções" + "faz mais sentido para você?".
 
-### 1. Hospedar a imagem
-- Upload da imagem anexada para o bucket público `whatsapp-media` em `andre-fonseca/curso-ead-instituto-educando.jpg`.
-- Resultado: URL pública fixa (`https://gljsifkjwkubxaqgxxul.supabase.co/storage/v1/object/public/whatsapp-media/andre-fonseca/curso-ead-instituto-educando.jpg`).
+**Solução:** alterar `buildMenuText()` para retornar um array de strings já pré-chunkadas, garantindo que a pergunta final fique inteira em um único bloco. Atualizar o consumidor em `agents/qualifier/run.ts` para emitir essas strings como mensagens separadas em `messages`.
 
-### 2. Nova tool no agente de IA: `send_promotional_image`
-Em `supabase/functions/whatsapp-ai-agent/index.ts`:
-- Adicionar declaração de tool `send_promotional_image` com 1 parâmetro: `caption` (texto curto opcional para acompanhar a imagem).
-- A tool fica **restrita** ao `user_id` do André (`c753d23b-7f23-4d56-a867-6639897b6767`). Se outro user_id chamar, retorna `{ success: false, error: "not_allowed" }` sem enviar nada (segurança e isolamento multi-tenant).
-- Execução: chama o endpoint Evolution `sendMedia` da instância do usuário enviando a URL pública da imagem (mesmo padrão já usado em `send-whatsapp-media`/`send-discovery-video`).
-- Após envio, retorna `instruction` orientando a IA a NÃO escrever mais nada e encerrar o turno (mesmo padrão do `sendDiscoveryVideo`), evitando duplicar mensagem.
+Pré-chunks propostos:
+1. `"Prazer em falar com você, {nome}. Para eu te direcionar da melhor forma, me conta: você está buscando?"` (ou versão sem nome)
+2. `"1 - Economia na conta de luz sem instalar nada\n2 - Planos de telefonia e internet para seu telefone\n3 - Como se tornar um Licenciado da iGreen e ganhar dinheiro vendendo assinaturas e placas solares"`
+3. `"Qual dessas opções faz mais sentido para você?"`
 
-### 3. Atualizar o prompt do André (`whatsapp_ai_config.custom_prompt`)
-- Trocar o trecho da ETAPA 7 onde aparece `🖼️ [midia]` por instrução explícita:
-  > "Depois de receber o nome completo, **chame OBRIGATORIAMENTE a tool `send_promotional_image`** com uma `caption` curta (ex.: "Segue o passo a passo para acessar seu curso EAD 👊🎁"). Após a tool, não envie outra mensagem — o card já contém todas as instruções (site, cupom, polo)."
+Mesma técnica aplicada em `MENU_SHORT_TEXT` se necessário (atualmente já cabe em 220, mas vou validar).
 
-### 4. Validação
-- Deploy da edge function `whatsapp-ai-agent`.
-- Teste manual simulando cliente "de outra cidade" no número de teste do André até a ETAPA 7 e confirmar:
-  - Imagem chega no WhatsApp do cliente.
-  - Nenhum outro usuário do sistema consegue acionar a tool (retorno `not_allowed` nos logs).
+### Ajuste 2 — Remover engage_check e ir direto pro valor da fatura
 
-## Detalhes técnicos
+**Problema:** depois do vídeo, a IA pergunta "faz sentido pra você, quer que eu te mostre quanto dá pra economizar?" e só no próximo turno pergunta o consumo. São duas trocas desnecessárias.
 
-- **Bucket**: reutilizar `whatsapp-media` (já público) — sem necessidade de migração ou nova policy.
-- **Gating por usuário**: feito em código dentro do `executeFunction`/branch da tool, comparando `userId` recebido no contexto da chamada com o UUID do André. Mantemos a tool declarada globalmente (Gemini precisa do schema) mas inerte para os demais — abordagem mais simples que prompts dinâmicos por usuário.
-- **Caption**: imagem enviada via `sendMedia` com `mediatype: "image"` e `caption` opcional. Sem prefixo de atendente (mensagem da IA, não humana).
-- **Idempotência**: registramos no log de mensagens da conversa (`whatsapp_conversations.messages`) com `sent_by: "ai"` e `type: "image"`, igual ao fluxo do vídeo de descoberta Igreen.
-- **Sem migration de banco** — toda a mudança é em edge function + 1 update no `whatsapp_ai_config` do André + upload do arquivo no Storage.
+**Solução:**
 
-## Arquivos afetados
-- `supabase/functions/whatsapp-ai-agent/index.ts` (nova tool + executor)
-- Storage: `whatsapp-media/andre-fonseca/curso-ead-instituto-educando.jpg` (novo)
-- Tabela `whatsapp_ai_config` (UPDATE no `custom_prompt` do André)
+1. Em `agents/green/stages.ts`, na função `decideGreenStage`, remover/pular o stage `engage_check`:
+   - Marcar `engaged=true` automaticamente quando o cliente respondeu após `video_sent` (no próprio handler de etapa `qualificacao`).
+   - Substituir os dois retornos `return "engage_check"` por uma transição direta pra próxima etapa de coleta.
+2. Substituir `ask_consumo` por `ask_valor_fatura` como primeiro pedido de dado (o consumo já era convertido pra valor; o stage `ask_consumo` deixa de ser pedido — fica apenas o valor da fatura).
+3. Em `agents/green/prompt.ts`, atualizar o stage `ask_valor_fatura` para que a IA primeiro reconheça/responda à mensagem do cliente (objeção, dúvida, etc.) e em seguida pergunte:
+   > "Qual o valor médio da sua fatura mensal? Assim posso te mostrar quanto seria sua economia."
+4. Atualizar `fallbackText` correspondente em `agents/green/run.ts`.
+5. Ajustar testes que referenciam `engage_check` (`testing/scenarios/index.ts`, `testing/assertions.ts`, `testing/conversation-runner.ts`) — remover a asserção de presença obrigatória do stage.
+
+### Ajuste 3 — Pular confirmação quando há uma única distribuidora
+
+**Problema:** em `agents/green/run.ts` (stages `present_distributors` e o ramo de redecide), quando `list.length === 1` a IA pergunta "Essa é a sua distribuidora atual?" — desnecessário, podemos assumir e seguir direto pra simulação.
+
+**Solução:** quando `list.length === 1` no stage `present_distributors`:
+- Setar `extras.distribuidora = list[0].distributor` e disparar `save_green_lead_field`.
+- Marcar `distributors_presented = true`.
+- Redecidir o stage imediatamente → cairá em `simulate_discount_concreto` se `valor_fatura` já existir, ou em `ask_valor_fatura` se ainda não.
+- Não emitir o texto "Essa é a sua distribuidora atual?". O texto deve ser apenas algo curto como "No seu estado trabalhamos com a {distribuidora}, vou usar ela na simulação." OU já gerar direto o texto da simulação se possível.
+
+Mesma lógica replicada no bloco de redecide (linhas ~469-485 do `run.ts`).
+
+### Arquivos a alterar
+
+- `supabase/functions/_igreen_v2/agents/qualifier/prompt.ts`
+- `supabase/functions/_igreen_v2/agents/qualifier/run.ts`
+- `supabase/functions/_igreen_v2/agents/green/stages.ts`
+- `supabase/functions/_igreen_v2/agents/green/run.ts`
+- `supabase/functions/_igreen_v2/agents/green/prompt.ts`
+- `supabase/functions/_igreen_v2/testing/conversation-runner.ts`
+- `supabase/functions/_igreen_v2/testing/scenarios/index.ts`
+- `supabase/functions/_igreen_v2/testing/assertions.ts`
+
+Nenhuma mudança de schema/migration necessária.

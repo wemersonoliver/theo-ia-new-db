@@ -42,6 +42,23 @@ export function buildMenuText(clientName?: string | null): string {
 Qual dessas opções faz mais sentido para você?`;
 }
 
+/**
+ * Versão em chunks do menu — garante que a pergunta final fique
+ * inteira em um único bloco (sem ser quebrada pelo chunker de 220 chars).
+ */
+export function buildMenuTextChunks(clientName?: string | null): string[] {
+  const nome = (clientName ?? "").trim();
+  const intro = nome
+    ? `Prazer em falar com você, ${nome}. Para eu te direcionar da melhor forma, me conta: você está buscando?`
+    : `Perfeito 😊 Para eu te direcionar da melhor forma, me conta: você está buscando?`;
+  const options =
+    `1 - Economia na conta de luz sem instalar nada\n` +
+    `2 - Planos de telefonia e internet para seu telefone\n` +
+    `3 - Como se tornar um Licenciado da iGreen e ganhar dinheiro vendendo assinaturas e placas solares`;
+  const question = `Qual dessas opções faz mais sentido para você?`;
+  return [intro, options, question];
+}
+
 export const MENU_SHORT_TEXT = `Pra te direcionar certinho, me diz qual faz mais sentido:
 
 1 - Economia na conta de luz

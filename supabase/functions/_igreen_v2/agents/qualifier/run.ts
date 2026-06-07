@@ -4,7 +4,7 @@
 import type { AgentContext, AgentResult } from "../_types.ts";
 import { decideQualifierStage, extractFirstName, detectProductMention, type QualifierStage } from "./stages.ts";
 import {
-  buildGreetOpenText, buildMenuText, buildRouteGreenText,
+  buildGreetOpenText, buildMenuText, buildMenuTextChunks, buildRouteGreenText,
   MENU_SHORT_TEXT,
   ROUTE_TELECOM_TEXT, ROUTE_EXPANSAO_TEXT,
   ASK_NAME_TEXT, ASK_NAME_AFTER_PRODUCT_TEXT,
@@ -20,6 +20,7 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
   const tool_calls: AgentResult["tool_calls"] = [];
   const patch: AgentResult["suggested_state_patch"] = {};
   let text = "";
+  let messages: string[] | null = null;
 
   // Captura espontânea de nome em qualquer turno do qualifier.
   const capturedName = !extras.client_name ? extractFirstName(ctx.message) : null;
@@ -57,7 +58,7 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
       const nome = (patch.extras as Record<string, unknown> | undefined)?.client_name
         ?? extras.client_name
         ?? null;
-      text = buildMenuText(typeof nome === "string" ? nome : null);
+      messages = buildMenuTextChunks(typeof nome === "string" ? nome : null);
       patch.extras = { ...(patch.extras as object ?? extras), menu_presented: true };
       break;
     }
@@ -116,7 +117,7 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
   }
 
   return {
-    messages: text ? [text] : [],
+    messages: messages ?? (text ? [text] : []),
     events,
     tool_calls,
     suggested_state_patch: patch,

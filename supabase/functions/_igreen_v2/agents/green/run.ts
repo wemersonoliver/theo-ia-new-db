@@ -147,9 +147,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     const nome = (currentExtras.client_name as string | undefined) ?? "";
     if (list.length === 0) {
       deterministicText = `${nome ? nome + ", " : ""}me confirma só uma coisa: qual é a sua distribuidora de energia?`;
-    } else if (list.length === 1) {
-      deterministicText = `No seu estado trabalhamos com a ${list[0].distributor}. Essa é a sua distribuidora atual? 😊`;
-    } else {
+    } else if (list.length > 1) {
       const opts = list.map((d, i) => `${i + 1} - ${d.distributor}`).join("\n");
       deterministicText = `No seu estado trabalhamos com:\n\n${opts}\n\nQual dessas é a sua?`;
     }
@@ -158,6 +156,18 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
       distributors_presented: true,
       distributors_options: list.map((d) => d.distributor),
     };
+    // Apenas uma distribuidora atende o estado → assume direto e pula confirmação.
+    if (list.length === 1) {
+      const chosen = list[0].distributor;
+      patch.extras = { ...(patch.extras as object), distribuidora: chosen };
+      tool_calls.push({
+        name: "save_green_lead_field",
+        args: { field: "distribuidora", value: chosen },
+      });
+      // O bloco de redecide abaixo (STAGES_REDECIDABLE) cuidará de avançar
+      // pra simulate_discount_concreto / ask_valor_fatura no mesmo turno.
+      stage = "ask_distribuidora";
+    }
   }
 
   if (stage === "ask_distribuidora") {
@@ -472,9 +482,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
         const nome = (mergedExtras.client_name as string | undefined) ?? "";
         if (list.length === 0) {
           deterministicText = `${nome ? nome + ", " : ""}me confirma só uma coisa: qual é a sua distribuidora de energia?`;
-        } else if (list.length === 1) {
-          deterministicText = `No seu estado trabalhamos com a ${list[0].distributor}. Essa é a sua distribuidora atual? 😊`;
-        } else {
+        } else if (list.length > 1) {
           const opts = list.map((d, i) => `${i + 1} - ${d.distributor}`).join("\n");
           deterministicText = `No seu estado trabalhamos com:\n\n${opts}\n\nQual dessas é a sua?`;
         }
@@ -483,6 +491,53 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
           distributors_presented: true,
           distributors_options: list.map((d) => d.distributor),
         };
+        // Única distribuidora → assume e avança direto pra simulação (ou ask_valor_fatura).
+        if (list.length === 1) {
+          const chosen = list[0].distributor;
+          patch.extras = { ...(patch.extras as object), distribuidora: chosen };
+          tool_calls.push({
+            name: "save_green_lead_field",
+            args: { field: "distribuidora", value: chosen },
+          });
+          deterministicText = null;
+          const mergedExtras2 = patch.extras as Record<string, unknown>;
+          const mergedState2 = { ...mergedState, extras: mergedExtras2 };
+          const after = decideGreenStage(mergedState2, ctx.message, !!ctx.media, (ctx.state as any).document_status ?? null);
+          if (after === "simulate_discount_concreto") {
+            const valor = Number(mergedExtras2.valor_fatura ?? 0);
+            const nome2 = (mergedExtras2.client_name as string | undefined) ?? "";
+            const list2 = await listDistributors(estado);
+            const found = list2.find((d) =>
+              d.distributor.toLowerCase().includes(chosen.toLowerCase()) ||
+              chosen.toLowerCase().includes(d.distributor.toLowerCase()));
+            const min = found?.min ?? 0;
+            const max = found?.max ?? 0;
+            if (min > 0 && max > 0 && valor > 0) {
+              const economia = (valor * max) / 100;
+              deterministicText =
+`Olha só${nome2 ? `, ${nome2}` : ""}! Pra ${chosen} a média de desconto fica entre ${min}% e ${max}%. Numa conta de R$ ${formatBRL(valor)}, seu desconto pode chegar a R$ ${formatBRL(economia)} todo mês. 🤑
+
+E não é só isso: depois do seu cadastro, você ainda pode chegar a zerar sua conta de luz indicando novos assinantes pelo nosso programa de cashback.
+
+Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só preciso de uma foto ou PDF da sua última fatura. 😉`;
+            } else {
+              deterministicText = `${nome2 ? nome2 + ", " : ""}com a ${chosen} a iGreen tem uma faixa oficial de economia. Me envia uma foto ou PDF da sua última fatura pra eu iniciar a verificação do seu cadastro. 😊`;
+            }
+            patch.extras = {
+              ...(patch.extras as object),
+              discount_lookup_done: true,
+              discount_min_percent: min || null,
+              discount_max_percent: max || null,
+            };
+            tool_calls.push({
+              name: "get_distributor_discount",
+              args: { state: estado, distributor: chosen },
+            });
+            stage = "simulate_discount_concreto";
+          } else {
+            stage = after;
+          }
+        }
       }
       if (stage === "simulate_discount_concreto") {
         const estado = (mergedExtras.estado as string | undefined) ?? "";
@@ -703,7 +758,7 @@ function fallbackText(stage: string): string {
     case "waiting_invoice": return "Perfeito, fico no aguardo da fatura.";
     case "ask_full_name_cpf": return "Pra preparar seu contrato, me passa por favor seu nome completo e CPF?";
     case "simulate_discount": return "Com base na sua distribuidora e estado, conseguimos aplicar a faixa oficial de economia da iGreen. Posso seguir com o cálculo exato a partir da sua última fatura?";
-    case "ask_valor_fatura": return "Você lembra qual o valor médio da sua conta de luz por mês, em reais?";
+    case "ask_valor_fatura": return "Qual o valor médio da sua fatura mensal? Assim posso te mostrar quanto seria sua economia.";
     case "intent_send_invoice_ack": return "Combinado, fico no aguardo da sua fatura.";
     case "request_identity": return "Sua fatura foi validada com sucesso. Para concluirmos, por favor me envie uma foto do RG ou CNH do titular da conta.";
     case "validate_identity": return "Recebi seu documento, estou conferindo aqui.";

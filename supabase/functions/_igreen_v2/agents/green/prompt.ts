@@ -78,7 +78,7 @@ export function buildGreenUserPrompt(args: {
     case "simulate_discount":
       return baseCtx + "STAGE: simulate_discount. PROIBIDO citar qualquer percentual, número ou faixa numérica neste turno (sem exceções). Diga em 1-2 frases, sem números: que com a distribuidora e estado informados a iGreen tem uma faixa oficial de economia, e que o valor exato só sai com a última fatura. Pergunte se ele pode enviar a fatura agora. Tom cordial, sem gírias.";
     case "ask_valor_fatura":
-      return baseCtx + "STAGE: ask_valor_fatura. Pergunte UMA coisa: qual o valor médio da conta de luz em reais. Máx 1 frase. NÃO use gírias.";
+      return baseCtx + "STAGE: ask_valor_fatura. Em 1-2 frases: 1) PRIMEIRO responda de forma curta e cordial à mensagem anterior do cliente (objeção, dúvida, comentário ou apenas confirmação de que assistiu o vídeo); 2) EM SEGUIDA pergunte exatamente: 'Qual o valor médio da sua fatura mensal? Assim posso te mostrar quanto seria sua economia.' Não use gírias. Não peça outro dado.";
     case "intent_send_invoice_ack":
       return baseCtx + "STAGE: intent_send_invoice_ack. Cliente disse que vai mandar a fatura mas ainda não anexou. Em 1 frase curta e cordial, confirme que aguarda. NÃO repita pedido de fatura. NÃO use gírias.";
     case "request_identity":
