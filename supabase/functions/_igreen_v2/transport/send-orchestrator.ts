@@ -21,6 +21,7 @@ export interface SendOrchestratorArgs {
   phone: string;
   instance: string;
   text?: string;
+  textChunks?: string[];
   media?: { kind: "image" | "audio" | "document"; base64?: string; url?: string; caption?: string; mimetype?: string };
   evolutionUrl?: string;
   evolutionKey?: string;
@@ -138,7 +139,9 @@ export async function sendOrchestrated(args: SendOrchestratorArgs): Promise<Send
     return { delivered: false, chunks: 0, events: [], lock_acquired: false };
   }
   try {
-    const chunks: HumanChunk[] = args.text ? humanize(args.text) : [];
+    const chunks: HumanChunk[] = Array.isArray(args.textChunks) && args.textChunks.length > 0
+      ? args.textChunks.flatMap((text) => humanize(text)).map((chunk, index) => ({ ...chunk, index }))
+      : args.text ? humanize(args.text) : [];
     const events: SendOrchestratorResult["events"] = [];
     for (const c of chunks) {
       await recordEvent({
