@@ -362,11 +362,13 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
     patch.extras = { ...(patch.extras as object ?? currentExtras), greeted: true };
     const nome = extractFirstName(ctx.message);
     if (nome) {
-      patch.extras = { ...(patch.extras as object), client_name: nome };
+      patch.extras = { ...(patch.extras as object), client_name: nome, explained: true };
       tool_calls.push({
         name: "save_green_lead_field",
-        args: { field: "client_name", value: nome },
+        args: { field: "nome_cliente", value: nome },
       });
+      tool_calls.push({ name: "set_product", args: { produto: "green" } });
+      deterministicText = `Prazer, ${nome}! Com a Igreen você economiza na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer saber como funciona?`;
     }
   }
 
@@ -654,22 +656,37 @@ function extractFirstName(msg: string): string | null {
     .replace(/\[Imagem.*?\]/gi, "")
     .trim();
   if (!raw) return null;
-  // Áudios curtos/perguntas raramente são nomes. Se tem '?' ou termina com
-  // verbo/interrogativo, descarta — peça pra escrever em texto.
   if (/\?$/.test(raw)) return null;
-  const t = raw.replace(/[^\p{L}\s]/gu, "").trim();
-  if (!t) return null;
-  // Stop-words comuns em áudios mal transcritos.
-  const STOP = new Set([
+
+  const blocked = new Set([
     "o","a","e","é","eh","ah","oi","ola","olá","sim","nao","não","ok","okay","beleza","blz",
     "mesmo","tudo","bem","tá","ta","obrigado","obrigada","valeu","tchau","bom","boa",
+    "quero","saber","como","funciona","tenho","interesse","conexao","conexão","green",
+    "energia","luz","conta","fatura","economizar","economia","internet","telecom",
   ]);
-  const tokens = t.split(/\s+/).filter(Boolean);
-  // Primeiro token que pareça nome próprio (≥3 letras e não é stop-word).
-  const first = tokens.find((tok) => tok.length >= 3 && !STOP.has(tok.toLowerCase()));
-  if (!first) return null;
-  if (first.length > 30) return null;
-  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+  const cleanToken = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const format = (value: string) => value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+  const accept = (value: string | undefined): string | null => {
+    const cand = (value ?? "").trim().replace(/[^\p{L}]/gu, "");
+    const low = cleanToken(cand);
+    if (cand.length < 2 || cand.length > 30 || blocked.has(low)) return null;
+    return format(cand);
+  };
+
+  const patterns = [
+    /\bmeu nome[\s\S]{0,5}(?:é|eh)?\s+([A-Za-zÀ-ÿ]{2,30})/i,
+    /\b(?:sou|aqui é|aqui eh)\s+(?:o|a|do|da|de)?\s*([A-Za-zÀ-ÿ]{2,30})/i,
+    /\bme chamo\s+([A-Za-zÀ-ÿ]{2,30})/i,
+    /\bchamo\s+([A-Za-zÀ-ÿ]{2,30})/i,
+  ];
+  for (const rx of patterns) {
+    const found = accept(raw.match(rx)?.[1]);
+    if (found) return found;
+  }
+
+  const tokens = raw.replace(/[^\p{L}\s]/gu, "").trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 1) return accept(tokens[0]);
+  return null;
 }
 
 async function generateText(ctx: AgentContext, stage: string): Promise<string> {
