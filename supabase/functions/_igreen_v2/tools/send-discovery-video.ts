@@ -159,6 +159,53 @@ async function recordTransportEvent(args: {
 
 interface Args { produto: string }
 
+async function scheduleVideoFollowup(args: {
+  account_id: string;
+  phone: string;
+  client_name: string;
+}): Promise<void> {
+  try {
+    const client = svc();
+    const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { data: existing } = await client
+      .from("igreen_product_video_followups")
+      .select("id")
+      .eq("account_id", args.account_id)
+      .eq("phone", args.phone)
+      .gte("created_at", since)
+      .limit(1);
+    if (existing && existing.length > 0) {
+      console.log("[send-discovery-video] followup already scheduled, skipping");
+      return;
+    }
+    const { data: acc } = await client
+      .from("accounts")
+      .select("owner_user_id")
+      .eq("id", args.account_id)
+      .maybeSingle();
+    const userId = (acc as { owner_user_id?: string } | null)?.owner_user_id;
+    if (!userId) {
+      console.warn("[send-discovery-video] no owner_user_id for account, skipping followup");
+      return;
+    }
+    const firstName = (args.client_name || "").trim().split(/\s+/)[0] || "";
+    const greeting = firstName ? `O que achou, ${firstName}?` : "E aí, o que achou?";
+    const message = `${greeting}\nPosso te mostrar qual seria sua economia mensal na prática?`;
+    const scheduledAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+    const { error } = await client.from("igreen_product_video_followups").insert({
+      account_id: args.account_id,
+      user_id: userId,
+      phone: args.phone,
+      message,
+      scheduled_at: scheduledAt,
+    });
+    if (error) console.error("[send-discovery-video] schedule followup failed", error);
+    else console.log("[send-discovery-video] followup scheduled for", scheduledAt);
+  } catch (e) {
+    console.error("[send-discovery-video] scheduleVideoFollowup error", e);
+  }
+}
+
 export const sendDiscoveryVideoTool: ToolDefinition<Args> = {
   name: "send_discovery_video",
   description: "Envia o vídeo de descoberta via Evolution API. Idempotente por (produto, phone).",
@@ -284,6 +331,15 @@ export const sendDiscoveryVideoTool: ToolDefinition<Args> = {
       provider_message_id: send.provider_message_id,
       video_url: videoUrl,
       error: null,
+    });
+    await scheduleVideoFollowup({
+      account_id: ctx.account_id,
+      phone: ctx.phone,
+      client_name: String(
+        (extras.client_name as string | undefined) ??
+          (extras.nome_cliente as string | undefined) ??
+          "",
+      ),
     });
 
     return {
