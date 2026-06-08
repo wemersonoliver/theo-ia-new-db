@@ -600,9 +600,8 @@ function isLikelyGreenInvoiceMediaOcr(text: string | null | undefined): boolean 
 
 function resolveGreenVideoUrl(videoUrl: string | null | undefined): string {
   const raw = String(videoUrl || "").trim();
-  if (raw.includes("/igreen/conexao-green-reportagem.mp4")) {
-    return "https://gljsifkjwkubxaqgxxul.supabase.co/storage/v1/object/public/whatsapp-media/fbc9254d-6577-468d-adba-5d639ed0e759/5551997540734/1779235885889_A5CABCBE53621853AE15FCB7DEC08C28.mp4";
-  }
+  // Legacy public URL replaced — bucket is now private. The video is sent
+  // by other paths that already produce signed URLs via _media.ts.
   return raw;
 }
 

@@ -131,11 +131,26 @@ export async function uploadMediaToStorage(params: UploadMediaParams): Promise<U
       return null;
     }
 
-    const { data: pub } = supabase.storage.from("whatsapp-media").getPublicUrl(path);
-    if (!pub?.publicUrl) return null;
+    // Bucket is private — generate a long-lived signed URL so Evolution API and
+    // the frontend can fetch the media. Falls back to public URL if signing fails.
+    const SEVEN_YEARS_SECONDS = 60 * 60 * 24 * 365 * 7;
+    let url: string | null = null;
+    try {
+      const { data: signed } = await supabase.storage
+        .from("whatsapp-media")
+        .createSignedUrl(path, SEVEN_YEARS_SECONDS);
+      url = signed?.signedUrl ?? null;
+    } catch (e) {
+      console.error("createSignedUrl failed, falling back to public URL:", e);
+    }
+    if (!url) {
+      const { data: pub } = supabase.storage.from("whatsapp-media").getPublicUrl(path);
+      url = pub?.publicUrl ?? null;
+    }
+    if (!url) return null;
 
     return {
-      url: pub.publicUrl,
+      url,
       mime: finalMime,
       filename: filename || `${safeId}.${ext}`,
       path,
