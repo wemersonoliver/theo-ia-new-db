@@ -371,7 +371,9 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
   }
 
   if (stage === "send_video") {
-    patch.extras = { ...(patch.extras as object ?? currentExtras), video_sent: true };
+    // NÃO marcar video_sent aqui — a tool send_discovery_video é quem define
+    // esse flag APÓS o envio efetivo. Marcar antes faz a tool pular com
+    // skip_reason="state_unchanged" e o vídeo nunca chega ao cliente.
     tool_calls.push({
       name: "send_discovery_video",
       args: { produto: "green" },
