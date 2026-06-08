@@ -197,8 +197,13 @@ function ProductRow({
         .from("whatsapp-media")
         .upload(path, file, { contentType: file.type, upsert: true });
       if (upErr) throw upErr;
-      const { data: pub } = supabase.storage.from("whatsapp-media").getPublicUrl(path);
-      onSave({ video_url: pub.publicUrl } as Partial<IgreenAccountProduct>);
+      // Bucket is private — store a long-lived signed URL.
+      const SEVEN_YEARS_SECONDS = 60 * 60 * 24 * 365 * 7;
+      const { data: signed, error: signErr } = await supabase.storage
+        .from("whatsapp-media")
+        .createSignedUrl(path, SEVEN_YEARS_SECONDS);
+      if (signErr || !signed?.signedUrl) throw signErr ?? new Error("Falha ao gerar URL do vídeo");
+      onSave({ video_url: signed.signedUrl } as Partial<IgreenAccountProduct>);
       toast.success("Vídeo enviado");
     } catch (e: any) {
       toast.error(e?.message ?? "Falha ao enviar vídeo");

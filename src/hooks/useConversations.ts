@@ -123,8 +123,15 @@ export function useConversations() {
         .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
       if (upErr) throw upErr;
 
-      const { data: pub } = supabase.storage.from("whatsapp-media").getPublicUrl(path);
-      const mediaUrl = pub.publicUrl;
+      // Bucket is private — produce a long-lived signed URL for the recipient.
+      const SEVEN_YEARS_SECONDS = 60 * 60 * 24 * 365 * 7;
+      const { data: signed, error: signErr } = await supabase.storage
+        .from("whatsapp-media")
+        .createSignedUrl(path, SEVEN_YEARS_SECONDS);
+      if (signErr || !signed?.signedUrl) {
+        throw signErr ?? new Error("Não foi possível gerar URL da mídia");
+      }
+      const mediaUrl = signed.signedUrl;
 
       const { data, error } = await supabase.functions.invoke("send-whatsapp-media", {
         body: {
