@@ -48,9 +48,19 @@ async function lookupVideoUrl(account_id: string, productKey: string): Promise<s
       .eq("account_id", account_id)
       .eq("key", productKey)
       .maybeSingle();
-    if (!data || (data as any).enabled === false) return null;
-    const url = (data as any).video_url;
-    return typeof url === "string" && url.trim().length > 0 ? url : null;
+    if (data && (data as any).enabled !== false) {
+      const url = (data as any).video_url;
+      if (typeof url === "string" && url.trim().length > 0) return url;
+    }
+    // Fallback global: igreen_products (vídeo padrão para todos os usuários)
+    const { data: globalRow } = await svc()
+      .from("igreen_products")
+      .select("video_url, enabled")
+      .eq("key", productKey)
+      .maybeSingle();
+    if (!globalRow || (globalRow as any).enabled === false) return null;
+    const gUrl = (globalRow as any).video_url;
+    return typeof gUrl === "string" && gUrl.trim().length > 0 ? gUrl : null;
   } catch (e) {
     console.error("[send-discovery-video] lookupVideoUrl error", e);
     return null;
