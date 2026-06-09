@@ -722,6 +722,7 @@ serve(async (req) => {
 
   // Phase 5 — registra mensagens do assistant na memória curta.
   if (chunkLimited.length) {
+    const joined = chunkLimited.map((p) => p.text).join("\n\n");
     await appendMessage({ account_id, phone, role: "assistant", content: joined, correlation_id });
   }
 
