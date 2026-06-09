@@ -1,63 +1,47 @@
 ## Objetivo
-Após o vídeo de descoberta ser enviado pelo green specialist, agendar uma mensagem automática 2 minutos depois:
 
-> O que achou, {primeiroNome}?
-> Posso te mostrar qual seria sua economia mensal na prática?
+Copiar integralmente o **Cenário 1** configurado pelo usuário `projetoswemerson.tw@gmail.com` para o usuário `thays.chavess@gmail.com`, para que a conta da Thays sirva como padrão (template) de todos os usuários do plano iGreen.
 
-Se o cliente responder antes dos 2 minutos, o cron cancela a mensagem (já é o comportamento atual da function `process-igreen-video-followups`). Quando o cliente finalmente responder, o supervisor → green specialist segue para o stage `ask_valor_fatura` perguntando o valor médio da fatura.
+## Mapeamento
 
-## Infraestrutura já existente (não precisa criar)
-- Tabela `igreen_product_video_followups` (account_id, user_id, phone, message, scheduled_at, sent_at, cancelled_at, …)
-- Edge function `process-igreen-video-followups` — varre pendências, cancela se cliente respondeu após `created_at`, senão envia via Evolution API e persiste no histórico.
-- Cron `process-igreen-video-followups-every-minute` já ativo (`* * * * *`).
+- Origem: `Etapa 1` (id `37f85677…`) — conta de Wemerson
+- Destino: `Cenário 1` (id `9ba67e21…`) — conta de Thays (hoje vazio: 0 dias / 0 mensagens / 0 itens)
 
-## Mudanças de código
+Conteúdo a copiar da origem: **7 dias**, **14 mensagens** (manhã/tarde), **23 itens** (textos e vídeos).
 
-### 1. `supabase/functions/_igreen_v2/tools/send-discovery-video.ts`
-Adicionar a função auxiliar `scheduleVideoFollowup(account_id, phone, client_name)` e chamá-la logo após o `recordTransportEvent({ status: "sent" })` (somente no caminho de sucesso real do envio):
+## O que será copiado
 
-- Anti-dupe: se já existe linha em `igreen_product_video_followups` para (`account_id`, `phone`) criada nos últimos 30 minutos, não inserir outra.
-- Resolve `user_id` a partir de `accounts.owner_user_id` (coluna `user_id` da tabela é NOT NULL). Se não houver `owner_user_id`, loga e pula sem quebrar o envio do vídeo.
-- Pega o primeiro nome de `extras.client_name` (fallback `extras.nome_cliente`). Se vazio, usa "E aí, o que achou?" sem nome.
-- `scheduled_at = now() + 2 min`.
-- Mensagem: `O que achou, {nome}?\nPosso te mostrar qual seria sua economia mensal na prática?`.
+1. **Configuração do cenário** (na linha `9ba67e21…` da Thays):
+   - `description`, `enabled`, `product_key`
+   - `final_tag` = `"NAO PASSOU CENARIO 1"`
+   - `final_tag_delay_hours` = `24`
+   - `trigger_tag`: vou manter o da Thays (`CENARIO1`) — a do Wemerson está como `ETEPA1` (provável digitação)
+   - `name`: mantém `"Cenário 1"` (não copio `"Etapa 1"`)
 
-Erros são apenas logados — nunca quebram a tool de envio do vídeo.
+2. **Dias** (`igreen_scenario_days`): 7 dias copiados com `day_number` e `enabled`.
 
-### 2. `supabase/functions/_igreen_v2/agents/green/prompt.ts`
-O prompt do stage `ask_valor_fatura` (linha 80–81) já reconhece a mensagem anterior antes de perguntar o valor médio — funciona tanto se o cliente responder antes dos 2 min (à mensagem do vídeo) quanto se responder depois (à mensagem de follow-up). Nenhuma alteração necessária.
+3. **Mensagens** (`igreen_scenario_messages`): 14 mensagens copiadas com `period` e `label`.
 
-### 3. `supabase/functions/_igreen_v2/agents/green/stages.ts`
-Sem mudança. O ramo `etapa === "novo"` já direciona para `ask_valor_fatura` assim que `extras.video_sent === true`.
+4. **Itens** (`igreen_scenario_items`): 23 itens copiados com `position`, `type`, `content`, `caption`, `media_url`, `media_mime`, `media_filename`, `delay_value`, `delay_unit`.
 
-### 4. `supabase/functions/process-igreen-video-followups/index.ts`
-Sem mudança. Já cancela quando `repliedAfter > created_at` e já persiste a mensagem enviada em `whatsapp_conversations`.
+## Observação sobre as mídias
 
-## Migrations
-Nenhuma — tabela, RLS e cron já existem.
+Os vídeos estão como URLs assinadas do bucket `followup-media` apontando para a pasta da conta do Wemerson (`1aae0245…/…`). Vou copiar a URL como está — ela continua acessível por leitura. Se você quiser que os arquivos sejam **republicados na pasta da Thays** (para ficarem 100% independentes da conta do Wemerson), me avise que faço isso em um segundo passo (download + reupload + atualização das URLs).
 
-## Fluxo resultante
+## Execução (SQL em uma única transação)
 
 ```text
-IA envia vídeo
-   │
-   ├── extras.video_sent = true
-   └── insert igreen_product_video_followups (scheduled_at = now+2min)
-                │
-   ┌────────────┴─────────────┐
-Cliente responde            Cliente fica
-em < 2 min                  em silêncio
-   │                            │
-cron cancela                cron envia em ~2 min:
-   │                        "O que achou, Wemerson?
-   │                         Posso te mostrar qual seria
-   │                         sua economia mensal na prática?"
-   │                            │
-   └──────────┬─────────────────┘
-              ▼
-   supervisor → green → ask_valor_fatura
-   "Qual o valor médio da sua fatura mensal?"
+BEGIN;
+  UPDATE igreen_scenarios (campos de config) WHERE id = destino;
+
+  -- Para cada dia da origem: INSERT em days (destino) retornando novo id
+  -- Para cada mensagem do dia: INSERT em messages com novo day_id
+  -- Para cada item da mensagem: INSERT em items com novo message_id
+COMMIT;
 ```
 
-## Arquivos alterados
-- `supabase/functions/_igreen_v2/tools/send-discovery-video.ts` (única mudança real de código)
+Usarei CTEs com `RETURNING` para preservar o mapeamento origem→destino de IDs sem precisar de loops.
+
+## Validação pós-execução
+
+Vou rodar `SELECT count(*)` em days/messages/items do cenário destino e confirmar 7 / 14 / 23.
