@@ -110,7 +110,7 @@ serve(async (req) => {
 
     const { data: instances } = await supabase
       .from("whatsapp_instances")
-      .select("id, instance_name, status");
+      .select("id, instance_name, status, user_id");
 
     let updated = 0;
     const updates: Array<{ name: string; from: string | null; to: string }> = [];
@@ -131,6 +131,13 @@ serve(async (req) => {
         await supabase.from("whatsapp_instances").update(patch).eq("id", inst.id);
         updates.push({ name: inst.instance_name, from: inst.status, to: newStatus });
         updated++;
+
+        // Notifica o usuário quando passou de connected → disconnected
+        if (newStatus === "disconnected" && inst.status === "connected" && inst.user_id) {
+          notifyUserDisconnected(supabase, inst.user_id, evolutionUrl, evolutionKey).catch((err) =>
+            console.error("notifyUserDisconnected error:", err),
+          );
+        }
       } else if (evo && (evo.phone || evo.profile)) {
         const patch: Record<string, unknown> = { last_sync_at: new Date().toISOString() };
         if (evo.phone) patch.phone_number = evo.phone;
@@ -151,3 +158,59 @@ serve(async (req) => {
     return json({ error: message }, 500);
   }
 });
+
+async function notifyUserDisconnected(
+  supabase: any,
+  userId: string,
+  evolutionUrl: string,
+  evolutionKey: string,
+) {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("phone, full_name")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!profile?.phone) {
+    console.log("notifyUserDisconnected: user has no phone", userId);
+    return;
+  }
+
+  const { data: sysInstance } = await supabase
+    .from("system_whatsapp_instance")
+    .select("instance_name, status")
+    .limit(1)
+    .maybeSingle();
+
+  if (!sysInstance || sysInstance.status !== "connected") {
+    console.log("notifyUserDisconnected: system instance not connected");
+    return;
+  }
+
+  const digits = String(profile.phone).replace(/\D/g, "");
+  const normalized = digits.length === 10 || digits.length === 11 ? `55${digits}` : digits;
+
+  const firstName = (profile.full_name || "").split(" ")[0] || "";
+  const greeting = firstName ? `Olá, ${firstName}!` : "Olá!";
+
+  const message =
+    `⚠️ *Atenção: WhatsApp desconectado*\n\n` +
+    `${greeting} Detectamos que o seu WhatsApp conectado ao *Theo IA* foi desconectado.\n\n` +
+    `Enquanto não reconectar, a IA *não vai responder* aos seus clientes e novas mensagens não serão recebidas.\n\n` +
+    `🔗 Reconecte agora em: https://theoia.com.br/whatsapp\n\n` +
+    `Se precisar de ajuda, é só responder aqui.`;
+
+  const resp = await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: evolutionKey },
+    body: JSON.stringify({ number: normalized, text: message }),
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text();
+    console.error("notifyUserDisconnected: send failed", resp.status, txt.slice(0, 200));
+    return;
+  }
+
+  console.log(`Disconnection alert sent to user ${userId} (${normalized})`);
+}
