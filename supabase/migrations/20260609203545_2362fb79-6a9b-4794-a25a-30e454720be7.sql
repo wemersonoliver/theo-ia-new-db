@@ -1,0 +1,1 @@
+UPDATE public.accounts SET is_igreen = true, updated_at = now() WHERE id = '3f304fb6-fd4e-46d0-9831-b23fabd37b7a';
