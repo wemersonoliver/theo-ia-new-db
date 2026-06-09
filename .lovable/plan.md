@@ -1,47 +1,87 @@
 ## Objetivo
 
-Copiar integralmente o **Cenário 1** configurado pelo usuário `projetoswemerson.tw@gmail.com` para o usuário `thays.chavess@gmail.com`, para que a conta da Thays sirva como padrão (template) de todos os usuários do plano iGreen.
+Quando um cliente **inicia o atendimento demonstrando interesse no produto Conexão Green** ("quero saber da conexão green", "como economizar na conta de luz", "energia por assinatura") e **para de responder antes de receber o vídeo de descoberta**, ele deve ser automaticamente matriculado no **Cenário 1 (`CENARIO1`)**. Esse comportamento vira padrão para todos os usuários do plano Igreen.
 
-## Mapeamento
+## Sinais que o sistema já mantém
 
-- Origem: `Etapa 1` (id `37f85677…`) — conta de Wemerson
-- Destino: `Cenário 1` (id `9ba67e21…`) — conta de Thays (hoje vazio: 0 dias / 0 mensagens / 0 itens)
+- `igreen_conversation_state` é gravada pelo agente Green com `produto='green'` assim que a intenção Conexão Green é detectada (antes do vídeo).
+- `igreen_conversation_state.extras` recebe `video_sent: true` somente quando a tool `send_discovery_video` executa com sucesso.
+- `igreen_conversation_state.last_event_at` é atualizado a cada mensagem do lead.
+- `whatsapp_conversations.messages[]` traz o histórico com `from_me` e `timestamp`.
+- `igreen_scenarios` da conta Igreen já tem o **Cenário 1** (`trigger_tag='CENARIO1'`, `product_key='green'`) padronizado.
+- A edge `igreen-scenario-enroll` já cria matrícula idempotente.
 
-Conteúdo a copiar da origem: **7 dias**, **14 mensagens** (manhã/tarde), **23 itens** (textos e vídeos).
+Falta apenas a varredura periódica que detecta o silêncio na fase pré-vídeo e dispara o enroll.
 
-## O que será copiado
+## Plano (anti-falhas, baixo custo)
 
-1. **Configuração do cenário** (na linha `9ba67e21…` da Thays):
-   - `description`, `enabled`, `product_key`
-   - `final_tag` = `"NAO PASSOU CENARIO 1"`
-   - `final_tag_delay_hours` = `24`
-   - `trigger_tag`: vou manter o da Thays (`CENARIO1`) — a do Wemerson está como `ETEPA1` (provável digitação)
-   - `name`: mantém `"Cenário 1"` (não copio `"Etapa 1"`)
+### 1. Nova edge function `igreen-pre-video-sweeper`
 
-2. **Dias** (`igreen_scenario_days`): 7 dias copiados com `day_number` e `enabled`.
+- Roda sob `service_role`, `verify_jwt = false`.
+- **Invocada por pg_cron 1×/hora** (`0 * * * *`). ~24 execuções/dia → custo desprezível.
+- `BATCH_LIMIT = 100` por execução.
+- `SILENCE_MINUTES = 60` (alinhado à frequência horária).
+- `LOOKBACK_HOURS = 24` (não ressuscita leads antigos quando a feature ativar).
 
-3. **Mensagens** (`igreen_scenario_messages`): 14 mensagens copiadas com `period` e `label`.
+**Query base** em `igreen_conversation_state`:
+- `produto = 'green'`
+- `coalesce((extras->>'video_sent')::bool, false) = false`
+- `coalesce(handoff_ativo, false) = false`
+- `last_event_at < now() - interval '60 minutes'`
+- `last_event_at > now() - interval '24 hours'`
+- `coalesce(extras->>'pre_video_enrolled_at', '') = ''`
 
-4. **Itens** (`igreen_scenario_items`): 23 itens copiados com `position`, `type`, `content`, `caption`, `media_url`, `media_mime`, `media_filename`, `delay_value`, `delay_unit`.
+**Para cada candidato — guard-rails antes do enroll:**
+1. Carrega `whatsapp_conversations` por `(account_id, phone)`.
+2. Confirma que a última mensagem foi do AI (`from_me=true`). Se foi do cliente, aborta.
+3. Confirma `closed_at IS NULL` e `outcome IS NULL`.
+4. Confirma que **não existe** linha em `igreen_product_video_followups` para `(account_id, phone)` — se existir, o vídeo já entrou em jogo (outro fluxo cuida).
+5. Confirma que **não existe** enrollment ativo em `igreen_scenario_enrollments` para `(account_id, contact_phone)`.
+6. Busca cenário ativo da conta com `trigger_tag ILIKE 'CENARIO1'`, `product_key='green'`, `enabled=true`. Se não houver, marca `extras.pre_video_skipped_reason='scenario_disabled'` e segue.
+7. Resolve `contact_id` em `contacts` por `(account_id, phone)` (best effort).
+8. Chama `igreen-scenario-enroll` via fetch interno com `x-internal-key` e payload `{ account_id, phone, contact_id, trigger_tag: 'CENARIO1' }`.
+9. Em sucesso: atualiza `extras` com `pre_video_enrolled_at = now()` e `pre_video_enrolled_via = 'sweeper'`; registra evento em `igreen_scenario_events` (`event='auto_enroll_pre_video'`).
+10. Em erro HTTP: **não** marca `pre_video_enrolled_at` (idempotência preserva retry no próximo ciclo).
 
-## Observação sobre as mídias
+### 2. pg_cron
 
-Os vídeos estão como URLs assinadas do bucket `followup-media` apontando para a pasta da conta do Wemerson (`1aae0245…/…`). Vou copiar a URL como está — ela continua acessível por leitura. Se você quiser que os arquivos sejam **republicados na pasta da Thays** (para ficarem 100% independentes da conta do Wemerson), me avise que faço isso em um segundo passo (download + reupload + atualização das URLs).
+Job `igreen-pre-video-sweeper-1h` executando `0 * * * *`, chamando a nova edge com `x-internal-key` (mesmo padrão dos demais jobs Igreen).
 
-## Execução (SQL em uma única transação)
+### 3. Salvaguardas explícitas
+
+- **Janela de silêncio 60 min** evita enrolar lead ainda ativo.
+- **Última msg `from_me=true`** evita enrolar quem já respondeu.
+- **`video_sent=false`** garante que quem recebeu o vídeo NÃO entra por aqui (outro fluxo).
+- **`pre_video_enrolled_at` em `extras`** = idempotência sem nova tabela.
+- **`igreen_stop_for_phone` dentro do enroll** evita duplicar com outros cenários.
+- **`LOOKBACK_HOURS=24`** evita varrer histórico antigo na ativação.
+- **`handoff_ativo=false`** evita atropelar humano.
+- **Sem dependência de plano**: se a conta não tem cenário CENARIO1 ativo, nada acontece.
+
+### 4. Custo (resumo honesto)
+
+- 24 invocações/dia, cada uma com 1 SELECT indexável + N consultas pequenas só para os poucos candidatos reais.
+- Sem nova tabela, sem novas colunas (uso `extras jsonb` existente).
+- Nenhuma escrita em loop pesado — apenas no momento do enroll real.
+
+### 5. Sem mudanças necessárias
+
+Frontend, agente Green, dispatcher, tool `send-discovery-video`, fluxo pós-vídeo: **inalterados**.
+
+## Arquivos afetados
 
 ```text
-BEGIN;
-  UPDATE igreen_scenarios (campos de config) WHERE id = destino;
-
-  -- Para cada dia da origem: INSERT em days (destino) retornando novo id
-  -- Para cada mensagem do dia: INSERT em messages com novo day_id
-  -- Para cada item da mensagem: INSERT em items com novo message_id
-COMMIT;
+supabase/functions/igreen-pre-video-sweeper/index.ts   (novo)
+supabase/config.toml                                   (verify_jwt = false p/ a nova função)
+pg_cron job                                            (via supabase--insert)
 ```
 
-Usarei CTEs com `RETURNING` para preservar o mapeamento origem→destino de IDs sem precisar de loops.
+## Validação manual
 
-## Validação pós-execução
+1. Lead novo manda "quero saber da conexão green" → IA pergunta o nome → lead some.
+2. Após 60 min, na próxima execução horária, aparece linha em `igreen_scenario_enrollments` (`scenario_key=CENARIO1`, `status=active`); `extras.pre_video_enrolled_at` preenchido.
+3. Lead que recebeu o vídeo (`extras.video_sent=true`) → sweeper ignora.
+4. Lead que respondeu o nome mas não chegou ao vídeo → ainda assim é enrolado (correto: não passou da fase do vídeo).
+5. Lead já matriculado em outro cenário → skip pelo guard 5.
 
-Vou rodar `SELECT count(*)` em days/messages/items do cenário destino e confirmar 7 / 14 / 23.
+Posso seguir para implementação?
