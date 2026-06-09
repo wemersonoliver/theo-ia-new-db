@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireInternalKey } from "../_cron_auth.ts";
+import { requireInternalKeyOrJwt } from "../_cron_auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,7 +17,7 @@ const PRODUCT_KEY = "green";
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  const unauth = requireInternalKey(req);
+  const unauth = await requireInternalKeyOrJwt(req);
   if (unauth) return unauth;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
