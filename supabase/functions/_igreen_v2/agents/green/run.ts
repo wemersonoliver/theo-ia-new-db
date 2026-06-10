@@ -205,6 +205,15 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
         args: { tag: "em atendimento" },
       });
     }
+    // Se o cliente perguntou "qual meu desconto?" logo após o vídeo,
+    // não devolvemos pergunta vazia: pedimos direto o valor da fatura.
+    if (burstLines.some((l) => isDiscountQuestion(l))) {
+      const nome = (currentExtras.client_name as string | undefined) ?? "";
+      const estado = (currentExtras.estado as string | undefined) ?? "";
+      deterministicText = estado
+        ? `Boa${nome ? `, ${nome}` : ""}! Pra te passar o número exato em ${estado}, me diz o valor médio da sua conta de luz por mês.`
+        : `Boa${nome ? `, ${nome}` : ""}! Pra te passar o número exato, me diz o valor médio da sua conta de luz por mês e em qual estado você está.`;
+    }
   }
 
   if (stage === "ask_estado") {
