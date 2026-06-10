@@ -72,6 +72,71 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   let stage = initialStage;
   let deterministicText: string | null = null;
 
+  // ---------- Captura oportunista de campos ----------
+  // O cliente costuma entregar dados (estado, valor da fatura) em mensagens
+  // antes do stage que pergunta esse dado (ex.: "Estou em SC" enquanto a IA
+  // ainda estava enviando o vídeo). Sem isso, o slot fica vazio e a IA
+  // pergunta de novo mais tarde, parecendo robótica.
+  const SKIP_OPPORTUNISTIC = new Set<string>([
+    "validate_invoice", "validate_identity", "handoff_human",
+    "objection_security", "invoice_rejected_reply", "send_autocadastro_link",
+    "waiting_invoice", "waiting_identity", "request_identity",
+  ]);
+  if (!ctx.media && !SKIP_OPPORTUNISTIC.has(stage)) {
+    const captures: Record<string, unknown> = {};
+    if (!hasExtraValue(currentExtras.estado)) {
+      const uf = firstHit(burstLines, extractEstado);
+      if (uf) {
+        captures.estado = uf;
+        tool_calls.push({
+          name: "save_green_lead_field",
+          args: { field: "estado", value: uf },
+        });
+      }
+    }
+    if (!hasExtraValue(currentExtras.valor_fatura)) {
+      const etapaAtual = (ctx.state.etapa_funil ?? "").toLowerCase();
+      const moneyContext = burstLines.some((l) =>
+        /\b(r\$|reais?|conta|fatura|luz|m[eê]s|mensal|m[eê]dia)\b/i.test(l));
+      if (etapaAtual === "qualificacao" || moneyContext) {
+        const v = firstHit(burstLines, parseValor);
+        if (v) {
+          captures.valor_fatura = v;
+          tool_calls.push({
+            name: "save_green_lead_field",
+            args: { field: "valor_fatura", value: String(v) },
+          });
+        }
+      }
+    }
+    if (Object.keys(captures).length > 0) {
+      Object.assign(currentExtras, captures);
+      patch.extras = { ...currentExtras };
+      const afterCapture = decideGreenStage(
+        { ...ctx.state, extras: currentExtras },
+        cleanedMsg,
+        !!ctx.media,
+        (ctx.state as any).document_status ?? null,
+      );
+      if (afterCapture !== stage) {
+        events.push({
+          type: "green_opportunistic_capture",
+          priority: "low",
+          source: "specialist",
+          payload: { captured: Object.keys(captures), from: stage, to: afterCapture },
+        });
+        stage = afterCapture;
+      } else {
+        events.push({
+          type: "green_opportunistic_capture",
+          priority: "low",
+          source: "specialist",
+          payload: { captured: Object.keys(captures), from: stage, to: stage },
+        });
+      }
+    }
+  }
+
   if (stage === "greet") {
     // marca que já saudamos para na próxima entrarmos em explain_solution
     patch.produto = "green";
