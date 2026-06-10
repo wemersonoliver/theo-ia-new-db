@@ -784,6 +784,7 @@ export default function Conversations() {
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} />
                     <TagPopover phone={selectedPhone} />
+                    <UnsubscribeFollowupButton phone={selectedPhone} />
                     <AssigneeSelector
                       compact
                       value={selectedConversation?.assigned_to ?? null}
