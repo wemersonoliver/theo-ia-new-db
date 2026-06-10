@@ -1,102 +1,107 @@
+## Diagnóstico da conversa (thays.chavess / 5547989118695)
 
-## Diagnóstico — conversa com Walther (5584987859366)
+Mensagens reais salvas no banco:
 
-Timeline:
+```
+13:28:44  cliente: "Quero saber mais sobre energia solar por assinatura"
+13:29:26  IA    : "...como posso te chamar?"
+13:30:17  cliente: "Walter"
+13:30:21  cliente: "Qual percentual de economia"
+13:31:05  IA    : "Que legal seu interesse na energia limpa, Walter! 😊
+                   Pra gente começar, como você prefere ser chamado?"
+```
 
-| Hora | Quem | Mensagem |
-| --- | --- | --- |
-| 01:47:23 | cliente | "Olá! Quero saber..." |
-| 01:48:07 | IA | "como posso te chamar?" ✅ |
-| 01:49:14 | cliente | "Walther" |
-| 01:49:34 | cliente | "Gostaria de saber como funciona." |
-| 01:50:04 | cliente | "Qual percentual de economia" |
-| **01:50:16** | **IA** | **"como posso te chamar?"** ← ignorou Walther |
-| **01:50:45** | **IA** | **"qual seu primeiro nome?"** ← perguntou o nome de novo |
+A coalescência funcionou (logs mostram `[coalesce] inbound count=4`). O texto enviado ao agente foi:
 
-**Duas respostas seguidas** (correlation_ids diferentes em 01:49:57 e 01:50:27), nenhuma reconheceu o nome "Walther" e nem as 2 perguntas que vieram depois.
+```
+[O cliente enviou várias mensagens em sequência, considere todas juntas:]
+1) Walter
+2) Qual percentual de economia
+```
 
-### O que o código realmente faz hoje
+O ajuste anterior só corrigiu o `extractFirstName` do **qualifier** (`_igreen_v2/agents/qualifier/stages.ts`). Mas a conversa estava no especialista **green**, que tem o seu **próprio** `extractFirstName` local em `supabase/functions/_igreen_v2/agents/green/run.ts` (linha 742) — e essa cópia:
 
-1. `whatsapp-webhook` → `triggerAIResponse()` → upsert em `whatsapp_pending_responses` com `scheduled_at = now + 20s` (config do usuário) **e** dispara um `fetch` pra `process-pending-ai`. Cada mensagem nova reseta `scheduled_at` (debounce ✅) mas **também spawn de um worker novo** que dorme 20s.
-2. `process-pending-ai` dorme 20s, checa se `scheduled_at` venceu, se sim **claim atômico** (`processed=true`) e chama a IA.
-3. **AQUI O PROBLEMA**: em `process-pending-ai` linhas 188-193, o que vai pra IA é só **`latestIncoming`** — a ÚLTIMA mensagem do cliente. Tem até um comentário explicando "sending the last 5 user messages as one text makes the Green flow confuse 'Oi' with the client's name".
+- não remove o cabeçalho `[O cliente enviou várias mensagens…]`
+- não remove os prefixos `1)`, `2)` etc.
+- só aceita nome quando `tokens.length === 1` (uma única palavra no texto todo)
 
-Resultado: o cliente manda "Walther" → "Gostaria de saber..." → "Qual percentual...", o debounce dispara, a IA recebe **só** "Qual percentual de economia". O stage decision é `ask_name` (porque `extras.client_name` está vazio, etapa=novo), e a LLM gera "como posso te chamar?". Walther foi perdido.
+Resultado: `client_name` nunca é salvo → o estágio `ask_name` cai no LLM, que ad-libba o nome a partir do histórico mas reabre a mesma pergunta. Idem para outros extratores (`extractConsumo`, `parseValor`, `extractEstado`, `extractDistribuidora`, detectores de FAQ/objeção) — todos rodam sobre o texto bruto da rajada e podem falhar pelo mesmo motivo.
 
-Por que **duas** respostas? Cada upsert no webhook spawn um worker novo. Com `delay=20s` e mensagens espaçadas ~20-30s, há momentos em que o `scheduled_at` já venceu quando um worker novo acorda → ele claim e responde, mesmo se outro worker já tinha respondido segundos antes. O lock de conversa (`ai_processing_until=90s`) só serializa — não cancela rodadas redundantes.
+Por isso o comportamento parece "não ter sido aplicado": foi aplicado, mas só num dos dois caminhos.
 
-### Conclusão
+## O que entregar
 
-- O debounce **funciona em parte**: ele atrasa, mas só passa a última mensagem.
-- O agente nunca vê a rajada completa, então parece "burro" e ignora dados que o cliente acabou de dar.
-- Workers concorrentes geram respostas duplicadas porque cada um roda isolado depois do lock liberar.
+Mudanças isoladas em `supabase/functions/_igreen_v2/agents/green/run.ts` (e helpers internos). Sem migrações de banco, sem mudança de fluxo, sem novos templates.
 
----
+### 1. Helper `splitBurstLines(msg)`
 
-## Plano de correção
+Normaliza qualquer entrada (rajada coalescida ou mensagem única) para uma lista de linhas limpas:
 
-Tudo concentrado em **`supabase/functions/process-pending-ai/index.ts`** + uma adição no schema de extras de `igreen_conversation_state` (sem migração — usa `extras` jsonb que já existe). Sem mudança em `whatsapp-webhook`.
+- separa por `\n`
+- remove cabeçalho `[O cliente enviou…]` (qualquer texto entre `[ ]` no início)
+- remove prefixos numerados (`1)`, `2.`, `3-`, `4:`)
+- faz `trim` e descarta vazios
+- se não houver `\n`, devolve `[msg.trim()]`
 
-### 1. Coalescer toda a rajada do cliente em UMA chamada à IA
+### 2. `extractFirstName` ciente de rajada
 
-Em vez de pegar só `latestIncoming`, juntar **todas as mensagens do cliente recebidas desde a última resposta da IA** (ou nos últimos N minutos, o que vier primeiro):
+Reescrever a função local do green/run.ts para:
 
-- Encontra `lastAssistantTs` = timestamp da última mensagem com `from_me=true` em `messages`.
-- Filtra `inboundSinceLastAi` = todas `!from_me` com `timestamp > lastAssistantTs` (fallback: últimos 5 min se não houver assistente).
-- Se houver só 1 → comportamento atual.
-- Se houver 2+ → monta o `latestIncomingText` como:
-  ```
-  [O cliente enviou várias mensagens em sequência:]
-  1) Walther
-  2) Gostaria de saber como funciona.
-  3) Qual percentual de economia
-  ```
-  Esse formato evita o problema antigo do "Oi" virar nome, porque o agente Green tem detector de nome **em texto livre** (`extractFirstName`) que ignora termos comuns ("oi", "ok", "sim"), e o stage decision usa toda a `extras` + a mensagem completa pra escolher o próximo passo. O número curto inicial (`Walther`) ainda é capturado pelo regex de single-token.
+1. Aplicar `splitBurstLines` na entrada.
+2. Para cada linha, rodar a lógica atual (padrões "meu nome é…", "sou o…", "me chamo…", fallback de palavra única).
+3. Retornar o primeiro nome válido encontrado.
 
-### 2. Captura de nome resiliente a múltiplas linhas
+Mantém o `NAME_BLOCKLIST` e a normalização atuais. Alinha o comportamento com a versão do qualifier.
 
-Atualizar `extractFirstName` em `_igreen_v2/agents/green/run.ts` pra:
-- Quebrar input por `\n` ou por padrão `^\d+\)\s+`.
-- Tentar extrair nome de **cada linha** na ordem, retornando o primeiro válido.
-- Assim, "1) Walther\n2) Gostaria…" devolve "Walther".
+### 3. Extratores e detectores rodando linha-a-linha
 
-### 3. Detector de "pergunta solta" no meio da rajada
+Os seguintes pontos do `runGreen` hoje recebem `ctx.message` cru. Substituir por uma varredura `splitBurstLines(ctx.message)` que retorna o primeiro hit:
 
-Quando o agente Green captura nome **E** detecta na mesma rajada uma pergunta tipo "como funciona" / "qual o percentual", o run deve:
-- Salvar o nome.
-- Avançar pra `explain_solution` (em vez de pedir nome de novo) e incluir uma frase curta respondendo a pergunta antes do CTA do próximo passo.
-- Já existe `detectFaqTopic` — usar pra adicionar uma frase do tipo "Funciona simples: a Igreen aplica desconto da faixa oficial da sua distribuidora direto na fatura" antes de pedir o próximo dado.
+- `extractConsumo`, `parseValor` (estágio `ask_consumo` / `ask_valor_fatura`)
+- `extractEstado` (estágio `ask_estado`)
+- `extractDistribuidora` e match numérico/texto (estágio `ask_distribuidora`)
+- `isAffirmation` (estágios `explain_solution`, `ask_distribuidora`)
+- `detectFaqTopic`, `detectOutOfScope`, `isGenericObjection` usados em `decideGreenStage`
 
-### 4. Evitar resposta duplicada por workers concorrentes
+Cada extrator vira: "rode sobre cada linha em ordem; devolva o primeiro resultado válido". Sem alterar a assinatura — só a implementação no call site (helper local `firstMatch(msg, fn)`).
 
-Em `process-pending-ai`, depois de adquirir o lock (`ai_processing_until`), **revalidar**:
-- Reler o `scheduled_at` atual de `whatsapp_pending_responses` pra essa conversa.
-- Se foi atualizado por um upsert novo do webhook nos últimos 5s (cliente continuou digitando), **abrir mão do lock, re-enfileirar** e sair sem chamar a IA. Isso garante que só o worker que pegar a janela "estável" responde.
-- Adicional: comparar `latestIncoming.timestamp` com `lastAssistantTs` — se já houve resposta da IA depois de qualquer inbound não respondido **e** não chegou nada novo, sair com `skipped: stale`.
+### 4. FAQ detectada na mesma rajada que o nome
 
-### 5. Aumentar delay padrão e teto mínimo
+Quando `ask_name` captura o nome **e** alguma outra linha da rajada bate em `detectFaqTopic` (ex.: "qual percentual de economia"), trocar o texto determinístico de:
 
-O usuário configurou 20s. Em rajadas humanas reais isso é curto. Sugestão (sem mexer em config do user — só piso aplicado em código):
-- Em `process-pending-ai`, depois do sleep inicial, se houve qualquer mensagem nova nos últimos 8s, dormir mais 8s extras (até no máx 3x) e revalidar. Isso "aguenta" o cliente que digita em rajadas curtas.
+```
+Prazer, Walter! Com a Igreen você economiza… Quer saber como funciona?
+```
 
-### 6. Sem migração de banco
+para:
 
-Reaproveitamos `whatsapp_pending_responses` (já existe) e `whatsapp_conversations.messages` (jsonb com timestamps). Nada novo no schema.
+```
+Prazer, Walter! Sobre o desconto: a faixa varia por estado/distribuidora,
+geralmente entre X% e Y%. Pra te dar o número exato, em qual estado você está?
+```
 
----
+(Mensagem curta + avança para `ask_estado` no mesmo turno marcando `explained: true` e `engaged: true`.) Isso cumpre a regra "responder objeção / FAQ em vez de repetir pergunta".
 
-## Resultado esperado na mesma conversa
+### 5. Sem mudanças no `process-pending-ai`
 
-Cliente manda em rajada: "Walther" → "Gostaria de saber como funciona." → "Qual percentual de economia".
+A coalescência atual está correta (confirmada nos logs). O bug não estava lá.
 
-Debounce coalesce os 3 → IA recebe tudo junto → captura `client_name=Walther`, detecta FAQ "como funciona" + pergunta sobre %, responde **uma vez só** algo como:
+## Por que isso resolve para TODOS os usuários iGreen
 
-> "Prazer, Walther! Funciona simples: a Igreen aplica um desconto da faixa oficial da sua distribuidora direto na sua fatura, sem obra. O percentual varia por distribuidora (geralmente entre 10% e 20%). Em qual estado você está? 😊"
+O fluxo `accounts.is_igreen = true → whatsapp-igreen-agent-v2 → _igreen_v2/agents/green/run.ts` é compartilhado por todas as contas iGreen. Corrigir o `extractFirstName` local e os extratores neste arquivo aplica o ajuste para todos automaticamente, sem migração nem configuração por conta.
 
-Em vez de duas perguntas robóticas "como posso te chamar?".
+## Resultado esperado (mesma simulação de hoje)
 
-## Arquivos a alterar
+Cliente envia em rajada: "Walter" → "Qual percentual de economia".
+IA responde uma única vez: "Prazer, Walter! O desconto fica entre X% e Y% dependendo do estado/distribuidora. Em qual estado você está?" — sem repetir "como posso te chamar".
 
-- `supabase/functions/process-pending-ai/index.ts` — coalescer rajada, revalidar antes de chamar IA, sleep adaptativo.
-- `supabase/functions/_igreen_v2/agents/green/run.ts` — `extractFirstName` multilinha; lógica em `ask_name`/`explain_solution` para responder pergunta detectada na mesma rajada.
-- (Opcional) `supabase/functions/_igreen_v2/agents/green/stages.ts` — pequena adição: se acabamos de capturar nome E há FAQ detectada na msg, escolher stage que responde antes de seguir.
+## Detalhes técnicos (referência)
+
+Arquivos tocados:
+- `supabase/functions/_igreen_v2/agents/green/run.ts` — novo `splitBurstLines`, novo `extractFirstName`, wrappers `firstMatch` para os extratores existentes, ajuste do branch `ask_name` para detectar FAQ na mesma rajada.
+
+Não toca:
+- `process-pending-ai/index.ts`
+- `_igreen_v2/agents/qualifier/*`
+- templates em `green/prompt.ts`
+- schema de banco
