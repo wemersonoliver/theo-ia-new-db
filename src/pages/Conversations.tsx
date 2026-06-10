@@ -41,6 +41,7 @@ import { toast } from "sonner";
 import { FinalizeDialog } from "@/components/conversations/FinalizeDialog";
 import { useFinalizeConversation } from "@/hooks/useFinalizeConversation";
 import { useAccount } from "@/hooks/useAccount";
+import { UnsubscribeFollowupButton } from "@/components/conversations/UnsubscribeFollowupButton";
 
 // ── Chat messages ─────────────────────────────────────────────────────────────
 function ChatMessages({ messages, className }: { messages: Message[]; className?: string }) {
