@@ -45,6 +45,9 @@ export type GreenStage =
   | "send_autocadastro_link"
   | "handoff_human"
   | "ask_full_name_cpf"
+  | "soft_close"
+  | "out_of_scope_clarify"
+  | "objection_reply"
   | "idle";
 
 const INVOICE_KEYWORDS = [
