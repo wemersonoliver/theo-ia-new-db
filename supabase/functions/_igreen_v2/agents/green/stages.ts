@@ -159,6 +159,30 @@ export function decideGreenStage(
   hasMedia: boolean = false,
   documentStatus?: string | null,
 ): GreenStage {
+  const intended = _decideGreenStageInner(state, message, hasMedia, documentStatus);
+  const extras = (state.extras ?? {}) as Record<string, unknown>;
+  // PRIORIDADE 0.7 — se íamos cobrar um dado/fatura, mas o cliente trouxe uma
+  // objeção genérica (não é número, UF, distribuidora nem afirmação), trata
+  // a objeção primeiro. Uma única objeção por turno; controle de repetição
+  // é feito por last_objection_topic no run.ts.
+  if (
+    DATA_COLLECTING_STAGES.has(intended) &&
+    !hasMedia &&
+    extras.greeted &&
+    isGenericObjection(message) &&
+    !isAffirmation(message)
+  ) {
+    return "objection_reply";
+  }
+  return intended;
+}
+
+function _decideGreenStageInner(
+  state: Pick<IgreenConversationState, "etapa_funil" | "produto" | "extras">,
+  message: string,
+  hasMedia: boolean = false,
+  documentStatus?: string | null,
+): GreenStage {
   const etapa = (state.etapa_funil ?? "novo").toLowerCase();
   const msg = (message ?? "").toLowerCase();
   const extras = (state.extras ?? {}) as Record<string, unknown>;
