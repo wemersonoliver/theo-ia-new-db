@@ -72,6 +72,71 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   let stage = initialStage;
   let deterministicText: string | null = null;
 
+  // ---------- Captura oportunista de campos ----------
+  // O cliente costuma entregar dados (estado, valor da fatura) em mensagens
+  // antes do stage que pergunta esse dado (ex.: "Estou em SC" enquanto a IA
+  // ainda estava enviando o vídeo). Sem isso, o slot fica vazio e a IA
+  // pergunta de novo mais tarde, parecendo robótica.
+  const SKIP_OPPORTUNISTIC = new Set<string>([
+    "validate_invoice", "validate_identity", "handoff_human",
+    "objection_security", "invoice_rejected_reply", "send_autocadastro_link",
+    "waiting_invoice", "waiting_identity", "request_identity",
+  ]);
+  if (!ctx.media && !SKIP_OPPORTUNISTIC.has(stage)) {
+    const captures: Record<string, unknown> = {};
+    if (!hasExtraValue(currentExtras.estado)) {
+      const uf = firstHit(burstLines, extractEstado);
+      if (uf) {
+        captures.estado = uf;
+        tool_calls.push({
+          name: "save_green_lead_field",
+          args: { field: "estado", value: uf },
+        });
+      }
+    }
+    if (!hasExtraValue(currentExtras.valor_fatura)) {
+      const etapaAtual = (ctx.state.etapa_funil ?? "").toLowerCase();
+      const moneyContext = burstLines.some((l) =>
+        /\b(r\$|reais?|conta|fatura|luz|m[eê]s|mensal|m[eê]dia)\b/i.test(l));
+      if (etapaAtual === "qualificacao" || moneyContext) {
+        const v = firstHit(burstLines, parseValor);
+        if (v) {
+          captures.valor_fatura = v;
+          tool_calls.push({
+            name: "save_green_lead_field",
+            args: { field: "valor_fatura", value: String(v) },
+          });
+        }
+      }
+    }
+    if (Object.keys(captures).length > 0) {
+      Object.assign(currentExtras, captures);
+      patch.extras = { ...currentExtras };
+      const afterCapture = decideGreenStage(
+        { ...ctx.state, extras: currentExtras },
+        cleanedMsg,
+        !!ctx.media,
+        (ctx.state as any).document_status ?? null,
+      );
+      if (afterCapture !== stage) {
+        events.push({
+          type: "green_opportunistic_capture",
+          priority: "low",
+          source: "specialist",
+          payload: { captured: Object.keys(captures), from: stage, to: afterCapture },
+        });
+        stage = afterCapture;
+      } else {
+        events.push({
+          type: "green_opportunistic_capture",
+          priority: "low",
+          source: "specialist",
+          payload: { captured: Object.keys(captures), from: stage, to: stage },
+        });
+      }
+    }
+  }
+
   if (stage === "greet") {
     // marca que já saudamos para na próxima entrarmos em explain_solution
     patch.produto = "green";
@@ -139,6 +204,15 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
         name: "add_contact_tag",
         args: { tag: "em atendimento" },
       });
+    }
+    // Se o cliente perguntou "qual meu desconto?" logo após o vídeo,
+    // não devolvemos pergunta vazia: pedimos direto o valor da fatura.
+    if (burstLines.some((l) => isDiscountQuestion(l))) {
+      const nome = (currentExtras.client_name as string | undefined) ?? "";
+      const estado = (currentExtras.estado as string | undefined) ?? "";
+      deterministicText = estado
+        ? `Boa${nome ? `, ${nome}` : ""}! Pra te passar o número exato em ${estado}, me diz o valor médio da sua conta de luz por mês.`
+        : `Boa${nome ? `, ${nome}` : ""}! Pra te passar o número exato, me diz o valor médio da sua conta de luz por mês e em qual estado você está.`;
     }
   }
 
@@ -746,6 +820,11 @@ function extractEstado(msg: string): string | null {
   if (!t) return null;
   const upper = t.toUpperCase().replace(/[^A-Z]/g, "");
   if (upper.length === 2 && UF_SET.has(upper)) return upper;
+  // Procura UF como token isolado dentro de frases tipo "Estou em SC".
+  const tokens = t.toUpperCase().split(/[^A-Z]+/).filter(Boolean);
+  for (const tok of tokens) {
+    if (tok.length === 2 && UF_SET.has(tok)) return tok;
+  }
   const lower = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   for (const [name, uf] of Object.entries(ESTADO_NOMES)) {
     if (lower.includes(name.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))) return uf;
@@ -848,6 +927,15 @@ function firstHit<T>(lines: string[], fn: (s: string) => T | null | undefined | 
     if (r) return r as T;
   }
   return null;
+}
+
+function hasExtraValue(v: unknown): boolean {
+  return v !== undefined && v !== null && String(v).trim() !== "";
+}
+
+function isDiscountQuestion(msg: string): boolean {
+  if (!msg) return false;
+  return /\b(qual[\s\S]{0,15}(percentual|porcentagem|desconto|economia)|quanto[\s\S]{0,20}(desconto|economiz)|qual[\s\S]{0,20}minha[\s\S]{0,15}economia|meu[\s\S]{0,10}desconto|meu[\s\S]{0,10}percentual)\b/i.test(msg);
 }
 
 async function generateText(ctx: AgentContext, stage: string): Promise<string> {
