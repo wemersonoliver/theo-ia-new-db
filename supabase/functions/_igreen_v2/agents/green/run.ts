@@ -920,6 +920,15 @@ function firstHit<T>(lines: string[], fn: (s: string) => T | null | undefined | 
   return null;
 }
 
+function hasExtraValue(v: unknown): boolean {
+  return v !== undefined && v !== null && String(v).trim() !== "";
+}
+
+function isDiscountQuestion(msg: string): boolean {
+  if (!msg) return false;
+  return /\b(qual[\s\S]{0,15}(percentual|porcentagem|desconto|economia)|quanto[\s\S]{0,20}(desconto|economiz)|qual[\s\S]{0,20}minha[\s\S]{0,15}economia|meu[\s\S]{0,10}desconto|meu[\s\S]{0,10}percentual)\b/i.test(msg);
+}
+
 async function generateText(ctx: AgentContext, stage: string): Promise<string> {
   const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
   const userPrompt = buildGreenUserPrompt({
