@@ -1,74 +1,52 @@
+## Problema
 
-## Diagnóstico da conversa (5547989118695)
+Toda transferência iGreen envia a mesma notificação:
+> "O cliente concluiu o envio de fatura e documento — pode iniciar o cadastro."
 
-Linha do tempo real, com o bug em destaque:
+Mas existem vários motivos diferentes de handoff (failsafe, palavra-chave, pedido explícito de humano, validação rejeitada, identidade aprovada, etc.) e o texto está fixo em `supabase/functions/_igreen_v2/automations/handoff.ts` (linha 111), independente do `reason`.
 
-```text
-Cliente: "Walter" + "Como funciona" + "Qual percentual de economia"
-IA: "Prazer Walter! desconto 10–20%... em qual estado você está?"   ← ask_name + FAQ
-Cliente: "Estou em SC"
-IA: "Vou te mandar um vídeo... me avisa quando assistir"            ← send_video
-       ⚠️ "SC" foi IGNORADO — extras.estado nunca foi salvo
-Cliente: "Já vi. Qual meu percentual?"
-IA: "Quer que eu te mostre quanto dá pra economizar?"               ← engage_check (fraco)
-Cliente: "Sim"
-IA: "Qual o valor médio da sua fatura?"                             ← ask_valor_fatura
-Cliente: "Média de 500"
-IA: "E em qual estado você está?"                                   ← ❌ ask_estado DE NOVO
-Cliente: "Sc"
-IA: "Pra Celesc o desconto fica entre 10% e 14%..."                 ← finalmente calcula
-```
+Resultado: o operador recebe sempre a mesma mensagem (incluindo `failsafe_triggered`, que NÃO é conclusão de cadastro), o que está confundindo a equipe iGreen.
 
-## Causa raiz
+## Solução
 
-Em `_igreen_v2/agents/green/run.ts`, a captura de campos (`estado`, `valor_fatura`, `distribuidora`, `consumo_medio`) só acontece **quando o stage ativo é o `ask_*` correspondente**. Se o cliente entrega o dado em outro stage (ex.: diz "Estou em SC" durante `send_video`, ou já no `ask_name`), o valor é jogado fora e a IA volta a pedir depois.
+Tornar o título e a descrição da notificação dinâmicos com base no campo `reason` que já chega no `handoffAutomation`. Criar um mapa `reason → {title, descrição}` cobrindo todos os casos atuais e mantendo um fallback genérico.
 
-Também: o `engage_check` após "qual meu percentual?" ignora que a IA já tinha estado/distribuidora prováveis e responde com pergunta vazia em vez de avançar.
+### Mapeamento proposto
 
-## Plano de correção
+| reason recebido                              | Título                                            | Descrição                                                                 |
+| -------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
+| `identity_validated_start_registration`      | ✅ Cliente pronto para cadastro                    | Fatura e documento validados — pode iniciar o cadastro na iGreen.         |
+| `failsafe_triggered`                         | ⚠️ IA travou — atenção humana                     | A IA não conseguiu responder com segurança. Assuma a conversa.            |
+| `explicit_user_request` / `keyword:humano…`  | 🙋 Cliente pediu atendente humano                 | O cliente solicitou falar com uma pessoa. Assuma a conversa.              |
+| `holder_mismatch`                            | 🪪 Documento não bate com titular                 | O documento enviado não corresponde ao titular da fatura. Verifique.      |
+| `not_identity_document`                      | 📄 Documento inválido enviado                     | O cliente enviou algo que não é documento de identidade. Verifique.       |
+| `complaint` / contém "reclama"               | 😠 Reclamação detectada                           | Cliente demonstrou insatisfação. Atenda com prioridade.                   |
+| fallback (qualquer outro)                    | 🔔 Atendimento iGreen precisa de você             | Motivo: `<reason>`. Assuma a conversa.                                    |
 
-Tudo em `supabase/functions/_igreen_v2/agents/green/run.ts` (continua valendo para todos os usuários iGreen, pois o V2 é compartilhado).
+Regras de classificação:
+- Se `reason` começa com `keyword:` → tratar como pedido explícito de humano.
+- Se contém `failsafe` → categoria failsafe.
+- Caso contrário, lookup direto no mapa; se não achar, fallback genérico (mantendo o `reason` cru visível no campo "Motivo").
 
-### 1. Captura oportunista global (toda mensagem, antes do switch de stages)
+### Alteração de código
 
-Adicionar um bloco no início do `runGreen`, logo após calcular `burstLines`, que sempre tenta extrair dos `burstLines` e salvar no `patch.extras` se o campo ainda estiver vazio:
+Arquivo único: `supabase/functions/_igreen_v2/automations/handoff.ts`
 
-- `estado` — via `firstHit(burstLines, extractEstado)`
-- `valor_fatura` — via `firstHit(burstLines, parseValor)`
-- `distribuidora` — via `firstHit(burstLines, extractDistribuidora)`
-- `consumo_medio` — via `firstHit(burstLines, extractConsumo)`
+1. Adicionar função `buildHandoffMessage(reason, displayName, phone, horario, summary)` que:
+   - normaliza o `reason` (lowercase, trim, prefixos);
+   - escolhe `{ title, body }` do mapa acima;
+   - monta o template final reusando o mesmo layout (Nome / Telefone / Horário / Motivo / Resumo).
+2. Substituir o template fixo (linha 111) por `const message = buildHandoffMessage(...)`.
+3. Manter o campo `🔄 *Motivo:*` com o `reason` original — útil para diagnóstico.
+4. Sem alterações em schema, RLS, tools, prompt, ou outras edge functions.
 
-Para cada captura nova, emitir o `tool_calls` `save_green_lead_field` correspondente (mantém compat com o pipeline de gravação no DB).
+### Validação
 
-Salvaguardas:
-- só sobrescreve se o slot estiver vazio (`!hasValue(currentExtras.<campo>)`);
-- só extrai estado/distribuidora se o cliente NÃO estiver enviando mídia neste turno (evita ruído de OCR);
-- não dispara em `validate_invoice` / `validate_identity` / `handoff_human` / `objection_security` (já têm fluxo próprio).
+- Deploy de `whatsapp-igreen-agent-v2` (compartilha o módulo).
+- Conferir no banco os últimos handoffs do usuário `marcioevandrocosta@hotmail.com` para confirmar quais `reason` ele recebeu (failsafe nas 3 prints).
+- Simular novamente uma conversa que termine em failsafe e outra que termine em `identity_validated_start_registration` para validar os dois textos distintos.
 
-### 2. Reaproveitar essas capturas no decideGreenStage
+### Fora do escopo
 
-Como o `decideGreenStage` é chamado ANTES do bloco de captura, após capturar opotunisticamente reexecutar `decideGreenStage(mergedState, ...)` para escolher o stage correto no mesmo turno (mesma técnica já usada em `STAGES_REDECIDABLE`). Isso garante que se o cliente entregar `valor_fatura + estado + distribuidora` numa só burst, o fluxo pula direto para `simulate_discount_concreto`.
-
-### 3. Atalho determinístico para "qual meu desconto?" pós-vídeo
-
-No branch `engage_check` (e também quando `stage === "ask_valor_fatura"` mas a mensagem do cliente é uma pergunta de desconto sem número):
-
-- Se `extras.estado` já existe, responder direto: "Pra calcular seu desconto exato em [estado], me diz só o valor médio da sua conta de luz." (uma pergunta só, focada).
-- Marcar `extras.engaged = true` no mesmo turno para não travar.
-
-### 4. Detector de pergunta de desconto
-
-Adicionar regex utilitário `isDiscountQuestion(msg)` matchando: `qual.*(percentual|desconto|economia)`, `quanto.*(economiz|desconto)`, `qual.*minha.*economia`. Usado pelo item 3 e para evitar que essa mensagem caia em `objection_reply`.
-
-### Detalhes técnicos
-
-- Arquivo único alterado: `supabase/functions/_igreen_v2/agents/green/run.ts`
-- Sem mudança em `stages.ts`, `prompt.ts`, `process-pending-ai`, banco ou prompts.
-- Sem alteração de schema.
-- Helpers `extractEstado`, `parseValor`, `extractDistribuidora`, `extractConsumo`, `firstHit`, `splitBurstLines` já existem no arquivo.
-- Após implementar, simular novamente com o mesmo cenário (Walter → "Estou em SC" → vídeo → "qual meu percentual" → "Sim" → "Média de 500") e confirmar que a IA NÃO repete a pergunta de estado e responde já com Celesc/SC.
-
-### Riscos
-
-- Falso positivo em `extractEstado` (ex.: "SP" dentro de uma palavra) — `firstHit` + regex atual já valida UF como token isolado. Manter blocklist atual.
-- `parseValor` capturando número errado (ex.: "tenho 2 filhos") — restringir captura oportunista de `valor_fatura` para casos com indicador de dinheiro (`r$`, `reais`, `conta`, `fatura`, `mês`) OU quando o `etapa_funil` já é `qualificacao` (cliente está claramente discutindo conta).
+- Não vou mexer em quando/como o failsafe dispara (já tratado em ajustes anteriores).
+- Não vou mudar destinatários, idempotência, nem o fluxo de eventos — só o conteúdo da mensagem.

@@ -108,7 +108,8 @@ async function notifyOperators(account_id: string, phone: string, reason: string
       hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
     });
     const summaryBlock = summary ? `\n📝 *Resumo:* ${summary}` : "";
-    const message = `🔔 *Atendimento iGreen pronto para você assumir*\n\nO cliente concluiu o envio de fatura e documento — pode iniciar o cadastro.\n\n👤 *Nome:* ${displayName}\n📱 *Telefone:* ${phone}\n⏰ *Horário:* ${horario}\n🔄 *Motivo:* ${reason}${summaryBlock}`;
+    const { title, body } = buildHandoffCopy(reason);
+    const message = `${title}\n\n${body}\n\n👤 *Nome:* ${displayName}\n📱 *Telefone:* ${phone}\n⏰ *Horário:* ${horario}\n🔄 *Motivo:* ${reason}${summaryBlock}`;
 
     let sent = 0;
     for (const [num] of recipients) {
@@ -129,6 +130,62 @@ async function notifyOperators(account_id: string, phone: string, reason: string
     console.error("[igreen handoff notify] fatal", e);
     return { sent: 0, error: (e as Error).message };
   }
+}
+
+function buildHandoffCopy(rawReason: string): { title: string; body: string } {
+  const reason = String(rawReason || "").toLowerCase().trim();
+
+  if (reason === "identity_validated_start_registration") {
+    return {
+      title: "✅ *Cliente pronto para cadastro iGreen*",
+      body: "Fatura e documento foram validados — pode iniciar o cadastro do cliente.",
+    };
+  }
+
+  if (reason.includes("failsafe")) {
+    return {
+      title: "⚠️ *IA travou — atenção humana necessária*",
+      body: "A IA não conseguiu responder com segurança nesta conversa. Assuma o atendimento.",
+    };
+  }
+
+  if (
+    reason === "explicit_user_request" ||
+    reason.startsWith("keyword:") ||
+    reason.includes("humano") ||
+    reason.includes("atendente")
+  ) {
+    return {
+      title: "🙋 *Cliente pediu atendente humano*",
+      body: "O cliente solicitou falar com uma pessoa. Assuma a conversa.",
+    };
+  }
+
+  if (reason === "holder_mismatch") {
+    return {
+      title: "🪪 *Documento não bate com o titular da fatura*",
+      body: "O documento enviado não corresponde ao titular da fatura. Verifique com o cliente.",
+    };
+  }
+
+  if (reason === "not_identity_document") {
+    return {
+      title: "📄 *Documento inválido enviado*",
+      body: "O cliente enviou um arquivo que não é documento de identidade. Verifique.",
+    };
+  }
+
+  if (reason.includes("complaint") || reason.includes("reclama")) {
+    return {
+      title: "😠 *Reclamação detectada*",
+      body: "O cliente demonstrou insatisfação. Atenda com prioridade.",
+    };
+  }
+
+  return {
+    title: "🔔 *Atendimento iGreen precisa de você*",
+    body: "A conversa foi transferida para atendimento humano. Assuma o cliente.",
+  };
 }
 
 export async function handoffAutomation(args: {
