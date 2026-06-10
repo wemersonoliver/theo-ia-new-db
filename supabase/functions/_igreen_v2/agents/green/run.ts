@@ -52,8 +52,14 @@ function formatBRL(n: number): string {
 }
 
 export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
+  // Normaliza rajadas coalescidas pelo process-pending-ai
+  // ("[O cliente enviou várias mensagens em sequência:]\n1) X\n2) Y").
+  // Todos os extratores/detectores rodam sobre essa versão limpa para que
+  // funcionem mesmo quando o cliente manda várias mensagens em sequência.
+  const cleanedMsg = cleanBurst(ctx.message);
+  const burstLines = splitBurstLines(ctx.message);
   const initialStage = decideGreenStage(
-    ctx.state, ctx.message,
+    ctx.state, cleanedMsg,
     !!ctx.media, (ctx.state as any).document_status ?? null,
   );
   const tool_calls: AgentResult["tool_calls"] = [];
@@ -78,7 +84,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     patch.produto = "green";
     patch.extras = { ...currentExtras, explained: true };
     tool_calls.push({ name: "set_product", args: { produto: "green" } });
-    if (isAffirmation(ctx.message)) {
+    if (burstLines.some((l) => isAffirmation(l))) {
       patch.extras = { ...(patch.extras as object), solution_confirmed: true };
     }
   }
@@ -92,7 +98,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
 
   if (stage === "ask_consumo") {
     // tenta capturar consumo na mensagem atual (números seguidos de kwh/r$/reais)
-    const consumo = extractConsumo(ctx.message);
+    const consumo = firstHit(burstLines, extractConsumo);
     if (consumo) {
       patch.extras = { ...currentExtras, consumo_medio: consumo };
       tool_calls.push({
@@ -103,7 +109,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     // O prompt deste stage pergunta valor médio em reais. Então uma resposta
     // numérica simples como "500" já deve preencher valor_fatura também;
     // caso contrário o fluxo pergunta praticamente a mesma coisa de novo.
-    const v = parseValor(ctx.message);
+    const v = firstHit(burstLines, parseValor);
     if (v) {
       patch.extras = {
         ...(patch.extras as object ?? currentExtras),
@@ -137,7 +143,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   }
 
   if (stage === "ask_estado") {
-    const uf = extractEstado(ctx.message);
+    const uf = firstHit(burstLines, extractEstado);
     if (uf) patch.extras = { ...currentExtras, estado: uf };
   }
 
@@ -172,7 +178,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
 
   if (stage === "ask_distribuidora") {
     const opts = (currentExtras.distributors_options as string[] | undefined) ?? [];
-    const msg = ctx.message.trim();
+    const msg = cleanedMsg.trim();
     let chosen: string | null = null;
     // 1) resposta numérica (1, 2, 3…)
     const numMatch = msg.match(/^\s*(\d{1,2})\b/);
@@ -189,10 +195,10 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
       }) ?? null;
     }
     // 3) lista de 1 + afirmação → assume essa
-    if (!chosen && opts.length === 1 && isAffirmation(msg)) chosen = opts[0];
+    if (!chosen && opts.length === 1 && burstLines.some((l) => isAffirmation(l))) chosen = opts[0];
     // 4) fallback: texto livre
     if (!chosen) {
-      const d = extractDistribuidora(ctx.message);
+      const d = firstHit(burstLines, extractDistribuidora);
       if (d && opts.length === 0) chosen = d;
     }
     if (chosen) {
@@ -205,7 +211,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   }
 
   if (stage === "ask_valor_fatura") {
-    const valor = parseValor(ctx.message);
+    const valor = firstHit(burstLines, parseValor);
     if (valor) {
       patch.extras = { ...(patch.extras as object ?? currentExtras), valor_fatura: valor };
       tool_calls.push({
@@ -284,7 +290,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
   if (stage === "family_authorization_check") {
     // Detecta confirmação de autorização do titular (família).
     const FAMILY_AUTH_RX = /\b(sim|tenho|posso|claro|pode|com certeza|positivo|isso|autoriz(o|ada|ado|açao|ação)|meu marido|minha esposa|meu pai|minha m[aã]e|meu filho|minha filha|meu irm[aã]o|minha irm[aã]|meu(s)? sogro|minha sogra|fam[ií]lia)\b/i;
-    if (FAMILY_AUTH_RX.test(ctx.message ?? "")) {
+    if (FAMILY_AUTH_RX.test(cleanedMsg ?? "")) {
       patch.extras = {
         ...(patch.extras as object ?? currentExtras),
         family_authorized: true,
@@ -296,7 +302,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
       (patch as any).document_status = "validated";
       const mergedExtras = patch.extras as Record<string, unknown>;
       const mergedState = { ...ctx.state, extras: mergedExtras, etapa_funil: "fatura_validada" };
-      const nextStage = decideGreenStage(mergedState, ctx.message, !!ctx.media, null);
+      const nextStage = decideGreenStage(mergedState, cleanedMsg, !!ctx.media, null);
       // Dispara automação de tagging "enviou fatura" → move card no CRM
       // (caso de fatura de terceiro autorizado pela família).
       events.push({ type: "invoice_approved", priority: "high", source: "specialist",
@@ -341,7 +347,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
   }
 
   if (stage === "out_of_scope_clarify") {
-    const topic = detectOutOfScope(ctx.message);
+    const topic = firstHit(burstLines, detectOutOfScope);
     const nome = (currentExtras.client_name as string | undefined) ?? "";
     const handled = ((currentExtras.out_of_scope_handled_topics as string[] | undefined) ?? []).slice();
     if (topic && !handled.includes(topic)) handled.push(topic);
@@ -381,7 +387,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
 
   if (stage === "objection_reply") {
     const nome = (currentExtras.client_name as string | undefined) ?? "";
-    const m = (ctx.message ?? "").toLowerCase();
+    const m = (cleanedMsg ?? "").toLowerCase();
     let topic = "geral";
     let body = "";
     if (/\b(aluguel|alugada?|n[aã]o\s+(?:é|eh)\s+(?:minha|meu)|(?:é|eh)\s+do\s+(?:meu|minha)\s+(?:pai|m[aã]e|marido|esposa|irm[aã]o?|filh[oa]|sogr[oa]))\b/.test(m)) {
@@ -461,7 +467,24 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
         args: { field: "nome_cliente", value: nome },
       });
       tool_calls.push({ name: "set_product", args: { produto: "green" } });
-      deterministicText = `Prazer, ${nome}! Com a Igreen você economiza na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer saber como funciona?`;
+      // Se na MESMA rajada o cliente já mandou uma FAQ (ex.: "qual o percentual
+      // de economia?") ou algo fora do escopo, respondemos a dúvida em vez de
+      // repetir "quer saber como funciona?".
+      const faq = firstHit(burstLines, detectFaqTopic);
+      const oos = firstHit(burstLines, detectOutOfScope);
+      const askedDiscount = burstLines.some((l) =>
+        /\b(percentual|porcentagem|quanto.{0,15}(desconto|economia|economizo|economizar)|qual.{0,10}desconto)\b/i.test(l));
+      if (askedDiscount) {
+        deterministicText = `Prazer, ${nome}! O desconto da iGreen varia por estado e distribuidora, geralmente entre 10% e 20% na sua fatura todo mês — sem obra, sem trocar de distribuidora. Pra eu te dar o número exato, em qual estado você está?`;
+      } else if (faq === "cashback") {
+        deterministicText = `Prazer, ${nome}! Sobre o cashback: cada novo assinante que entrar pela sua indicação te devolve uma parte da fatura dele, e isso pode até zerar sua conta de luz. Antes disso, me conta: em qual estado você está?`;
+      } else if (faq === "instalacao" || faq === "como_funciona" || faq) {
+        deterministicText = `Prazer, ${nome}! Funciona simples: a iGreen aplica um desconto da faixa oficial da sua distribuidora direto na sua fatura, sem obra e sem trocar de distribuidora. Em qual estado você está pra eu te mostrar a economia?`;
+      } else if (oos) {
+        deterministicText = `Prazer, ${nome}! Sobre o que você perguntou, a iGreen trabalha especificamente com desconto na conta de luz via assinatura de energia limpa. Quer que eu te mostre rapidinho como funciona essa economia?`;
+      } else {
+        deterministicText = `Prazer, ${nome}! Com a Igreen você economiza na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer saber como funciona?`;
+      }
     }
   }
 
@@ -525,7 +548,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
   }
 
   if (stage === "faq_answer") {
-    const topic = detectFaqTopic(ctx.message);
+    const topic = firstHit(burstLines, detectFaqTopic);
     const nome = (currentExtras.client_name as string | undefined) ?? "";
     const valor = Number(currentExtras.valor_fatura ?? 0);
     const distribuidora = (currentExtras.distribuidora as string | undefined) ?? "";
@@ -575,7 +598,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
   if (STAGES_REDECIDABLE.has(stage)) {
     const mergedExtras = (patch.extras as Record<string, unknown>) ?? currentExtras;
     const mergedState = { ...ctx.state, extras: mergedExtras, etapa_funil: patch.etapa_funil ?? ctx.state.etapa_funil };
-    const nextStage = decideGreenStage(mergedState, ctx.message, !!ctx.media, (ctx.state as any).document_status ?? null);
+    const nextStage = decideGreenStage(mergedState, cleanedMsg, !!ctx.media, (ctx.state as any).document_status ?? null);
     if (nextStage !== stage) {
       events.push({ type: "green_stage_advanced", priority: "low", source: "specialist",
         payload: { from: stage, to: nextStage } });
@@ -607,7 +630,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
           deterministicText = null;
           const mergedExtras2 = patch.extras as Record<string, unknown>;
           const mergedState2 = { ...mergedState, extras: mergedExtras2 };
-          const after = decideGreenStage(mergedState2, ctx.message, !!ctx.media, (ctx.state as any).document_status ?? null);
+          const after = decideGreenStage(mergedState2, cleanedMsg, !!ctx.media, (ctx.state as any).document_status ?? null);
           if (after === "simulate_discount_concreto") {
             const valor = Number(mergedExtras2.valor_fatura ?? 0);
             const nome2 = (mergedExtras2.client_name as string | undefined) ?? "";
@@ -749,6 +772,19 @@ function extractFirstName(msg: string): string | null {
     .replace(/\[Imagem.*?\]/gi, "")
     .trim();
   if (!raw) return null;
+
+  // Rajada coalescida pelo process-pending-ai
+  // ("[O cliente enviou várias mensagens em sequência:]\n1) X\n2) Y").
+  // Tenta cada linha em ordem e devolve o primeiro nome válido.
+  const lines = splitBurstLines(raw);
+  if (lines.length > 1) {
+    for (const line of lines) {
+      const found = extractFirstName(line);
+      if (found) return found;
+    }
+    return null;
+  }
+  raw = lines[0] ?? raw;
   if (/\?$/.test(raw)) return null;
 
   const blocked = new Set([
@@ -756,6 +792,7 @@ function extractFirstName(msg: string): string | null {
     "mesmo","tudo","bem","tá","ta","obrigado","obrigada","valeu","tchau","bom","boa",
     "quero","saber","como","funciona","tenho","interesse","conexao","conexão","green",
     "energia","luz","conta","fatura","economizar","economia","internet","telecom",
+    "qual","quanto","porcentagem","percentual","desconto",
   ]);
   const cleanToken = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const format = (value: string) => value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
@@ -779,6 +816,37 @@ function extractFirstName(msg: string): string | null {
 
   const tokens = raw.replace(/[^\p{L}\s]/gu, "").trim().split(/\s+/).filter(Boolean);
   if (tokens.length === 1) return accept(tokens[0]);
+  return null;
+}
+
+// ---------- Burst helpers (rajada coalescida) ----------
+// O process-pending-ai junta múltiplas mensagens em sequência num único texto:
+//   "[O cliente enviou várias mensagens em sequência, considere todas juntas:]
+//    1) Walter
+//    2) Qual percentual de economia"
+// Esses helpers normalizam essa entrada para que extratores e detectores
+// que esperam uma mensagem por linha funcionem corretamente.
+function splitBurstLines(msg: string | null | undefined): string[] {
+  const raw = (msg ?? "").trim();
+  if (!raw) return [];
+  const lines = raw
+    .split(/\r?\n+/)
+    .map((l) => l.replace(/^\s*\[[^\]]*\]\s*/, ""))           // remove cabeçalho [..]
+    .map((l) => l.replace(/^\s*\d{1,2}[\).\-:]\s*/, ""))     // remove "1) ", "2.", "3-"
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  return lines.length > 0 ? lines : [raw];
+}
+
+function cleanBurst(msg: string | null | undefined): string {
+  return splitBurstLines(msg).join("\n");
+}
+
+function firstHit<T>(lines: string[], fn: (s: string) => T | null | undefined | false): T | null {
+  for (const l of lines) {
+    const r = fn(l);
+    if (r) return r as T;
+  }
   return null;
 }
 
