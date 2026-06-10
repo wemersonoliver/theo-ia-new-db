@@ -1,85 +1,102 @@
 
-## Diagnóstico das 2 conversas
+## Diagnóstico — conversa com Walther (5584987859366)
 
-**Marizele (5531971376154)** — A IA seguiu o fluxo tecnicamente certo, mas:
-- Quando ela disse **"Não quero por enquanto"**, a IA ignorou e respondeu *"Para a gente dar uma olhada no seu cadastro na CEMIG, você pode me mandar a sua última fatura..."* — empurrou de novo.
-- Quando ela disse **"Pode deixar só queria saber como funciona obgda"** (claramente encerrando), a IA explicou em 1 frase e voltou a pedir a fatura.
-- Faltou: reconhecer o "não", oferecer ficar à disposição, encerrar com leveza (sem pedir fatura de novo).
+Timeline:
 
-**Marina (5577999494889)** — Problema mais grave:
-- Cliente disse **"Eu queria fazer um empréstimo na conta de energia"** — isso é **crédito consignado em conta de luz, NÃO é o produto Igreen**.
-- A IA respondeu *"Que legal que você quer saber mais sobre isso"* e mandou o vídeo de assinatura solar como se fosse a mesma coisa.
-- Depois insistiu *"Que legal que você quer fazer o empréstimo, Marina! Qual o valor médio da sua fatura..."* — fingindo que vende empréstimo.
-- O dono teve que intervir manualmente várias vezes pra esclarecer.
-- Faltou: detectar intenção fora de escopo e esclarecer o produto logo no primeiro turno.
+| Hora | Quem | Mensagem |
+| --- | --- | --- |
+| 01:47:23 | cliente | "Olá! Quero saber..." |
+| 01:48:07 | IA | "como posso te chamar?" ✅ |
+| 01:49:14 | cliente | "Walther" |
+| 01:49:34 | cliente | "Gostaria de saber como funciona." |
+| 01:50:04 | cliente | "Qual percentual de economia" |
+| **01:50:16** | **IA** | **"como posso te chamar?"** ← ignorou Walther |
+| **01:50:45** | **IA** | **"qual seu primeiro nome?"** ← perguntou o nome de novo |
 
-**Causa raiz no código (`_igreen_v2/agents/green/`)**:
-1. `decideGreenStage` em `stages.ts` só conhece duas objeções: handoff explícito e medo de golpe. Qualquer outro "não", "não agora", "só queria saber", "depois eu vejo" passa direto e cai no próximo stage rígido.
-2. Nenhum detector de **intenção fora de escopo** (empréstimo, financiamento, placa solar própria, segunda via de fatura, troca de titularidade, religar luz, etc.).
-3. O prompt em `prompt.ts` exige "referenciar em 1 frase a resposta anterior", mas como o stage já foi decidido como `request_invoice`/`ask_valor_fatura`, a IA acaba só colando uma desculpa curta e empurrando a mesma pergunta.
-4. `engage_check` existe mas nunca é escolhido após o vídeo — `decideGreenStage` pula direto pra `ask_valor_fatura` quando `video_sent=true`.
+**Duas respostas seguidas** (correlation_ids diferentes em 01:49:57 e 01:50:27), nenhuma reconheceu o nome "Walther" e nem as 2 perguntas que vieram depois.
+
+### O que o código realmente faz hoje
+
+1. `whatsapp-webhook` → `triggerAIResponse()` → upsert em `whatsapp_pending_responses` com `scheduled_at = now + 20s` (config do usuário) **e** dispara um `fetch` pra `process-pending-ai`. Cada mensagem nova reseta `scheduled_at` (debounce ✅) mas **também spawn de um worker novo** que dorme 20s.
+2. `process-pending-ai` dorme 20s, checa se `scheduled_at` venceu, se sim **claim atômico** (`processed=true`) e chama a IA.
+3. **AQUI O PROBLEMA**: em `process-pending-ai` linhas 188-193, o que vai pra IA é só **`latestIncoming`** — a ÚLTIMA mensagem do cliente. Tem até um comentário explicando "sending the last 5 user messages as one text makes the Green flow confuse 'Oi' with the client's name".
+
+Resultado: o cliente manda "Walther" → "Gostaria de saber..." → "Qual percentual...", o debounce dispara, a IA recebe **só** "Qual percentual de economia". O stage decision é `ask_name` (porque `extras.client_name` está vazio, etapa=novo), e a LLM gera "como posso te chamar?". Walther foi perdido.
+
+Por que **duas** respostas? Cada upsert no webhook spawn um worker novo. Com `delay=20s` e mensagens espaçadas ~20-30s, há momentos em que o `scheduled_at` já venceu quando um worker novo acorda → ele claim e responde, mesmo se outro worker já tinha respondido segundos antes. O lock de conversa (`ai_processing_until=90s`) só serializa — não cancela rodadas redundantes.
+
+### Conclusão
+
+- O debounce **funciona em parte**: ele atrasa, mas só passa a última mensagem.
+- O agente nunca vê a rajada completa, então parece "burro" e ignora dados que o cliente acabou de dar.
+- Workers concorrentes geram respostas duplicadas porque cada um roda isolado depois do lock liberar.
 
 ---
 
-## Plano de mudanças
+## Plano de correção
 
-Tudo concentrado em `supabase/functions/_igreen_v2/agents/green/` — sem mexer em outros agentes, banco ou frontend.
+Tudo concentrado em **`supabase/functions/process-pending-ai/index.ts`** + uma adição no schema de extras de `igreen_conversation_state` (sem migração — usa `extras` jsonb que já existe). Sem mudança em `whatsapp-webhook`.
 
-### 1. Novos detectores em `stages.ts`
+### 1. Coalescer toda a rajada do cliente em UMA chamada à IA
 
-- `isSoftDecline(msg)` — captura "não quero", "agora não", "depois eu vejo", "só queria saber", "fica pra depois", "vou pensar", "obrigado(a)" como fechamento, "tá bom assim", "deixa pra lá".
-- `detectOutOfScope(msg)` → retorna `"emprestimo" | "placa_propria" | "segunda_via" | "religar" | "troca_titular" | null`. Regex específicas por categoria (empréstimo: `\b(empr[eé]stimo|consignado|cr[eé]dito.{0,15}(conta|luz|energia))\b`, etc.).
-- `isQuestionAboutHow(msg)` — pergunta genuína de "como funciona", "o que é isso", separando de afirmação de interesse.
+Em vez de pegar só `latestIncoming`, juntar **todas as mensagens do cliente recebidas desde a última resposta da IA** (ou nos últimos N minutos, o que vier primeiro):
 
-### 2. Novos stages
+- Encontra `lastAssistantTs` = timestamp da última mensagem com `from_me=true` em `messages`.
+- Filtra `inboundSinceLastAi` = todas `!from_me` com `timestamp > lastAssistantTs` (fallback: últimos 5 min se não houver assistente).
+- Se houver só 1 → comportamento atual.
+- Se houver 2+ → monta o `latestIncomingText` como:
+  ```
+  [O cliente enviou várias mensagens em sequência:]
+  1) Walther
+  2) Gostaria de saber como funciona.
+  3) Qual percentual de economia
+  ```
+  Esse formato evita o problema antigo do "Oi" virar nome, porque o agente Green tem detector de nome **em texto livre** (`extractFirstName`) que ignora termos comuns ("oi", "ok", "sim"), e o stage decision usa toda a `extras` + a mensagem completa pra escolher o próximo passo. O número curto inicial (`Walther`) ainda é capturado pelo regex de single-token.
 
-Adicionar ao enum `GreenStage` e ao `prompt.ts`:
+### 2. Captura de nome resiliente a múltiplas linhas
 
-- `soft_close` — cliente declinou educadamente. Reconhece, agradece, diz que fica à disposição, **não pede fatura, não faz pergunta de qualificação**. Marca `extras.soft_closed=true` e adiciona tag CRM "lead frio".
-- `out_of_scope_clarify` — esclarece em 2 frases que a Igreen é **assinatura de energia limpa com desconto na fatura, não é empréstimo / não vende placa / não resolve segunda via**, e pergunta se mesmo assim quer entender a economia. Marca `extras.out_of_scope_topic` pra não repetir.
-- `objection_reply` — stage genérico de objeção quando o cliente responde algo que **não é confirmação nem dado pedido** (ex: "tá caro", "não confio", "minha conta é baixa", "moro de aluguel"). A IA primeiro responde a objeção em 1-2 frases curtas baseadas em uma mini knowledge base inline (aluguel: pode contratar; conta baixa: mostra valor mínimo; preço: explica que é desconto, não cobra a mais), depois faz **uma** pergunta leve pra reengajar — não repete o último pedido.
+Atualizar `extractFirstName` em `_igreen_v2/agents/green/run.ts` pra:
+- Quebrar input por `\n` ou por padrão `^\d+\)\s+`.
+- Tentar extrair nome de **cada linha** na ordem, retornando o primeiro válido.
+- Assim, "1) Walther\n2) Gostaria…" devolve "Walther".
 
-### 3. Prioridades no `decideGreenStage`
+### 3. Detector de "pergunta solta" no meio da rajada
 
-Nova ordem de prioridade no topo, antes da lógica atual:
+Quando o agente Green captura nome **E** detecta na mesma rajada uma pergunta tipo "como funciona" / "qual o percentual", o run deve:
+- Salvar o nome.
+- Avançar pra `explain_solution` (em vez de pedir nome de novo) e incluir uma frase curta respondendo a pergunta antes do CTA do próximo passo.
+- Já existe `detectFaqTopic` — usar pra adicionar uma frase do tipo "Funciona simples: a Igreen aplica desconto da faixa oficial da sua distribuidora direto na fatura" antes de pedir o próximo dado.
 
-```
--1  handoff explícito       (já existe)
- 0  objeção de segurança     (já existe)
- 0.5 detectOutOfScope && !extras.out_of_scope_handled  → out_of_scope_clarify
- 0.6 isSoftDecline && extras.greeted && !extras.soft_closed → soft_close
- 0.7 stage atual ia pedir fatura/dado E mensagem do cliente é objeção/dúvida não relacionada → objection_reply
-```
+### 4. Evitar resposta duplicada por workers concorrentes
 
-Também: **reativar `engage_check` 1 vez** logo após `send_video`, antes de `ask_valor_fatura`, pra dar respiro e captar reação real ao vídeo (objeção, dúvida, "não tenho interesse") em vez de já cobrar dado.
+Em `process-pending-ai`, depois de adquirir o lock (`ai_processing_until`), **revalidar**:
+- Reler o `scheduled_at` atual de `whatsapp_pending_responses` pra essa conversa.
+- Se foi atualizado por um upsert novo do webhook nos últimos 5s (cliente continuou digitando), **abrir mão do lock, re-enfileirar** e sair sem chamar a IA. Isso garante que só o worker que pegar a janela "estável" responde.
+- Adicional: comparar `latestIncoming.timestamp` com `lastAssistantTs` — se já houve resposta da IA depois de qualquer inbound não respondido **e** não chegou nada novo, sair com `skipped: stale`.
 
-### 4. Ajustes no `run.ts`
+### 5. Aumentar delay padrão e teto mínimo
 
-- Implementar os 3 novos stages com `deterministicText` (textos curtos, sem números inventados, seguindo as regras hard do `GREEN_SYSTEM`).
-- Em `soft_close`: `tool_calls` adiciona `add_contact_tag` "lead_frio" e **não** chama `request_invoice` / `set_stage`.
-- Em `out_of_scope_clarify`: `add_contact_tag` com o tópico detectado (ex: "interesse_emprestimo") para o dono ver no CRM.
-- Em `objection_reply`: salva `extras.last_objection` pra não responder a mesma objeção 2x seguidas.
-
-### 5. Reforço no `GREEN_SYSTEM` (prompt.ts)
-
-Adicionar regras hard:
-- "Se o cliente disser explicitamente que NÃO quer agora, NUNCA repita o pedido de fatura/dado no mesmo turno. Agradeça e fique à disposição."
-- "Se o cliente pedir um produto que a Igreen não vende (empréstimo, placa própria, segunda via, religar luz), NUNCA finja que vende. Esclareça em 1 frase e pergunte se ainda assim quer conhecer a assinatura de energia."
-- "Antes de qualquer próxima pergunta, primeiro responda em 1 frase ao que o cliente acabou de dizer. Se ele fez uma objeção, trate a objeção antes de avançar."
+O usuário configurou 20s. Em rajadas humanas reais isso é curto. Sugestão (sem mexer em config do user — só piso aplicado em código):
+- Em `process-pending-ai`, depois do sleep inicial, se houve qualquer mensagem nova nos últimos 8s, dormir mais 8s extras (até no máx 3x) e revalidar. Isso "aguenta" o cliente que digita em rajadas curtas.
 
 ### 6. Sem migração de banco
 
-Tudo vive em `extras` (jsonb já existente em `igreen_conversation_state`). Sem novas colunas, sem novas tabelas, sem mudança de RLS.
+Reaproveitamos `whatsapp_pending_responses` (já existe) e `whatsapp_conversations.messages` (jsonb com timestamps). Nada novo no schema.
 
 ---
 
-## Resultado esperado nas mesmas conversas
+## Resultado esperado na mesma conversa
 
-- **Marizele** diz "Não quero por enquanto" → IA: *"Tranquilo, Marizele! Fico à disposição quando quiser dar uma olhada. Qualquer dúvida é só me chamar 😊"* — e para.
-- **Marina** diz "queria fazer um empréstimo na conta de energia" → IA: *"Entendi, Marina! A Igreen não trabalha com empréstimo — a gente dá desconto direto na sua conta de luz, todo mês, sem trocar de distribuidora. Quer que eu te mostre como funciona a economia mesmo assim?"* — sem mandar vídeo nem pedir fatura até ter um "sim" real.
+Cliente manda em rajada: "Walther" → "Gostaria de saber como funciona." → "Qual percentual de economia".
+
+Debounce coalesce os 3 → IA recebe tudo junto → captura `client_name=Walther`, detecta FAQ "como funciona" + pergunta sobre %, responde **uma vez só** algo como:
+
+> "Prazer, Walther! Funciona simples: a Igreen aplica um desconto da faixa oficial da sua distribuidora direto na sua fatura, sem obra. O percentual varia por distribuidora (geralmente entre 10% e 20%). Em qual estado você está? 😊"
+
+Em vez de duas perguntas robóticas "como posso te chamar?".
 
 ## Arquivos a alterar
 
-- `supabase/functions/_igreen_v2/agents/green/stages.ts` (detectores + enum + prioridades)
-- `supabase/functions/_igreen_v2/agents/green/prompt.ts` (regras hard + 3 novos cases)
-- `supabase/functions/_igreen_v2/agents/green/run.ts` (handlers dos 3 novos stages)
+- `supabase/functions/process-pending-ai/index.ts` — coalescer rajada, revalidar antes de chamar IA, sleep adaptativo.
+- `supabase/functions/_igreen_v2/agents/green/run.ts` — `extractFirstName` multilinha; lógica em `ask_name`/`explain_solution` para responder pergunta detectada na mesma rajada.
+- (Opcional) `supabase/functions/_igreen_v2/agents/green/stages.ts` — pequena adição: se acabamos de capturar nome E há FAQ detectada na msg, escolher stage que responde antes de seguir.

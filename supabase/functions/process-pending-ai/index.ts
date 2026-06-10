@@ -79,9 +79,11 @@ serve(async (req) => {
       });
     }
 
-    // Sleep for the configured delay before checking pending responses
-    // This ensures the debounce window has passed
-    const sleepTime = delayMs || 35000;
+    // Sleep for the configured delay before checking pending responses.
+    // This ensures the debounce window has passed and we coalesce
+    // multiple inbound messages into a single AI run.
+    // Piso de 18s pra dar respiro humano mesmo se o usuário configurou um delay menor.
+    const sleepTime = Math.max(delayMs || 35000, 18000);
     console.log(`Sleeping ${sleepTime}ms before processing for: ${phone}`);
 
     // Send "typing..." presence to WhatsApp during the wait so the customer
@@ -137,6 +139,33 @@ serve(async (req) => {
       });
     }
 
+    // EXTRA DEBOUNCE: se o cliente mandou mensagem nos últimos 8s, dorme +8s
+    // e revalida. Aguenta o cliente que digita em rajadas curtas.
+    // Faz isso no máximo 3 vezes pra não travar indefinidamente.
+    let extraWaits = 0;
+    while (extraWaits < 3) {
+      const { data: convCheck } = await supabase
+        .from("whatsapp_conversations")
+        .select("messages")
+        .eq("user_id", userId)
+        .eq("phone", phone)
+        .maybeSingle();
+      const msgs = (convCheck?.messages ?? []) as any[];
+      const lastInboundTs = [...msgs]
+        .filter((m: any) => !m.from_me)
+        .map((m: any) => new Date(m.timestamp).getTime())
+        .filter((n) => Number.isFinite(n))
+        .sort((a, b) => b - a)[0] ?? 0;
+      if (lastInboundTs && Date.now() - lastInboundTs < 8000) {
+        console.log(`[debounce-extra] last inbound ${Date.now() - lastInboundTs}ms ago, sleeping +8s for: ${phone}`);
+        if (instanceName) sendTypingPresence(instanceName, phone);
+        await new Promise((r) => setTimeout(r, 8000));
+        extraWaits++;
+        continue;
+      }
+      break;
+    }
+
     // ATOMIC CLAIM: only one worker can mark this row processed.
     // If another worker already claimed it, exit immediately to prevent
     // duplicate AI invocations producing parallel responses.
@@ -182,15 +211,52 @@ serve(async (req) => {
       });
     }
 
-    // Get the latest incoming message. The AI agent already loads full
-    // conversation history from the database; sending the last 5 user messages
-    // as one text makes the Green flow confuse "Oi" with the client's name.
+    // COALESCER RAJADA: pegar TODAS as mensagens do cliente recebidas desde a
+    // última resposta da IA. Antes, mandávamos só a última mensagem, e o agente
+    // perdia dados que o cliente acabou de dar (ex.: cliente manda "Walther" →
+    // "como funciona?" → "qual o %?" e a IA respondia ignorando o nome).
     const messages = conversation.messages || [];
-    const latestIncoming = [...messages]
+    const lastAssistantTs = [...messages]
+      .filter((m: any) => m.from_me)
+      .map((m: any) => new Date(m.timestamp).getTime())
+      .filter((n) => Number.isFinite(n))
+      .sort((a, b) => b - a)[0] ?? 0;
+    const FIVE_MIN_AGO = Date.now() - 5 * 60 * 1000;
+    const cutoffTs = Math.max(lastAssistantTs, FIVE_MIN_AGO);
+    const inboundSinceLastAi = [...messages]
       .filter((m: any) => !m.from_me)
-      .reverse()
-      .find((m: any) => typeof (m.ai_content || m.content) === "string");
-    const latestIncomingText = String(latestIncoming?.ai_content || latestIncoming?.content || "").trim();
+      .filter((m: any) => {
+        const t = new Date(m.timestamp).getTime();
+        return Number.isFinite(t) && t > cutoffTs;
+      })
+      .filter((m: any) => typeof (m.ai_content || m.content) === "string");
+    const latestIncoming = inboundSinceLastAi[inboundSinceLastAi.length - 1]
+      ?? [...messages].filter((m: any) => !m.from_me).reverse()
+          .find((m: any) => typeof (m.ai_content || m.content) === "string");
+    let latestIncomingText = "";
+    if (inboundSinceLastAi.length > 1) {
+      const numbered = inboundSinceLastAi
+        .map((m: any, i: number) =>
+          `${i + 1}) ${String(m.ai_content || m.content).trim()}`)
+        .join("\n");
+      latestIncomingText =
+        `[O cliente enviou várias mensagens em sequência, considere todas juntas:]\n${numbered}`;
+    } else {
+      latestIncomingText = String(latestIncoming?.ai_content || latestIncoming?.content || "").trim();
+    }
+    console.log(`[coalesce] inbound count since last AI=${inboundSinceLastAi.length} for: ${phone}`);
+
+    // STALE GUARD: se a última mensagem do cliente é ANTERIOR à última resposta
+    // da IA, esse worker é redundante (outro worker já respondeu). Sai.
+    const latestInboundTs = latestIncoming
+      ? new Date(latestIncoming.timestamp).getTime()
+      : 0;
+    if (lastAssistantTs && latestInboundTs && latestInboundTs <= lastAssistantTs) {
+      console.log(`[stale] latest inbound (${latestInboundTs}) <= last assistant (${lastAssistantTs}), skipping: ${phone}`);
+      return new Response(JSON.stringify({ skipped: true, reason: "Stale, already answered" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
 
     if (!latestIncomingText) {
       console.log("No incoming messages to respond to:", phone);
