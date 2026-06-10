@@ -470,6 +470,7 @@ export default function Conversations() {
             <div className="grid grid-cols-2 gap-2 border-b bg-muted/30 px-3 py-2 shrink-0">
               <CreateDealButton phone={selectedPhone} contactName={selectedConversation?.contact_name} className="w-full justify-center" />
               <TagPopover phone={selectedPhone} className="w-full justify-center" />
+              <UnsubscribeFollowupButton phone={selectedPhone} className="col-span-2 w-full justify-center" fullLabel />
               <div className="col-span-2 flex items-center gap-2">
                 <span className="text-xs text-muted-foreground shrink-0">Responsável:</span>
                 <AssigneeSelector
