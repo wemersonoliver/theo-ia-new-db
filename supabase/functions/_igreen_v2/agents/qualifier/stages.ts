@@ -74,6 +74,21 @@ const NAME_BLOCKLIST = new Set([
 
 export function extractFirstName(msg: string): string | null {
   if (!msg) return null;
+  // Suporte a rajada coalescida: "[O cliente enviou várias mensagens em sequência:]\n1) Walther\n2) ..."
+  // ou simplesmente várias linhas. Tenta cada linha em ordem; devolve o 1º nome válido.
+  const lines = msg
+    .split(/\r?\n+/)
+    .map((l) => l.replace(/^\s*\[[^\]]*\]\s*/, "")) // remove cabeçalho [..]
+    .map((l) => l.replace(/^\s*\d{1,2}[\).\-:]\s*/, "")) // remove "1) ", "2.", "3-"
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (lines.length > 1) {
+    for (const line of lines) {
+      const found = extractFirstName(line);
+      if (found) return found;
+    }
+    return null;
+  }
   // tenta padrões comuns: "meu nome é X", "sou o/a X", "aqui é o/a X", "me chamo X"
   const patterns = [
     /\bmeu nome[\s\S]{0,5}(?:é|eh)?\s+([A-Za-zÀ-ÿ]{2,30})/i,
