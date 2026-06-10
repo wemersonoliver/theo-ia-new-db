@@ -811,6 +811,11 @@ function extractEstado(msg: string): string | null {
   if (!t) return null;
   const upper = t.toUpperCase().replace(/[^A-Z]/g, "");
   if (upper.length === 2 && UF_SET.has(upper)) return upper;
+  // Procura UF como token isolado dentro de frases tipo "Estou em SC".
+  const tokens = t.toUpperCase().split(/[^A-Z]+/).filter(Boolean);
+  for (const tok of tokens) {
+    if (tok.length === 2 && UF_SET.has(tok)) return tok;
+  }
   const lower = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   for (const [name, uf] of Object.entries(ESTADO_NOMES)) {
     if (lower.includes(name.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))) return uf;
