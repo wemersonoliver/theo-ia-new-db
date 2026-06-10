@@ -772,6 +772,19 @@ function extractFirstName(msg: string): string | null {
     .replace(/\[Imagem.*?\]/gi, "")
     .trim();
   if (!raw) return null;
+
+  // Rajada coalescida pelo process-pending-ai
+  // ("[O cliente enviou várias mensagens em sequência:]\n1) X\n2) Y").
+  // Tenta cada linha em ordem e devolve o primeiro nome válido.
+  const lines = splitBurstLines(raw);
+  if (lines.length > 1) {
+    for (const line of lines) {
+      const found = extractFirstName(line);
+      if (found) return found;
+    }
+    return null;
+  }
+  raw = lines[0] ?? raw;
   if (/\?$/.test(raw)) return null;
 
   const blocked = new Set([
@@ -779,6 +792,7 @@ function extractFirstName(msg: string): string | null {
     "mesmo","tudo","bem","tá","ta","obrigado","obrigada","valeu","tchau","bom","boa",
     "quero","saber","como","funciona","tenho","interesse","conexao","conexão","green",
     "energia","luz","conta","fatura","economizar","economia","internet","telecom",
+    "qual","quanto","porcentagem","percentual","desconto",
   ]);
   const cleanToken = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const format = (value: string) => value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
@@ -802,6 +816,37 @@ function extractFirstName(msg: string): string | null {
 
   const tokens = raw.replace(/[^\p{L}\s]/gu, "").trim().split(/\s+/).filter(Boolean);
   if (tokens.length === 1) return accept(tokens[0]);
+  return null;
+}
+
+// ---------- Burst helpers (rajada coalescida) ----------
+// O process-pending-ai junta múltiplas mensagens em sequência num único texto:
+//   "[O cliente enviou várias mensagens em sequência, considere todas juntas:]
+//    1) Walter
+//    2) Qual percentual de economia"
+// Esses helpers normalizam essa entrada para que extratores e detectores
+// que esperam uma mensagem por linha funcionem corretamente.
+function splitBurstLines(msg: string | null | undefined): string[] {
+  const raw = (msg ?? "").trim();
+  if (!raw) return [];
+  const lines = raw
+    .split(/\r?\n+/)
+    .map((l) => l.replace(/^\s*\[[^\]]*\]\s*/, ""))           // remove cabeçalho [..]
+    .map((l) => l.replace(/^\s*\d{1,2}[\).\-:]\s*/, ""))     // remove "1) ", "2.", "3-"
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  return lines.length > 0 ? lines : [raw];
+}
+
+function cleanBurst(msg: string | null | undefined): string {
+  return splitBurstLines(msg).join("\n");
+}
+
+function firstHit<T>(lines: string[], fn: (s: string) => T | null | undefined | false): T | null {
+  for (const l of lines) {
+    const r = fn(l);
+    if (r) return r as T;
+  }
   return null;
 }
 
