@@ -467,7 +467,24 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
         args: { field: "nome_cliente", value: nome },
       });
       tool_calls.push({ name: "set_product", args: { produto: "green" } });
-      deterministicText = `Prazer, ${nome}! Com a Igreen você economiza na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer saber como funciona?`;
+      // Se na MESMA rajada o cliente já mandou uma FAQ (ex.: "qual o percentual
+      // de economia?") ou algo fora do escopo, respondemos a dúvida em vez de
+      // repetir "quer saber como funciona?".
+      const faq = firstHit(burstLines, detectFaqTopic);
+      const oos = firstHit(burstLines, detectOutOfScope);
+      const askedDiscount = burstLines.some((l) =>
+        /\b(percentual|porcentagem|quanto.{0,15}(desconto|economia|economizo|economizar)|qual.{0,10}desconto)\b/i.test(l));
+      if (askedDiscount) {
+        deterministicText = `Prazer, ${nome}! O desconto da iGreen varia por estado e distribuidora, geralmente entre 10% e 20% na sua fatura todo mês — sem obra, sem trocar de distribuidora. Pra eu te dar o número exato, em qual estado você está?`;
+      } else if (faq === "cashback") {
+        deterministicText = `Prazer, ${nome}! Sobre o cashback: cada novo assinante que entrar pela sua indicação te devolve uma parte da fatura dele, e isso pode até zerar sua conta de luz. Antes disso, me conta: em qual estado você está?`;
+      } else if (faq === "instalacao" || faq === "como_funciona" || faq) {
+        deterministicText = `Prazer, ${nome}! Funciona simples: a iGreen aplica um desconto da faixa oficial da sua distribuidora direto na sua fatura, sem obra e sem trocar de distribuidora. Em qual estado você está pra eu te mostrar a economia?`;
+      } else if (oos) {
+        deterministicText = `Prazer, ${nome}! Sobre o que você perguntou, a iGreen trabalha especificamente com desconto na conta de luz via assinatura de energia limpa. Quer que eu te mostre rapidinho como funciona essa economia?`;
+      } else {
+        deterministicText = `Prazer, ${nome}! Com a Igreen você economiza na conta de luz com energia limpa, sem obra e sem trocar de distribuidora. Quer saber como funciona?`;
+      }
     }
   }
 
@@ -531,7 +548,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
   }
 
   if (stage === "faq_answer") {
-    const topic = detectFaqTopic(ctx.message);
+    const topic = firstHit(burstLines, detectFaqTopic);
     const nome = (currentExtras.client_name as string | undefined) ?? "";
     const valor = Number(currentExtras.valor_fatura ?? 0);
     const distribuidora = (currentExtras.distribuidora as string | undefined) ?? "";
@@ -581,7 +598,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
   if (STAGES_REDECIDABLE.has(stage)) {
     const mergedExtras = (patch.extras as Record<string, unknown>) ?? currentExtras;
     const mergedState = { ...ctx.state, extras: mergedExtras, etapa_funil: patch.etapa_funil ?? ctx.state.etapa_funil };
-    const nextStage = decideGreenStage(mergedState, ctx.message, !!ctx.media, (ctx.state as any).document_status ?? null);
+    const nextStage = decideGreenStage(mergedState, cleanedMsg, !!ctx.media, (ctx.state as any).document_status ?? null);
     if (nextStage !== stage) {
       events.push({ type: "green_stage_advanced", priority: "low", source: "specialist",
         payload: { from: stage, to: nextStage } });
@@ -613,7 +630,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
           deterministicText = null;
           const mergedExtras2 = patch.extras as Record<string, unknown>;
           const mergedState2 = { ...mergedState, extras: mergedExtras2 };
-          const after = decideGreenStage(mergedState2, ctx.message, !!ctx.media, (ctx.state as any).document_status ?? null);
+          const after = decideGreenStage(mergedState2, cleanedMsg, !!ctx.media, (ctx.state as any).document_status ?? null);
           if (after === "simulate_discount_concreto") {
             const valor = Number(mergedExtras2.valor_fatura ?? 0);
             const nome2 = (mergedExtras2.client_name as string | undefined) ?? "";
