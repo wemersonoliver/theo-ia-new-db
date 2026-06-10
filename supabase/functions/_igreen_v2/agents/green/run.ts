@@ -3,7 +3,7 @@
 // LLM só preenche texto curto. Stage e tool_calls são decididos em código (D1).
 
 import type { AgentContext, AgentResult } from "../_types.ts";
-import { decideGreenStage, isAffirmation, detectFaqTopic } from "./stages.ts";
+import { decideGreenStage, isAffirmation, detectFaqTopic, detectOutOfScope, isGenericObjection } from "./stages.ts";
 import { GREEN_SYSTEM, buildGreenUserPrompt } from "./prompt.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { openAITextFallback, isProviderOutOfCredits, markProviderOutOfCredits } from "../../../_shared/ai-fallback/index.ts";
