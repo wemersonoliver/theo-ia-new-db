@@ -52,8 +52,14 @@ function formatBRL(n: number): string {
 }
 
 export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
+  // Normaliza rajadas coalescidas pelo process-pending-ai
+  // ("[O cliente enviou várias mensagens em sequência:]\n1) X\n2) Y").
+  // Todos os extratores/detectores rodam sobre essa versão limpa para que
+  // funcionem mesmo quando o cliente manda várias mensagens em sequência.
+  const cleanedMsg = cleanBurst(ctx.message);
+  const burstLines = splitBurstLines(ctx.message);
   const initialStage = decideGreenStage(
-    ctx.state, ctx.message,
+    ctx.state, cleanedMsg,
     !!ctx.media, (ctx.state as any).document_status ?? null,
   );
   const tool_calls: AgentResult["tool_calls"] = [];
@@ -78,7 +84,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     patch.produto = "green";
     patch.extras = { ...currentExtras, explained: true };
     tool_calls.push({ name: "set_product", args: { produto: "green" } });
-    if (isAffirmation(ctx.message)) {
+    if (burstLines.some((l) => isAffirmation(l))) {
       patch.extras = { ...(patch.extras as object), solution_confirmed: true };
     }
   }
@@ -92,7 +98,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
 
   if (stage === "ask_consumo") {
     // tenta capturar consumo na mensagem atual (números seguidos de kwh/r$/reais)
-    const consumo = extractConsumo(ctx.message);
+    const consumo = firstHit(burstLines, extractConsumo);
     if (consumo) {
       patch.extras = { ...currentExtras, consumo_medio: consumo };
       tool_calls.push({
@@ -103,7 +109,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     // O prompt deste stage pergunta valor médio em reais. Então uma resposta
     // numérica simples como "500" já deve preencher valor_fatura também;
     // caso contrário o fluxo pergunta praticamente a mesma coisa de novo.
-    const v = parseValor(ctx.message);
+    const v = firstHit(burstLines, parseValor);
     if (v) {
       patch.extras = {
         ...(patch.extras as object ?? currentExtras),
@@ -137,7 +143,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   }
 
   if (stage === "ask_estado") {
-    const uf = extractEstado(ctx.message);
+    const uf = firstHit(burstLines, extractEstado);
     if (uf) patch.extras = { ...currentExtras, estado: uf };
   }
 
@@ -172,7 +178,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
 
   if (stage === "ask_distribuidora") {
     const opts = (currentExtras.distributors_options as string[] | undefined) ?? [];
-    const msg = ctx.message.trim();
+    const msg = cleanedMsg.trim();
     let chosen: string | null = null;
     // 1) resposta numérica (1, 2, 3…)
     const numMatch = msg.match(/^\s*(\d{1,2})\b/);
@@ -189,10 +195,10 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
       }) ?? null;
     }
     // 3) lista de 1 + afirmação → assume essa
-    if (!chosen && opts.length === 1 && isAffirmation(msg)) chosen = opts[0];
+    if (!chosen && opts.length === 1 && burstLines.some((l) => isAffirmation(l))) chosen = opts[0];
     // 4) fallback: texto livre
     if (!chosen) {
-      const d = extractDistribuidora(ctx.message);
+      const d = firstHit(burstLines, extractDistribuidora);
       if (d && opts.length === 0) chosen = d;
     }
     if (chosen) {
@@ -205,7 +211,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   }
 
   if (stage === "ask_valor_fatura") {
-    const valor = parseValor(ctx.message);
+    const valor = firstHit(burstLines, parseValor);
     if (valor) {
       patch.extras = { ...(patch.extras as object ?? currentExtras), valor_fatura: valor };
       tool_calls.push({
@@ -284,7 +290,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
   if (stage === "family_authorization_check") {
     // Detecta confirmação de autorização do titular (família).
     const FAMILY_AUTH_RX = /\b(sim|tenho|posso|claro|pode|com certeza|positivo|isso|autoriz(o|ada|ado|açao|ação)|meu marido|minha esposa|meu pai|minha m[aã]e|meu filho|minha filha|meu irm[aã]o|minha irm[aã]|meu(s)? sogro|minha sogra|fam[ií]lia)\b/i;
-    if (FAMILY_AUTH_RX.test(ctx.message ?? "")) {
+    if (FAMILY_AUTH_RX.test(cleanedMsg ?? "")) {
       patch.extras = {
         ...(patch.extras as object ?? currentExtras),
         family_authorized: true,
@@ -296,7 +302,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
       (patch as any).document_status = "validated";
       const mergedExtras = patch.extras as Record<string, unknown>;
       const mergedState = { ...ctx.state, extras: mergedExtras, etapa_funil: "fatura_validada" };
-      const nextStage = decideGreenStage(mergedState, ctx.message, !!ctx.media, null);
+      const nextStage = decideGreenStage(mergedState, cleanedMsg, !!ctx.media, null);
       // Dispara automação de tagging "enviou fatura" → move card no CRM
       // (caso de fatura de terceiro autorizado pela família).
       events.push({ type: "invoice_approved", priority: "high", source: "specialist",
@@ -341,7 +347,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
   }
 
   if (stage === "out_of_scope_clarify") {
-    const topic = detectOutOfScope(ctx.message);
+    const topic = firstHit(burstLines, detectOutOfScope);
     const nome = (currentExtras.client_name as string | undefined) ?? "";
     const handled = ((currentExtras.out_of_scope_handled_topics as string[] | undefined) ?? []).slice();
     if (topic && !handled.includes(topic)) handled.push(topic);
@@ -381,7 +387,7 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
 
   if (stage === "objection_reply") {
     const nome = (currentExtras.client_name as string | undefined) ?? "";
-    const m = (ctx.message ?? "").toLowerCase();
+    const m = (cleanedMsg ?? "").toLowerCase();
     let topic = "geral";
     let body = "";
     if (/\b(aluguel|alugada?|n[aã]o\s+(?:é|eh)\s+(?:minha|meu)|(?:é|eh)\s+do\s+(?:meu|minha)\s+(?:pai|m[aã]e|marido|esposa|irm[aã]o?|filh[oa]|sogr[oa]))\b/.test(m)) {
