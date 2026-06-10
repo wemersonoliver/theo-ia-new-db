@@ -1,107 +1,74 @@
-## Diagnóstico da conversa (thays.chavess / 5547989118695)
 
-Mensagens reais salvas no banco:
+## Diagnóstico da conversa (5547989118695)
 
-```
-13:28:44  cliente: "Quero saber mais sobre energia solar por assinatura"
-13:29:26  IA    : "...como posso te chamar?"
-13:30:17  cliente: "Walter"
-13:30:21  cliente: "Qual percentual de economia"
-13:31:05  IA    : "Que legal seu interesse na energia limpa, Walter! 😊
-                   Pra gente começar, como você prefere ser chamado?"
-```
+Linha do tempo real, com o bug em destaque:
 
-A coalescência funcionou (logs mostram `[coalesce] inbound count=4`). O texto enviado ao agente foi:
-
-```
-[O cliente enviou várias mensagens em sequência, considere todas juntas:]
-1) Walter
-2) Qual percentual de economia
-```
-
-O ajuste anterior só corrigiu o `extractFirstName` do **qualifier** (`_igreen_v2/agents/qualifier/stages.ts`). Mas a conversa estava no especialista **green**, que tem o seu **próprio** `extractFirstName` local em `supabase/functions/_igreen_v2/agents/green/run.ts` (linha 742) — e essa cópia:
-
-- não remove o cabeçalho `[O cliente enviou várias mensagens…]`
-- não remove os prefixos `1)`, `2)` etc.
-- só aceita nome quando `tokens.length === 1` (uma única palavra no texto todo)
-
-Resultado: `client_name` nunca é salvo → o estágio `ask_name` cai no LLM, que ad-libba o nome a partir do histórico mas reabre a mesma pergunta. Idem para outros extratores (`extractConsumo`, `parseValor`, `extractEstado`, `extractDistribuidora`, detectores de FAQ/objeção) — todos rodam sobre o texto bruto da rajada e podem falhar pelo mesmo motivo.
-
-Por isso o comportamento parece "não ter sido aplicado": foi aplicado, mas só num dos dois caminhos.
-
-## O que entregar
-
-Mudanças isoladas em `supabase/functions/_igreen_v2/agents/green/run.ts` (e helpers internos). Sem migrações de banco, sem mudança de fluxo, sem novos templates.
-
-### 1. Helper `splitBurstLines(msg)`
-
-Normaliza qualquer entrada (rajada coalescida ou mensagem única) para uma lista de linhas limpas:
-
-- separa por `\n`
-- remove cabeçalho `[O cliente enviou…]` (qualquer texto entre `[ ]` no início)
-- remove prefixos numerados (`1)`, `2.`, `3-`, `4:`)
-- faz `trim` e descarta vazios
-- se não houver `\n`, devolve `[msg.trim()]`
-
-### 2. `extractFirstName` ciente de rajada
-
-Reescrever a função local do green/run.ts para:
-
-1. Aplicar `splitBurstLines` na entrada.
-2. Para cada linha, rodar a lógica atual (padrões "meu nome é…", "sou o…", "me chamo…", fallback de palavra única).
-3. Retornar o primeiro nome válido encontrado.
-
-Mantém o `NAME_BLOCKLIST` e a normalização atuais. Alinha o comportamento com a versão do qualifier.
-
-### 3. Extratores e detectores rodando linha-a-linha
-
-Os seguintes pontos do `runGreen` hoje recebem `ctx.message` cru. Substituir por uma varredura `splitBurstLines(ctx.message)` que retorna o primeiro hit:
-
-- `extractConsumo`, `parseValor` (estágio `ask_consumo` / `ask_valor_fatura`)
-- `extractEstado` (estágio `ask_estado`)
-- `extractDistribuidora` e match numérico/texto (estágio `ask_distribuidora`)
-- `isAffirmation` (estágios `explain_solution`, `ask_distribuidora`)
-- `detectFaqTopic`, `detectOutOfScope`, `isGenericObjection` usados em `decideGreenStage`
-
-Cada extrator vira: "rode sobre cada linha em ordem; devolva o primeiro resultado válido". Sem alterar a assinatura — só a implementação no call site (helper local `firstMatch(msg, fn)`).
-
-### 4. FAQ detectada na mesma rajada que o nome
-
-Quando `ask_name` captura o nome **e** alguma outra linha da rajada bate em `detectFaqTopic` (ex.: "qual percentual de economia"), trocar o texto determinístico de:
-
-```
-Prazer, Walter! Com a Igreen você economiza… Quer saber como funciona?
+```text
+Cliente: "Walter" + "Como funciona" + "Qual percentual de economia"
+IA: "Prazer Walter! desconto 10–20%... em qual estado você está?"   ← ask_name + FAQ
+Cliente: "Estou em SC"
+IA: "Vou te mandar um vídeo... me avisa quando assistir"            ← send_video
+       ⚠️ "SC" foi IGNORADO — extras.estado nunca foi salvo
+Cliente: "Já vi. Qual meu percentual?"
+IA: "Quer que eu te mostre quanto dá pra economizar?"               ← engage_check (fraco)
+Cliente: "Sim"
+IA: "Qual o valor médio da sua fatura?"                             ← ask_valor_fatura
+Cliente: "Média de 500"
+IA: "E em qual estado você está?"                                   ← ❌ ask_estado DE NOVO
+Cliente: "Sc"
+IA: "Pra Celesc o desconto fica entre 10% e 14%..."                 ← finalmente calcula
 ```
 
-para:
+## Causa raiz
 
-```
-Prazer, Walter! Sobre o desconto: a faixa varia por estado/distribuidora,
-geralmente entre X% e Y%. Pra te dar o número exato, em qual estado você está?
-```
+Em `_igreen_v2/agents/green/run.ts`, a captura de campos (`estado`, `valor_fatura`, `distribuidora`, `consumo_medio`) só acontece **quando o stage ativo é o `ask_*` correspondente**. Se o cliente entrega o dado em outro stage (ex.: diz "Estou em SC" durante `send_video`, ou já no `ask_name`), o valor é jogado fora e a IA volta a pedir depois.
 
-(Mensagem curta + avança para `ask_estado` no mesmo turno marcando `explained: true` e `engaged: true`.) Isso cumpre a regra "responder objeção / FAQ em vez de repetir pergunta".
+Também: o `engage_check` após "qual meu percentual?" ignora que a IA já tinha estado/distribuidora prováveis e responde com pergunta vazia em vez de avançar.
 
-### 5. Sem mudanças no `process-pending-ai`
+## Plano de correção
 
-A coalescência atual está correta (confirmada nos logs). O bug não estava lá.
+Tudo em `supabase/functions/_igreen_v2/agents/green/run.ts` (continua valendo para todos os usuários iGreen, pois o V2 é compartilhado).
 
-## Por que isso resolve para TODOS os usuários iGreen
+### 1. Captura oportunista global (toda mensagem, antes do switch de stages)
 
-O fluxo `accounts.is_igreen = true → whatsapp-igreen-agent-v2 → _igreen_v2/agents/green/run.ts` é compartilhado por todas as contas iGreen. Corrigir o `extractFirstName` local e os extratores neste arquivo aplica o ajuste para todos automaticamente, sem migração nem configuração por conta.
+Adicionar um bloco no início do `runGreen`, logo após calcular `burstLines`, que sempre tenta extrair dos `burstLines` e salvar no `patch.extras` se o campo ainda estiver vazio:
 
-## Resultado esperado (mesma simulação de hoje)
+- `estado` — via `firstHit(burstLines, extractEstado)`
+- `valor_fatura` — via `firstHit(burstLines, parseValor)`
+- `distribuidora` — via `firstHit(burstLines, extractDistribuidora)`
+- `consumo_medio` — via `firstHit(burstLines, extractConsumo)`
 
-Cliente envia em rajada: "Walter" → "Qual percentual de economia".
-IA responde uma única vez: "Prazer, Walter! O desconto fica entre X% e Y% dependendo do estado/distribuidora. Em qual estado você está?" — sem repetir "como posso te chamar".
+Para cada captura nova, emitir o `tool_calls` `save_green_lead_field` correspondente (mantém compat com o pipeline de gravação no DB).
 
-## Detalhes técnicos (referência)
+Salvaguardas:
+- só sobrescreve se o slot estiver vazio (`!hasValue(currentExtras.<campo>)`);
+- só extrai estado/distribuidora se o cliente NÃO estiver enviando mídia neste turno (evita ruído de OCR);
+- não dispara em `validate_invoice` / `validate_identity` / `handoff_human` / `objection_security` (já têm fluxo próprio).
 
-Arquivos tocados:
-- `supabase/functions/_igreen_v2/agents/green/run.ts` — novo `splitBurstLines`, novo `extractFirstName`, wrappers `firstMatch` para os extratores existentes, ajuste do branch `ask_name` para detectar FAQ na mesma rajada.
+### 2. Reaproveitar essas capturas no decideGreenStage
 
-Não toca:
-- `process-pending-ai/index.ts`
-- `_igreen_v2/agents/qualifier/*`
-- templates em `green/prompt.ts`
-- schema de banco
+Como o `decideGreenStage` é chamado ANTES do bloco de captura, após capturar opotunisticamente reexecutar `decideGreenStage(mergedState, ...)` para escolher o stage correto no mesmo turno (mesma técnica já usada em `STAGES_REDECIDABLE`). Isso garante que se o cliente entregar `valor_fatura + estado + distribuidora` numa só burst, o fluxo pula direto para `simulate_discount_concreto`.
+
+### 3. Atalho determinístico para "qual meu desconto?" pós-vídeo
+
+No branch `engage_check` (e também quando `stage === "ask_valor_fatura"` mas a mensagem do cliente é uma pergunta de desconto sem número):
+
+- Se `extras.estado` já existe, responder direto: "Pra calcular seu desconto exato em [estado], me diz só o valor médio da sua conta de luz." (uma pergunta só, focada).
+- Marcar `extras.engaged = true` no mesmo turno para não travar.
+
+### 4. Detector de pergunta de desconto
+
+Adicionar regex utilitário `isDiscountQuestion(msg)` matchando: `qual.*(percentual|desconto|economia)`, `quanto.*(economiz|desconto)`, `qual.*minha.*economia`. Usado pelo item 3 e para evitar que essa mensagem caia em `objection_reply`.
+
+### Detalhes técnicos
+
+- Arquivo único alterado: `supabase/functions/_igreen_v2/agents/green/run.ts`
+- Sem mudança em `stages.ts`, `prompt.ts`, `process-pending-ai`, banco ou prompts.
+- Sem alteração de schema.
+- Helpers `extractEstado`, `parseValor`, `extractDistribuidora`, `extractConsumo`, `firstHit`, `splitBurstLines` já existem no arquivo.
+- Após implementar, simular novamente com o mesmo cenário (Walter → "Estou em SC" → vídeo → "qual meu percentual" → "Sim" → "Média de 500") e confirmar que a IA NÃO repete a pergunta de estado e responde já com Celesc/SC.
+
+### Riscos
+
+- Falso positivo em `extractEstado` (ex.: "SP" dentro de uma palavra) — `firstHit` + regex atual já valida UF como token isolado. Manter blocklist atual.
+- `parseValor` capturando número errado (ex.: "tenho 2 filhos") — restringir captura oportunista de `valor_fatura` para casos com indicador de dinheiro (`r$`, `reais`, `conta`, `fatura`, `mês`) OU quando o `etapa_funil` já é `qualificacao` (cliente está claramente discutindo conta).
