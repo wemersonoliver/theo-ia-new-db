@@ -3,7 +3,7 @@
 // LLM só preenche texto curto. Stage e tool_calls são decididos em código (D1).
 
 import type { AgentContext, AgentResult } from "../_types.ts";
-import { decideGreenStage, isAffirmation, detectFaqTopic } from "./stages.ts";
+import { decideGreenStage, isAffirmation, detectFaqTopic, detectOutOfScope, isGenericObjection } from "./stages.ts";
 import { GREEN_SYSTEM, buildGreenUserPrompt } from "./prompt.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { openAITextFallback, isProviderOutOfCredits, markProviderOutOfCredits } from "../../../_shared/ai-fallback/index.ts";
@@ -324,6 +324,99 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
       name: "save_green_lead_field",
       args: { field: "auto_cadastro_enviado", value: "true" },
     });
+  }
+
+  if (stage === "soft_close") {
+    const nome = (currentExtras.client_name as string | undefined) ?? "";
+    patch.extras = {
+      ...(patch.extras as object ?? currentExtras),
+      soft_closed: true,
+      soft_closed_at: new Date().toISOString(),
+    };
+    tool_calls.push({
+      name: "add_contact_tag",
+      args: { tag: "lead_frio" },
+    });
+    deterministicText = `Tranquilo${nome ? `, ${nome}` : ""}! Fico à disposição quando quiser dar uma olhada. Qualquer dúvida é só me chamar por aqui. 😊`;
+  }
+
+  if (stage === "out_of_scope_clarify") {
+    const topic = detectOutOfScope(ctx.message);
+    const nome = (currentExtras.client_name as string | undefined) ?? "";
+    const handled = ((currentExtras.out_of_scope_handled_topics as string[] | undefined) ?? []).slice();
+    if (topic && !handled.includes(topic)) handled.push(topic);
+    let body = "";
+    switch (topic) {
+      case "emprestimo":
+        body = "a Igreen não trabalha com empréstimo nem crédito na conta de luz. O que a gente faz é aplicar um desconto da energia limpa direto na sua fatura todo mês, sem trocar de distribuidora.";
+        break;
+      case "placa_propria":
+        body = "a Igreen não vende nem instala placa solar. A gente faz assinatura de energia limpa: o desconto cai direto na sua fatura, sem obra e sem placa em casa.";
+        break;
+      case "segunda_via":
+        body = "a Igreen não emite segunda via da sua conta de luz — isso é direto com a distribuidora. O que a gente faz é dar desconto na sua fatura todo mês.";
+        break;
+      case "religar":
+        body = "religação de energia é feita direto com a distribuidora, a Igreen não atua nessa parte. A gente faz assinatura de energia limpa que dá desconto na sua fatura.";
+        break;
+      case "troca_titular":
+        body = "troca de titularidade da conta de luz é feita direto na distribuidora, a Igreen não faz isso. A gente entra dando desconto na fatura, no nome do titular atual.";
+        break;
+      default:
+        body = "esse tipo de serviço não é com a Igreen. A gente trabalha com assinatura de energia limpa que dá desconto direto na sua fatura.";
+    }
+    patch.extras = {
+      ...(patch.extras as object ?? currentExtras),
+      out_of_scope_handled_topics: handled,
+      last_out_of_scope_topic: topic ?? null,
+    };
+    if (topic) {
+      tool_calls.push({
+        name: "add_contact_tag",
+        args: { tag: `interesse_${topic}` },
+      });
+    }
+    deterministicText = `${nome ? nome + ", " : ""}${body} Mesmo assim, quer que eu te mostre rapidinho como funciona essa economia na conta de luz?`;
+  }
+
+  if (stage === "objection_reply") {
+    const nome = (currentExtras.client_name as string | undefined) ?? "";
+    const m = (ctx.message ?? "").toLowerCase();
+    let topic = "geral";
+    let body = "";
+    if (/\b(aluguel|alugada?|n[aã]o\s+(?:é|eh)\s+(?:minha|meu)|(?:é|eh)\s+do\s+(?:meu|minha)\s+(?:pai|m[aã]e|marido|esposa|irm[aã]o?|filh[oa]|sogr[oa]))\b/.test(m)) {
+        topic = "titular_terceiro";
+        body = "tranquilo, dá pra contratar mesmo a conta estando no nome de outra pessoa da família — basta a autorização do titular.";
+    } else if (/\bconta\s+baixa|minha\s+conta\s+(?:é|eh)\s+baixa\b/.test(m)) {
+        topic = "conta_baixa";
+        body = "entendo. Pra Igreen, geralmente a economia faz mais diferença em faturas acima de R$ 200, mas posso te mostrar como fica no seu caso antes de você decidir.";
+    } else if (/\bt[aá]\s+caro|muito\s+caro\b/.test(m)) {
+        topic = "preco";
+        body = "olha, a Igreen não cobra nada a mais — o que entra na sua conta é a sua fatura JÁ COM desconto aplicado. Você só paga, todo mês, menos do que pagaria pra distribuidora sozinha.";
+    } else if (/\bn[aã]o\s+confio|n[aã]o\s+acredito\b/.test(m)) {
+        topic = "confianca";
+        body = "faz sentido você ter pé atrás, qualquer um teria. A Igreen é uma empresa registrada, com mais de 200 mil clientes ativos, e seus dados são usados só pra aplicar o desconto na sua conta.";
+    } else if (/\bsem\s+tempo|t[aá]\s+complicado|t[aá]\s+dif[ií]cil|n[aã]o\s+pode\s+agora\b/.test(m)) {
+        topic = "tempo";
+        body = "tranquilo, é rapidinho — em uns 2 minutos a gente já consegue ver quanto dá pra você economizar.";
+    } else {
+        body = "entendi seu ponto.";
+    }
+    const lastTopic = (currentExtras.last_objection_topic as string | undefined) ?? null;
+    patch.extras = {
+      ...(patch.extras as object ?? currentExtras),
+      last_objection_topic: topic,
+      last_objection_at: new Date().toISOString(),
+    };
+    // Se a mesma objeção já foi tratada no turno anterior, encerra com leveza
+    // em vez de insistir.
+    if (lastTopic === topic) {
+      deterministicText = `${nome ? nome + ", " : ""}${body} Sem problema se quiser pensar com calma — fico à disposição quando você quiser seguir. 😊`;
+      patch.extras = { ...(patch.extras as object), soft_closed: true };
+      tool_calls.push({ name: "add_contact_tag", args: { tag: "lead_frio" } });
+    } else {
+      deterministicText = `${nome ? nome + ", " : ""}${body} Posso continuar te mostrando a economia ou prefere que eu pare por aqui?`;
+    }
   }
 
   if (stage === "handoff_human") {

@@ -45,6 +45,9 @@ export type GreenStage =
   | "send_autocadastro_link"
   | "handoff_human"
   | "ask_full_name_cpf"
+  | "soft_close"
+  | "out_of_scope_clarify"
+  | "objection_reply"
   | "idle";
 
 const INVOICE_KEYWORDS = [
@@ -69,6 +72,54 @@ export function isIntentSearchingInvoice(msg: string): boolean {
 export function isObjectionSecurity(msg: string): boolean {
   return OBJECTION_SECURITY_RX.test(msg ?? "");
 }
+
+// Cliente declina educadamente / pede pra parar. NÃO é objeção a ser
+// rebatida — é hora de soltar o lead com gentileza.
+const SOFT_DECLINE_RX = /(n[aã]o quero(?:\s+(?:agora|por enquanto|mais|n[aã]o))?|por enquanto n[aã]o|agora n[aã]o|depois (?:eu )?(?:vejo|penso|falo|retorno)|fica pra depois|deixa pra (?:depois|l[aá])|vou pensar|s[oó] (?:queria|quero|tava querendo) saber|s[oó] tava (?:vendo|olhando|curioso)|era s[oó] (?:isso|pra saber)|t[aá] (?:bom|ok)(?:\s+assim)?(?:,?\s*obrigad[oa])?|pode deixar|obrigad[oa](?:[\s,.!]|$)|valeu(?:[\s,.!]|$)|n[aã]o tenho interesse|n[aã]o me interessa|deixa)/i;
+export function isSoftDecline(msg: string): boolean {
+  return SOFT_DECLINE_RX.test(msg ?? "");
+}
+
+// Intenção fora do escopo da Igreen (assinatura de energia limpa com desconto).
+export type GreenOutOfScopeTopic =
+  | "emprestimo"
+  | "placa_propria"
+  | "segunda_via"
+  | "religar"
+  | "troca_titular";
+export function detectOutOfScope(msg: string): GreenOutOfScopeTopic | null {
+  const m = (msg ?? "").toLowerCase();
+  if (!m) return null;
+  if (/\b(empr[eé]stimo|consignado|cr[eé]dito\s+(?:na|em|da)\s+(?:conta|luz|energia)|antecipa(?:r|c|ç)[aã]?o\s+(?:da|de)\s+(?:conta|fatura)|grana\s+(?:na|pela)\s+(?:conta|luz))\b/.test(m)) return "emprestimo";
+  if (/\b(?:instalar?|colocar?|comprar?|or(?:c|ç)amento\s+de)\s+(?:placa|painel|sistema)\s+(?:solar|fotovoltaic[ao])\b|\b(?:placa|painel)\s+solar\s+(?:no|em)\s+(?:meu|minha|casa|telhado)\b/.test(m)) return "placa_propria";
+  if (/\b(?:segunda\s+via|2[aª]\s+via|2\s*via)\b.*\b(?:conta|fatura|boleto|luz)\b|\bfatura\s+(?:atrasad|vencid)/.test(m)) return "segunda_via";
+  if (/\b(?:religar?|religa(?:c|ç)[aã]o|ligar?\s+(?:de\s+novo\s+)?a\s+luz|luz\s+(?:foi\s+)?cortad|cortaram\s+(?:a\s+)?(?:luz|energia))\b/.test(m)) return "religar";
+  if (/\b(?:trocar?|mudar?|passar?)\s+(?:o\s+)?(?:nome|titular(?:idade)?)\s+(?:da\s+)?(?:conta|fatura|luz)\b/.test(m)) return "troca_titular";
+  return null;
+}
+
+// Pergunta genuína "como funciona / o que é isso" — diferente de afirmação.
+const HOW_RX = /\b(como\s+(?:funciona|que\s+funciona|isso\s+funciona)|o\s+que\s+(?:é|eh)\s+(?:isso|isto)|me\s+explica|n[aã]o\s+entendi)\b/i;
+export function isQuestionAboutHow(msg: string): boolean {
+  return HOW_RX.test(msg ?? "");
+}
+
+// Objeção genérica que o cliente faz quando estamos cobrando um dado.
+// Não confunde com "não" puro (já tratado por soft_decline) nem com afirmação.
+const GENERIC_OBJECTION_RX = /\b(t[aá]\s+caro|muito\s+caro|n[aã]o\s+confio|n[aã]o\s+acredito|minha\s+conta\s+(?:é|eh)\s+baixa|conta\s+baixa|moro\s+(?:de\s+)?aluguel|alugada?|n[aã]o\s+(?:é|eh)\s+(?:minha|meu)|(?:é|eh)\s+do\s+(?:meu|minha)\s+(?:pai|m[aã]e|marido|esposa|irm[aã]o?|filh[oa]|sogr[oa])|t[aá]\s+complicado|t[aá]\s+dif[ií]cil|n[aã]o\s+pode\s+agora|sem\s+tempo)\b/i;
+export function isGenericObjection(msg: string): boolean {
+  return GENERIC_OBJECTION_RX.test(msg ?? "");
+}
+
+// Stages que estavam prestes a cobrar um dado do cliente. Se a mensagem
+// dele for objeção em vez de resposta, devemos pivotar para objection_reply.
+const DATA_COLLECTING_STAGES = new Set<GreenStage>([
+  "ask_valor_fatura",
+  "ask_consumo",
+  "ask_estado",
+  "ask_distribuidora",
+  "request_invoice",
+]);
 
 // FAQ rápida — dúvidas comuns que NÃO devem disparar repetição de pedido de fatura.
 // Mapeamos a categoria para escolher resposta determinística em run.ts.
@@ -108,6 +159,30 @@ export function decideGreenStage(
   hasMedia: boolean = false,
   documentStatus?: string | null,
 ): GreenStage {
+  const intended = _decideGreenStageInner(state, message, hasMedia, documentStatus);
+  const extras = (state.extras ?? {}) as Record<string, unknown>;
+  // PRIORIDADE 0.7 — se íamos cobrar um dado/fatura, mas o cliente trouxe uma
+  // objeção genérica (não é número, UF, distribuidora nem afirmação), trata
+  // a objeção primeiro. Uma única objeção por turno; controle de repetição
+  // é feito por last_objection_topic no run.ts.
+  if (
+    DATA_COLLECTING_STAGES.has(intended) &&
+    !hasMedia &&
+    extras.greeted &&
+    isGenericObjection(message) &&
+    !isAffirmation(message)
+  ) {
+    return "objection_reply";
+  }
+  return intended;
+}
+
+function _decideGreenStageInner(
+  state: Pick<IgreenConversationState, "etapa_funil" | "produto" | "extras">,
+  message: string,
+  hasMedia: boolean = false,
+  documentStatus?: string | null,
+): GreenStage {
   const etapa = (state.etapa_funil ?? "novo").toLowerCase();
   const msg = (message ?? "").toLowerCase();
   const extras = (state.extras ?? {}) as Record<string, unknown>;
@@ -121,6 +196,20 @@ export function decideGreenStage(
   // PRIORIDADE 0 — objeção de golpe (válida em qualquer etapa, desde que já tenha saudado).
   if (isObjectionSecurity(message) && !extras.objection_security_handled && extras.greeted) {
     return "objection_security";
+  }
+
+  // PRIORIDADE 0.5 — intenção fora do escopo (empréstimo, placa, segunda via…).
+  // Esclarecemos uma única vez por tópico para não virar disco riscado.
+  const oos = detectOutOfScope(message);
+  if (oos && !hasMedia) {
+    const handled = (extras.out_of_scope_handled_topics as string[] | undefined) ?? [];
+    if (!handled.includes(oos)) return "out_of_scope_clarify";
+  }
+
+  // PRIORIDADE 0.6 — cliente declinou educadamente após já estar engajado.
+  // Solta com leveza, sem repetir pedido de dado/fatura.
+  if (isSoftDecline(message) && extras.greeted && !extras.soft_closed && !hasMedia) {
+    return "soft_close";
   }
 
   // Após objeção, se cliente aceitar, enviar link de auto-cadastro (1 vez).
@@ -193,6 +282,13 @@ export function decideGreenStage(
 
   if (etapa === "qualificacao") {
     if (!extras.video_sent) return "send_video";
+    // Logo depois do vídeo, dar um respiro (1 vez) — capta reação real
+    // antes de cobrar valor da fatura.
+    if (extras.video_sent && !extras.engaged && !hasValue(extras.valor_fatura)) {
+      // Se a mensagem do cliente já é uma objeção genérica, deixa o bloco
+      // de PRIORIDADE 0.7 (abaixo) cuidar; caso contrário, faz engage_check.
+      if (!isGenericObjection(message)) return "engage_check";
+    }
     if (!hasValue(extras.valor_fatura)) return "ask_valor_fatura";
     if (!hasValue(extras.estado)) return "ask_estado";
     if (!hasValue(extras.distribuidora)) {

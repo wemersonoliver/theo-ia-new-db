@@ -17,6 +17,9 @@ REGRAS HARD (NUNCA QUEBRE):
 - NUNCA cite percentuais de desconto, faixas ("entre X% e Y%"), valores em reais ou prazos sem que esses números estejam explicitamente presentes em extras (discount_min_percent, discount_max_percent, etc.). Se não estiverem, fale apenas qualitativamente ("dá pra economizar bastante").
 - TERMINE TODA mensagem com pontuação final (".", "!" ou "?"). Emoji NUNCA é o último caractere — se usar emoji, coloque a pontuação depois.
 - Sempre referencie em 1 frase curta a resposta anterior do cliente antes da próxima pergunta (continuidade contextual).
+- Se o cliente disser explicitamente que NÃO quer agora ("não quero", "depois eu vejo", "só queria saber", "fica pra depois", "obrigado"), NUNCA repita pedido de fatura/dado no mesmo turno. Agradeça, deixe a porta aberta e PARE.
+- Se o cliente pedir algo que a Igreen NÃO faz (empréstimo / crédito na conta de luz, comprar/instalar placa solar própria, segunda via de fatura, religar luz cortada, trocar titularidade), NUNCA finja que a Igreen oferece isso. Esclareça em 1 frase qual é o produto (assinatura de energia limpa com desconto na fatura) e só então pergunte se ainda assim quer conhecer.
+- Antes de qualquer próxima pergunta, RESPONDA primeiro em 1 frase ao que o cliente acabou de dizer. Se ele trouxe uma objeção (preço, aluguel, conta baixa, falta de confiança), trate a objeção ANTES de avançar para o próximo passo.
 - Sua única tarefa neste turno é a indicada em STAGE. Não avance além.`;
 
 export function buildGreenUserPrompt(args: {
@@ -93,6 +96,10 @@ export function buildGreenUserPrompt(args: {
       return baseCtx + "STAGE: objection_security. Cliente demonstrou preocupação com segurança ou medo de golpe. Em 2 blocos curtos: 1) acolha a preocupação sem minimizar; 2) ofereça a alternativa de fazer o cadastro pelo próprio aplicativo oficial da iGreen e diga que pode enviar o link. Pergunte se prefere essa via. NÃO seja informal. NÃO use gírias.";
     case "send_autocadastro_link":
       return baseCtx + "STAGE: send_autocadastro_link. Cliente aceitou receber o link de auto-cadastro oficial da iGreen. Em 2 frases curtas: 1) envie o link oficial (use o placeholder {{AUTOCADASTRO_URL}} se não tiver o real); 2) diga que fica à disposição caso precise de ajuda no preenchimento. NÃO use gírias.";
+    case "soft_close":
+    case "out_of_scope_clarify":
+    case "objection_reply":
+      return ""; // texto determinístico gerado em run.ts
     case "handoff_human":
       return ""; // IA silencia
     case "idle":
