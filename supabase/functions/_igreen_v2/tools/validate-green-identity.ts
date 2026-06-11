@@ -45,6 +45,29 @@ function namesMatch(a: string | null | undefined, b: string | null | undefined):
   return common >= 2;
 }
 
+// Compara CPF completo (do RG/CNH) com CPF da fatura, que costuma vir
+// mascarado pela distribuidora ("022.***.***-04"). Retorna true se os
+// dígitos visíveis em AMBOS forem compatíveis.
+function cpfMatchesMask(docCpf: string, invoiceCpf: string): boolean {
+  // Mantém só dígitos e '*' para comparar posição a posição
+  const a = String(docCpf).replace(/[^\d*]/g, "");
+  const b = String(invoiceCpf).replace(/[^\d*]/g, "");
+  if (a.length < 11 && b.length < 11) return false;
+  // Normaliza para 11 chars cada (preenche com '*' se vier menor)
+  const norm = (s: string) => s.length >= 11 ? s.slice(0, 11) : s.padStart(11, "*");
+  const x = norm(a), y = norm(b);
+  if (x.length !== 11 || y.length !== 11) return false;
+  let visibleMatches = 0;
+  for (let i = 0; i < 11; i++) {
+    const ci = x[i], cj = y[i];
+    if (ci === "*" || cj === "*") continue;
+    if (ci !== cj) return false;
+    visibleMatches++;
+  }
+  // Precisa pelo menos 5 dígitos visíveis em comum pra dar match confiável
+  return visibleMatches >= 5;
+}
+
 export const validateGreenIdentityTool: ToolDefinition<Args> = {
   name: "validate_green_identity",
   description: "Valida documento de identidade (RG/CNH) do titular da fatura.",
