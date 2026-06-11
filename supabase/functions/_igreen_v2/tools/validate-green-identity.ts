@@ -166,6 +166,8 @@ export const validateGreenIdentityTool: ToolDefinition<Args> = {
     const confidence = Number(validator.confidence ?? 0);
     const extracted = (validator.extracted ?? {}) as Record<string, unknown>;
     const docName = (extracted.holder_name as string | undefined) ?? (extracted.full_name as string | undefined) ?? null;
+    const docCpf = (extracted.document_id as string | undefined) ?? null;
+    const invoiceCpfMask = (stateExtras.invoice_holder_cpf_mask as string | undefined) ?? null;
 
     const isIdDoc = classification === "rg" || classification === "cnh" || classification === "identity";
 
@@ -177,10 +179,22 @@ export const validateGreenIdentityTool: ToolDefinition<Args> = {
         || (titularName.trim().split(/\s+/).length === 1 && firstName(docName) === firstName(titularName));
     }
 
+    // Reconciliação por CPF — chave forte. Se o CPF do RG/CNH bate com o CPF
+    // (mesmo mascarado) extraído da fatura, considera match mesmo quando o
+    // nome do titular veio corrompido pelo OCR ("BC ICMS" etc.). Cobre o
+    // caso em que a IA travou em holder_mismatch falso e nunca destrava.
+    let matchedByCpf = false;
+    if (isIdDoc && !match && docCpf && invoiceCpfMask) {
+      matchedByCpf = cpfMatchesMask(docCpf, invoiceCpfMask);
+      if (matchedByCpf) match = true;
+    }
+
     const events: ToolResult["events"] = [{
       type: "identity_validated", priority: "high", source: "tool",
       payload: { is_id_document: isIdDoc, match, classification, confidence,
-        doc_name: docName, expected_name: titularName },
+        doc_name: docName, expected_name: titularName,
+        matched_by_cpf: matchedByCpf, doc_cpf_present: !!docCpf,
+        invoice_cpf_present: !!invoiceCpfMask },
     }];
 
     const patch: Record<string, unknown> = {
