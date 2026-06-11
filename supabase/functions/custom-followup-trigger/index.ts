@@ -72,6 +72,20 @@ serve(async (req) => {
   let totalEnrolled = 0;
 
   for (const flow of flows || []) {
+    const { data: account, error: accountError } = await supabase
+      .from("accounts")
+      .select("is_igreen")
+      .eq("id", (flow as any).account_id)
+      .maybeSingle();
+    if (accountError) {
+      console.error(`[custom-followup-trigger] account lookup failed for ${(flow as any).account_id}:`, accountError);
+      continue;
+    }
+    if (account?.is_igreen === true) {
+      console.log(`[custom-followup-trigger] blocked iGreen account ${(flow as any).account_id}; only iGreen scenarios are allowed`);
+      continue;
+    }
+
     const idleMs = inactivityMs((flow as any).trigger_config);
     if (!idleMs) continue;
     const cutoff = new Date(Date.now() - idleMs).toISOString();

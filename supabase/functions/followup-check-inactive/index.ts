@@ -66,6 +66,21 @@ serve(async (req) => {
           continue;
         }
 
+        const { data: account, error: accountError } = await supabase
+          .from("accounts")
+          .select("is_igreen")
+          .eq("id", accountId)
+          .maybeSingle();
+        if (accountError) {
+          console.error(`[${runId}] [account ${accountId}] account lookup failed:`, accountError);
+          continue;
+        }
+        if (account?.is_igreen === true) {
+          trackReason("igreen_account");
+          console.log(`[${runId}] [account ${accountId}] SKIP: iGreen accounts use only iGreen scenarios`);
+          continue;
+        }
+
         const { data: conversations, error: convError } = await supabase
           .from("whatsapp_conversations")
           .select("phone, messages, last_message_at, ai_active")
