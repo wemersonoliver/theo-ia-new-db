@@ -692,6 +692,20 @@ export default function Conversations() {
                 </button>
               ))}
             </div>
+            <div className="mt-2 inline-flex rounded-md border bg-muted/40 p-0.5 text-xs">
+              {(["all","ai","human"] as const).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setAiFilter(k)}
+                  className={cn(
+                    "px-2.5 py-1 rounded-sm transition-colors inline-flex items-center gap-1",
+                    aiFilter === k ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {k === "all" ? "Todos" : k === "ai" ? (<><Bot className="h-3 w-3" /> IA</>) : (<><User className="h-3 w-3" /> Humano</>)}
+                </button>
+              ))}
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[calc(100vh-280px)]">
