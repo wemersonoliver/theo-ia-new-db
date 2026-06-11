@@ -388,7 +388,12 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
         patch.extras = { ...(patch.extras as object), identity_requested: true };
         const nome = (currentExtras.client_name as string | undefined) ?? "";
         const titular = (currentExtras.invoice_holder_name as string | undefined) ?? "";
-        const titularNome = titular ? titular.split(/\s+/).slice(0, 2).join(" ") : "";
+        const holderConf = (currentExtras.invoice_holder_confidence as string | undefined) ?? null;
+        // Só cita o nome do titular se a confiança for boa — evita pedir
+        // "RG ou CNH de BC ICMS" quando o OCR pegou lixo.
+        const titularNome = (titular && holderConf !== "low")
+          ? titular.split(/\s+/).slice(0, 2).join(" ")
+          : "";
         deterministicText = `${nome ? nome + ", " : ""}combinado! Pra prosseguir com o cadastro${titularNome ? ` em nome de ${titularNome}` : " do titular"}, me envia agora uma foto do RG ou CNH do titular da conta, por favor.`;
       }
     }
