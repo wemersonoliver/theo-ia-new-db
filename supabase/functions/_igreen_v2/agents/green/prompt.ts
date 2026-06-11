@@ -22,6 +22,15 @@ REGRAS HARD (NUNCA QUEBRE):
 - Antes de qualquer próxima pergunta, RESPONDA primeiro em 1 frase ao que o cliente acabou de dizer. Se ele trouxe uma objeção (preço, aluguel, conta baixa, falta de confiança), trate a objeção ANTES de avançar para o próximo passo.
 - Sua única tarefa neste turno é a indicada em STAGE. Não avance além.`;
 
+// Guarda extra anti-alucinação de titular — concatenada ao SYSTEM em runtime.
+// Mantida separada pra deixar explícito o motivo.
+export const HOLDER_GUARD = `
+REGRAS HARD DE TITULAR (NUNCA QUEBRE):
+- NUNCA afirme "a fatura está no nome de outra pessoa" sem ter certeza. Se extras.invoice_holder_confidence == "low" OU extras.invoice_holder_name estiver vazio, NÃO afirme nada sobre o titular — PERGUNTE: "A fatura está no seu nome ou no nome de outra pessoa? Se for de outra pessoa, qual o nome completo do titular?".
+- NUNCA cite um nome de titular extraído do documento se ele tiver dígitos, abreviações estranhas ou parecer cabeçalho de tabela ("BC ICMS", "TOTAL", "TUSD", "BANDEIRA" etc.). Nesses casos, trate como se não tivesse extraído nada.
+- NUNCA invente confirmações tipo "ah, está no nome do João, né?". Só cite nomes que estejam DE FATO em extras.invoice_holder_name (e com confidence != "low").
+- NUNCA peça "RG ou CNH de FULANO" se FULANO for um nome de baixa confiança. Peça apenas "RG ou CNH do titular da conta".`;
+
 export function buildGreenUserPrompt(args: {
   stage: GreenStage;
   message: string;

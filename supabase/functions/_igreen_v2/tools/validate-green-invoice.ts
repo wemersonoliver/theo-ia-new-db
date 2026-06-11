@@ -217,6 +217,10 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
     const classification = String(validator.classification ?? "unreadable");
     const extracted = (validator.extracted ?? {}) as Record<string, unknown>;
     const holderName = (extracted.holder_name as string | undefined) ?? null;
+    const holderConfidence = (extracted.holder_confidence as string | undefined) ?? null;
+    const holderCpfMask = (extracted.holder_cpf_mask as string | undefined)
+      ?? (extracted.document_id as string | undefined)
+      ?? null;
 
     // 3) thresholds
     const threshold = decideByConfidence(confidence);
@@ -232,7 +236,15 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
         .maybeSingle();
       clientName = (lead?.nome_cliente as string | undefined) ?? null;
     } catch { /* non-blocking */ }
-    const holder = matchHolder(holderName, clientName);
+    let holder = matchHolder(holderName, clientName);
+    // Quando a extração do titular veio com baixa confiança, NÃO podemos
+    // afirmar mismatch — o nome capturado pode ser lixo de OCR (ex.: "BC ICMS").
+    // Convertemos para "unknown" para que decideInvoiceFinal não rejeite por
+    // holder_mismatch e o agente possa pedir confirmação ao cliente em vez
+    // de acusar erroneamente que a fatura é de outra pessoa.
+    if (holderConfidence === "low" && holder.status === "mismatch") {
+      holder = { ...holder, status: "unknown" };
+    }
 
     // 5) decisão final
     const final = decideInvoiceFinal({ classification: classification as any, threshold, holder_match: holder.status });
@@ -293,6 +305,8 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
           invoice_validated_match: holder.status === "match",
           invoice_match_third_party: holder.status !== "match",
           invoice_holder_name: holderName ?? null,
+          invoice_holder_confidence: holderConfidence,
+          invoice_holder_cpf_mask: holderCpfMask,
           last_media_reject_reason: null,
           invoice_rejected_notified: false,
         };
@@ -304,6 +318,8 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
         patch.extras = {
           ...((ctx.state.extras ?? {}) as Record<string, unknown>),
           invoice_holder_name: holderName ?? null,
+          invoice_holder_confidence: holderConfidence,
+          invoice_holder_cpf_mask: holderCpfMask,
         };
         break;
       case "reject_holder_mismatch":
@@ -318,6 +334,8 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
           last_media_reject_reason: "reject_holder_mismatch",
           invoice_match_third_party: true,
           invoice_holder_name: holderName ?? null,
+          invoice_holder_confidence: holderConfidence,
+          invoice_holder_cpf_mask: holderCpfMask,
           invoice_rejected_notified: false,
         };
         break;

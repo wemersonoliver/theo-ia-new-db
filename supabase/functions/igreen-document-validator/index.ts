@@ -42,6 +42,13 @@ interface ExtractedFields {
   address?: string;
   energy_consumption_kwh?: number;
   distributor?: string;
+  // Confiança da extração do titular. Quando "low", o agente NÃO deve
+  // afirmar que a fatura está em nome de outra pessoa — deve perguntar.
+  holder_confidence?: "high" | "medium" | "low";
+  // CPF do titular extraído da fatura — pode vir mascarado (ex.: "022.***.***-04")
+  // ou completo. Usado para reconciliar com o CPF do RG/CNH e desbloquear
+  // casos em que o nome veio com OCR ruim mas o CPF bate.
+  holder_cpf_mask?: string;
 }
 
 interface ValidatorResponse {
@@ -58,16 +65,32 @@ interface ValidatorResponse {
 }
 
 const SYSTEM = `Você é um classificador OCR de faturas de energia elétrica brasileiras.
-Receberá uma imagem ou PDF, e PODE receber também um texto OCR pré-extraído (campo extracted_text).
-Use AMBOS como evidência. Se o extracted_text claramente contiver dados de fatura de energia brasileira
-(distribuidora reconhecida, kWh, valor a pagar, titular), classifique como "green_invoice" mesmo que
-a leitura visual falhe.
+Receberá uma imagem ou PDF, e PODE receber também um texto OCR pré-extraído.
+Faturas brasileiras vêm em DEZENAS de layouts (Enel, Equatorial, CPFL, Light, Coelba,
+Cemig, Celesc, Energisa, EDP, Neoenergia, Copel, etc.). Você DEVE analisar o cabeçalho
+inteiro e identificar o nome do TITULAR — a pessoa para quem a fatura é emitida.
+
+REGRAS HARD para holder_name:
+- O titular é SEMPRE um nome de PESSOA (ou razão social) com 2 ou mais palavras alfabéticas.
+- NUNCA confunda com cabeçalhos de tabelas de tributos: "BC ICMS", "ICMS", "PIS", "COFINS",
+  "TUSD", "TE", "BANDEIRA", "TARIFA", "SUBTOTAL", "TOTAL A PAGAR", "BASE", "ALÍQUOTA".
+- NUNCA confunda com o nome da distribuidora (ENEL, CPFL, EQUATORIAL, LIGHT etc.).
+- NUNCA invente nome. Se não houver nome claro de pessoa, devolva holder_name="" e
+  holder_confidence="low".
+- Procure por âncoras: "Nome do Cliente", "Cliente:", "Nome/Razão Social", "Titular",
+  "Devedor", "Consumidor", "Destinatário", "Sr(a):", "Razão Social", "Nome:".
+- Considere também o nome em CAIXA ALTA que aparece logo após o cabeçalho da distribuidora,
+  geralmente junto do endereço de cobrança.
+- Extraia o CPF/CNPJ do titular, mesmo mascarado ("022.***.***-04"), no campo holder_cpf_mask.
+
 Responda APENAS JSON com as chaves:
 {
   "classification": "green_invoice" | "other_invoice" | "unreadable" | "not_invoice",
   "confidence": number (0..1),
   "extracted": {
     "holder_name": string,
+    "holder_confidence": "high" | "medium" | "low",
+    "holder_cpf_mask": string,
     "document_id": string,
     "address": string,
     "energy_consumption_kwh": number,
@@ -420,21 +443,14 @@ function ocrFallback(text: string, filename?: string | null): ExtractedFields | 
   const distMatch = KNOWN_DISTRIBUTORS.find((d) => new RegExp(`\\b${d}\\b`, "i").test(t));
   if (!distMatch) return null;
 
-  // Nome do titular: prioriza rótulos reais da fatura antes de qualquer
-  // sequência em maiúsculas. PDFs da Celesc costumam vir como markdown/OCR:
-  // "**Nome do titular/cliente:** WEMERSON LEITE OLIVEIRA". Antes o fallback
-  // caía no primeiro texto maiúsculo do documento ("DOCUMENTO AUXILIAR...").
-  let holder: string | undefined;
-  const labeledHolder = extractInvoiceHolderName(t);
-  if (labeledHolder) {
-    holder = labeledHolder;
-  }
+  // Nome do titular: análise robusta do cabeçalho inteiro com âncoras,
+  // blocklist e scoring (suporta Enel, Equatorial, CPFL, Light, Coelba etc.).
+  const headerExtraction = extractHolderFromHeader(text);
+  let holder: string | undefined = headerExtraction.name ?? undefined;
+  let holderConfidence: "high" | "medium" | "low" = headerExtraction.confidence;
   if (!holder) {
-    const upperRun = t.match(/\b([A-ZÁÉÍÓÚÂÊÔÃÕÇ]{2,}(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]{2,}){1,5})\b/);
-    if (upperRun) {
-      const candidate = cleanInvoiceHolderCandidate(upperRun[1]);
-      if (candidate) holder = candidate;
-    }
+    const filenameGuess = holderFromFilename(filename);
+    if (filenameGuess) { holder = filenameGuess; holderConfidence = "low"; }
   }
 
   // Consumo kWh
@@ -448,14 +464,24 @@ function ocrFallback(text: string, filename?: string | null): ExtractedFields | 
     if (Number.isFinite(n) && n > 0 && n < 50000) kwh = n;
   }
 
-  // CPF mascarado / qualquer documento (aceita formatos com asteriscos)
+  // CPF mascarado / qualquer documento (aceita formatos com asteriscos).
+  // Captura formato Enel/Equatorial ("022.***.***-04") e completo ("022.255.463-04").
+  const cpfRegexes = [
+    /\b\d{3}\.\*{3}\.\*{3}-\d{2}\b/,
+    /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/,
+    /\*{2,3}\.?\d{3}\.?\d{3}-?\*{2}/,
+    /\b\d{11}\b/,
+  ];
   let docId: string | undefined;
-  const cpfMatch = t.match(/\*{2,3}\.?\d{3}\.?\d{3}-?\*{2}/)
-    ?? t.match(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/);
-  if (cpfMatch) docId = cpfMatch[0];
+  for (const rx of cpfRegexes) {
+    const m = t.match(rx);
+    if (m) { docId = m[0]; break; }
+  }
 
   return {
-    holder_name: holder ?? holderFromFilename(filename),
+    holder_name: holder,
+    holder_confidence: holderConfidence,
+    holder_cpf_mask: docId,
     document_id: docId,
     distributor: distMatch,
     energy_consumption_kwh: kwh,
@@ -467,23 +493,177 @@ function weakInvoiceOcrFallback(text: string, filename?: string | null): Extract
   const distMatch = KNOWN_DISTRIBUTORS.find((d) => new RegExp(`\\b${d}\\b`, "i").test(t));
   const hasEnergyDoc = /(nota fiscal de energia|energia elétrica|energia eletrica|conta de luz|fatura de energia|danf3e)/i.test(t);
   if (!distMatch || !hasEnergyDoc) return null;
+  const headerExtraction = extractHolderFromHeader(text);
   return {
-    holder_name: extractInvoiceHolderName(t) ?? holderFromFilename(filename),
+    holder_name: headerExtraction.name ?? holderFromFilename(filename),
+    holder_confidence: headerExtraction.name ? headerExtraction.confidence : "low",
     distributor: distMatch,
   };
 }
 
-function extractInvoiceHolderName(text: string): string | undefined {
-  const patterns = [
-    /nome\s*(?:do\s*)?(?:titular|cliente)?\s*(?:\/\s*(?:titular|cliente))?\s*[:\-* ]+\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ' ]{4,90})(?=\s*(?:\*\*|cpf|cnpj|documento|endere[cç]o|unidade|cliente|etapa|refer[eê]ncia|vencimento|total|$))/i,
-    /(?:titular|cliente)\s*[:\-* ]+\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ' ]{4,90})(?=\s*(?:\*\*|cpf|cnpj|documento|endere[cç]o|unidade|cliente|etapa|refer[eê]ncia|vencimento|total|$))/i,
-  ];
-  for (const pattern of patterns) {
-    const m = text.match(pattern);
-    const cleaned = cleanInvoiceHolderCandidate(m?.[1]);
-    if (cleaned) return cleaned;
+// ──────────────────────────────────────────────────────────────────────────
+// EXTRAÇÃO ROBUSTA DO TITULAR — multi-âncora + blocklist + scoring.
+// Funciona com QUALQUER layout de fatura brasileira (Enel, Equatorial,
+// CPFL, Light, Coelba, Cemig, Celesc, Energisa, EDP, Neoenergia, Copel...).
+//
+// Etapas:
+//   1. Pega a região do cabeçalho (primeiros ~40% do texto).
+//   2. Para cada linha, tenta achar âncora explícita ("Nome do Cliente:",
+//      "Cliente:", "Titular:", "Razão Social:", "Sr(a):" etc.) e captura o
+//      texto à direita ou na linha seguinte.
+//   3. Fallback: varre primeiras 25 linhas e marca como candidata toda linha
+//      em CAIXA ALTA / Title Case com 2-5 palavras alfabéticas.
+//   4. Filtra com blocklist rígida (tributos, distribuidoras, datas, valores,
+//      hashes, strings >40 chars sem espaço, palavras únicas de 1-2 letras).
+//   5. Atribui score (+3 âncora explícita, +2 caixa alta, +1 próximo de CPF).
+//   6. Devolve a candidata com maior score, e nível de confiança proporcional.
+// ──────────────────────────────────────────────────────────────────────────
+
+const HOLDER_ANCHORS: Array<{ rx: RegExp; score: number }> = [
+  { rx: /nome\s*(?:do\s*)?(?:titular|cliente|consumidor|destinat[aá]rio)\s*[:\-]/i, score: 5 },
+  { rx: /nome\s*\/\s*raz[aã]o\s*social\s*[:\-]/i, score: 5 },
+  { rx: /raz[aã]o\s*social\s*[:\-]/i, score: 5 },
+  { rx: /(?:^|\s)titular\s*[:\-]/i, score: 5 },
+  { rx: /(?:^|\s)cliente\s*[:\-]/i, score: 4 },
+  { rx: /(?:^|\s)consumidor\s*[:\-]/i, score: 4 },
+  { rx: /(?:^|\s)devedor\s*[:\-]/i, score: 4 },
+  { rx: /(?:^|\s)destinat[aá]rio\s*[:\-]/i, score: 4 },
+  { rx: /(?:^|\s)sr\(?a\)?\s*[:\-]/i, score: 3 },
+  { rx: /(?:^|\s)nome\s*[:\-]/i, score: 3 },
+  { rx: /(?:^|\s)nome\s*completo\s*[:\-]/i, score: 5 },
+  // Markdown bold ("**Nome do Cliente:** FULANO DE TAL")
+  { rx: /\*\*\s*nome[^*]*\*\*\s*[:\-]?/i, score: 5 },
+];
+
+// Palavras/tokens proibidos em nomes de pessoas (cabeçalhos de coluna,
+// tributos, distribuidoras, termos contábeis). Qualquer ocorrência descarta
+// a candidata.
+const HOLDER_BLOCKLIST_TOKENS = new Set([
+  "ICMS","PIS","COFINS","TUSD","TE","KWH","MWH","CNPJ","CPF","RG","INSCRICAO","INSCRIÇÃO",
+  "BC","BASE","ALIQUOTA","ALÍQUOTA","TOTAL","SUBTOTAL","BANDEIRA","TARIFA","VENCIMENTO",
+  "ENEL","CPFL","EQUATORIAL","LIGHT","NEOENERGIA","COELBA","COSERN","ENERGISA","ELEKTRO",
+  "EDP","COPEL","CEMIG","CEEE","CELESC","CELPE","RGE","ELETROPAULO","COELCE","CERON",
+  "DISTRIBUIDORA","FORNECIMENTO","LEITURA","REFERENCIA","REFERÊNCIA","VENCTO","EMISSAO",
+  "EMISSÃO","NOTA","FISCAL","DANFE","DANF3E","DANFE3","ENDERECO","ENDEREÇO","UNIDADE",
+  "CONSUMIDORA","INSTALACAO","INSTALAÇÃO","CONTRATO","FATURA","CONTA","BOLETO","CODIGO",
+  "CÓDIGO","DEBITOS","DÉBITOS","CREDITO","CRÉDITO","MULTA","JUROS","CONSUMO","DEMANDA",
+  "MEDIDOR","CICLO","MODALIDADE","CLASSIFICACAO","CLASSIFICAÇÃO","ILUMINACAO","ILUMINAÇÃO",
+  "PUBLICA","PÚBLICA","TRIBUTO","BANDEIRAS","VERDE","AMARELA","VERMELHA","ESCASSEZ","HIDRICA",
+  "HÍDRICA","ENERGIA","ELETRICA","ELÉTRICA","DOCUMENTO","AUXILIAR","SERVICO","SERVIÇO",
+]);
+
+const HOLDER_PHRASE_BLOCKLIST = /(documento\s+auxiliar|nota\s+fiscal|energia\s+el[eé]trica|distribuidora|classifica[cç][aã]o|modalidade|fornecimento|ilumina[cç][aã]o|conta\s+contrato|n[uú]mero\s+da|c[oó]digo\s+de\s+barras|valor\s+a\s+pagar|total\s+a\s+pagar|vencimento|emiss[aã]o|leitura\s+anterior|leitura\s+atual|hist[oó]rico\s+de\s+consumo|bandeira\s+tarif[aá]ria|tarifa\s+social)/i;
+
+function isValidHolderCandidate(raw: string): boolean {
+  if (!raw) return false;
+  const cleaned = raw.trim();
+  if (cleaned.length < 5 || cleaned.length > 80) return false;
+  // Strings com dígitos não são nomes
+  if (/\d/.test(cleaned)) return false;
+  // Strings com caracteres especiais demais (hashes/códigos)
+  if (/[#@$%&|<>\\\/\[\]\{\}=]/.test(cleaned)) return false;
+  if (cleaned.length > 40 && !/\s/.test(cleaned)) return false; // hash colado
+  // Frase proibida (cabeçalhos / descrições)
+  if (HOLDER_PHRASE_BLOCKLIST.test(cleaned)) return false;
+  // Tokens válidos: alfabéticos com acentos, 2+ caracteres
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
+  if (tokens.length < 2 || tokens.length > 6) return false;
+  // Cada token precisa ser ao menos 2 chars, alfabético/conector
+  const goodTokens = tokens.filter((t) => /^[A-ZÁÉÍÓÚÂÊÔÃÕÇa-záéíóúâêôãõç']{2,}$/i.test(t));
+  if (goodTokens.length < 2) return false;
+  // Blocklist por token (normalizado MAIÚSCULAS sem acento)
+  for (const t of tokens) {
+    const norm = t.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (HOLDER_BLOCKLIST_TOKENS.has(norm)) return false;
   }
-  return undefined;
+  return true;
+}
+
+function sanitizeHolderCandidate(raw: string): string {
+  return raw
+    .replace(/\*+/g, " ")
+    .replace(/[:\-]+\s*$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractHolderFromHeader(rawText: string): { name: string | null; confidence: "high" | "medium" | "low"; score: number } {
+  if (!rawText) return { name: null, confidence: "low", score: 0 };
+  // Região do cabeçalho: primeiros 40% do texto, ou primeiros 2500 chars (o que for menor).
+  const headerEnd = Math.min(rawText.length, Math.max(1500, Math.floor(rawText.length * 0.4)));
+  const header = rawText.slice(0, headerEnd);
+  const lines = header.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+
+  // CPF position within full text — usado pra dar +1 bônus a candidatas próximas.
+  const cpfMatch = rawText.match(/\b\d{3}\.(?:\d{3}|\*{3})\.(?:\d{3}|\*{3})-(?:\d{2}|\*{2})\b/);
+  const cpfPos = cpfMatch ? rawText.indexOf(cpfMatch[0]) : -1;
+
+  const candidates: Array<{ name: string; score: number; pos: number }> = [];
+
+  // ── 1) Procura por âncoras explícitas ────────────────────────────────────
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    for (const anchor of HOLDER_ANCHORS) {
+      const m = line.match(anchor.rx);
+      if (!m) continue;
+      // Pega o que vem DEPOIS da âncora na mesma linha
+      const after = line.slice((m.index ?? 0) + m[0].length).trim();
+      let candidate = "";
+      if (after && after.length > 2) {
+        candidate = sanitizeHolderCandidate(after.split(/\s{2,}|\t|\|/)[0]);
+      }
+      // Se não tem nada após (label sozinho na linha), usa a próxima linha
+      if (!isValidHolderCandidate(candidate) && i + 1 < lines.length) {
+        candidate = sanitizeHolderCandidate(lines[i + 1]);
+      }
+      if (isValidHolderCandidate(candidate)) {
+        const pos = rawText.indexOf(line);
+        const proximityBonus = (cpfPos >= 0 && Math.abs(pos - cpfPos) < 400) ? 1 : 0;
+        candidates.push({ name: candidate, score: anchor.score + proximityBonus, pos });
+      }
+    }
+  }
+
+  // ── 2) Fallback posicional: primeiras 25 linhas com CAIXA ALTA / Title Case
+  if (candidates.length === 0) {
+    const scanLimit = Math.min(lines.length, 25);
+    for (let i = 0; i < scanLimit; i++) {
+      const line = lines[i];
+      // Considera só linhas curtas com aparência de nome
+      const stripped = sanitizeHolderCandidate(line);
+      if (!isValidHolderCandidate(stripped)) continue;
+      // Heurística adicional: linha em CAIXA ALTA ganha mais peso
+      const upperRatio = (stripped.replace(/[^A-ZÁÉÍÓÚÂÊÔÃÕÇ]/g, "").length) /
+                        Math.max(1, stripped.replace(/\s/g, "").length);
+      if (upperRatio < 0.5) continue;
+      const pos = rawText.indexOf(line);
+      const proximityBonus = (cpfPos >= 0 && Math.abs(pos - cpfPos) < 400) ? 1 : 0;
+      candidates.push({ name: stripped, score: 2 + proximityBonus, pos });
+    }
+  }
+
+  if (candidates.length === 0) return { name: null, confidence: "low", score: 0 };
+
+  // Pega o de maior score (em caso de empate, o mais próximo do CPF; senão, o mais alto no doc)
+  candidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.pos - b.pos;
+  });
+  const best = candidates[0];
+  const confidence: "high" | "medium" | "low" =
+    best.score >= 5 ? "high" : best.score >= 3 ? "medium" : "low";
+  // Title-case visual mas preserva acentos
+  const name = best.name
+    .split(/\s+/)
+    .map((w) => w.length > 2 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())
+    .join(" ");
+  return { name, confidence, score: best.score };
+}
+
+// Mantém função antiga como wrapper (compat com callers que ainda referenciam).
+function extractInvoiceHolderName(text: string): string | undefined {
+  const r = extractHolderFromHeader(text);
+  return r.name ?? undefined;
 }
 
 function cleanInvoiceHolderCandidate(raw?: string | null): string | undefined {
