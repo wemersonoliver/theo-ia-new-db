@@ -225,6 +225,7 @@ export default function Conversations() {
   const [finalizeOpen, setFinalizeOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"open" | "closed" | "all">("open");
+  const [aiFilter, setAiFilter] = useState<"all" | "ai" | "human">("all");
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchParams] = useSearchParams();
@@ -260,6 +261,11 @@ export default function Conversations() {
           return !c.outcome;
         })
         .filter((c) => {
+          if (aiFilter === "all") return true;
+          if (aiFilter === "ai") return !!c.ai_active;
+          return !c.ai_active;
+        })
+        .filter((c) => {
           const q = searchQuery.trim().toLowerCase();
           if (!q) return true;
           const contact = contactByPhone.get(c.phone);
@@ -268,7 +274,7 @@ export default function Conversations() {
           const phone = (c.phone || "").toLowerCase();
           return name.includes(q) || email.includes(q) || phone.includes(q);
         }),
-    [rawConversations, otherPendingPhones, statusFilter, searchQuery, contactByPhone],
+    [rawConversations, otherPendingPhones, statusFilter, aiFilter, searchQuery, contactByPhone],
   );
 
   const selectedPending = useMemo(
