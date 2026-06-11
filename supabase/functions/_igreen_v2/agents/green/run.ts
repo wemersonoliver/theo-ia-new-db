@@ -4,7 +4,7 @@
 
 import type { AgentContext, AgentResult } from "../_types.ts";
 import { decideGreenStage, isAffirmation, detectFaqTopic, detectOutOfScope, isGenericObjection } from "./stages.ts";
-import { GREEN_SYSTEM, buildGreenUserPrompt } from "./prompt.ts";
+import { GREEN_SYSTEM, HOLDER_GUARD, buildGreenUserPrompt } from "./prompt.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { openAITextFallback, isProviderOutOfCredits, markProviderOutOfCredits } from "../../../_shared/ai-fallback/index.ts";
 
@@ -951,7 +951,7 @@ async function generateText(ctx: AgentContext, stage: string): Promise<string> {
 
   const tryOpenAI = async (reason: string): Promise<string | null> => {
     const fb = await openAITextFallback({
-      systemPrompt: GREEN_SYSTEM,
+      systemPrompt: GREEN_SYSTEM + "\n" + HOLDER_GUARD,
       userPrompt,
       model: "gpt-4o-mini",
       maxTokens: 600,
@@ -983,7 +983,7 @@ async function generateText(ctx: AgentContext, stage: string): Promise<string> {
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: GREEN_SYSTEM }] },
+          systemInstruction: { parts: [{ text: GREEN_SYSTEM + "\n" + HOLDER_GUARD }] },
           contents: [{
             role: "user",
             parts: [{ text: userPrompt }],
