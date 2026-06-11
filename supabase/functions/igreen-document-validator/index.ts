@@ -42,6 +42,13 @@ interface ExtractedFields {
   address?: string;
   energy_consumption_kwh?: number;
   distributor?: string;
+  // Confiança da extração do titular. Quando "low", o agente NÃO deve
+  // afirmar que a fatura está em nome de outra pessoa — deve perguntar.
+  holder_confidence?: "high" | "medium" | "low";
+  // CPF do titular extraído da fatura — pode vir mascarado (ex.: "022.***.***-04")
+  // ou completo. Usado para reconciliar com o CPF do RG/CNH e desbloquear
+  // casos em que o nome veio com OCR ruim mas o CPF bate.
+  holder_cpf_mask?: string;
 }
 
 interface ValidatorResponse {
@@ -58,16 +65,32 @@ interface ValidatorResponse {
 }
 
 const SYSTEM = `Você é um classificador OCR de faturas de energia elétrica brasileiras.
-Receberá uma imagem ou PDF, e PODE receber também um texto OCR pré-extraído (campo extracted_text).
-Use AMBOS como evidência. Se o extracted_text claramente contiver dados de fatura de energia brasileira
-(distribuidora reconhecida, kWh, valor a pagar, titular), classifique como "green_invoice" mesmo que
-a leitura visual falhe.
+Receberá uma imagem ou PDF, e PODE receber também um texto OCR pré-extraído.
+Faturas brasileiras vêm em DEZENAS de layouts (Enel, Equatorial, CPFL, Light, Coelba,
+Cemig, Celesc, Energisa, EDP, Neoenergia, Copel, etc.). Você DEVE analisar o cabeçalho
+inteiro e identificar o nome do TITULAR — a pessoa para quem a fatura é emitida.
+
+REGRAS HARD para holder_name:
+- O titular é SEMPRE um nome de PESSOA (ou razão social) com 2 ou mais palavras alfabéticas.
+- NUNCA confunda com cabeçalhos de tabelas de tributos: "BC ICMS", "ICMS", "PIS", "COFINS",
+  "TUSD", "TE", "BANDEIRA", "TARIFA", "SUBTOTAL", "TOTAL A PAGAR", "BASE", "ALÍQUOTA".
+- NUNCA confunda com o nome da distribuidora (ENEL, CPFL, EQUATORIAL, LIGHT etc.).
+- NUNCA invente nome. Se não houver nome claro de pessoa, devolva holder_name="" e
+  holder_confidence="low".
+- Procure por âncoras: "Nome do Cliente", "Cliente:", "Nome/Razão Social", "Titular",
+  "Devedor", "Consumidor", "Destinatário", "Sr(a):", "Razão Social", "Nome:".
+- Considere também o nome em CAIXA ALTA que aparece logo após o cabeçalho da distribuidora,
+  geralmente junto do endereço de cobrança.
+- Extraia o CPF/CNPJ do titular, mesmo mascarado ("022.***.***-04"), no campo holder_cpf_mask.
+
 Responda APENAS JSON com as chaves:
 {
   "classification": "green_invoice" | "other_invoice" | "unreadable" | "not_invoice",
   "confidence": number (0..1),
   "extracted": {
     "holder_name": string,
+    "holder_confidence": "high" | "medium" | "low",
+    "holder_cpf_mask": string,
     "document_id": string,
     "address": string,
     "energy_consumption_kwh": number,
