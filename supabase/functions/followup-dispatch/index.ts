@@ -63,6 +63,27 @@ serve(async (req) => {
 
     for (const msg of due) {
       try {
+        const { data: account, error: accountError } = await supabase
+          .from("accounts")
+          .select("is_igreen")
+          .eq("id", msg.account_id)
+          .maybeSingle();
+        if (accountError) {
+          console.error(`[followup-dispatch] account lookup failed for ${msg.phone}:`, accountError);
+          skipped++;
+          continue;
+        }
+        if (account?.is_igreen === true) {
+          await supabase.rpc("cancel_followup_sequence", {
+            p_user_id: msg.user_id,
+            p_phone: msg.phone,
+            p_reason: "igreen_account",
+          });
+          console.log(`[followup-dispatch] blocked iGreen account ${msg.account_id} phone ${msg.phone}`);
+          skipped++;
+          continue;
+        }
+
         // Re-check tracking (pode ter sido cancelado) + espaçamento
         const { data: tracking } = await supabase
           .from("followup_tracking")

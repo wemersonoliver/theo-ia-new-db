@@ -93,6 +93,20 @@ serve(async (req) => {
       .eq("id", flow_id).maybeSingle();
     if (!flow) return jsonResponse({ error: "flow not found" }, 404);
 
+    const { data: account, error: accountError } = await supabase
+      .from("accounts")
+      .select("is_igreen")
+      .eq("id", flow.account_id)
+      .maybeSingle();
+    if (accountError) {
+      console.error("account lookup failed", accountError);
+      return jsonResponse({ error: "account lookup failed" }, 500);
+    }
+    if (account?.is_igreen === true) {
+      console.log(`[custom-followup-enroll] blocked iGreen account ${flow.account_id}; only iGreen scenarios are allowed`);
+      return jsonResponse({ error: "iGreen accounts use only iGreen scenarios" }, 409);
+    }
+
     // permission: must be member of account
     const { data: member } = await supabase
       .from("account_members")

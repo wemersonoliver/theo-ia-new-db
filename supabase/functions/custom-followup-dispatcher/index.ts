@@ -318,6 +318,33 @@ serve(async (req) => {
         skipped++; continue;
       }
 
+      const { data: account, error: accountError } = await supabase
+        .from("accounts")
+        .select("is_igreen")
+        .eq("id", f.account_id)
+        .maybeSingle();
+      if (accountError) {
+        console.error(`[custom-followup-dispatcher] account lookup failed for ${f.account_id}:`, accountError);
+        await supabase.from("custom_followup_queue")
+          .update({ status: "pending", locked_at: null, locked_by: null, last_error: "account lookup failed" })
+          .eq("id", item.id);
+        skipped++; continue;
+      }
+      if (account?.is_igreen === true) {
+        await supabase.rpc("custom_followup_stop_for_phone", {
+          _account_id: f.account_id, _phone: item.phone, _reason: "igreen_account"
+        });
+        await supabase.from("custom_followup_queue")
+          .update({ status: "skipped", last_error: "iGreen account: only iGreen scenarios are allowed" })
+          .eq("id", item.id);
+        await logEvent(supabase, {
+          account_id: f.account_id, flow_id: f.id, enrollment_id: item.enrollment_id,
+          phone: item.phone, event_type: "stopped", meta: { reason: "igreen_account" },
+        });
+        console.log(`[custom-followup-dispatcher] blocked iGreen account ${f.account_id} phone ${item.phone}`);
+        skipped++; continue;
+      }
+
       // Window check (com feriados)
       const holidays = await getHolidays(f.account_id);
       if (!isWithinWindowNow(f.window_config, holidays)) {

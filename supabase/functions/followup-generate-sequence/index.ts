@@ -167,6 +167,26 @@ serve(async (req) => {
 
     for (const tracking of pendings) {
       try {
+        const { data: account, error: accountError } = await supabase
+          .from("accounts")
+          .select("is_igreen")
+          .eq("id", tracking.account_id)
+          .maybeSingle();
+        if (accountError) {
+          console.error(`[followup-gen] account lookup failed for ${tracking.phone}:`, accountError);
+          failures.push(tracking.phone);
+          continue;
+        }
+        if (account?.is_igreen === true) {
+          await supabase.from("followup_tracking").update({
+            status: "declined",
+            cancellation_reason: "igreen_account",
+            updated_at: new Date().toISOString(),
+          }).eq("id", tracking.id);
+          console.log(`[followup-gen] blocked iGreen account ${tracking.account_id} phone ${tracking.phone}`);
+          continue;
+        }
+
         // Carrega config + AI config
         const [{ data: config }, { data: aiConfig }, { data: conversation }] = await Promise.all([
           supabase.from("followup_config").select("*").eq("user_id", tracking.user_id).maybeSingle(),
