@@ -168,6 +168,13 @@ function buildHandoffCopy(rawReason: string): { title: string; body: string } {
     };
   }
 
+  if (reason === "holder_mismatch_low_confidence" || reason === "holder_low_confidence") {
+    return {
+      title: "⚠️ *IA precisa de ajuda pra confirmar o titular*",
+      body: "A leitura do nome do titular na fatura ficou com baixa confiança. Confirme com o cliente quem é o titular antes de seguir com o cadastro.",
+    };
+  }
+
   if (reason === "not_identity_document") {
     return {
       title: "📄 *Documento inválido enviado*",
