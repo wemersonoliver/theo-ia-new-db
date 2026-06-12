@@ -119,7 +119,7 @@ function TagPopover({ phone, className }: { phone: string; className?: string })
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className={cn("gap-1.5 shrink-0", className)}>
           <Tag className="h-4 w-4" />
-          <span className="hidden sm:inline">Tags</span>
+          <span className="hidden 2xl:inline">Tags</span>
           {tags.length > 0 && (
             <Badge variant="secondary" className="h-4 w-4 p-0 flex items-center justify-center text-[10px]">
               {tags.length}
@@ -193,7 +193,7 @@ function CreateDealButton({ phone, contactName, className }: { phone: string; co
         onClick={() => setOpen(true)}
       >
         <Kanban className="h-4 w-4" />
-        <span className="hidden sm:inline">Criar Deal</span>
+        <span className="hidden 2xl:inline">Criar Deal</span>
       </Button>
 
       <DealDialog
