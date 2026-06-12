@@ -22,14 +22,14 @@ REGRAS HARD (NUNCA QUEBRE):
 - Antes de qualquer próxima pergunta, RESPONDA primeiro em 1 frase ao que o cliente acabou de dizer. Se ele trouxe uma objeção (preço, aluguel, conta baixa, falta de confiança), trate a objeção ANTES de avançar para o próximo passo.
 - Sua única tarefa neste turno é a indicada em STAGE. Não avance além.`;
 
-// Guarda extra anti-alucinação de titular — concatenada ao SYSTEM em runtime.
-// Mantida separada pra deixar explícito o motivo.
+// Guarda simplificada (jun/2026): a IA NÃO valida mais titularidade.
+// Quando pedir o documento de identidade, é responsabilidade do cliente
+// mandar o do titular da fatura — a IA apenas deixa isso explícito.
 export const HOLDER_GUARD = `
-REGRAS HARD DE TITULAR (NUNCA QUEBRE):
-- NUNCA afirme "a fatura está no nome de outra pessoa" sem ter certeza. Se extras.invoice_holder_confidence == "low" OU extras.invoice_holder_name estiver vazio, NÃO afirme nada sobre o titular — PERGUNTE: "A fatura está no seu nome ou no nome de outra pessoa? Se for de outra pessoa, qual o nome completo do titular?".
-- NUNCA cite um nome de titular extraído do documento se ele tiver dígitos, abreviações estranhas ou parecer cabeçalho de tabela ("BC ICMS", "TOTAL", "TUSD", "BANDEIRA" etc.). Nesses casos, trate como se não tivesse extraído nada.
-- NUNCA invente confirmações tipo "ah, está no nome do João, né?". Só cite nomes que estejam DE FATO em extras.invoice_holder_name (e com confidence != "low").
-- NUNCA peça "RG ou CNH de FULANO" se FULANO for um nome de baixa confiança. Peça apenas "RG ou CNH do titular da conta".`;
+REGRAS DE TITULAR:
+- NUNCA afirme nada sobre o titular da fatura (nome de outra pessoa, terceiro, etc.). Não temos essa informação confirmada.
+- Ao pedir o documento de identidade, diga sempre "RG ou CNH do TITULAR da fatura" — deixe claro pro cliente que precisa ser do titular.
+- NUNCA cite nome extraído do documento na conversa.`;
 
 export function buildGreenUserPrompt(args: {
   stage: GreenStage;
@@ -78,13 +78,13 @@ export function buildGreenUserPrompt(args: {
     case "ask_name":
       return baseCtx + "STAGE: ask_name. Cliente acabou de demonstrar interesse no produto. Em 1-2 frases curtas: agradeça/reconheça o interesse de forma calorosa E pergunte apenas como pode chamá-lo (primeiro nome). NÃO peça nome completo. NÃO peça CPF. NÃO peça mais nenhum dado. NÃO comece com 'Opa' se greeted=true.";
     case "request_invoice":
-      return baseCtx + "STAGE: request_invoice. Reconheça curto a distribuidora e peça a última fatura de energia em PDF ou foto para iniciar a verificação do cadastro. NÃO fale em calcular economia. Máx 2 frases.";
+      return baseCtx + "STAGE: request_invoice. Cliente confirmou que quer iniciar o cadastro. Em 1-2 frases curtas peça a última fatura de energia em PDF ou foto. NÃO fale em calcular economia (já foi simulado). Máx 2 frases.";
     case "waiting_invoice":
       return baseCtx + "STAGE: waiting_invoice. Agradeça e diga que aguarda a fatura quando ele puder enviar. Máx 1 frase.";
     case "validate_invoice":
       return ""; // IA silencia — texto determinístico é gerado após o resultado da tool.
     case "soft_confirm_ask":
-      return baseCtx + "STAGE: soft_confirm_ask. Peça uma confirmação direta (sim/não) sobre o titular da fatura. Máx 1 frase.";
+      return ""; // DEPRECADO — não pedimos mais confirmação de titular.
     case "ask_full_name_cpf":
       return baseCtx + "STAGE: ask_full_name_cpf. Explique em 1 frase curta que agora precisa do nome completo e CPF para preparar o contrato. Peça os dois juntos, de forma cordial. Máx 2 frases.";
     case "simulate_discount":
@@ -94,13 +94,16 @@ export function buildGreenUserPrompt(args: {
     case "intent_send_invoice_ack":
       return baseCtx + "STAGE: intent_send_invoice_ack. Cliente disse que vai mandar a fatura mas ainda não anexou. Em 1 frase curta e cordial, confirme que aguarda. NÃO repita pedido de fatura. NÃO use gírias.";
     case "request_identity":
-      return baseCtx + "STAGE: request_identity. A fatura foi validada com sucesso. Em 1-2 frases peça uma foto do documento de identidade do titular (RG ou CNH). Tom cordial. NÃO peça CPF agora. NÃO use gírias.";
+      return baseCtx + "STAGE: request_identity. A fatura foi recebida. Em 1-2 frases peça uma foto do RG ou CNH DO TITULAR DA FATURA. Deixe explícito que o documento precisa ser do titular da fatura (a pessoa cujo nome está na conta de luz). Tom cordial. NÃO peça CPF agora. NÃO use gírias.";
     case "validate_identity":
       return baseCtx + "STAGE: validate_identity. Em 1 frase diga que recebeu o documento e está conferindo.";
     case "waiting_identity":
       return baseCtx + "STAGE: waiting_identity. Em 1 frase curta e cordial, diga que está aguardando a foto do RG ou CNH do titular da fatura. NÃO repita instruções longas. NÃO use gírias.";
     case "family_authorization_check":
-      return baseCtx + "STAGE: family_authorization_check. A fatura está em nome de outra pessoa. Pergunte em 1 frase cordial se o titular é alguém da família e se você tem autorização para seguir com a contratação em nome dele.";
+      return ""; // DEPRECADO — não checamos mais titular.
+    case "early_discount_tease":
+    case "confirm_signup":
+      return ""; // texto determinístico gerado em run.ts
     case "objection_security":
       return baseCtx + "STAGE: objection_security. Cliente demonstrou preocupação com segurança ou medo de golpe. Em 2 blocos curtos: 1) acolha a preocupação sem minimizar; 2) ofereça a alternativa de fazer o cadastro pelo próprio aplicativo oficial da iGreen e diga que pode enviar o link. Pergunte se prefere essa via. NÃO seja informal. NÃO use gírias.";
     case "send_autocadastro_link":
