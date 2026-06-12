@@ -4,7 +4,6 @@
 
 import type { AgentContext, AgentResult } from "../_types.ts";
 import { decideGreenStage, isAffirmation, detectFaqTopic, detectOutOfScope, isGenericObjection } from "./stages.ts";
-import { isDiscountQuestion as isDiscountQuestionStage } from "./stages.ts";
 import { GREEN_SYSTEM, HOLDER_GUARD, buildGreenUserPrompt } from "./prompt.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { openAITextFallback, isProviderOutOfCredits, markProviderOutOfCredits } from "../../../_shared/ai-fallback/index.ts";
@@ -785,6 +784,12 @@ Quer que eu já comece seu cadastro agora? 😉`;
             args: { state: estado, distributor: distribuidora },
           });
         }
+      }
+      else if (stage === "request_invoice") {
+        // Alcançado via redecide depois que cliente confirmou o cadastro
+        // em confirm_signup. Dispara a tool e zera o texto pra IA gerar.
+        tool_calls.push({ name: "request_invoice", args: { reason: "calculo_economia" } });
+        deterministicText = null;
       }
     }
   }
