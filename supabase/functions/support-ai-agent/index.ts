@@ -8,6 +8,7 @@ import {
   isProviderOutOfCredits,
   detectCreditError,
 } from "../_shared/ai-fallback/index.ts";
+import { getPrimaryProvider } from "../_shared/ai-provider/primary.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
