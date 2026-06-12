@@ -1,74 +1,57 @@
+## Diagnóstico — conta `marcioevandrocosta@hotmail.com`
 
-## Diagnóstico
+A conta (`3f304fb6-fd4e-46d0-9831-b23fabd37b7a`, `is_igreen=true`) tem o cenário **CENARIO1** ativo, instância WhatsApp `biz1025_principal` conectada, e **19 inscrições no cenário** (`igreen_scenario_enrollments`), das quais **17 já estão vencidas** (`next_run_at < now()`, `status=active`). Mesmo assim, **nenhum evento foi disparado**: `igreen_scenario_events = 0` para essa conta e `last_sent_at = NULL` em todas as 19 inscrições.
 
-Verifiquei a conversa do número `5594981030361` (conta `eng.rafaelamancio@gmail.com`). A IA escreveu "segunda-feira, dia 16 de junho", mas o cliente combinou para a próxima segunda — que é **15/06/2026**. O dia 16/06 é terça.
+### Causa raiz
 
-Esse erro não é exclusivo dessa conta; já apareceu em outras. A causa é estrutural, não de prompt do usuário.
-
-### Por que isso acontece
-
-No arquivo `supabase/functions/_ai_system_prompt.ts` (linha 86) o único contexto temporal que damos para o Gemini é:
+O cron `igreen-scenario-dispatcher-1m` roda a cada minuto e o pg_cron reporta `succeeded` — mas, olhando os logs HTTP da Edge Function:
 
 ```
-Hoje é sexta-feira, 12 de junho de 2026 (2026-06-12).
-Ao mencionar datas, converta para o formato YYYY-MM-DD para as funções.
-Exemplos: "amanhã" = dia seguinte, "segunda" = próxima segunda-feira.
+POST /functions/v1/igreen-scenario-dispatcher  → 401 (todas as últimas execuções)
 ```
 
-Ou seja, quando o cliente diz "segunda", o modelo precisa **fazer aritmética de calendário sozinho** (somar dias, virar mês, considerar bissexto, etc.). LLMs são comprovadamente ruins nisso e erram o número do dia com frequência — exatamente o que aconteceu aqui (somou +4 em vez de +3 a partir de sexta 12/06).
+A função usa `requireInternalKey(req)` e compara o header `x-internal-key` com o secret `INTERNAL_CRON_SECRET`. O job do pg_cron envia o valor `229a8e11606878372cac9f41fa0016dab8d851a1b947570c91723083beeb73c6`, mas esse valor **não coincide** com o `INTERNAL_CRON_SECRET` configurado nas Edge Functions. Resultado: a requisição é rejeitada antes de qualquer processamento, nada é enviado, nada é logado.
 
-Além disso, mesmo quando a tool `create_appointment` é chamada com a data correta (`2026-06-15`), o **texto de confirmação** que vai para o cliente é gerado livremente pelo modelo a partir da memória dele, não do retorno da tool. Então o modelo pode salvar certo no banco e ainda assim escrever a data errada no WhatsApp.
+### Escopo do problema (não é só Igreen)
 
-## Plano de Correção
+Os mesmos 401 atingem outras tarefas críticas que dependem do mesmo secret:
 
-### 1. Injetar um calendário pré-computado no system prompt
-Em `whatsapp-ai-agent/index.ts` (e nos outros pontos que chamam `buildAgentSystemPrompt`, como `test-ai-prompt` e `support-ai-agent`), gerar em código (BRT) uma tabela dos próximos 14 dias úteis e passar como novo campo `calendarBlock`:
+- `igreen-scenario-dispatcher` — cenários Igreen
+- `attendance-flow-dispatch` — fluxos de atendimento
+- `send-welcome-sequence` — boas-vindas
+- `custom-followup-dispatcher` / `custom-followup-trigger` — follow-ups personalizados
+- `roulette-expire-assignments` — roleta de leads
+- `followup-dispatch` / `followup-generate-sequence` — follow-up IA
+- `system-followup-dispatch` / `system-followup-generate-sequence` — follow-up de sistema
+
+Tudo isso está parado pelo mesmo motivo.
+
+## Plano de correção
+
+### 1. Sincronizar o secret `INTERNAL_CRON_SECRET`
+Atualizar o secret das Edge Functions para o valor que os jobs do pg_cron já estão enviando:
 
 ```
-CALENDÁRIO DE REFERÊNCIA (use SEMPRE estes valores, não calcule sozinho):
-- hoje, sexta-feira: 2026-06-12
-- amanhã, sábado: 2026-06-13
-- domingo: 2026-06-14
-- próxima segunda-feira: 2026-06-15
-- próxima terça-feira: 2026-06-16
-- próxima quarta-feira: 2026-06-17
-- ... (14 dias)
+INTERNAL_CRON_SECRET = 229a8e11606878372cac9f41fa0016dab8d851a1b947570c91723083beeb73c6
 ```
 
-Em `_ai_system_prompt.ts`, inserir esse bloco logo após "Hoje é..." e reforçar:
+Esse é o caminho mais seguro: não mexe em pg_cron (que tem várias linhas duplicando o secret hardcoded), apenas alinha o servidor.
 
-> "Ao mencionar uma data ao cliente, **copie literalmente** o dia/mês do CALENDÁRIO DE REFERÊNCIA. Nunca calcule de cabeça. Se a data desejada não estiver na lista, use `check_available_slots` antes."
+### 2. Reativar o disparo imediato dos vencidos
+Após o secret sincronizar, o cron de 1 minuto já vai pegar os 17 atrasados da conta do Marcio (e os atrasados de outras contas) automaticamente. Não é necessário "rebobinar" — o dispatcher tem `lte("next_run_at", now)`.
 
-### 2. Retornar texto de confirmação autoritativo na tool `create_appointment`
-Em `executeFunction` (caso `create_appointment` e `reschedule_appointment`), além do `success: true`, retornar:
+### 3. Validação
+- Consultar os logs HTTP de `igreen-scenario-dispatcher` em 1–2 minutos → esperar `200`.
+- Verificar `igreen_scenario_events` da conta `3f304fb6-...` → devem aparecer linhas com `status=sent`.
+- Verificar `last_sent_at` em `igreen_scenario_enrollments` da conta → não deve mais ser `NULL`.
+- Conferir que os outros crons afetados (welcome, roulette, attendance-flow, custom-followup) também voltam a 200.
 
-```json
-{
-  "success": true,
-  "appointment_date": "2026-06-15",
-  "appointment_time": "08:00",
-  "weekday_pt": "segunda-feira",
-  "date_pt": "15 de junho de 2026",
-  "confirmation_hint": "Confirme ao cliente usando EXATAMENTE: 'segunda-feira, 15 de junho, às 08:00'."
-}
-```
-
-E adicionar no prompt uma regra:
-> "Ao confirmar um agendamento criado/reagendado, use EXATAMENTE o `confirmation_hint` retornado pela tool. Não reformule a data."
-
-### 3. Mesma correção em `list_appointments` / `check_available_slots`
-Já formatam data, mas garantir que o `weekday` venha do JS (`toLocaleDateString` com `timeZone: America/Sao_Paulo`), nunca do modelo.
-
-### 4. Validação
-- Rodar a `test-ai-prompt` simulando "quero agendar segunda" em datas variadas (sex, sáb, dom) e conferir o texto de confirmação.
-- Conferir logs de `whatsapp-ai-agent` em 2-3 conversas reais após o deploy.
+### 4. (Opcional, fora deste escopo) Reduzir risco futuro
+Recomendo num próximo passo: parar de hardcodar o secret nos comandos do pg_cron e usar `current_setting('app.internal_cron_secret', true)` ou um cofre `vault.secrets`, para que rotações de secret não exijam mexer em N jobs. Não faz parte deste plano para manter a mudança mínima e segura.
 
 ## Detalhes técnicos
 
-Arquivos a alterar:
-- `supabase/functions/_ai_system_prompt.ts` — novo campo `calendarBlock`, regra de "copiar literal".
-- `supabase/functions/_igreen_flow.ts` (ou novo helper `_calendar.ts`) — função `buildCalendarBlock(today: Date): string` gerando 14 dias em BRT.
-- `supabase/functions/whatsapp-ai-agent/index.ts` — montar `calendarBlock` e passar para `buildAgentSystemPrompt`; enriquecer o retorno de `create_appointment` / `reschedule_appointment` com `weekday_pt`, `date_pt`, `confirmation_hint`.
-- `supabase/functions/test-ai-prompt/index.ts` e `supabase/functions/support-ai-agent/index.ts` — passar o mesmo `calendarBlock`.
-
-Sem migrações de banco. Sem mudança de schema. Sem impacto em UI.
+- Sem migração de banco.
+- Sem alteração de código.
+- Apenas atualização do secret `INTERNAL_CRON_SECRET` nas Edge Functions via ferramenta de secrets.
+- Arquivos envolvidos no diagnóstico (não precisam ser editados): `supabase/functions/_cron_auth.ts`, `supabase/functions/igreen-scenario-dispatcher/index.ts`.
