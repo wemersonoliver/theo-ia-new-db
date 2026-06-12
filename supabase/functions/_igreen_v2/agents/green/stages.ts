@@ -29,6 +29,8 @@ export type GreenStage =
   | "ask_name"
   | "simulate_discount"
   | "simulate_discount_concreto"
+  | "early_discount_tease"
+  | "confirm_signup"
   | "ask_valor_fatura"
   | "request_invoice"
   | "intent_send_invoice_ack"
@@ -153,6 +155,14 @@ export function isAffirmation(msg: string): boolean {
   return AFFIRMATION_RX.test(msg);
 }
 
+// Cliente pergunta direto sobre desconto/economia/percentual sem ter dado
+// estado nem valor. Usado pelo stage `early_discount_tease` para responder
+// com a faixa qualitativa (10–20%) e pedir o estado.
+const DISCOUNT_QUESTION_RX = /\b(qual[\s\S]{0,15}(percentual|porcentagem|desconto|economia)|quanto[\s\S]{0,20}(desconto|economiz|por\s*cento|porcento|%)|qual[\s\S]{0,20}minha[\s\S]{0,15}economia|meu[\s\S]{0,10}desconto|meu[\s\S]{0,10}percentual|qual[\s\S]{0,5}(?:o\s+)?desconto|tem\s+desconto\s+de\s+quanto|desconto\s+(?:é|eh)\s+de\s+quanto)\b/i;
+export function isDiscountQuestion(msg: string): boolean {
+  return !!msg && DISCOUNT_QUESTION_RX.test(msg);
+}
+
 export function decideGreenStage(
   state: Pick<IgreenConversationState, "etapa_funil" | "produto" | "extras">,
   message: string,
@@ -212,37 +222,32 @@ function _decideGreenStageInner(
     return "soft_close";
   }
 
+  // PRIORIDADE 0.65 — cliente pergunta direto sobre desconto/economia antes
+  // de termos estado + valor. Não devolvemos número exato (não temos), mas
+  // também não enrolamos: damos a faixa qualitativa (10–20%) e pedimos o
+  // estado. Só dispara uma vez para não virar disco riscado.
+  if (
+    !hasMedia &&
+    isDiscountQuestion(message) &&
+    !extras.early_discount_tease_sent &&
+    (!hasValue(extras.estado) || !hasValue(extras.valor_fatura))
+  ) {
+    return "early_discount_tease";
+  }
+
   // Após objeção, se cliente aceitar, enviar link de auto-cadastro (1 vez).
   if (extras.objection_security_handled && !extras.autocadastro_sent && acceptsAutoCadastro(message)) {
     return "send_autocadastro_link";
   }
 
   // Mídia recebida APÓS fatura validada → é o documento de identidade (RG/CNH).
-  // Também cobre recuperação de estado: se já houve autorização familiar e o
-  // pedido de identidade foi feito, a conversa pode ainda estar em
-  // fatura_rejeitada por uma transição antiga bloqueada.
-  const awaitingIdentityMedia =
-    etapa === "fatura_validada" ||
-    (etapa === "fatura_rejeitada" && extras.family_authorized === true && extras.identity_requested === true);
+  const awaitingIdentityMedia = etapa === "fatura_validada";
   if (hasMedia && awaitingIdentityMedia) {
     return "validate_identity";
   }
 
   if (hasMedia && (etapa === "qualificacao" || etapa === "fatura_enviada" || etapa === "fatura_rejeitada")) {
     return "validate_invoice";
-  }
-
-  if (!hasMedia && etapa === "fatura_rejeitada" && extras.family_authorized === true && extras.identity_requested === true) {
-    return "waiting_identity";
-  }
-
-  // Titularidade divergente (third-party) detectada — antes de tratar como rejeição
-  // genérica, oferecer caminho de autorização familiar.
-  const holderMismatchPending =
-    extras.invoice_match_third_party === true ||
-    (etapa === "fatura_rejeitada" && extras.last_media_reject_reason === "reject_holder_mismatch");
-  if (!hasMedia && holderMismatchPending && !extras.family_authorized) {
-    return "family_authorization_check";
   }
 
   // Fatura recebida mas rejeitada silenciosamente — precisamos avisar o cliente
@@ -269,10 +274,6 @@ function _decideGreenStageInner(
     return "intent_send_invoice_ack";
   }
 
-  if (documentStatus === "awaiting_soft_confirm") {
-    return "soft_confirm_ask";
-  }
-
   if (etapa === "novo") {
     if (!extras.client_name) return "ask_name";
     if (!extras.explained) return "explain_solution";
@@ -289,6 +290,7 @@ function _decideGreenStageInner(
       // de PRIORIDADE 0.7 (abaixo) cuidar; caso contrário, faz engage_check.
       if (!isGenericObjection(message)) return "engage_check";
     }
+    // Antes de simular precisamos OBRIGATORIAMENTE de estado + valor.
     if (!hasValue(extras.valor_fatura)) return "ask_valor_fatura";
     if (!hasValue(extras.estado)) return "ask_estado";
     if (!hasValue(extras.distribuidora)) {
@@ -296,6 +298,15 @@ function _decideGreenStageInner(
       return "ask_distribuidora";
     }
     if (!hasValue(extras.discount_lookup_done)) return "simulate_discount_concreto";
+    // Documentos só são pedidos depois que o cliente confirma "quer começar".
+    if (!extras.signup_confirmed) {
+      if (isAffirmation(message)) {
+        // Resposta afirmativa no turno em que aguardávamos confirmação:
+        // libera o pedido de fatura imediatamente.
+        return "request_invoice";
+      }
+      return "confirm_signup";
+    }
     return "request_invoice";
   }
 
@@ -306,19 +317,11 @@ function _decideGreenStageInner(
   }
 
   if (etapa === "fatura_validada") {
-    // Novo fluxo: após validate_green_invoice com match=true OU após autorização
-    // familiar em caso de third-party, pedir RG/CNH do titular.
-    const okForIdentity =
-      extras.invoice_validated_match ||
-      (extras.invoice_match_third_party && extras.family_authorized);
-    if (okForIdentity && !extras.identity_validated) {
+    // Após fatura aprovada, pedimos RG/CNH do titular (responsabilidade do
+    // cliente garantir que é do titular — não comparamos mais o nome).
+    if (!extras.identity_validated) {
       if (!extras.identity_requested) return "request_identity";
-      // Só dispara validate_identity quando o cliente realmente anexar mídia.
-      // Caso contrário, fica aguardando o RG/CNH sem repetir "estou conferindo".
       return hasMedia ? "validate_identity" : "waiting_identity";
-    }
-    if (extras.invoice_match_third_party && !extras.family_authorized) {
-      return "family_authorization_check";
     }
     if (!extras.full_name || !extras.cpf) return "ask_full_name_cpf";
     return "idle";
