@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
+import { buildAgentSystemPrompt, buildCalendarBlock } from "../_ai_system_prompt.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { resolveAccountId } from "../_account.ts";
 import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock, buildGreenDistributorStateReply } from "../_igreen_flow.ts";
@@ -503,6 +503,7 @@ serve(async (req) => {
     const todayFormatted = today.toLocaleDateString("pt-BR", {
       weekday: "long", day: "2-digit", month: "long", year: "numeric", timeZone: "America/Sao_Paulo",
     });
+    const calendarBlock = buildCalendarBlock(today);
 
     // Igreen products block (mesma lógica do agente real)
     let igreenProductsBlock = "";
@@ -550,6 +551,7 @@ serve(async (req) => {
       brtTime: brt.brtTime,
       brtGreeting: brt.greeting,
       igreenProductsBlock,
+      calendarBlock,
     });
 
     // Build conversation for Gemini.

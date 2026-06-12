@@ -7,7 +7,7 @@ import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts"
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { reportApiFailure, reportApiSuccess } from "../_health.ts";
-import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
+import { buildAgentSystemPrompt, buildCalendarBlock } from "../_ai_system_prompt.ts";
 import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock, buildGreenDistributorStateReply } from "../_igreen_flow.ts";
 import { openAIGeminiShapeFallback, markProviderOutOfCredits, isProviderOutOfCredits, detectCreditError } from "../_shared/ai-fallback/index.ts";
 import { getPrimaryProvider } from "../_shared/ai-provider/primary.ts";
@@ -1418,6 +1418,7 @@ serve(async (req) => {
     const today = brt.date;
     const todayStr = today.toISOString().split("T")[0];
     const todayFormatted = today.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric", timeZone: "America/Sao_Paulo" });
+    const calendarBlock = buildCalendarBlock(today);
 
     // Carrega produtos Igreen do account (para listar no prompt + flag de vídeo)
     let igreenProductsBlock = "";
@@ -1651,6 +1652,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
       brtTime: brt.brtTime,
       brtGreeting: brt.greeting,
       igreenProductsBlock,
+      calendarBlock,
     });
 
     // Build conversation messages
@@ -2584,10 +2586,46 @@ async function executeFunction(supabase: any, supabaseUrl: string, name: string,
 
     const result = await response.json();
     console.log(`[executeFunction] Result (status=${response.status}):`, JSON.stringify(result));
-    return result;
+    return enrichAppointmentResult(name, args, result);
   } catch (error) {
     console.error("[executeFunction] Error:", error);
     return { error: "Erro ao executar função", message: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+// Acrescenta texto autoritativo de confirmação (dia da semana + "DD de mês") ao
+// retorno das tools de agendamento. O modelo é instruído a copiar "confirmation_hint"
+// literalmente, evitando o erro recorrente em que o LLM calcula o dia do mês errado.
+const _WEEKDAY_PT_LOCAL = [
+  "domingo", "segunda-feira", "terça-feira", "quarta-feira",
+  "quinta-feira", "sexta-feira", "sábado",
+];
+const _MONTH_PT_LOCAL = [
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+function enrichAppointmentResult(name: string, args: any, result: any): any {
+  try {
+    if (!result || result.success !== true) return result;
+    const target = name === "create_appointment" || name === "reschedule_appointment";
+    if (!target) return result;
+    const dateStr: string | undefined = args?.date || result?.appointment?.date || result?.date;
+    const timeStr: string | undefined = args?.time || result?.appointment?.time || result?.time;
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return result;
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dt = new Date(y, (m - 1), d);
+    if (Number.isNaN(dt.getTime())) return result;
+    const weekday_pt = _WEEKDAY_PT_LOCAL[dt.getDay()];
+    const date_pt = `${d} de ${_MONTH_PT_LOCAL[m - 1]} de ${y}`;
+    const shortDate = `${d} de ${_MONTH_PT_LOCAL[m - 1]}`;
+    const timePart = timeStr ? `, às ${timeStr}` : "";
+    const confirmation_hint =
+      `Confirme ao cliente usando EXATAMENTE este texto de data/hora: ` +
+      `"${weekday_pt}, ${shortDate}${timePart}". ` +
+      `NÃO mude o dia do mês, NÃO recalcule o dia da semana.`;
+    return { ...result, weekday_pt, date_pt, confirmation_hint };
+  } catch (_) {
+    return result;
   }
 }
 
