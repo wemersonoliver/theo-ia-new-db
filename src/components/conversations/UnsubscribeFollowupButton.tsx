@@ -38,7 +38,7 @@ export function UnsubscribeFollowupButton({ phone, className, fullLabel }: Props
           ) : (
             <BellOff className="h-4 w-4" />
           )}
-          <span className={fullLabel ? "" : "hidden xl:inline"}>
+          <span className={fullLabel ? "" : "hidden 2xl:inline"}>
             Desinscrever follow-up
           </span>
         </Button>
