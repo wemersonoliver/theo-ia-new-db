@@ -16,7 +16,6 @@ import type { ToolDefinition } from "../tool-router/types.ts";
 import type { ToolResult } from "../types.ts";
 import { checkMedia } from "../document-rules-engine/media-guard.ts";
 import { decideByConfidence } from "../document-rules-engine/confidence-thresholds.ts";
-import { matchHolder } from "../document-rules-engine/holder-match.ts";
 import { decideInvoiceFinal } from "../document-rules-engine/invoice-rules.ts";
 import { CURRENT_VALIDATION_VERSION } from "../document-rules-engine/version.ts";
 import { snapshot } from "../state-engine/snapshot.ts";
@@ -225,29 +224,10 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
     // 3) thresholds
     const threshold = decideByConfidence(confidence);
 
-    // 4) holder-match — usa nome do lead se existir (lead_data.client_name), senão "unknown"
-    let clientName: string | null = null;
-    try {
-      const { data: lead } = await svc()
-        .from("igreen_lead_data")
-        .select("nome_cliente")
-        .eq("account_id", ctx.account_id)
-        .eq("phone", ctx.phone)
-        .maybeSingle();
-      clientName = (lead?.nome_cliente as string | undefined) ?? null;
-    } catch { /* non-blocking */ }
-    let holder = matchHolder(holderName, clientName);
-    // Quando a extração do titular veio com baixa confiança, NÃO podemos
-    // afirmar mismatch — o nome capturado pode ser lixo de OCR (ex.: "BC ICMS").
-    // Convertemos para "unknown" para que decideInvoiceFinal não rejeite por
-    // holder_mismatch e o agente possa pedir confirmação ao cliente em vez
-    // de acusar erroneamente que a fatura é de outra pessoa.
-    if (holderConfidence === "low" && holder.status === "mismatch") {
-      holder = { ...holder, status: "unknown" };
-    }
-
-    // 5) decisão final
-    const final = decideInvoiceFinal({ classification: classification as any, threshold, holder_match: holder.status });
+    // 4) decisão final — apenas tipo + legibilidade. A IA não tenta mais
+    // comparar titularidade aqui (jun/2026): é o cliente quem confirma quando
+    // enviar o RG/CNH na etapa seguinte.
+    const final = decideInvoiceFinal({ classification: classification as any, threshold });
 
     // log mínimo (sem raw, sem payload Gemini completo)
     try {
@@ -265,7 +245,7 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
           distributor: extracted.distributor ?? null,
           energy_consumption_kwh: extracted.energy_consumption_kwh ?? null,
         },
-        valid: final === "approve" || final === "soft_confirm",
+        valid: final === "approve",
         reject_reason: final.startsWith("reject_") ? final : null,
         media_url: args.media_url,
         correlation_id,
@@ -280,7 +260,6 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
       type: "document_validated", priority: "medium", source: "tool",
       payload: {
         classification, confidence, threshold,
-        holder_match: holder.status, holder_score: holder.score,
         final, attempts: validator.attempts ?? 0,
         validator_error: validator.error ?? null,
       },
@@ -289,7 +268,6 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
     const patch: Record<string, unknown> = {
       validation_attempts: attempt,
       document_confidence: confidence,
-      holder_match_status: holder.status,
       validation_version: CURRENT_VALIDATION_VERSION,
     };
 
@@ -298,44 +276,16 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
         patch.document_status = "validated";
         patch.etapa_funil = "fatura_validada";
         patch.fatura_valida = true;
-        patch.holder_match = holder.status === "match";
+        patch.holder_match = true;
         events.push({ type: "invoice_approved", priority: "high", source: "tool", payload: {} });
         patch.extras = {
           ...((ctx.state.extras ?? {}) as Record<string, unknown>),
-          invoice_validated_match: holder.status === "match",
-          invoice_match_third_party: holder.status !== "match",
+          invoice_validated_match: true,
+          invoice_match_third_party: false,
           invoice_holder_name: holderName ?? null,
           invoice_holder_confidence: holderConfidence,
           invoice_holder_cpf_mask: holderCpfMask,
           last_media_reject_reason: null,
-          invoice_rejected_notified: false,
-        };
-        break;
-      case "soft_confirm":
-        patch.document_status = "awaiting_soft_confirm";
-        events.push({ type: "invoice_soft_confirm_requested", priority: "high", source: "tool",
-          payload: { holder_name: holderName } });
-        patch.extras = {
-          ...((ctx.state.extras ?? {}) as Record<string, unknown>),
-          invoice_holder_name: holderName ?? null,
-          invoice_holder_confidence: holderConfidence,
-          invoice_holder_cpf_mask: holderCpfMask,
-        };
-        break;
-      case "reject_holder_mismatch":
-        patch.document_status = "rejected";
-        patch.etapa_funil = "fatura_rejeitada";
-        patch.fatura_valida = false;
-        patch.holder_match = false;
-        events.push({ type: "invoice_rejected", priority: "high", source: "tool",
-          payload: { reason: "holder_mismatch" } });
-        patch.extras = {
-          ...((ctx.state.extras ?? {}) as Record<string, unknown>),
-          last_media_reject_reason: "reject_holder_mismatch",
-          invoice_match_third_party: true,
-          invoice_holder_name: holderName ?? null,
-          invoice_holder_confidence: holderConfidence,
-          invoice_holder_cpf_mask: holderCpfMask,
           invoice_rejected_notified: false,
         };
         break;
@@ -363,14 +313,14 @@ export const validateGreenInvoiceTool: ToolDefinition<Args> = {
       account_id: ctx.account_id, phone: ctx.phone,
       label: "after_document_validation",
       correlation_id,
-      extra: { attempt, outcome: final, classification, confidence, holder_match: holder.status },
+      extra: { attempt, outcome: final, classification, confidence },
     });
 
     return {
       success: true,
       events,
       suggested_state_patch: patch as any,
-      data: { final, classification, confidence, threshold, holder_match: holder.status, holder_name: holderName },
+      data: { final, classification, confidence, threshold, holder_name: holderName },
     };
   },
 };
