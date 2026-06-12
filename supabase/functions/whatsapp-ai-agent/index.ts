@@ -7,7 +7,7 @@ import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts"
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { reportApiFailure, reportApiSuccess } from "../_health.ts";
-import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
+import { buildAgentSystemPrompt, buildCalendarBlock } from "../_ai_system_prompt.ts";
 import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock, buildGreenDistributorStateReply } from "../_igreen_flow.ts";
 import { openAIGeminiShapeFallback, markProviderOutOfCredits, isProviderOutOfCredits, detectCreditError } from "../_shared/ai-fallback/index.ts";
 import { getPrimaryProvider } from "../_shared/ai-provider/primary.ts";
@@ -1418,6 +1418,7 @@ serve(async (req) => {
     const today = brt.date;
     const todayStr = today.toISOString().split("T")[0];
     const todayFormatted = today.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric", timeZone: "America/Sao_Paulo" });
+    const calendarBlock = buildCalendarBlock(today);
 
     // Carrega produtos Igreen do account (para listar no prompt + flag de vídeo)
     let igreenProductsBlock = "";
