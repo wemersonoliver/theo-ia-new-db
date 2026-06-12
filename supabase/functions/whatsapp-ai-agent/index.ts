@@ -1652,6 +1652,7 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
       brtTime: brt.brtTime,
       brtGreeting: brt.greeting,
       igreenProductsBlock,
+      calendarBlock,
     });
 
     // Build conversation messages
