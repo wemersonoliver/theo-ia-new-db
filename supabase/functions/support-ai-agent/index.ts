@@ -8,6 +8,7 @@ import {
   isProviderOutOfCredits,
   detectCreditError,
 } from "../_shared/ai-fallback/index.ts";
+import { getPrimaryProvider } from "../_shared/ai-provider/primary.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1226,12 +1227,31 @@ async function callGeminiWithTools(
       }
     };
 
-    // Try Gemini first; if it fails terminally (429/5xx/credits), fall back to OpenAI
+    // Ordem decidida pelo admin (system_ai_provider).
+    const primaryProvider = await getPrimaryProvider();
     let data: any | null = null;
     let geminiFailed = false;
     let geminiFailReason = "";
 
-    if (apiKey && !isProviderOutOfCredits("gemini")) {
+    // Se admin escolheu OpenAI como padrão, tenta OpenAI primeiro.
+    if (primaryProvider === "openai") {
+      const fb = await openAIGeminiShapeFallback({
+        systemPrompt,
+        contents,
+        tools: supportTools,
+        model: "gpt-4o-mini",
+        maxTokens: 1500,
+        temperature: 0.7,
+        ctx: { reason: "admin_pref_openai_primary", phone },
+      });
+      if (fb) {
+        data = fb;
+      } else {
+        geminiFailed = false; // força tentativa do Gemini abaixo
+      }
+    }
+
+    if (!data && apiKey && !isProviderOutOfCredits("gemini")) {
       try {
         const response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -1269,12 +1289,13 @@ async function callGeminiWithTools(
         geminiFailed = true;
         geminiFailReason = "gemini_fetch_error";
       }
-    } else {
+    } else if (!data) {
       geminiFailed = true;
       geminiFailReason = apiKey ? "gemini_circuit_open" : "gemini_no_api_key";
     }
 
-    if (geminiFailed || !data) {
+    // Se Gemini era primário e falhou → tenta OpenAI como fallback.
+    if (!data && primaryProvider !== "openai" && (geminiFailed || !data)) {
       console.warn(`[support-ai-agent] Trying OpenAI fallback (${geminiFailReason})`);
       const fb = await openAIGeminiShapeFallback({
         systemPrompt,
@@ -1285,10 +1306,11 @@ async function callGeminiWithTools(
         temperature: 0.7,
         ctx: { reason: geminiFailReason, phone },
       });
-      if (!fb) {
-        throw new Error(`All AI providers unavailable (${geminiFailReason})`);
-      }
-      data = fb;
+      if (fb) data = fb;
+    }
+
+    if (!data) {
+      throw new Error(`All AI providers unavailable (${geminiFailReason || "unknown"})`);
     }
 
     const candidate = data.candidates?.[0];

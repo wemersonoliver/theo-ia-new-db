@@ -25,6 +25,7 @@ import {
   Workflow,
   Megaphone,
   Leaf,
+  Cpu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -38,6 +39,7 @@ const adminNavItems = [
   { to: "/admin/system-whatsapp", icon: Smartphone, label: "WhatsApp Sistema" },
   { to: "/admin/conversations", icon: MessageSquare, label: "Conversas" },
   { to: "/admin/ai-config", icon: Bot, label: "IA Suporte" },
+  { to: "/admin/ai-provider", icon: Cpu, label: "Provedor de IA" },
   { to: "/admin/simulate-support", icon: FlaskConical, label: "Simular Suporte" },
   { to: "/admin/ai-costs", icon: DollarSign, label: "Custos de IA" },
   { to: "/admin/voice-costs", icon: DollarSign, label: "Custos de Voz IA" },

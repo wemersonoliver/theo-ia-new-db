@@ -4486,6 +4486,30 @@ export type Database = {
         }
         Relationships: []
       }
+      system_ai_provider: {
+        Row: {
+          created_at: string
+          id: string
+          primary_provider: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          primary_provider?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          primary_provider?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       system_api_health: {
         Row: {
           api_name: string
