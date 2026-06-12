@@ -18,6 +18,73 @@ export interface AgentPromptParts {
   brtGreeting?: string;
   /** Bloco extra com regras específicas dos produtos Igreen (ex.: fluxo Conexão Green). */
   igreenProductsBlock?: string;
+  /**
+   * Tabela pré-computada de datas (próximos 14 dias) em BRT, no formato:
+   *   "- segunda-feira (próxima): 2026-06-15 (15 de junho)"
+   * O modelo DEVE copiar literalmente daqui em vez de calcular de cabeça.
+   */
+  calendarBlock?: string;
+}
+
+const WEEKDAY_PT = [
+  "domingo",
+  "segunda-feira",
+  "terça-feira",
+  "quarta-feira",
+  "quinta-feira",
+  "sexta-feira",
+  "sábado",
+];
+
+const MONTH_PT = [
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+
+/** Formata uma Date local-BRT em "YYYY-MM-DD" sem depender de toISOString. */
+function ymdLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Gera o bloco de calendário (14 dias a partir de hoje, em BRT).
+ * IMPORTANTE: `today` deve já estar em horário BRT (use getBrtNowParts().date).
+ */
+export function buildCalendarBlock(today: Date): string {
+  const lines: string[] = [];
+  const todayWd = today.getDay();
+  // Marcadores: para cada dia da semana (0..6), a próxima ocorrência depois de hoje.
+  const nextWeekdayShown: Record<number, boolean> = {};
+
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+    const wd = d.getDay();
+    const ymd = ymdLocal(d);
+    const dateLabel = `${d.getDate()} de ${MONTH_PT[d.getMonth()]}`;
+    let prefix = "";
+    if (i === 0) prefix = "HOJE";
+    else if (i === 1) prefix = "AMANHÃ";
+    else if (i === 2) prefix = "depois de amanhã";
+    else if (!nextWeekdayShown[wd] && wd !== todayWd) {
+      prefix = `próxima ${WEEKDAY_PT[wd]}`;
+      nextWeekdayShown[wd] = true;
+    }
+    const wdName = WEEKDAY_PT[wd];
+    const tag = prefix ? ` [${prefix}]` : "";
+    lines.push(`- ${ymd} — ${wdName}, ${dateLabel}${tag}`);
+  }
+
+  return `CALENDÁRIO DE REFERÊNCIA (próximos 14 dias, fuso de Brasília):
+${lines.join("\n")}
+
+REGRAS DE DATA (OBRIGATÓRIAS — NUNCA VIOLE):
+- Ao mencionar QUALQUER data ao cliente, copie LITERALMENTE o dia e o mês do CALENDÁRIO DE REFERÊNCIA acima. NUNCA calcule "+N dias" de cabeça.
+- Quando o cliente disser "amanhã", "depois de amanhã", "segunda", "próxima sexta" etc., procure a linha correspondente acima e use exatamente aquele "DD de mês" e o ymd.
+- Ao chamar tools de agendamento, use a coluna ymd (YYYY-MM-DD) da linha escolhida.
+- Se o cliente pedir uma data fora desses 14 dias, peça confirmação explícita do dia/mês/ano antes de prosseguir.`;
 }
 
 export function buildAgentSystemPrompt(p: AgentPromptParts): string {
@@ -50,6 +117,8 @@ Você tem a ferramenta send_location para enviar a localização do negócio com
     : "";
 
   const igreenBlock = p.igreenProductsBlock ? `\n${p.igreenProductsBlock}\n` : "";
+
+  const calendarSection = p.calendarBlock ? `\n${p.calendarBlock}\n` : "";
 
   return `${nicheLine}
 ${businessDescriptionBlock}
@@ -84,14 +153,15 @@ Você tem acesso a ferramentas para gerenciar agendamentos. Quando o cliente:
 - Quando o cliente responder que não pode ir e quiser outro horário, use reschedule_appointment para atualizar o agendamento existente. Não crie um segundo agendamento e não deixe o antigo ativo.
 
 Hoje é ${p.todayFormatted} (${p.todayStr}).
-Ao mencionar datas, converta para o formato YYYY-MM-DD para as funções.
-Exemplos: "amanhã" = dia seguinte, "segunda" = próxima segunda-feira.
+${calendarSection}
+Ao mencionar datas, converta para o formato YYYY-MM-DD para as funções, SEMPRE consultando o CALENDÁRIO DE REFERÊNCIA acima.
 
 REGRAS CRÍTICAS - NUNCA VIOLE:
 - NUNCA escreva código (Python, JS, default_api, print, etc). Use APENAS as tools por function calling.
 - Responda SEMPRE em linguagem natural, conversacional e em português brasileiro.
 - OBRIGATÓRIO: Só diga que um agendamento foi criado APÓS create_appointment retornar success: true. Nunca simule.
 - OBRIGATÓRIO: Só diga que um agendamento foi cancelado/reagendado APÓS cancel_appointment/reschedule_appointment retornar success: true. Nunca simule.
+- OBRIGATÓRIO: Ao confirmar um agendamento criado/reagendado para o cliente, use EXATAMENTE o texto do campo "confirmation_hint" retornado pela tool. NÃO reformule a data nem o dia da semana — copie literalmente o "DD de mês" e o dia da semana que a tool devolveu.
 - Se o cliente confirmou data, horário, serviço e nome, chame create_appointment IMEDIATAMENTE.
 - Sempre que o cliente informar o nome, guarde e passe no campo client_name.
 
