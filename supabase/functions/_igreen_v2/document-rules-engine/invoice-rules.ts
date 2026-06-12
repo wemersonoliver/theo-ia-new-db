@@ -15,16 +15,19 @@ export type InvoiceFinalDecision =
 export interface InvoiceFinalInput {
   classification: string;
   threshold: ThresholdDecision;
-  holder_match: HolderMatchStatus;
+  holder_match?: HolderMatchStatus;
 }
 
+// Regra simplificada (jun/2026): só checa que é uma fatura de energia legível.
+// A IA não tenta mais validar titularidade aqui — quem garante isso é o
+// próprio cliente, que recebe instrução explícita de enviar o RG/CNH do
+// titular da fatura mais adiante. Mantemos o tipo de retorno antigo para
+// compatibilidade com código a jusante, mas nunca devolvemos
+// "reject_holder_mismatch" nem "soft_confirm".
 export function decideInvoiceFinal(input: InvoiceFinalInput): InvoiceFinalDecision {
   const c = (input.classification ?? "").toLowerCase();
   if (c === "unreadable") return "reject_unreadable";
   if (c !== "green_invoice" && c !== "other_invoice") return "reject_not_invoice";
   if (input.threshold === "request_resend") return "reject_low_confidence";
-  // Holder mismatch BLOQUEIA, mesmo com auto_approve.
-  if (input.holder_match === "mismatch") return "reject_holder_mismatch";
-  if (input.threshold === "request_soft_confirmation") return "soft_confirm";
   return "approve";
 }

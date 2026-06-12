@@ -1,34 +1,74 @@
-# Correção dos follow-ups iGreen
 
-## Diagnóstico confirmado
-- A mensagem enviada hoje às **11:30** para `5544998619843` foi registrada como `sent_by: followup_ai`.
-- Portanto, ela veio do **follow-up geral/legado**, e não de um cenário iGreen.
-- A conta de Márcio está corretamente marcada como `is_igreen = true`, mas o follow-up geral está habilitado e criou uma sequência para esse contato.
-- Existe outra mensagem desse follow-up geral prevista para **19:31**.
-- Não existe inscrição ativa em `igreen_scenario_enrollments` para esse telefone.
-- Também não há cenário iGreen habilitado/configurado para essa conta; o estado registra `scenario_disabled`.
+## Novo comportamento da IA Green
 
-## Implementação
-1. **Bloquear contas iGreen no follow-up geral**
-   - Adicionar uma verificação de `accounts.is_igreen` no detector de inatividade, gerador de sequência e disparador.
-   - Usar defesa em profundidade: mesmo que uma sequência antiga já exista, o disparador não poderá enviá-la.
+Duas mudanças combinadas: (1) **validação de documentos vira só checagem de tipo** e (2) **a IA segue o fluxo de forma inteligente**, sabendo aliviar tensão quando o cliente já chega perguntando desconto.
 
-2. **Bloquear contas iGreen nos follow-ups personalizados comuns**
-   - Aplicar a mesma proteção no gatilho, inscrição e disparador de custom follow-up.
-   - Manter ativos apenas os mecanismos próprios do iGreen: cenários iGreen e automações iGreen relacionadas.
+---
 
-3. **Cancelar pendências já criadas**
-   - Cancelar a sequência geral existente para `5544998619843`, incluindo o envio previsto para 19:31.
-   - Cancelar outras sequências gerais ou personalizadas ainda pendentes em contas marcadas como iGreen, sem apagar o histórico do que já foi enviado.
+### 1. Documentos — só checagem de tipo
 
-4. **Melhorar rastreabilidade**
-   - Registrar nos logs quando um envio for bloqueado por a conta ser iGreen.
-   - Preservar `sent_by: igreen_scenario` para identificar claramente mensagens originadas pelos cenários.
+**Fatura:** a IA só precisa confirmar que é uma fatura de energia. Sem comparar nome do cliente vs. nome da fatura, sem "soft_confirm de titular", sem "autorização familiar".
+- Aprovada → segue. Rejeitada → só se não for fatura ou estiver ilegível.
 
-5. **Validar e publicar as funções**
-   - Testar que uma conta comum continua usando follow-up geral.
-   - Testar que uma conta iGreen não entra nem dispara follow-up geral/customizado.
-   - Confirmar que cenários iGreen continuam funcionando normalmente e publicar as funções alteradas.
+**RG/CNH:** só precisa confirmar que é um documento de identidade.
+- Ao pedir, a IA fala: *"Agora me envia uma foto do RG ou CNH **do titular da fatura**."* — a responsabilidade fica com o cliente.
+- Aprovado se for RG/CNH legível. Rejeitado só se não for documento.
 
-## Resultado esperado
-Contas iGreen usarão **somente os cenários iGreen**. O contato analisado não receberá a mensagem geral prevista para 19:31, e novas conversas iGreen não serão capturadas pelos sistemas de follow-up comuns.
+**Documentos só são pedidos depois que o cliente confirma que quer fazer o cadastro.** Se ele mandar fatura espontaneamente antes, a IA aceita e segue normalmente (não rejeita por timing).
+
+---
+
+### 2. Fluxo consultivo inteligente
+
+A IA tem um **roteiro padrão** que tenta seguir, mas com inteligência para responder objeções e perguntas diretas sem travar:
+
+**Roteiro padrão (happy path):**
+1. Saudação + nome
+2. Explicar o produto em 1-2 frases
+3. Mandar o vídeo curto
+4. Check de engajamento ("fez sentido?")
+5. Perguntar **estado** (UF)
+6. Perguntar **valor médio da fatura**
+7. Consultar tabela oficial (`get_distributor_discount`) e apresentar simulação concreta
+8. Perguntar: *"Quer que eu já comece seu cadastro?"*
+9. Só com "sim" → pedir fatura → pedir RG/CNH → nome completo + CPF → handoff
+
+**Atalhos inteligentes (quando o cliente força o ritmo):**
+
+- **Cliente já chega perguntando desconto** ("quanto é o desconto?", "qual a economia?"):
+  IA responde algo como: *"A média costuma ficar entre 10% e 20%, depende do seu estado e da distribuidora. Em qual estado você está?"* — e em seguida pergunta o valor médio da fatura para fazer a simulação real.
+
+- **Cliente manda fatura antes da hora:** aceita, valida o tipo, e pula direto para "quer começar o cadastro?".
+
+- **Cliente faz pergunta no meio do fluxo** (cashback, prazo, segurança, "como funciona"): IA responde a pergunta primeiro, depois retoma o passo onde estava.
+
+- **Cliente traz objeção** (caro, aluguel, conta baixa): trata a objeção antes de avançar (já existe, mantém).
+
+- **Antes de simular**, IA **sempre confirma estado + valor médio**. Se faltar qualquer um, pergunta antes de simular. Nunca inventa percentual fora da faixa 10–20% padrão se a tabela oficial não tiver retorno.
+
+---
+
+### Arquivos que vou alterar
+
+| Arquivo | Mudança |
+|---|---|
+| `supabase/functions/_igreen_v2/document-rules-engine/invoice-rules.ts` | Remover `reject_holder_mismatch` e a dimensão `holder_match` da decisão. |
+| `supabase/functions/_igreen_v2/tools/validate-green-invoice.ts` | Remover holder-match, soft_confirm de titular e flags `invoice_match_third_party`/`invoice_holder_*`. Aprovado → `fatura_validada`; rejeitado → `fatura_rejeitada` (`not_invoice`/`unreadable`/`low_confidence`). |
+| `supabase/functions/_igreen_v2/tools/validate-green-identity.ts` | Remover comparação nome titular×documento. Aprovar se classification = RG/CNH legível. |
+| `supabase/functions/_igreen_v2/agents/green/stages.ts` | • Remover `family_authorization_check`, `soft_confirm_ask`, `holderMismatchPending`. • Adicionar stage `early_discount_tease` quando o cliente perguntar desconto antes de ter estado/valor. • Adicionar stage `confirm_signup` (após `simulate_discount_concreto`). • Só sair de `confirm_signup` → `request_invoice` com afirmação explícita. • Garantir que `simulate_discount_concreto` só roda com `extras.estado` **e** `extras.valor_fatura` preenchidos. |
+| `supabase/functions/_igreen_v2/agents/green/prompt.ts` | • Atualizar `request_identity` para "RG ou CNH do titular da fatura". • Remover `HOLDER_GUARD`. • Adicionar molde `early_discount_tease` (frase pronta: "média entre 10% e 20%, depende do estado/distribuidora — em qual estado você está?"). • Adicionar molde `confirm_signup` ("quer que eu já comece seu cadastro?"). |
+| `supabase/functions/_igreen_v2/agents/green/run.ts` | • Detectar pergunta direta de desconto → `early_discount_tease`. • Resposta afirmativa em `confirm_signup` → `request_invoice`. • Remover ramos de family/holder. |
+| `supabase/functions/_igreen_v2/state-engine/transitions.ts` | Simplificar transições: remover ramos derivados de mismatch de titular. Manter `fatura_validada → documento_enviado → documento_validado → handoff`. |
+
+### O que **não** muda
+
+Detecção de handoff humano, soft decline, objeção de segurança, FAQ, fora de escopo, outros specialists (telecom/expansão/qualifier), cenários de follow-up, UI, RLS, webhooks.
+
+### Como vou validar
+
+1. Reler `decideGreenStage` simulando: "qual o desconto?" como primeira mensagem → deve cair em `early_discount_tease`, não em pedido de fatura.
+2. Simular fatura recebida sem `nome_cliente` no lead → deve aprovar.
+3. Simular RG recebido com nome diferente do da fatura → deve aprovar.
+4. Conferir que documentos só são solicitados após `confirm_signup = sim`.
+
+Posso seguir com essa implementação?
