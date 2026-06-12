@@ -10,6 +10,7 @@ import { reportApiFailure, reportApiSuccess } from "../_health.ts";
 import { buildAgentSystemPrompt } from "../_ai_system_prompt.ts";
 import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock, buildGreenDistributorStateReply } from "../_igreen_flow.ts";
 import { openAIGeminiShapeFallback, markProviderOutOfCredits, isProviderOutOfCredits, detectCreditError } from "../_shared/ai-fallback/index.ts";
+import { getPrimaryProvider } from "../_shared/ai-provider/primary.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
