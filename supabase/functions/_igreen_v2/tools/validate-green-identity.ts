@@ -194,23 +194,12 @@ export const validateGreenIdentityTool: ToolDefinition<Args> = {
 
     const isIdDoc = classification === "rg" || classification === "cnh" || classification === "identity";
 
-    // Match robusto: primeiro nome igual + pelo menos um sobrenome em comum,
-    // OU primeiro nome igual quando o titular tem apenas um nome registrado.
-    let match = false;
-    if (isIdDoc && docName && titularName) {
-      match = namesMatch(docName, titularName)
-        || (titularName.trim().split(/\s+/).length === 1 && firstName(docName) === firstName(titularName));
-    }
-
-    // Reconciliação por CPF — chave forte. Se o CPF do RG/CNH bate com o CPF
-    // (mesmo mascarado) extraído da fatura, considera match mesmo quando o
-    // nome do titular veio corrompido pelo OCR ("BC ICMS" etc.). Cobre o
-    // caso em que a IA travou em holder_mismatch falso e nunca destrava.
-    let matchedByCpf = false;
-    if (isIdDoc && !match && docCpf && invoiceCpfMask) {
-      matchedByCpf = cpfMatchesMask(docCpf, invoiceCpfMask);
-      if (matchedByCpf) match = true;
-    }
+    // Regra simplificada (jun/2026): a IA NÃO compara mais o nome do RG/CNH
+    // com o nome do titular da fatura. Quem garante isso é o próprio cliente,
+    // que recebeu instrução explícita de mandar o documento do titular.
+    // Aprovamos sempre que for um documento de identidade legível.
+    const match = isIdDoc;
+    const matchedByCpf = false;
 
     const events: ToolResult["events"] = [{
       type: "identity_validated", priority: "high", source: "tool",
@@ -240,16 +229,10 @@ export const validateGreenIdentityTool: ToolDefinition<Args> = {
         type: "handoff_requested", priority: "critical", source: "tool",
         payload: { reason: "identity_validated_start_registration" },
       });
-    } else if (isIdDoc) {
-      patch.etapa_funil = "documento_enviado";
-      events.push({
-        type: "identity_rejected", priority: "high", source: "tool",
-        payload: { reason: "holder_mismatch", doc_name: docName, expected_name: titularName },
-      });
     } else {
       events.push({
         type: "identity_rejected", priority: "high", source: "tool",
-        payload: { reason: "not_identity_document", classification },
+        payload: { reason: "not_identity_document_or_unreadable", classification },
       });
     }
     patch.extras = newExtras;
