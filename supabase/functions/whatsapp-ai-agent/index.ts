@@ -393,7 +393,48 @@ async function callLLMWithToolsFallback(
   payload: any,
   ctx: { phone?: string; account_id?: string },
 ): Promise<{ data: any; provider: "gemini" | "openai"; model?: string }> {
-  // Se Gemini está em breaker (sem créditos), pula direto para OpenAI.
+  const primary = await getPrimaryProvider();
+  const sys = payload?.systemInstruction?.parts?.[0]?.text ?? "";
+  const tools = Array.isArray(payload?.tools) ? payload.tools[0] : payload?.tools;
+
+  const tryOpenAI = async (reason: string) => {
+    const fb = await openAIGeminiShapeFallback({
+      systemPrompt: sys,
+      contents: payload?.contents ?? [],
+      tools,
+      model: "gpt-4o-mini",
+      maxTokens: 2000,
+      temperature: 0.6,
+      ctx: { reason, ...ctx },
+    });
+    if (fb) return { data: fb, provider: "openai" as const, model: fb._fallback_model };
+    return null;
+  };
+
+  const tryGemini = async () => {
+    if (!apiKey) return null;
+    if (isProviderOutOfCredits("gemini")) return null;
+    try {
+      const res = await fetchGeminiWithRetry(apiKey, payload);
+      const data = await res.json();
+      return { data, provider: "gemini" as const, model: "gemini-2.5-flash" };
+    } catch (e) {
+      const msg = (e as Error).message || "";
+      console.warn(`[whatsapp-ai-agent] Gemini falhou (${msg})`);
+      return null;
+    }
+  };
+
+  // Admin escolheu OpenAI como padrão → tenta OpenAI primeiro; cai pra Gemini.
+  if (primary === "openai") {
+    const r1 = await tryOpenAI("admin_pref_openai_primary");
+    if (r1) return r1;
+    const r2 = await tryGemini();
+    if (r2) return r2;
+    throw new Error("All AI providers unavailable");
+  }
+
+  // Padrão (Gemini primeiro).
   if (apiKey && !isProviderOutOfCredits("gemini")) {
     try {
       const res = await fetchGeminiWithRetry(apiKey, payload);
@@ -402,32 +443,14 @@ async function callLLMWithToolsFallback(
     } catch (e) {
       const msg = (e as Error).message || "";
       console.warn(`[whatsapp-ai-agent] Gemini falhou (${msg}); tentando OpenAI...`);
-      const sys = payload?.systemInstruction?.parts?.[0]?.text ?? "";
-      const fb = await openAIGeminiShapeFallback({
-        systemPrompt: sys,
-        contents: payload?.contents ?? [],
-        tools: Array.isArray(payload?.tools) ? payload.tools[0] : payload?.tools,
-        model: "gpt-4o-mini",
-        maxTokens: 2000,
-        temperature: 0.6,
-        ctx: { reason: msg.includes("credits") ? "gemini_credits_exhausted" : "gemini_error", ...ctx },
-      });
-      if (fb) return { data: fb, provider: "openai", model: fb._fallback_model };
+      const r = await tryOpenAI(msg.includes("credits") ? "gemini_credits_exhausted" : "gemini_error");
+      if (r) return r;
       throw e;
     }
   }
   // Sem Gemini disponível → vai direto pra OpenAI
-  const sys = payload?.systemInstruction?.parts?.[0]?.text ?? "";
-  const fb = await openAIGeminiShapeFallback({
-    systemPrompt: sys,
-    contents: payload?.contents ?? [],
-    tools: Array.isArray(payload?.tools) ? payload.tools[0] : payload?.tools,
-    model: "gpt-4o-mini",
-    maxTokens: 2000,
-    temperature: 0.6,
-    ctx: { reason: apiKey ? "gemini_circuit_open_credits" : "gemini_no_api_key", ...ctx },
-  });
-  if (fb) return { data: fb, provider: "openai", model: fb._fallback_model };
+  const r = await tryOpenAI(apiKey ? "gemini_circuit_open_credits" : "gemini_no_api_key");
+  if (r) return r;
   throw new Error("All AI providers unavailable");
 }
 
