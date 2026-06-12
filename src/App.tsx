@@ -65,6 +65,7 @@ const AdminHelpCenter = lazy(() => import("./pages/admin/AdminHelpCenter"));
 const AdminTasks = lazy(() => import("./pages/admin/AdminTasks"));
 const AdminPlans = lazy(() => import("./pages/admin/AdminPlans"));
 const AdminAICosts = lazy(() => import("./pages/admin/AdminAICosts"));
+const AdminAIProvider = lazy(() => import("./pages/admin/AdminAIProvider"));
 const AdminSimulateSupport = lazy(() => import("./pages/admin/AdminSimulateSupport"));
 const AdminFlows = lazy(() => import("./pages/admin/AdminFlows"));
 const AdminFlowEditor = lazy(() => import("./pages/admin/AdminFlowEditor"));
