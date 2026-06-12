@@ -671,7 +671,10 @@ Quer que eu já comece seu cadastro agora? 😉`;
   // re-decidimos o stage para evitar repetir a pergunta no próximo turno.
   // Não aplicamos para stages que disparam tool_calls (send_video/validate_invoice/request_invoice)
   // — esses precisam manter o stage original.
-  const STAGES_REDECIDABLE = new Set(["ask_consumo", "ask_estado", "ask_distribuidora", "ask_valor_fatura"]);
+  const STAGES_REDECIDABLE = new Set([
+    "ask_consumo", "ask_estado", "ask_distribuidora", "ask_valor_fatura",
+    "confirm_signup",
+  ]);
   if (STAGES_REDECIDABLE.has(stage)) {
     const mergedExtras = (patch.extras as Record<string, unknown>) ?? currentExtras;
     const mergedState = { ...ctx.state, extras: mergedExtras, etapa_funil: patch.etapa_funil ?? ctx.state.etapa_funil };
@@ -724,15 +727,16 @@ Quer que eu já comece seu cadastro agora? 😉`;
 
 E não é só isso: depois do seu cadastro, você ainda pode chegar a zerar sua conta de luz indicando novos assinantes pelo nosso programa de cashback.
 
-Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só preciso de uma foto ou PDF da sua última fatura. 😉`;
+Quer que eu já comece seu cadastro agora? 😉`;
             } else {
-              deterministicText = `${nome2 ? nome2 + ", " : ""}com a ${chosen} a iGreen tem uma faixa oficial de economia. Me envia uma foto ou PDF da sua última fatura pra eu iniciar a verificação do seu cadastro. 😊`;
+              deterministicText = `${nome2 ? nome2 + ", " : ""}com a ${chosen} a iGreen tem uma faixa oficial de economia. Quer que eu já comece seu cadastro agora? 😊`;
             }
             patch.extras = {
               ...(patch.extras as object),
               discount_lookup_done: true,
               discount_min_percent: min || null,
               discount_max_percent: max || null,
+              signup_pitch_sent: true,
             };
             tool_calls.push({
               name: "get_distributor_discount",
@@ -764,15 +768,16 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
 
 E não é só isso: depois do seu cadastro, você ainda pode chegar a zerar sua conta de luz indicando novos assinantes pelo nosso programa de cashback.
 
-Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só preciso de uma foto ou PDF da sua última fatura. 😉`;
+Quer que eu já comece seu cadastro agora? 😉`;
         } else {
-          deterministicText = `${nome ? nome + ", " : ""}com a ${distribuidora || "sua distribuidora"} a iGreen tem uma faixa oficial de economia. Me envia uma foto ou PDF da sua última fatura pra eu iniciar a verificação do seu cadastro. 😊`;
+          deterministicText = `${nome ? nome + ", " : ""}com a ${distribuidora || "sua distribuidora"} a iGreen tem uma faixa oficial de economia. Quer que eu já comece seu cadastro agora? 😊`;
         }
         patch.extras = {
           ...(patch.extras as object ?? mergedExtras),
           discount_lookup_done: true,
           discount_min_percent: min || null,
           discount_max_percent: max || null,
+          signup_pitch_sent: true,
         };
         if (estado && distribuidora) {
           tool_calls.push({
