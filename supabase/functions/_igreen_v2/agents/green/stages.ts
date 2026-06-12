@@ -121,6 +121,7 @@ const DATA_COLLECTING_STAGES = new Set<GreenStage>([
   "ask_estado",
   "ask_distribuidora",
   "request_invoice",
+  "confirm_signup",
 ]);
 
 // FAQ rápida — dúvidas comuns que NÃO devem disparar repetição de pedido de fatura.
