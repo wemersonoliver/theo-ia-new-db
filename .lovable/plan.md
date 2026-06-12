@@ -1,74 +1,62 @@
+## Objetivo
+Criar um botão no painel admin que define qual IA é usada por padrão em todo o sistema (Gemini ou OpenAI). A outra provedora vira fallback automático em caso de falha.
 
-## Novo comportamento da IA Green
+## 1. Banco de dados (nova migration)
+Criar tabela única `system_ai_provider` com:
+- `primary_provider` (texto: `gemini` ou `openai`) — default `gemini`
+- `updated_at`, `updated_by`
 
-Duas mudanças combinadas: (1) **validação de documentos vira só checagem de tipo** e (2) **a IA segue o fluxo de forma inteligente**, sabendo aliviar tensão quando o cliente já chega perguntando desconto.
+RLS:
+- Leitura: qualquer usuário autenticado (necessário para edge functions e UI admin).
+- Escrita: somente `super_admin` (via `has_role`).
+- `service_role`: acesso total.
 
----
+Inserir 1 linha inicial com `primary_provider = 'gemini'`.
 
-### 1. Documentos — só checagem de tipo
+## 2. Helper compartilhado nas Edge Functions
+Novo arquivo `supabase/functions/_shared/ai-provider/primary.ts` com:
+- `getPrimaryProvider()` — lê a linha de `system_ai_provider` usando service role, com cache em memória (TTL 30s) para evitar query por mensagem.
+- Retorna `'gemini' | 'openai'`.
 
-**Fatura:** a IA só precisa confirmar que é uma fatura de energia. Sem comparar nome do cliente vs. nome da fatura, sem "soft_confirm de titular", sem "autorização familiar".
-- Aprovada → segue. Rejeitada → só se não for fatura ou estiver ilegível.
+## 3. Inversão de fallback nas chamadas existentes
+Hoje todas as edge functions chamam Gemini direto e usam `_shared/ai-fallback/*` (OpenAI) quando Gemini falha.
 
-**RG/CNH:** só precisa confirmar que é um documento de identidade.
-- Ao pedir, a IA fala: *"Agora me envia uma foto do RG ou CNH **do titular da fatura**."* — a responsabilidade fica com o cliente.
-- Aprovado se for RG/CNH legível. Rejeitado só se não for documento.
+Alteração mínima nos 8 callers já mapeados:
+- `whatsapp-ai-agent`
+- `interview-ai-agent`
+- `process-image-ocr`
+- `support-ai-agent`
+- `igreen-document-validator`
+- `system-followup-ai`
+- `followup-ai`
+- `_igreen_v2/supervisor/decide.ts`, `_igreen_v2/memory/summarizer.ts`, `_igreen_v2/agents/green/run.ts`
 
-**Documentos só são pedidos depois que o cliente confirma que quer fazer o cadastro.** Se ele mandar fatura espontaneamente antes, a IA aceita e segue normalmente (não rejeita por timing).
+Padrão aplicado em cada um:
+1. No início da função, ler `provider = await getPrimaryProvider()`.
+2. Se `provider === 'gemini'`: fluxo atual (Gemini → fallback OpenAI). Sem mudança de comportamento.
+3. Se `provider === 'openai'`: chamar OpenAI primeiro (via os helpers já existentes em `_shared/ai-fallback`); se OpenAI falhar/sem créditos/timeout, executar o caminho atual do Gemini como fallback.
 
----
+Para isso, encapsular a chamada do Gemini de cada função em uma pequena função local `callGemini()` e a do OpenAI em `callOpenAI()`, e usar:
+```ts
+const order = provider === 'openai' ? [callOpenAI, callGemini] : [callGemini, callOpenAI];
+```
 
-### 2. Fluxo consultivo inteligente
+Nenhum prompt, schema ou modelo é alterado — apenas a ordem de tentativa.
 
-A IA tem um **roteiro padrão** que tenta seguir, mas com inteligência para responder objeções e perguntas diretas sem travar:
+## 4. UI Admin (frontend)
+Novo card "Provedor de IA padrão" em `src/pages/admin/AdminAIConfig.tsx` (ou um arquivo novo `AdminAIProvider.tsx` linkado no `AdminSidebar`):
+- Switch / par de botões grandes: **Gemini (Google)** | **OpenAI (GPT)**.
+- Indicador do atual ativo + texto "O outro será usado como fallback automático em caso de falha".
+- Botão **Salvar** (otimista, com toast).
+- Hook novo `useSystemAIProvider` (TanStack Query) com `get` + `mutate`.
+- Restrito ao role `super_admin` (padrão admin já em vigor nas demais páginas).
 
-**Roteiro padrão (happy path):**
-1. Saudação + nome
-2. Explicar o produto em 1-2 frases
-3. Mandar o vídeo curto
-4. Check de engajamento ("fez sentido?")
-5. Perguntar **estado** (UF)
-6. Perguntar **valor médio da fatura**
-7. Consultar tabela oficial (`get_distributor_discount`) e apresentar simulação concreta
-8. Perguntar: *"Quer que eu já comece seu cadastro?"*
-9. Só com "sim" → pedir fatura → pedir RG/CNH → nome completo + CPF → handoff
+## 5. Validação
+- Após salvar, próximas mensagens recebidas devem usar o novo provedor primeiro (cache 30s).
+- Testar que ao forçar erro em uma das pontas (ex.: chave inválida), o fallback assume corretamente.
 
-**Atalhos inteligentes (quando o cliente força o ritmo):**
-
-- **Cliente já chega perguntando desconto** ("quanto é o desconto?", "qual a economia?"):
-  IA responde algo como: *"A média costuma ficar entre 10% e 20%, depende do seu estado e da distribuidora. Em qual estado você está?"* — e em seguida pergunta o valor médio da fatura para fazer a simulação real.
-
-- **Cliente manda fatura antes da hora:** aceita, valida o tipo, e pula direto para "quer começar o cadastro?".
-
-- **Cliente faz pergunta no meio do fluxo** (cashback, prazo, segurança, "como funciona"): IA responde a pergunta primeiro, depois retoma o passo onde estava.
-
-- **Cliente traz objeção** (caro, aluguel, conta baixa): trata a objeção antes de avançar (já existe, mantém).
-
-- **Antes de simular**, IA **sempre confirma estado + valor médio**. Se faltar qualquer um, pergunta antes de simular. Nunca inventa percentual fora da faixa 10–20% padrão se a tabela oficial não tiver retorno.
-
----
-
-### Arquivos que vou alterar
-
-| Arquivo | Mudança |
-|---|---|
-| `supabase/functions/_igreen_v2/document-rules-engine/invoice-rules.ts` | Remover `reject_holder_mismatch` e a dimensão `holder_match` da decisão. |
-| `supabase/functions/_igreen_v2/tools/validate-green-invoice.ts` | Remover holder-match, soft_confirm de titular e flags `invoice_match_third_party`/`invoice_holder_*`. Aprovado → `fatura_validada`; rejeitado → `fatura_rejeitada` (`not_invoice`/`unreadable`/`low_confidence`). |
-| `supabase/functions/_igreen_v2/tools/validate-green-identity.ts` | Remover comparação nome titular×documento. Aprovar se classification = RG/CNH legível. |
-| `supabase/functions/_igreen_v2/agents/green/stages.ts` | • Remover `family_authorization_check`, `soft_confirm_ask`, `holderMismatchPending`. • Adicionar stage `early_discount_tease` quando o cliente perguntar desconto antes de ter estado/valor. • Adicionar stage `confirm_signup` (após `simulate_discount_concreto`). • Só sair de `confirm_signup` → `request_invoice` com afirmação explícita. • Garantir que `simulate_discount_concreto` só roda com `extras.estado` **e** `extras.valor_fatura` preenchidos. |
-| `supabase/functions/_igreen_v2/agents/green/prompt.ts` | • Atualizar `request_identity` para "RG ou CNH do titular da fatura". • Remover `HOLDER_GUARD`. • Adicionar molde `early_discount_tease` (frase pronta: "média entre 10% e 20%, depende do estado/distribuidora — em qual estado você está?"). • Adicionar molde `confirm_signup` ("quer que eu já comece seu cadastro?"). |
-| `supabase/functions/_igreen_v2/agents/green/run.ts` | • Detectar pergunta direta de desconto → `early_discount_tease`. • Resposta afirmativa em `confirm_signup` → `request_invoice`. • Remover ramos de family/holder. |
-| `supabase/functions/_igreen_v2/state-engine/transitions.ts` | Simplificar transições: remover ramos derivados de mismatch de titular. Manter `fatura_validada → documento_enviado → documento_validado → handoff`. |
-
-### O que **não** muda
-
-Detecção de handoff humano, soft decline, objeção de segurança, FAQ, fora de escopo, outros specialists (telecom/expansão/qualifier), cenários de follow-up, UI, RLS, webhooks.
-
-### Como vou validar
-
-1. Reler `decideGreenStage` simulando: "qual o desconto?" como primeira mensagem → deve cair em `early_discount_tease`, não em pedido de fatura.
-2. Simular fatura recebida sem `nome_cliente` no lead → deve aprovar.
-3. Simular RG recebido com nome diferente do da fatura → deve aprovar.
-4. Conferir que documentos só são solicitados após `confirm_signup = sim`.
-
-Posso seguir com essa implementação?
+## Resumo do que muda
+- 1 migration nova
+- 1 helper compartilhado nas edge functions
+- 8–10 edge functions ajustadas para respeitar a ordem
+- 1 tela/card admin + 1 hook
