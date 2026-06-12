@@ -4,6 +4,7 @@
 
 import type { AgentContext, AgentResult } from "../_types.ts";
 import { decideGreenStage, isAffirmation, detectFaqTopic, detectOutOfScope, isGenericObjection } from "./stages.ts";
+import { isDiscountQuestion as isDiscountQuestionStage } from "./stages.ts";
 import { GREEN_SYSTEM, HOLDER_GUARD, buildGreenUserPrompt } from "./prompt.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { openAITextFallback, isProviderOutOfCredits, markProviderOutOfCredits } from "../../../_shared/ai-fallback/index.ts";
@@ -316,15 +317,16 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
 
 E não é só isso: depois do seu cadastro, você ainda pode chegar a zerar sua conta de luz indicando novos assinantes pelo nosso programa de cashback.
 
-Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só preciso de uma foto ou PDF da sua última fatura. 😉`;
+Quer que eu já comece seu cadastro agora? 😉`;
     } else {
-      deterministicText = `${nome ? nome + ", " : ""}com a ${distribuidora || "sua distribuidora"} a iGreen tem uma faixa oficial de economia. Me envia uma foto ou PDF da sua última fatura pra eu iniciar a verificação do seu cadastro. 😊`;
+      deterministicText = `${nome ? nome + ", " : ""}com a ${distribuidora || "sua distribuidora"} a iGreen tem uma faixa oficial de economia. Quer que eu já comece seu cadastro agora? 😊`;
     }
     patch.extras = {
       ...(patch.extras as object ?? currentExtras),
       discount_lookup_done: true,
       discount_min_percent: min || null,
       discount_max_percent: max || null,
+      signup_pitch_sent: true,
     };
     // Log oficial via tool (mantém compat)
     if (estado && distribuidora) {
@@ -332,6 +334,37 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
         name: "get_distributor_discount",
         args: { state: estado, distributor: distribuidora },
       });
+    }
+  }
+
+  if (stage === "early_discount_tease") {
+    const nome = (currentExtras.client_name as string | undefined) ?? "";
+    const estado = (currentExtras.estado as string | undefined) ?? "";
+    const valor = Number(currentExtras.valor_fatura ?? 0);
+    let ask = "Em qual estado você está?";
+    if (estado && !valor) ask = `Qual o valor médio da sua conta de luz em ${estado}? Assim te passo o número exato.`;
+    if (!estado && valor) ask = "Em qual estado você está? Assim te passo o número exato.";
+    deterministicText = `${nome ? nome + ", " : ""}a média de desconto da iGreen costuma ficar entre 10% e 20% na sua fatura todo mês — varia conforme o estado e a distribuidora. ${ask}`;
+    patch.extras = {
+      ...(patch.extras as object ?? currentExtras),
+      early_discount_tease_sent: true,
+      // Marca engaged para não disparar engage_check no próximo turno após
+      // o cliente responder o estado/valor.
+      engaged: true,
+    };
+  }
+
+  if (stage === "confirm_signup") {
+    const nome = (currentExtras.client_name as string | undefined) ?? "";
+    // Resposta afirmativa → confirma e o redecide abaixo joga em request_invoice.
+    if (burstLines.some((l) => isAffirmation(l))) {
+      patch.extras = {
+        ...(patch.extras as object ?? currentExtras),
+        signup_confirmed: true,
+        signup_confirmed_at: new Date().toISOString(),
+      };
+    } else {
+      deterministicText = `${nome ? nome + ", " : ""}quer que eu já comece seu cadastro agora? É rapidinho — só preciso de uma foto da sua última fatura pra começar.`;
     }
   }
 
@@ -361,43 +394,9 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
     patch.extras = { ...(patch.extras as object ?? currentExtras), identity_requested: true };
   }
 
-  if (stage === "family_authorization_check") {
-    // Detecta confirmação de autorização do titular (família).
-    const FAMILY_AUTH_RX = /\b(sim|tenho|posso|claro|pode|com certeza|positivo|isso|autoriz(o|ada|ado|açao|ação)|meu marido|minha esposa|meu pai|minha m[aã]e|meu filho|minha filha|meu irm[aã]o|minha irm[aã]|meu(s)? sogro|minha sogra|fam[ií]lia)\b/i;
-    if (FAMILY_AUTH_RX.test(cleanedMsg ?? "")) {
-      patch.extras = {
-        ...(patch.extras as object ?? currentExtras),
-        family_authorized: true,
-        family_authorized_at: new Date().toISOString(),
-        invoice_match_third_party: true,
-      };
-      // Garante que estamos em fatura_validada para o fluxo de identidade seguir.
-      patch.etapa_funil = "fatura_validada";
-      (patch as any).document_status = "validated";
-      const mergedExtras = patch.extras as Record<string, unknown>;
-      const mergedState = { ...ctx.state, extras: mergedExtras, etapa_funil: "fatura_validada" };
-      const nextStage = decideGreenStage(mergedState, cleanedMsg, !!ctx.media, null);
-      // Dispara automação de tagging "enviou fatura" → move card no CRM
-      // (caso de fatura de terceiro autorizado pela família).
-      events.push({ type: "invoice_approved", priority: "high", source: "specialist",
-        payload: { third_party_authorized: true } });
-      events.push({ type: "green_stage_advanced", priority: "low", source: "specialist",
-        payload: { from: stage, to: nextStage } });
-      stage = nextStage;
-      if (stage === "request_identity") {
-        patch.extras = { ...(patch.extras as object), identity_requested: true };
-        const nome = (currentExtras.client_name as string | undefined) ?? "";
-        const titular = (currentExtras.invoice_holder_name as string | undefined) ?? "";
-        const holderConf = (currentExtras.invoice_holder_confidence as string | undefined) ?? null;
-        // Só cita o nome do titular se a confiança for boa — evita pedir
-        // "RG ou CNH de BC ICMS" quando o OCR pegou lixo.
-        const titularNome = (titular && holderConf !== "low")
-          ? titular.split(/\s+/).slice(0, 2).join(" ")
-          : "";
-        deterministicText = `${nome ? nome + ", " : ""}combinado! Pra prosseguir com o cadastro${titularNome ? ` em nome de ${titularNome}` : " do titular"}, me envia agora uma foto do RG ou CNH do titular da conta, por favor.`;
-      }
-    }
-  }
+  // family_authorization_check — DEPRECADO (jun/2026). Não validamos mais
+  // titularidade da fatura; o cliente é responsável por mandar o RG/CNH
+  // do titular quando a IA pedir.
 
   if (stage === "send_autocadastro_link") {
     patch.extras = { ...(patch.extras as object ?? currentExtras), autocadastro_sent: true };
@@ -524,10 +523,9 @@ Bora fazer seu cadastro agora? Pra iniciar a verificação do seu cadastro, só 
         media_url: ctx.media.url,
         mime_type: ctx.media.mime_type,
         byte_size: ctx.media.byte_size,
-        expected_name:
-          (currentExtras.invoice_holder_name as string | undefined)
-          ?? (currentExtras.invoice_match_third_party ? null : (currentExtras.client_name as string | undefined))
-          ?? null,
+        // Não passamos mais expected_name — a validação agora só checa que é
+        // RG/CNH legível; o cliente garante que é do titular.
+        expected_name: null,
       },
     });
     // Texto final é gerado pelo orquestrador APÓS o resultado da tool
