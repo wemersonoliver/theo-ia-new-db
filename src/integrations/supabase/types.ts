@@ -2049,6 +2049,7 @@ export type Database = {
           key: string
           name: string
           position: number
+          signup_url: string | null
           updated_at: string
           video_url: string | null
         }
@@ -2063,6 +2064,7 @@ export type Database = {
           key: string
           name: string
           position?: number
+          signup_url?: string | null
           updated_at?: string
           video_url?: string | null
         }
@@ -2077,6 +2079,7 @@ export type Database = {
           key?: string
           name?: string
           position?: number
+          signup_url?: string | null
           updated_at?: string
           video_url?: string | null
         }
@@ -2877,6 +2880,7 @@ export type Database = {
           key: string
           name: string
           position: number
+          signup_url: string | null
           updated_at: string
           video_url: string | null
         }
@@ -2889,6 +2893,7 @@ export type Database = {
           key: string
           name: string
           position?: number
+          signup_url?: string | null
           updated_at?: string
           video_url?: string | null
         }
@@ -2901,6 +2906,7 @@ export type Database = {
           key?: string
           name?: string
           position?: number
+          signup_url?: string | null
           updated_at?: string
           video_url?: string | null
         }

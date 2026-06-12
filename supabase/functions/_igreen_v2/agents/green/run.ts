@@ -407,6 +407,41 @@ Quer que eu já comece seu cadastro agora? 😉`;
       name: "save_green_lead_field",
       args: { field: "auto_cadastro_enviado", value: "true" },
     });
+    // Busca o link de auto-cadastro configurado pelo usuário (por conta),
+    // com fallback para o produto global "green".
+    let signupUrl: string | null = null;
+    try {
+      const { data: acctRow } = await svc()
+        .from("igreen_account_products")
+        .select("signup_url, enabled")
+        .eq("account_id", (ctx as any).account_id)
+        .eq("key", "green")
+        .maybeSingle();
+      if (acctRow && (acctRow as any).enabled !== false) {
+        const u = (acctRow as any).signup_url;
+        if (typeof u === "string" && u.trim()) signupUrl = u.trim();
+      }
+      if (!signupUrl) {
+        const { data: globalRow } = await svc()
+          .from("igreen_products")
+          .select("signup_url, enabled")
+          .eq("key", "green")
+          .maybeSingle();
+        if (globalRow && (globalRow as any).enabled !== false) {
+          const u = (globalRow as any).signup_url;
+          if (typeof u === "string" && u.trim()) signupUrl = u.trim();
+        }
+      }
+    } catch (e) {
+      console.error("[green] lookup signup_url failed", e);
+    }
+    const nome = (currentExtras.client_name as string | undefined) ?? "";
+    if (signupUrl) {
+      deterministicText = `${nome ? nome + ", " : ""}aqui está o link oficial de auto-cadastro: ${signupUrl}\n\nQualquer dúvida no preenchimento, é só me chamar que eu te ajudo. 😉`;
+    } else {
+      deterministicText = `${nome ? nome + ", " : ""}deixa eu te chamar um especialista pra te enviar o link oficial de auto-cadastro com segurança. Já estou transferindo, ok?`;
+      tool_calls.push({ name: "handoff_to_human", args: { reason: "signup_url_not_configured" } });
+    }
   }
 
   if (stage === "soft_close") {

@@ -32,7 +32,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Plus, Package, Save, Trash2, BookOpen, Video, Upload, X } from "lucide-react";
+import { Loader2, Plus, Package, Save, Trash2, BookOpen, Video, Upload, X, Link as LinkIcon } from "lucide-react";
 import { useIgreenAccountProducts, type IgreenAccountProduct } from "@/hooks/useIgreenAccountProducts";
 import { KnowledgeBaseTab } from "./KnowledgeBaseTab";
 import { supabase } from "@/integrations/supabase/client";
@@ -170,13 +170,15 @@ function ProductRow({
 }) {
   const [name, setName] = useState(product.name);
   const [description, setDescription] = useState(product.description ?? "");
+  const [signupUrl, setSignupUrl] = useState((product as any).signup_url ?? "");
   const [uploading, setUploading] = useState(false);
   const videoUrl = (product as any).video_url as string | null | undefined;
 
   useEffect(() => {
     setName(product.name);
     setDescription(product.description ?? "");
-  }, [product.name, product.description]);
+    setSignupUrl((product as any).signup_url ?? "");
+  }, [product.name, product.description, (product as any).signup_url]);
 
   const handleUpload = async (file: File) => {
     if (!file) return;
@@ -256,6 +258,20 @@ function ProductRow({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="min-h-[80px]"
+              />
+            </div>
+            <div className="space-y-1 pt-2 border-t">
+              <Label className="text-xs flex items-center gap-2">
+                <LinkIcon className="h-3.5 w-3.5" /> Link de auto-cadastro
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                URL oficial do auto-cadastro deste produto. A IA enviará este link ao cliente quando ele preferir se cadastrar sozinho (ex.: após objeção de segurança ao envio de documentos).
+              </p>
+              <Input
+                value={signupUrl}
+                onChange={(e) => setSignupUrl(e.target.value)}
+                placeholder="https://..."
+                type="url"
               />
             </div>
             <div className="space-y-2 pt-2 border-t">
@@ -343,7 +359,8 @@ function ProductRow({
                   onSave({
                     name: name.trim() || product.name,
                     description: description.trim() ? description.trim() : null,
-                  })
+                    signup_url: signupUrl.trim() ? signupUrl.trim() : null,
+                  } as Partial<IgreenAccountProduct>)
                 }
               >
                 <Save className="h-4 w-4" /> Salvar
