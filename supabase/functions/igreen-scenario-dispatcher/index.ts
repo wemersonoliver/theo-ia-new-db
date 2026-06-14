@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import { extractPersonName, cleanRenderedTemplate } from "../_person-name.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,6 +11,31 @@ const corsHeaders = {
 const MAX_ENROLLMENTS = 25;
 
 function isoNow() { return new Date().toISOString(); }
+
+/**
+ * Renders template variables in a scenario item text.
+ * Supported tokens: {{primeiro_nome}}, {{nome}}.
+ * If no valid human name is available, tokens are replaced with empty
+ * and orphan punctuation is cleaned (e.g. "Oi {{primeiro_nome}}, tudo bem?" → "Oi, tudo bem?" → "Oi tudo bem?").
+ * Returns the original text untouched when there are no tokens.
+ */
+function renderItemText(text: string | null | undefined, contact: { name?: string | null; person_name?: string | null } | null): string {
+  const raw = text ?? "";
+  if (!raw) return "";
+  if (!/\{\{\s*(primeiro_nome|nome)\s*\}\}/i.test(raw)) return raw;
+
+  const candidate = (contact?.person_name || contact?.name || "").trim();
+  const parsed = extractPersonName(candidate);
+  const firstName = parsed?.firstName ?? "";
+  const fullName = parsed?.fullName ?? "";
+
+  let out = raw.replace(/\{\{\s*primeiro_nome\s*\}\}/gi, firstName);
+  out = out.replace(/\{\{\s*nome\s*\}\}/gi, fullName || firstName);
+
+  // If we substituted with empty, clean orphan punctuation/spaces.
+  if (!firstName) out = cleanRenderedTemplate(out);
+  return out;
+}
 
 function addDelay(from: Date, value: number, unit: string): Date {
   const ms =
