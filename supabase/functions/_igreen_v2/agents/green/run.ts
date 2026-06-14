@@ -818,6 +818,24 @@ Quer que eu já comece seu cadastro agora? 😉`;
         const distribuidora = (mergedExtras.distribuidora as string | undefined) ?? "";
         const valor = Number(mergedExtras.valor_fatura ?? 0);
         const nome = (mergedExtras.client_name as string | undefined) ?? "";
+        // Guard: distribuidora precisa estar entre as oficiais do estado.
+        const optsCheck2 = (mergedExtras.distributors_options as string[] | undefined) ?? [];
+        if (distribuidora && optsCheck2.length > 0) {
+          const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+          const valid = optsCheck2.some((o) => norm(o) === norm(distribuidora) || norm(o).includes(norm(distribuidora)) || norm(distribuidora).includes(norm(o)));
+          if (!valid) {
+            patch.extras = { ...(patch.extras as object ?? mergedExtras), distribuidora: null };
+            const optsList = optsCheck2.map((d, i) => `${i + 1} - ${d}`).join("\n");
+            deterministicText = `${nome ? nome + ", " : ""}só pra confirmar qual é a sua distribuidora no seu estado:\n\n${optsList}\n\nQual dessas é a sua?`;
+            stage = "ask_distribuidora";
+            return {
+              messages: [deterministicText],
+              events,
+              tool_calls,
+              suggested_state_patch: patch,
+            };
+          }
+        }
         let min = 0, max = 0;
         if (estado && distribuidora) {
           const list = await listDistributors(estado);
