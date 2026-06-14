@@ -275,6 +275,16 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
       const d = firstHit(burstLines, extractDistribuidora);
       if (d && opts.length === 0) chosen = d;
     }
+    // Guard: nunca salvar a distribuidora se ela bater com o estado já
+    // informado (cliente está respondendo "Bahia" enquanto a IA já está
+    // perguntando outra coisa, por exemplo).
+    if (chosen) {
+      const estadoSalvo = (currentExtras.estado as string | undefined) ?? "";
+      const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      if (extractEstado(chosen) || (estadoSalvo && norm(chosen) === norm(estadoSalvo))) {
+        chosen = null;
+      }
+    }
     if (chosen) {
       patch.extras = { ...(patch.extras as object ?? currentExtras), distribuidora: chosen };
       tool_calls.push({
