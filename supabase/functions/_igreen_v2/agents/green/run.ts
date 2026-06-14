@@ -393,8 +393,25 @@ Quer que eu já comece seu cadastro agora? 😉`;
         signup_confirmed: true,
         signup_confirmed_at: new Date().toISOString(),
       };
-    } else {
+    } else if (!currentExtras.signup_pitch_sent) {
+      // Primeira vez: pede confirmação.
       deterministicText = `${nome ? nome + ", " : ""}quer que eu já comece seu cadastro agora? É rapidinho — só preciso de uma foto da sua última fatura pra começar.`;
+      patch.extras = {
+        ...(patch.extras as object ?? currentExtras),
+        signup_pitch_sent: true,
+      };
+    } else {
+      // Pitch já enviado e cliente não confirmou (negou, mudou de assunto, etc.).
+      // NÃO repete o pedido — encerra com leveza e marca o lead como frio.
+      patch.extras = {
+        ...(patch.extras as object ?? currentExtras),
+        signup_declined_at: new Date().toISOString(),
+        soft_closed: true,
+        soft_closed_at: new Date().toISOString(),
+      };
+      tool_calls.push({ name: "add_contact_tag", args: { tag: "lead_frio" } });
+      deterministicText = `Tranquilo${nome ? `, ${nome}` : ""}! Fico à disposição quando quiser dar uma olhada. Qualquer dúvida é só me chamar por aqui. 😊`;
+      stage = "soft_close";
     }
   }
 
