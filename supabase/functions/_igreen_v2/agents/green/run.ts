@@ -307,7 +307,23 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
 
   if (stage === "simulate_discount_concreto") {
     const estado = (currentExtras.estado as string | undefined) ?? "";
-    const distribuidora = (currentExtras.distribuidora as string | undefined) ?? "";
+    let distribuidora = (currentExtras.distribuidora as string | undefined) ?? "";
+    // Guard: se a distribuidora salva não está na lista oficial de
+    // distributors_options do estado, é lixo (ex.: nome do estado entrou
+    // como distribuidora). Não simula com valor inválido — volta a perguntar.
+    const optsCheck = (currentExtras.distributors_options as string[] | undefined) ?? [];
+    if (distribuidora && optsCheck.length > 0) {
+      const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      const valid = optsCheck.some((o) => norm(o) === norm(distribuidora) || norm(o).includes(norm(distribuidora)) || norm(distribuidora).includes(norm(o)));
+      if (!valid) {
+        // Limpa o valor inválido para o próximo turno cair em ask_distribuidora.
+        patch.extras = { ...(patch.extras as object ?? currentExtras), distribuidora: null };
+        const nome = (currentExtras.client_name as string | undefined) ?? "";
+        const optsList = optsCheck.map((d, i) => `${i + 1} - ${d}`).join("\n");
+        deterministicText = `${nome ? nome + ", " : ""}só pra confirmar qual é a sua distribuidora no seu estado:\n\n${optsList}\n\nQual dessas é a sua?`;
+        return { tool_calls, events, patch, deterministic_text: deterministicText, ai_text: null, stage };
+      }
+    }
     const valor = Number(currentExtras.valor_fatura ?? 0);
     const nome = (currentExtras.client_name as string | undefined) ?? "";
     // Busca faixa oficial
