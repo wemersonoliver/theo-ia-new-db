@@ -196,8 +196,23 @@ serve(async (req) => {
       }
       const instanceName = inst.instance_name;
 
+      // Resolve contact name (used to render {{primeiro_nome}}/{{nome}})
+      const { data: contactRow } = await supabase
+        .from("contacts")
+        .select("name, person_name")
+        .eq("account_id", enrollment.account_id)
+        .eq("phone", enrollment.contact_phone)
+        .maybeSingle();
+
+      // Render template variables in text/caption with safe fallback (empty + cleanup)
+      const renderedItem = {
+        ...nextItem,
+        content: nextItem.type === "text" ? renderItemText(nextItem.content, contactRow) : nextItem.content,
+        caption: nextItem.caption ? renderItemText(nextItem.caption, contactRow) : nextItem.caption,
+      };
+
       // Send item
-      const sendRes = await sendItem(evolutionUrl, evolutionKey, instanceName, enrollment.contact_phone, nextItem);
+      const sendRes = await sendItem(evolutionUrl, evolutionKey, instanceName, enrollment.contact_phone, renderedItem);
 
       // Log event
       await supabase.from("igreen_scenario_events").insert({
@@ -229,7 +244,7 @@ serve(async (req) => {
             timestamp: isoNow(),
             from_me: true,
             type: nextItem.type,
-            content: nextItem.type === "text" ? (nextItem.content || "") : (nextItem.caption || ""),
+            content: renderedItem.type === "text" ? (renderedItem.content || "") : (renderedItem.caption || ""),
             media_url: nextItem.media_url || undefined,
             media_mime: nextItem.media_mime || undefined,
             sent_by: "igreen_scenario",
