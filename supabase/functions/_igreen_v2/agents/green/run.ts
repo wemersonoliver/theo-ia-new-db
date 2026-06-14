@@ -321,7 +321,12 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
         const nome = (currentExtras.client_name as string | undefined) ?? "";
         const optsList = optsCheck.map((d, i) => `${i + 1} - ${d}`).join("\n");
         deterministicText = `${nome ? nome + ", " : ""}só pra confirmar qual é a sua distribuidora no seu estado:\n\n${optsList}\n\nQual dessas é a sua?`;
-        return { tool_calls, events, patch, deterministic_text: deterministicText, ai_text: null, stage };
+        return {
+          messages: [deterministicText],
+          events,
+          tool_calls,
+          suggested_state_patch: patch,
+        };
       }
     }
     const valor = Number(currentExtras.valor_fatura ?? 0);
