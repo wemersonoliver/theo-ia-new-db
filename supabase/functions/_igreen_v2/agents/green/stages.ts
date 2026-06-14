@@ -77,9 +77,15 @@ export function isObjectionSecurity(msg: string): boolean {
 
 // Cliente declina educadamente / pede pra parar. NÃO é objeção a ser
 // rebatida — é hora de soltar o lead com gentileza.
-const SOFT_DECLINE_RX = /(n[aã]o quero(?:\s+(?:agora|por enquanto|mais|n[aã]o))?|por enquanto n[aã]o|agora n[aã]o|depois (?:eu )?(?:vejo|penso|falo|retorno)|fica pra depois|deixa pra (?:depois|l[aá])|vou pensar|s[oó] (?:queria|quero|tava querendo) saber|s[oó] tava (?:vendo|olhando|curioso)|era s[oó] (?:isso|pra saber)|t[aá] (?:bom|ok)(?:\s+assim)?(?:,?\s*obrigad[oa])?|pode deixar|obrigad[oa](?:[\s,.!]|$)|valeu(?:[\s,.!]|$)|n[aã]o tenho interesse|n[aã]o me interessa|deixa)/i;
+const SOFT_DECLINE_RX = /(n[aã]o quero(?:\s+(?:agora|por enquanto|mais|n[aã]o))?|por enquanto n[aã]o|agora n[aã]o|depois (?:eu )?(?:vejo|penso|falo|retorno)|fica pra depois|deixa pra (?:depois|l[aá])|deixa (?:quieto|assim|isso|pra l[aá])|vou pensar|s[oó] (?:queria|quero|tava querendo) saber|s[oó] tava (?:vendo|olhando|curioso)|era s[oó] (?:isso|pra saber)|t[aá] (?:bom|ok)(?:\s+assim)?(?:,?\s*obrigad[oa])?|pode deixar|obrigad[oa](?:[\s,.!]|$)|valeu(?:[\s,.!]|$)|n[aã]o tenho interesse|n[aã]o me interessa|n[aã]o precisa|deixa|esquece(?:\s+isso)?|chega|desisto|para de (?:insistir|mandar)|n[aã]o insista)/i;
+// Mensagem CURTA e isolada de recusa ("não", "nao", "n", "nope"). Não usamos
+// o SOFT_DECLINE_RX para isso porque "não" puro é ambíguo em texto longo.
+const SHORT_NO_RX = /^\s*(n[aã]o|n|nope|nada|jamais)[\s.!?]*$/i;
 export function isSoftDecline(msg: string): boolean {
-  return SOFT_DECLINE_RX.test(msg ?? "");
+  const raw = (msg ?? "").trim();
+  if (!raw) return false;
+  if (SHORT_NO_RX.test(raw)) return true;
+  return SOFT_DECLINE_RX.test(raw);
 }
 
 // Intenção fora do escopo da Igreen (assinatura de energia limpa com desconto).

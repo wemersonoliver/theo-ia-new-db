@@ -275,6 +275,16 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
       const d = firstHit(burstLines, extractDistribuidora);
       if (d && opts.length === 0) chosen = d;
     }
+    // Guard: nunca salvar a distribuidora se ela bater com o estado já
+    // informado (cliente está respondendo "Bahia" enquanto a IA já está
+    // perguntando outra coisa, por exemplo).
+    if (chosen) {
+      const estadoSalvo = (currentExtras.estado as string | undefined) ?? "";
+      const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      if (extractEstado(chosen) || (estadoSalvo && norm(chosen) === norm(estadoSalvo))) {
+        chosen = null;
+      }
+    }
     if (chosen) {
       patch.extras = { ...(patch.extras as object ?? currentExtras), distribuidora: chosen };
       tool_calls.push({
@@ -297,7 +307,28 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
 
   if (stage === "simulate_discount_concreto") {
     const estado = (currentExtras.estado as string | undefined) ?? "";
-    const distribuidora = (currentExtras.distribuidora as string | undefined) ?? "";
+    let distribuidora = (currentExtras.distribuidora as string | undefined) ?? "";
+    // Guard: se a distribuidora salva não está na lista oficial de
+    // distributors_options do estado, é lixo (ex.: nome do estado entrou
+    // como distribuidora). Não simula com valor inválido — volta a perguntar.
+    const optsCheck = (currentExtras.distributors_options as string[] | undefined) ?? [];
+    if (distribuidora && optsCheck.length > 0) {
+      const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      const valid = optsCheck.some((o) => norm(o) === norm(distribuidora) || norm(o).includes(norm(distribuidora)) || norm(distribuidora).includes(norm(o)));
+      if (!valid) {
+        // Limpa o valor inválido para o próximo turno cair em ask_distribuidora.
+        patch.extras = { ...(patch.extras as object ?? currentExtras), distribuidora: null };
+        const nome = (currentExtras.client_name as string | undefined) ?? "";
+        const optsList = optsCheck.map((d, i) => `${i + 1} - ${d}`).join("\n");
+        deterministicText = `${nome ? nome + ", " : ""}só pra confirmar qual é a sua distribuidora no seu estado:\n\n${optsList}\n\nQual dessas é a sua?`;
+        return {
+          messages: [deterministicText],
+          events,
+          tool_calls,
+          suggested_state_patch: patch,
+        };
+      }
+    }
     const valor = Number(currentExtras.valor_fatura ?? 0);
     const nome = (currentExtras.client_name as string | undefined) ?? "";
     // Busca faixa oficial
@@ -362,8 +393,25 @@ Quer que eu já comece seu cadastro agora? 😉`;
         signup_confirmed: true,
         signup_confirmed_at: new Date().toISOString(),
       };
-    } else {
+    } else if (!currentExtras.signup_pitch_sent) {
+      // Primeira vez: pede confirmação.
       deterministicText = `${nome ? nome + ", " : ""}quer que eu já comece seu cadastro agora? É rapidinho — só preciso de uma foto da sua última fatura pra começar.`;
+      patch.extras = {
+        ...(patch.extras as object ?? currentExtras),
+        signup_pitch_sent: true,
+      };
+    } else {
+      // Pitch já enviado e cliente não confirmou (negou, mudou de assunto, etc.).
+      // NÃO repete o pedido — encerra com leveza e marca o lead como frio.
+      patch.extras = {
+        ...(patch.extras as object ?? currentExtras),
+        signup_declined_at: new Date().toISOString(),
+        soft_closed: true,
+        soft_closed_at: new Date().toISOString(),
+      };
+      tool_calls.push({ name: "add_contact_tag", args: { tag: "lead_frio" } });
+      deterministicText = `Tranquilo${nome ? `, ${nome}` : ""}! Fico à disposição quando quiser dar uma olhada. Qualquer dúvida é só me chamar por aqui. 😊`;
+      stage = "soft_close";
     }
   }
 
@@ -787,6 +835,24 @@ Quer que eu já comece seu cadastro agora? 😉`;
         const distribuidora = (mergedExtras.distribuidora as string | undefined) ?? "";
         const valor = Number(mergedExtras.valor_fatura ?? 0);
         const nome = (mergedExtras.client_name as string | undefined) ?? "";
+        // Guard: distribuidora precisa estar entre as oficiais do estado.
+        const optsCheck2 = (mergedExtras.distributors_options as string[] | undefined) ?? [];
+        if (distribuidora && optsCheck2.length > 0) {
+          const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+          const valid = optsCheck2.some((o) => norm(o) === norm(distribuidora) || norm(o).includes(norm(distribuidora)) || norm(distribuidora).includes(norm(o)));
+          if (!valid) {
+            patch.extras = { ...(patch.extras as object ?? mergedExtras), distribuidora: null };
+            const optsList = optsCheck2.map((d, i) => `${i + 1} - ${d}`).join("\n");
+            deterministicText = `${nome ? nome + ", " : ""}só pra confirmar qual é a sua distribuidora no seu estado:\n\n${optsList}\n\nQual dessas é a sua?`;
+            stage = "ask_distribuidora";
+            return {
+              messages: [deterministicText],
+              events,
+              tool_calls,
+              suggested_state_patch: patch,
+            };
+          }
+        }
         let min = 0, max = 0;
         if (estado && distribuidora) {
           const list = await listDistributors(estado);
@@ -886,6 +952,9 @@ function extractDistribuidora(msg: string): string | null {
   if (t.length < 2 || t.length > 60) return null;
   // Aceita nome livre da distribuidora (texto sem números longos).
   if (/^\d+$/.test(t)) return null;
+  // Rejeita se a mensagem inteira for um nome/UF de estado — cliente
+  // está respondendo a `ask_estado`, não a `ask_distribuidora`.
+  if (extractEstado(t)) return null;
   return t;
 }
 
