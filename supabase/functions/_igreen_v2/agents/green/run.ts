@@ -886,6 +886,9 @@ function extractDistribuidora(msg: string): string | null {
   if (t.length < 2 || t.length > 60) return null;
   // Aceita nome livre da distribuidora (texto sem números longos).
   if (/^\d+$/.test(t)) return null;
+  // Rejeita se a mensagem inteira for um nome/UF de estado — cliente
+  // está respondendo a `ask_estado`, não a `ask_distribuidora`.
+  if (extractEstado(t)) return null;
   return t;
 }
 
