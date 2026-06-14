@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import { extractPersonName, cleanRenderedTemplate } from "../_person-name.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,6 +11,31 @@ const corsHeaders = {
 const MAX_ENROLLMENTS = 25;
 
 function isoNow() { return new Date().toISOString(); }
+
+/**
+ * Renders template variables in a scenario item text.
+ * Supported tokens: {{primeiro_nome}}, {{nome}}.
+ * If no valid human name is available, tokens are replaced with empty
+ * and orphan punctuation is cleaned (e.g. "Oi {{primeiro_nome}}, tudo bem?" → "Oi, tudo bem?" → "Oi tudo bem?").
+ * Returns the original text untouched when there are no tokens.
+ */
+function renderItemText(text: string | null | undefined, contact: { name?: string | null; person_name?: string | null } | null): string {
+  const raw = text ?? "";
+  if (!raw) return "";
+  if (!/\{\{\s*(primeiro_nome|nome)\s*\}\}/i.test(raw)) return raw;
+
+  const candidate = (contact?.person_name || contact?.name || "").trim();
+  const parsed = extractPersonName(candidate);
+  const firstName = parsed?.firstName ?? "";
+  const fullName = parsed?.fullName ?? "";
+
+  let out = raw.replace(/\{\{\s*primeiro_nome\s*\}\}/gi, firstName);
+  out = out.replace(/\{\{\s*nome\s*\}\}/gi, fullName || firstName);
+
+  // If we substituted with empty, clean orphan punctuation/spaces.
+  if (!firstName) out = cleanRenderedTemplate(out);
+  return out;
+}
 
 function addDelay(from: Date, value: number, unit: string): Date {
   const ms =
@@ -170,8 +196,23 @@ serve(async (req) => {
       }
       const instanceName = inst.instance_name;
 
+      // Resolve contact name (used to render {{primeiro_nome}}/{{nome}})
+      const { data: contactRow } = await supabase
+        .from("contacts")
+        .select("name, person_name")
+        .eq("account_id", enrollment.account_id)
+        .eq("phone", enrollment.contact_phone)
+        .maybeSingle();
+
+      // Render template variables in text/caption with safe fallback (empty + cleanup)
+      const renderedItem = {
+        ...nextItem,
+        content: nextItem.type === "text" ? renderItemText(nextItem.content, contactRow) : nextItem.content,
+        caption: nextItem.caption ? renderItemText(nextItem.caption, contactRow) : nextItem.caption,
+      };
+
       // Send item
-      const sendRes = await sendItem(evolutionUrl, evolutionKey, instanceName, enrollment.contact_phone, nextItem);
+      const sendRes = await sendItem(evolutionUrl, evolutionKey, instanceName, enrollment.contact_phone, renderedItem);
 
       // Log event
       await supabase.from("igreen_scenario_events").insert({
@@ -203,7 +244,7 @@ serve(async (req) => {
             timestamp: isoNow(),
             from_me: true,
             type: nextItem.type,
-            content: nextItem.type === "text" ? (nextItem.content || "") : (nextItem.caption || ""),
+            content: renderedItem.type === "text" ? (renderedItem.content || "") : (renderedItem.caption || ""),
             media_url: nextItem.media_url || undefined,
             media_mime: nextItem.media_mime || undefined,
             sent_by: "igreen_scenario",
