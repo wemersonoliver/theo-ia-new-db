@@ -138,9 +138,35 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   }
 
   if (stage === "greet") {
-    // marca que já saudamos para na próxima entrarmos em explain_solution
+    // Nova abertura determinística: 5 bolhas em sequência terminando com
+    // o pedido do estado. NÃO pergunta nome, NÃO envia vídeo.
     patch.produto = "green";
-    patch.extras = { ...currentExtras, greeted: true };
+    patch.etapa_funil = "qualificacao";
+    patch.extras = {
+      ...currentExtras,
+      greeted: true,
+      explained: true,
+      intro_sent: true,
+      intro_sent_at: new Date().toISOString(),
+      atendimento_started: true,
+    };
+    tool_calls.push({ name: "set_product", args: { produto: "green" } });
+    tool_calls.push({ name: "set_stage", args: { etapa: "qualificacao" } });
+    if (!currentExtras.atendimento_started) {
+      tool_calls.push({ name: "add_contact_tag", args: { tag: "em atendimento" } });
+    }
+    return {
+      messages: [
+        "Olá! 👋 Seja muito bem-vindo(a)! É um prazer falar com você.",
+        "A energia por assinatura é uma forma simples de economizar na conta de luz sem precisar instalar placas solares ou fazer qualquer obra no seu imóvel. ☀️",
+        "Você continua recebendo energia normalmente da distribuidora da sua região, mas passa a aproveitar créditos de energia gerados por usinas parceiras, reduzindo o valor da sua fatura.",
+        "E o melhor: posso fazer uma simulação personalizada para mostrar quanto você pode economizar de verdade. 💰",
+        "Para isso, me informe apenas em qual estado você mora. Assim, consigo calcular uma estimativa da sua economia mensal e anual de forma mais precisa.",
+      ],
+      events,
+      tool_calls,
+      suggested_state_patch: patch,
+    };
   }
 
   if (stage === "explain_solution") {
