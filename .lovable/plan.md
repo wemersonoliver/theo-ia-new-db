@@ -1,64 +1,78 @@
-## Diagnóstico (conversa 5571987620493 / Ilma)
+## Objetivo
+Substituir o início atual do atendimento da Conexão Green. Hoje a IA começa perguntando o nome do cliente (`ask_name`), depois explica, depois manda vídeo, depois faz `engage_check`. Vamos remover essa abertura por nome e enviar, no primeiro contato qualificado para Green, uma sequência fixa de 5 mensagens que termina pedindo o **estado** do cliente — entrando direto no funil de simulação.
 
-State atual no banco:
-```
-estado: BA
-distribuidora: "Bahia"     ← BUG: nome do estado salvo como distribuidora
-distributors_options: ["Coelba","Neoenergia"]
-distributors_presented: true
-discount_min_percent: null
-discount_max_percent: null  ← lookup falhou
-signup_pitch_sent: true
-valor_fatura: 500
-```
+## Mensagens novas (texto fixo, sem LLM)
+1. `Olá! 👋 Seja muito bem-vindo(a)! É um prazer falar com você.`
+2. `A energia por assinatura é uma forma simples de economizar na conta de luz sem precisar instalar placas solares ou fazer qualquer obra no seu imóvel. ☀️`
+3. `Você continua recebendo energia normalmente da distribuidora da sua região, mas passa a aproveitar créditos de energia gerados por usinas parceiras, reduzindo o valor da sua fatura.`
+4. `E o melhor: posso fazer uma simulação personalizada para mostrar quanto você pode economizar de verdade. 💰`
+5. `Para isso, me informe apenas em qual estado você mora. Assim, consigo calcular uma estimativa da sua economia mensal e anual de forma mais precisa.`
 
-O que aconteceu, em ordem:
-1. Cliente disse "Bahia" respondendo ao stage `ask_estado`.
-2. O parser salvou corretamente `estado: BA`, mas em paralelo o `ask_distribuidora` (executado no mesmo turno via burstLines / fallback de texto livre) aceitou a palavra "Bahia" como nome da distribuidora.
-3. Como já tinha `distribuidora` preenchida, o fluxo pulou `present_distributors` (Coelba/Neoenergia) e foi direto pra `simulate_discount_concreto`.
-4. O lookup em `igreen_distributor_discounts` não achou "Bahia" → caiu no fallback qualitativo: *"com a Bahia a iGreen tem uma faixa oficial de economia. Quer que eu já comece seu cadastro?"* — exatamente a mensagem que o cliente recebeu.
-5. Cliente respondeu "nao" e depois "esquece". Nenhum dos dois bate no `SOFT_DECLINE_RX` (que só pega "não quero", "depois", "deixa pra lá", "obrigado"…). O fluxo voltou a `confirm_signup` e repetiu *"quer que eu já comece seu cadastro agora?"* duas vezes seguidas.
+Enviadas como 5 bolhas separadas no mesmo turno (split por `\n\n` ou retorno de `messages: string[]`).
 
-Ou seja: a IA não fez a simulação real porque salvou a distribuidora errada, e ficou forçando porque "não" puro e "esquece" não são reconhecidos como recusa.
+## Mudanças técnicas
 
-## Correções propostas
+### 1. `supabase/functions/_igreen_v2/agents/green/stages.ts` — `decideGreenStage`
+Reescrever o ramo `etapa === "novo"` e o início de `qualificacao` para:
+- **Remover** a checagem `if (!extras.client_name) return "ask_name"`.
+- **Remover** o uso de `send_video` / `engage_check` como passos obrigatórios da abertura (ficam disponíveis só se forem chamados por outro caminho; na prática deixam de ser acionados aqui).
+- Novo fluxo:
+  - se `!extras.greeted` → `greet` (vai entregar as 5 mensagens novas e já marca `greeted`, `explained`, `intro_sent` e promove `etapa_funil` para `qualificacao`)
+  - depois cai direto em `ask_estado` (já está no prompt da mensagem 5)
+  - se já tiver `estado` mas faltar `valor_fatura` → `ask_valor_fatura`
+  - segue o fluxo atual: `present_distributors` → `ask_distribuidora` → `simulate_discount_concreto` → `confirm_signup` → `request_invoice`.
 
-### 1. Não confundir estado com distribuidora (`agents/green/run.ts`)
-No bloco `ask_distribuidora`:
-- Antes de chamar o fallback `extractDistribuidora`, rejeitar a mensagem se ela for um nome/UF de estado válido (reusar `extractEstado`).
-- Rejeitar valores que coincidam com o `extras.estado` já salvo.
-- Só salvar `distribuidora` no fallback livre se a string tiver pelo menos uma das palavras-chave conhecidas (lista de distribuidoras do estado, ou termos como "energia", "luz", "elétrica", "ceee", "cemig", etc.).
+### 2. `supabase/functions/_igreen_v2/agents/green/run.ts` — bloco `stage === "greet"`
+Substituir a marcação simples por entrega determinística da sequência:
+- `deterministicText` (ou `messages: string[]`) com as 5 mensagens acima, separadas — usar o mesmo padrão de múltiplas bolhas já existente em outros stages (ex.: `simulate_discount_concreto`).
+- `patch.produto = "green"`.
+- `patch.etapa_funil = "qualificacao"`.
+- `patch.extras = { ...currentExtras, greeted: true, explained: true, intro_sent: true, intro_sent_at: <iso>, atendimento_started: true }`.
+- `tool_calls.push({ name: "set_product", args: { produto: "green" } })`.
+- `tool_calls.push({ name: "add_contact_tag", args: { tag: "em atendimento" } })` (mantém o card movendo no CRM como hoje fazia o `engage_check`).
+- **Não** enfileirar `send_discovery_video` aqui — vídeo fica desativado nessa nova abertura (decisão registrada no plano; pode ser reintroduzido depois manualmente em outro stage se quiserem).
 
-### 2. Garantir um único stage de coleta por turno (`agents/green/run.ts`)
-Hoje os blocos `if (stage === "ask_estado")`, `if (stage === "ask_distribuidora")`, `if (stage === "ask_valor_fatura")` rodam em sequência sem checar qual é o stage selecionado. Trocar para `else if` (ou um único `switch (stage)`) para que a mesma mensagem nunca seja parseada como dois campos diferentes.
+### 3. Bloco `stage === "ask_name"` e `stage === "explain_solution"`
+- Manter os blocos existindo (para não quebrar imports/refs e o `fallbackTextForStage`), mas eles deixam de ser alcançáveis pelo `decideGreenStage` na abertura padrão.
+- Se quiser, podemos remover o bloco `ask_name` por completo num passo posterior — neste plano só desconectamos.
 
-### 3. Forçar escolha real quando há lista de distribuidoras
-Em `simulate_discount_concreto` (linhas 298 e 785): antes de usar `extras.distribuidora`, validar que o valor está presente em `extras.distributors_options` (case-insensitive). Se não estiver, **não** marcar `discount_lookup_done: true` — voltar para `ask_distribuidora` com a lista numerada novamente.
+### 4. `engage_check`
+- Continua existindo no código, mas o `decideGreenStage` não vai mais agendar `engage_check` após vídeo (já que não mandamos vídeo). Sem mudança extra necessária.
 
-### 4. Reconhecer recusa curta (`agents/green/stages.ts`)
-Ampliar `SOFT_DECLINE_RX` para também capturar:
-- `nao`/`não` puro (mensagem inteira igual a "não", "n", "nope").
-- `esquece`, `esquece isso`, `deixa pra lá`, `não precisa`, `chega`, `para`, `parar`, `desisto`.
+### 5. Captura oportunista do nome
+- Como não vamos mais perguntar o nome, manter a captura passiva: se o cliente disser o nome em qualquer momento, o parser `extractFirstName` já popula `client_name` via `green_opportunistic_capture` (já existe). Sem mudança.
 
-Disparar `soft_close` no mesmo turno e marcar `extras.soft_closed = true` para travar novas tentativas de pitch.
+### 6. Supervisor / roteamento (`supabase/functions/_igreen_v2/supervisor/prompt.ts`)
+- Nenhuma mudança. A regra atual ("oi", "tenho interesse" etc. → `qualifier`) continua válida. Só entra direto no Green quando o cliente cita explicitamente algo do produto (energia por assinatura, conta de luz, economizar na luz…), que é exatamente o gatilho pedido.
 
-### 5. Bloquear repetição literal do pitch de cadastro
-No bloco `confirm_signup` do `run.ts`: se `extras.signup_pitch_sent === true` e o cliente respondeu negativamente (ou só silêncio/objeção), não repetir "quer que eu comece seu cadastro?". Pivotar para `soft_close` ou `objection_reply` conforme o caso, e marcar `extras.signup_declined_at`.
+### 7. Migração SQL — destravar conversas em aberto
+Para conversas que **já** estão paradas no antigo `ask_name`/`explain_solution`/`send_video` no estado `novo`, rodar:
 
-### 6. Limpar o estado quebrado do contato atual
-SQL único para destravar a Ilma e permitir o reenvio da simulação correta:
 ```sql
 UPDATE igreen_conversation_state
-SET extras = extras - 'distribuidora' - 'discount_lookup_done'
-                    - 'discount_min_percent' - 'discount_max_percent'
-                    - 'signup_pitch_sent'
-WHERE phone = '5571987620493';
+SET extras = jsonb_set(
+  jsonb_set(
+    COALESCE(extras, '{}'::jsonb),
+    '{greeted}', 'true'::jsonb, true
+  ),
+  '{explained}', 'true'::jsonb, true
+),
+    etapa_funil = 'qualificacao'
+WHERE produto = 'green'
+  AND (etapa_funil IS NULL OR etapa_funil IN ('novo','qualificacao'))
+  AND (extras->>'intro_sent') IS DISTINCT FROM 'true'
+  AND (extras->>'estado') IS NULL;
 ```
 
-## Validação
-- Reexecutar manualmente o caso "Bahia / R$500": esperar a mensagem com Coelba/Neoenergia, depois a simulação concreta com percentual e R$ economizado.
-- Mandar "não" e "esquece" em conversa de teste → IA deve agradecer e parar.
-- Rodar o teste unitário de `decideGreenStage` adicionando casos: "Bahia" não vira distribuidora; "nao"/"esquece" disparam `soft_close`.
+(Opcional — só roda se você confirmar; sem isso, os leads antigos seguem onde estão.)
 
-## Observações técnicas
-Arquivos tocados: `supabase/functions/_igreen_v2/agents/green/run.ts` e `supabase/functions/_igreen_v2/agents/green/stages.ts`. Migração SQL apenas para limpar o state da conversa afetada (não altera schema).
+## Validação
+- Teste manual com número novo escrevendo "tenho interesse em energia por assinatura" → IA deve enviar as 5 mensagens em sequência e parar aguardando o estado.
+- Cliente responde "Bahia" → cai em `present_distributors` (Coelba/Neoenergia).
+- Cliente escolhe distribuidora → pergunta valor da fatura → simulação concreta.
+- Teste de regressão: handoff humano, soft_decline ("não", "esquece"), objection_security continuam funcionando (regras de prioridade no `decideGreenStage` permanecem intocadas).
+
+## Arquivos tocados
+- `supabase/functions/_igreen_v2/agents/green/stages.ts`
+- `supabase/functions/_igreen_v2/agents/green/run.ts`
+- (opcional) 1 migração SQL para destravar conversas antigas.
