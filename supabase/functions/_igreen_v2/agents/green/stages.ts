@@ -282,10 +282,13 @@ function _decideGreenStageInner(
   }
 
   if (etapa === "novo") {
-    if (!extras.client_name) return "ask_name";
-    if (!extras.explained) return "explain_solution";
-    if (extras.video_sent) return "ask_valor_fatura";
-    return "send_video";
+    // Nova abertura: NÃO perguntamos mais o nome nem mandamos vídeo.
+    // Enviamos a sequência fixa de boas-vindas + pedido do estado e já
+    // promovemos a etapa para "qualificacao".
+    if (!extras.greeted) return "greet";
+    if (!hasValue(extras.estado)) return "ask_estado";
+    if (!hasValue(extras.valor_fatura)) return "ask_valor_fatura";
+    return "ask_estado";
   }
 
   if (etapa === "qualificacao") {
