@@ -9,6 +9,8 @@ import { ShieldCheck, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import theoLogo from "@/assets/logo_theo_ia.png";
 
+const LOGIN_TIMEOUT_MS = 20000;
+
 export default function AdminLogin() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -39,13 +41,24 @@ export default function AdminLogin() {
     e.preventDefault();
     setLoading(true);
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data: authData, error: authError } = await Promise.race([
+      supabase.auth.signInWithPassword({
+        email,
+        password,
+      }),
+      new Promise<never>((_, reject) => {
+        window.setTimeout(
+          () => reject(new Error("Tempo esgotado ao conectar com o serviço de login. Tente novamente em instantes.")),
+          LOGIN_TIMEOUT_MS,
+        );
+      }),
+    ]).catch((error) => ({
+      data: { user: null, session: null },
+      error: error instanceof Error ? error : new Error("Falha inesperada ao fazer login."),
+    }));
 
     if (authError || !authData.user) {
-      toast.error("Credenciais inválidas.");
+      toast.error(authError?.message || "Credenciais inválidas.");
       setLoading(false);
       return;
     }
