@@ -13,6 +13,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const LOGIN_TIMEOUT_MS = 20000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -55,8 +56,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
+    try {
+      const { error } = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(
+            () => reject(new Error("Tempo esgotado ao conectar com o serviço de login. Tente novamente em instantes.")),
+            LOGIN_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      return { error };
+    } catch (error) {
+      return { error: error instanceof Error ? error : new Error("Falha inesperada ao fazer login.") };
+    }
   };
 
   const signUp = async (email: string, password: string, fullName: string, phone?: string, businessName?: string) => {
