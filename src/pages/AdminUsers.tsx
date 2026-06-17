@@ -140,18 +140,23 @@ export default function AdminUsers() {
   };
 
   const handleChangePassword = async () => {
-    if (!passwordDialog || !newPassword || newPassword.length < 6) {
-      toast({ title: "Erro", description: "Senha deve ter no mínimo 6 caracteres", variant: "destructive" });
+    const cleanPassword = newPassword.trim();
+    if (!passwordDialog || !cleanPassword || cleanPassword.length < 6) {
+      toast({ title: "Erro", description: "Senha deve ter no mínimo 6 caracteres (sem espaços)", variant: "destructive" });
       return;
     }
     setActionLoading(true);
-    const { error } = await supabase.functions.invoke("admin-users", {
-      body: { action: "update_password", userId: passwordDialog, password: newPassword },
+    const { data, error } = await supabase.functions.invoke("admin-users", {
+      body: { action: "update_password", userId: passwordDialog, password: cleanPassword },
     });
-    if (error) {
-      toast({ title: "Erro", description: "Falha ao alterar senha", variant: "destructive" });
+    if (error || (data && (data as any).error)) {
+      const msg = (data as any)?.error || error?.message || "Falha ao alterar senha";
+      toast({ title: "Erro", description: msg, variant: "destructive" });
     } else {
-      toast({ title: "Sucesso", description: "Senha alterada com sucesso" });
+      toast({
+        title: "Senha alterada",
+        description: "A nova senha foi salva e todas as sessões antigas do usuário foram encerradas. Peça para ele fazer login novamente.",
+      });
       setPasswordDialog(null);
       setNewPassword("");
     }
