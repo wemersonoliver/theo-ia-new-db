@@ -1,78 +1,67 @@
+# Corrigir disparos noturnos do iGreen Scenario Dispatcher
+
+## Problema
+
+A conta `marcioevandrocosta@hotmail.com` enviou mensagens de cenários (`sent_by: igreen_scenario`) às **23:15 BRT** para os contatos `5571983459826` e `5541985171405`. A causa é que o `igreen-scenario-dispatcher` **não respeita janela horária**, ao contrário do `followup-dispatch` clássico (08–19 BRT). Após o travamento do WhatsApp do usuário, o backlog foi disparado de madrugada — risco real de ban do número.
+
 ## Objetivo
-Substituir o início atual do atendimento da Conexão Green. Hoje a IA começa perguntando o nome do cliente (`ask_name`), depois explica, depois manda vídeo, depois faz `engage_check`. Vamos remover essa abertura por nome e enviar, no primeiro contato qualificado para Green, uma sequência fixa de 5 mensagens que termina pedindo o **estado** do cliente — entrando direto no funil de simulação.
 
-## Mensagens novas (texto fixo, sem LLM)
-1. `Olá! 👋 Seja muito bem-vindo(a)! É um prazer falar com você.`
-2. `A energia por assinatura é uma forma simples de economizar na conta de luz sem precisar instalar placas solares ou fazer qualquer obra no seu imóvel. ☀️`
-3. `Você continua recebendo energia normalmente da distribuidora da sua região, mas passa a aproveitar créditos de energia gerados por usinas parceiras, reduzindo o valor da sua fatura.`
-4. `E o melhor: posso fazer uma simulação personalizada para mostrar quanto você pode economizar de verdade. 💰`
-5. `Para isso, me informe apenas em qual estado você mora. Assim, consigo calcular uma estimativa da sua economia mensal e anual de forma mais precisa.`
+Garantir que mensagens de cenários iGreen **só sejam enviadas entre 08:00 e 19:00 BRT, de segunda a sábado**, mesmo quando há backlog após reconexão ou quando o delay de um item cairia fora da janela.
 
-Enviadas como 5 bolhas separadas no mesmo turno (split por `\n\n` ou retorno de `messages: string[]`).
+## Mudanças em `supabase/functions/igreen-scenario-dispatcher/index.ts`
 
-## Mudanças técnicas
+### 1. Reusar helpers de janela existentes
+Importar `isWithinWindow` e `generateScheduleSequence` de `../_followup-window.ts` (já testados e usados pelo followup clássico). Janela padrão: `morning_window_start=08:00`, `evening_window_end=19:00`, bloqueia domingo.
 
-### 1. `supabase/functions/_igreen_v2/agents/green/stages.ts` — `decideGreenStage`
-Reescrever o ramo `etapa === "novo"` e o início de `qualificacao` para:
-- **Remover** a checagem `if (!extras.client_name) return "ask_name"`.
-- **Remover** o uso de `send_video` / `engage_check` como passos obrigatórios da abertura (ficam disponíveis só se forem chamados por outro caminho; na prática deixam de ser acionados aqui).
-- Novo fluxo:
-  - se `!extras.greeted` → `greet` (vai entregar as 5 mensagens novas e já marca `greeted`, `explained`, `intro_sent` e promove `etapa_funil` para `qualificacao`)
-  - depois cai direto em `ask_estado` (já está no prompt da mensagem 5)
-  - se já tiver `estado` mas faltar `valor_fatura` → `ask_valor_fatura`
-  - segue o fluxo atual: `present_distributors` → `ask_distribuidora` → `simulate_discount_concreto` → `confirm_signup` → `request_invoice`.
+### 2. Guard global no loop (antes de processar cada enrollment)
+No início do `for (const enrollment of due)`, se `!isWithinWindow({})`:
+- Reagendar `next_run_at` para o próximo slot válido via `generateScheduleSequence({}, 1)[0]`
+- `skipped++` e `continue`
+- **Não enviar nada fora da janela, ponto final.**
 
-### 2. `supabase/functions/_igreen_v2/agents/green/run.ts` — bloco `stage === "greet"`
-Substituir a marcação simples por entrega determinística da sequência:
-- `deterministicText` (ou `messages: string[]`) com as 5 mensagens acima, separadas — usar o mesmo padrão de múltiplas bolhas já existente em outros stages (ex.: `simulate_discount_concreto`).
-- `patch.produto = "green"`.
-- `patch.etapa_funil = "qualificacao"`.
-- `patch.extras = { ...currentExtras, greeted: true, explained: true, intro_sent: true, intro_sent_at: <iso>, atendimento_started: true }`.
-- `tool_calls.push({ name: "set_product", args: { produto: "green" } })`.
-- `tool_calls.push({ name: "add_contact_tag", args: { tag: "em atendimento" } })` (mantém o card movendo no CRM como hoje fazia o `engage_check`).
-- **Não** enfileirar `send_discovery_video` aqui — vídeo fica desativado nessa nova abertura (decisão registrada no plano; pode ser reintroduzido depois manualmente em outro stage se quiserem).
+### 3. Clamp do `addDelay` para dentro da janela (linha 265)
+Nova função `clampToWindow(target: Date): Date`:
+- Converte `target` para BRT
+- Se cair antes das 08:00 → move para 08:00 do mesmo dia
+- Se cair depois das 19:00 → move para 08:00 + jitter do próximo dia útil
+- Se cair em domingo → pula para segunda
+- Retorna em UTC
+Aplicar em todos os `next_run_at` calculados: linha 191 (instance disconnected), 231 (retry), 265 (próximo item do bundle), 281 (catch error), 327 (applyFinalTag retry), 399/449 (advanceToNext).
 
-### 3. Bloco `stage === "ask_name"` e `stage === "explain_solution"`
-- Manter os blocos existindo (para não quebrar imports/refs e o `fallbackTextForStage`), mas eles deixam de ser alcançáveis pelo `decideGreenStage` na abertura padrão.
-- Se quiser, podemos remover o bloco `ask_name` por completo num passo posterior — neste plano só desconectamos.
+### 4. Corrigir `slotForPeriod` para nunca retornar passado
+No final da função, se `result < new Date()`, recursar com `forDay = amanhã` (e pular domingo). Garante que backlog não dispare instantaneamente.
 
-### 4. `engage_check`
-- Continua existindo no código, mas o `decideGreenStage` não vai mais agendar `engage_check` após vídeo (já que não mandamos vídeo). Sem mudança extra necessária.
+### 5. Cap de envios por run por contato
+Adicionar `Set<string>` de `account_id:phone` já processados no run. Se o contato já recebeu uma mensagem neste tick, pular os demais enrollments do mesmo contato (defesa contra múltiplos enrollments simultâneos).
 
-### 5. Captura oportunista do nome
-- Como não vamos mais perguntar o nome, manter a captura passiva: se o cliente disser o nome em qualquer momento, o parser `extractFirstName` já popula `client_name` via `green_opportunistic_capture` (já existe). Sem mudança.
+## Mudança no banco (migration)
 
-### 6. Supervisor / roteamento (`supabase/functions/_igreen_v2/supervisor/prompt.ts`)
-- Nenhuma mudança. A regra atual ("oi", "tenho interesse" etc. → `qualifier`) continua válida. Só entra direto no Green quando o cliente cita explicitamente algo do produto (energia por assinatura, conta de luz, economizar na luz…), que é exatamente o gatilho pedido.
-
-### 7. Migração SQL — destravar conversas em aberto
-Para conversas que **já** estão paradas no antigo `ask_name`/`explain_solution`/`send_video` no estado `novo`, rodar:
+Reagendar os enrollments ativos cujo `next_run_at` está no passado ou cairia fora da janela, para o próximo slot válido (amanhã 08:00–19:00 BRT, segunda a sábado). Isso limpa o backlog acumulado de TODOS os usuários, não só do Márcio.
 
 ```sql
-UPDATE igreen_conversation_state
-SET extras = jsonb_set(
-  jsonb_set(
-    COALESCE(extras, '{}'::jsonb),
-    '{greeted}', 'true'::jsonb, true
-  ),
-  '{explained}', 'true'::jsonb, true
+UPDATE igreen_scenario_enrollments
+SET next_run_at = (
+  (date_trunc('day', (now() AT TIME ZONE 'America/Sao_Paulo')) + interval '1 day'
+   + (interval '8 hours') + (random() * interval '11 hours'))
+  AT TIME ZONE 'America/Sao_Paulo'
 ),
-    etapa_funil = 'qualificacao'
-WHERE produto = 'green'
-  AND (etapa_funil IS NULL OR etapa_funil IN ('novo','qualificacao'))
-  AND (extras->>'intro_sent') IS DISTINCT FROM 'true'
-  AND (extras->>'estado') IS NULL;
+updated_at = now()
+WHERE status IN ('active','pending_tag')
+  AND (
+    next_run_at < now()
+    OR EXTRACT(HOUR FROM (next_run_at AT TIME ZONE 'America/Sao_Paulo')) NOT BETWEEN 8 AND 18
+    OR EXTRACT(DOW  FROM (next_run_at AT TIME ZONE 'America/Sao_Paulo')) = 0
+  );
 ```
 
-(Opcional — só roda se você confirmar; sem isso, os leads antigos seguem onde estão.)
+## Não-mudanças
 
-## Validação
-- Teste manual com número novo escrevendo "tenho interesse em energia por assinatura" → IA deve enviar as 5 mensagens em sequência e parar aguardando o estado.
-- Cliente responde "Bahia" → cai em `present_distributors` (Coelba/Neoenergia).
-- Cliente escolhe distribuidora → pergunta valor da fatura → simulação concreta.
-- Teste de regressão: handoff humano, soft_decline ("não", "esquece"), objection_security continuam funcionando (regras de prioridade no `decideGreenStage` permanecem intocadas).
+- Não mexo no `followup-dispatch` (já tem `isWithinWindow`).
+- Não mexo no `whatsapp-ai-agent` — ele responde quando o cliente escreve, não dispara em massa.
+- Não desativo cenários existentes; apenas atraso para a próxima janela válida.
 
-## Arquivos tocados
-- `supabase/functions/_igreen_v2/agents/green/stages.ts`
-- `supabase/functions/_igreen_v2/agents/green/run.ts`
-- (opcional) 1 migração SQL para destravar conversas antigas.
+## Verificação
+
+1. Após o deploy, consultar `igreen_scenario_enrollments` dos dois números e confirmar que `next_run_at` está dentro de 08–19 BRT em dia útil.
+2. Forçar uma chamada do dispatcher fora de janela e verificar nos logs que retorna `sent: 0, skipped: N>0`.
+3. Acompanhar `igreen_scenario_events` por 24h para confirmar ausência de envios fora da janela.

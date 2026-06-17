@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 import { extractPersonName, cleanRenderedTemplate } from "../_person-name.ts";
+import { isWithinWindow, generateScheduleSequence } from "../_followup-window.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,38 @@ const corsHeaders = {
 const MAX_ENROLLMENTS = 25;
 
 function isoNow() { return new Date().toISOString(); }
+
+/**
+ * Clampa um timestamp UTC para dentro da janela 08:00–19:00 BRT, seg-sáb.
+ * - Se cair antes das 08:00 BRT → 08:00 + jitter (até 30 min) do mesmo dia.
+ * - Se cair depois das 19:00 BRT → 08:00 + jitter do próximo dia útil.
+ * - Se cair em domingo BRT → pula para segunda 08:00 + jitter.
+ */
+function clampToWindow(target: Date): Date {
+  const local = new Date(target.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  const tzOffset = local.getTime() - target.getTime();
+  const startMin = 8 * 60;
+  const endMin = 19 * 60;
+  const curMin = local.getHours() * 60 + local.getMinutes();
+
+  const moveToMorning = (d: Date) => {
+    const jitter = Math.floor(Math.random() * 30); // 0-29 min de jitter
+    d.setHours(8, jitter, Math.floor(Math.random() * 60), 0);
+  };
+
+  if (local.getDay() === 0) {
+    // domingo → segunda
+    local.setDate(local.getDate() + 1);
+    moveToMorning(local);
+  } else if (curMin < startMin) {
+    moveToMorning(local);
+  } else if (curMin > endMin) {
+    local.setDate(local.getDate() + 1);
+    if (local.getDay() === 0) local.setDate(local.getDate() + 1);
+    moveToMorning(local);
+  }
+  return new Date(local.getTime() - tzOffset);
+}
 
 /**
  * Renders template variables in a scenario item text.
@@ -58,7 +91,13 @@ function slotForPeriod(period: "morning" | "evening", forDay?: Date): Date {
   const endMin = endH * 60 + endM;
   const slot = startMin + Math.floor(Math.random() * Math.max(1, endMin - startMin));
   local.setHours(Math.floor(slot / 60), slot % 60, 0, 0);
-  return new Date(local.getTime() - tzOffset);
+  const result = new Date(local.getTime() - tzOffset);
+  // Nunca retornar passado: se já passou (ou domingo), joga para a próxima janela válida.
+  if (result.getTime() <= Date.now() || local.getDay() === 0) {
+    const tomorrow = new Date(base.getTime() + 24 * 60 * 60 * 1000);
+    return clampToWindow(tomorrow);
+  }
+  return clampToWindow(result);
 }
 
 serve(async (req) => {
@@ -93,9 +132,33 @@ serve(async (req) => {
   }
 
   let sent = 0, skipped = 0, failed = 0, advanced = 0, completed = 0, tagged = 0;
+  const processedContacts = new Set<string>();
 
   for (const enrollment of due ?? []) {
     try {
+      // Guard global: nunca enviar fora da janela 08-19 BRT (seg-sáb).
+      if (!isWithinWindow({})) {
+        const next = generateScheduleSequence({}, 1)[0];
+        await supabase.from("igreen_scenario_enrollments").update({
+          next_run_at: next,
+          updated_at: isoNow(),
+        }).eq("id", enrollment.id);
+        skipped++;
+        continue;
+      }
+
+      // Cap por contato/run: 1 envio por contato por tick.
+      const contactKey = `${enrollment.account_id}:${enrollment.contact_phone}`;
+      if (processedContacts.has(contactKey)) {
+        const next = clampToWindow(new Date(Date.now() + 10 * 60_000));
+        await supabase.from("igreen_scenario_enrollments").update({
+          next_run_at: next.toISOString(),
+          updated_at: isoNow(),
+        }).eq("id", enrollment.id);
+        skipped++;
+        continue;
+      }
+
       // ===== Handle pending final-tag application =====
       if (enrollment.status === "pending_tag") {
         const res = await applyFinalTag(supabase, enrollment);
@@ -188,7 +251,7 @@ serve(async (req) => {
       if (!inst || inst.status !== "connected") {
         // re-schedule in 5 min
         await supabase.from("igreen_scenario_enrollments").update({
-          next_run_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+          next_run_at: clampToWindow(new Date(Date.now() + 5 * 60_000)).toISOString(),
           updated_at: isoNow(),
         }).eq("id", enrollment.id);
         skipped++;
@@ -228,7 +291,7 @@ serve(async (req) => {
       if (!sendRes.ok) {
         // retry in 2 min
         await supabase.from("igreen_scenario_enrollments").update({
-          next_run_at: new Date(Date.now() + 2 * 60_000).toISOString(),
+          next_run_at: clampToWindow(new Date(Date.now() + 2 * 60_000)).toISOString(),
           updated_at: isoNow(),
         }).eq("id", enrollment.id);
         failed++;
@@ -263,10 +326,11 @@ serve(async (req) => {
       if (moreItems.length > 0) {
         const upcoming = moreItems[0];
         const next = addDelay(new Date(), upcoming.delay_value || 0, upcoming.delay_unit || "minutes");
+        const safeNext = clampToWindow(next);
         await supabase.from("igreen_scenario_enrollments").update({
           current_item_position: nextItem.position,
           last_sent_at: isoNow(),
-          next_run_at: next.toISOString(),
+          next_run_at: safeNext.toISOString(),
           updated_at: isoNow(),
         }).eq("id", enrollment.id);
       } else {
@@ -275,10 +339,11 @@ serve(async (req) => {
       }
 
       sent++;
+      processedContacts.add(contactKey);
     } catch (e) {
       console.error("igreen dispatch error", e);
       await supabase.from("igreen_scenario_enrollments").update({
-        next_run_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+        next_run_at: clampToWindow(new Date(Date.now() + 5 * 60_000)).toISOString(),
         updated_at: isoNow(),
       }).eq("id", enrollment.id);
       failed++;
@@ -324,7 +389,7 @@ async function applyFinalTag(supabase: any, enrollment: any): Promise<{ ok: bool
   } catch (e) {
     console.error("applyFinalTag error", e);
     await supabase.from("igreen_scenario_enrollments").update({
-      next_run_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+      next_run_at: clampToWindow(new Date(Date.now() + 10 * 60_000)).toISOString(),
       updated_at: isoNow(),
     }).eq("id", enrollment.id);
     return { ok: false };
