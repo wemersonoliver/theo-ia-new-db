@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from "@/components/ui/separator";
 import { Loader2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
-import { useRecaptchaBadge } from "@/lib/recaptcha";
 import { AuroraBackground } from "@/components/fx/AuroraBackground";
 import { FloatingSparkles } from "@/components/fx/FloatingSparkles";
 
@@ -19,7 +18,6 @@ export default function Login() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const { signIn, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
-  useRecaptchaBadge();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
