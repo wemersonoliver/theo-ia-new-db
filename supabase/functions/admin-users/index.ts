@@ -100,9 +100,37 @@ serve(async (req) => {
 
     if (action === "update_password") {
       if (!userId || !password) throw new Error("userId and password required");
-      const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password });
-      if (error) throw error;
-      return new Response(JSON.stringify({ success: true }), {
+      // Remove espaços/quebras invisíveis que vêm de cópia-cola e quebram o login depois
+      const cleanPassword = String(password).trim();
+      if (cleanPassword.length < 6) {
+        throw new Error("A senha deve ter no mínimo 6 caracteres (sem contar espaços)");
+      }
+
+      const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        password: cleanPassword,
+        email_confirm: true,
+      });
+      if (updErr) throw updErr;
+
+      // Invalida todas as sessões/refresh tokens antigos para forçar novo login limpo
+      try {
+        await supabaseAdmin.auth.admin.signOut(userId, "global");
+      } catch (signOutErr) {
+        console.warn("[admin-users] signOut após troca de senha falhou:", signOutErr);
+      }
+
+      // Se o usuário é membro de equipe com flag de troca obrigatória, libera o acesso
+      // (admin trocou a senha manualmente, então o "must_change" já foi resolvido)
+      try {
+        await supabaseAdmin
+          .from("account_members")
+          .update({ must_change_password: false })
+          .eq("user_id", userId);
+      } catch (clearErr) {
+        console.warn("[admin-users] clear must_change_password falhou:", clearErr);
+      }
+
+      return new Response(JSON.stringify({ success: true, password_length: cleanPassword.length }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
