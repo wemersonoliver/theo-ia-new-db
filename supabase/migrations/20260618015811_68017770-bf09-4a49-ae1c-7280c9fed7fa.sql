@@ -1,0 +1,1 @@
+UPDATE public.whatsapp_ai_sessions SET messages_without_human = 0, handed_off_at = NULL, updated_at = now() WHERE phone = '5547991293662' AND user_id = '2c4a48c8-12a2-413d-8fa7-0a4de4aa8ef6';
