@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 import { resolveAccountId } from "../_account.ts";
-import { getBrazilianPhoneVariant, normalizeBrazilianPhone, resolveExistingWhatsappJid } from "../_phone.ts";
+import { getBrazilianPhoneVariant, normalizeBrazilianPhone, resolveExistingWhatsappJid, resolvePreferredWhatsappChatNumber } from "../_phone.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -142,6 +142,12 @@ serve(async (req) => {
     // (retorna 200 OK porque apenas enfileira), então o fallback por erro
     // HTTP não pega o caso de "número errado". Por isso resolvemos o JID
     // real antes via /chat/whatsappNumbers.
+    const resolvedChatNumber = await resolvePreferredWhatsappChatNumber({
+      evolutionUrl,
+      evolutionKey,
+      instanceName,
+      phone: normalizedPhone,
+    });
     const resolvedJid = await resolveExistingWhatsappJid({
       evolutionUrl,
       evolutionKey,
@@ -149,7 +155,8 @@ serve(async (req) => {
       phone: normalizedPhone,
     });
     const candidates: string[] = [];
-    if (resolvedJid) candidates.push(resolvedJid);
+    if (resolvedChatNumber) candidates.push(resolvedChatNumber);
+    if (resolvedJid && !candidates.includes(resolvedJid)) candidates.push(resolvedJid);
     if (!candidates.includes(normalizedPhone)) candidates.push(normalizedPhone);
     const variant = getBrazilianPhoneVariant(normalizedPhone);
     if (variant && !candidates.includes(variant)) candidates.push(variant);
