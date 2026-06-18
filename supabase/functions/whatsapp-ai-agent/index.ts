@@ -922,10 +922,22 @@ serve(async (req) => {
       const claimed = await claimHandoffNotification(supabase, userId, accountId, phone);
       if (!claimed) {
         console.log("Message-limit handoff skipped: recent handoff already notified for", phone);
-        return new Response(JSON.stringify({ skipped: true, reason: "Recent handoff already notified" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        });
+        // Já houve notificação recente de handoff para este contato.
+        // NÃO bloqueamos a IA: marcamos handed_off_at na sessão para que
+        // o bloco de limite não seja reavaliado nos próximos 60min e
+        // seguimos respondendo normalmente (conforme design).
+        try {
+          await supabase
+            .from("whatsapp_ai_sessions")
+            .update({ handed_off_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .eq("user_id", userId)
+            .eq("phone", phone);
+        } catch (e) {
+          console.error("Failed to stamp handed_off_at after duplicate handoff:", e);
+        }
+        // Fall through: a IA continua o fluxo normal abaixo.
       }
+      else {
 
       if (aiConfig.handoff_message) {
         await sendAndSaveAIMessageParts(supabase, userId, phone, aiConfig.handoff_message);
@@ -951,6 +963,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ skipped: true, reason: "Message limit reached" }), { 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
       });
+      }
     }
 
     // Get conversation history for context
