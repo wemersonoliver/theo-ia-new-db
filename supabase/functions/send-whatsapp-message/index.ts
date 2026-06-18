@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 import { resolveAccountId } from "../_account.ts";
-import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts";
+import { getBrazilianPhoneVariant, normalizeBrazilianPhone, resolveExistingWhatsappJid } from "../_phone.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -138,9 +138,21 @@ serve(async (req) => {
     // some Brazilian WhatsApp accounts (legacy DDDs) only accept the 12-digit
     // form. We try the canonical (13-digit) first and, if Evolution rejects
     // the number as invalid/non-existent, retry with the variant.
-    const candidates = [normalizedPhone];
+    // IMPORTANTE: Baileys aceita o POST mesmo para JIDs inexistentes
+    // (retorna 200 OK porque apenas enfileira), então o fallback por erro
+    // HTTP não pega o caso de "número errado". Por isso resolvemos o JID
+    // real antes via /chat/whatsappNumbers.
+    const resolvedJid = await resolveExistingWhatsappJid({
+      evolutionUrl,
+      evolutionKey,
+      instanceName,
+      phone: normalizedPhone,
+    });
+    const candidates: string[] = [];
+    if (resolvedJid) candidates.push(resolvedJid);
+    if (!candidates.includes(normalizedPhone)) candidates.push(normalizedPhone);
     const variant = getBrazilianPhoneVariant(normalizedPhone);
-    if (variant && variant !== normalizedPhone) candidates.push(variant);
+    if (variant && !candidates.includes(variant)) candidates.push(variant);
 
     let sendResponse: Awaited<ReturnType<typeof evolutionRequest>> | null = null;
     for (const candidate of candidates) {

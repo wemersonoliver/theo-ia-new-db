@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveAccountId } from "../_account.ts";
 import { cleanAIText } from "../_ai_text.ts";
 import { extractIntroducedName, extractPersonName } from "../_person-name.ts";
-import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts";
+import { getBrazilianPhoneVariant, normalizeBrazilianPhone, resolveExistingWhatsappJid } from "../_phone.ts";
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { reportApiFailure, reportApiSuccess } from "../_health.ts";
@@ -2906,9 +2906,19 @@ async function sendWhatsAppMessage(
 
     const resolvedChatNumber = await resolvePreferredChatNumber(instance.instance_name, phone, evolutionUrl, evolutionKey);
 
-    // Prioriza o número real do chat na Evolution e depois cai para os formatos
-    // normalizados/variantes para números brasileiros legados.
-    const tryNumbers = [resolvedChatNumber, phone];
+    // Resolve o JID REAL via /chat/whatsappNumbers (definitivo: diz se o
+    // número existe no WhatsApp). Sem isso, Baileys aceita o POST mesmo
+    // para JIDs inexistentes (200 OK) e a entrega falha silenciosamente.
+    const resolvedExistingJid = await resolveExistingWhatsappJid({
+      evolutionUrl,
+      evolutionKey,
+      instanceName: instance.instance_name,
+      phone,
+    });
+
+    // Ordem de prioridade: JID confirmado existente → chat preferido →
+    // formato normalizado → variante BR.
+    const tryNumbers = [resolvedExistingJid, resolvedChatNumber, phone];
     const variant = getBrazilianPhoneVariant(phone);
     if (variant && variant !== phone) tryNumbers.push(variant);
 
