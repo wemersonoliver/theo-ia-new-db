@@ -75,6 +75,62 @@ export function getBrazilianPhoneVariant(raw: string | null | undefined): string
   return null;
 }
 
+function normalizeEvolutionBaseUrl(url: string): string {
+  return url.replace(/\/+$/, "").replace(/\/manager$/i, "");
+}
+
+function extractDigitsFromRemoteJid(remoteJid: unknown): string | null {
+  if (typeof remoteJid !== "string") return null;
+  const base = remoteJid.split("@")[0];
+  const digits = base.replace(/\D/g, "");
+  return digits || null;
+}
+
+// Quando já existe uma conversa no WhatsApp, o JID do chat é mais confiável
+// do que uma validação genérica por número. Isso resolve casos de números BR
+// recém-criados/recuperados em que a Evolution aceita o envio para 13 dígitos,
+// mas o chat real ativo está no JID alternativo sem o nono dígito.
+export async function resolvePreferredWhatsappChatNumber(args: {
+  evolutionUrl: string;
+  evolutionKey: string;
+  instanceName: string;
+  phone: string;
+}): Promise<string | null> {
+  try {
+    const canonical = normalizeBrazilianPhone(args.phone);
+    const variant = getBrazilianPhoneVariant(canonical);
+    const candidateSet = new Set([args.phone, canonical, variant].filter(Boolean) as string[]);
+
+    const response = await fetch(`${normalizeEvolutionBaseUrl(args.evolutionUrl)}/chat/findChats/${args.instanceName}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: args.evolutionKey,
+        Authorization: `Bearer ${args.evolutionKey}`,
+      },
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) return null;
+    const chats = await response.json().catch(() => null);
+    if (!Array.isArray(chats)) return null;
+
+    for (const chat of chats) {
+      const remoteJid = chat?.id || chat?.remoteJid || chat?.jid;
+      const digits = extractDigitsFromRemoteJid(remoteJid);
+      if (!digits) continue;
+      if (candidateSet.has(digits) || normalizeBrazilianPhone(digits) === canonical) {
+        return digits;
+      }
+    }
+
+    return null;
+  } catch (e) {
+    console.warn("[resolvePreferredWhatsappChatNumber] lookup failed:", (e as Error)?.message);
+    return null;
+  }
+}
+
 // Resolve o JID REAL do WhatsApp consultando o endpoint
 // /chat/whatsappNumbers/{instance} da Evolution. Tenta as duas formas
 // (com e sem o "9") e retorna a primeira que existir no WhatsApp.
@@ -94,7 +150,7 @@ export async function resolveExistingWhatsappJid(args: {
   if (variant && !candidates.includes(variant)) candidates.push(variant);
   if (candidates.length === 0) return null;
 
-  const url = `${args.evolutionUrl.replace(/\/+$/, "")}/chat/whatsappNumbers/${args.instanceName}`;
+  const url = `${normalizeEvolutionBaseUrl(args.evolutionUrl)}/chat/whatsappNumbers/${args.instanceName}`;
   try {
     const r = await fetch(url, {
       method: "POST",

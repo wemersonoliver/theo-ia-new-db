@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveAccountId } from "../_account.ts";
 import { cleanAIText } from "../_ai_text.ts";
 import { extractIntroducedName, extractPersonName } from "../_person-name.ts";
-import { getBrazilianPhoneVariant, normalizeBrazilianPhone, resolveExistingWhatsappJid } from "../_phone.ts";
+import { getBrazilianPhoneVariant, normalizeBrazilianPhone, resolveExistingWhatsappJid, resolvePreferredWhatsappChatNumber } from "../_phone.ts";
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { retrieveRelevantContext } from "../_shared/rag.ts";
 import { reportApiFailure, reportApiSuccess } from "../_health.ts";
@@ -2239,7 +2239,7 @@ async function executeSendLocation(supabase: any, userId: string, phone: string,
   }
 
   try {
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/+$/, "").replace(/\/manager$/i, "");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
 
     if (!evolutionUrl || !evolutionKey) {
@@ -2393,7 +2393,12 @@ async function executeSendProductVideo(
       }
     }
 
-    const resolvedChatNumber = await resolvePreferredChatNumber(instance.instance_name, phone, evolutionUrl, evolutionKey);
+    const resolvedChatNumber = await resolvePreferredWhatsappChatNumber({
+      evolutionUrl,
+      evolutionKey,
+      instanceName: instance.instance_name,
+      phone,
+    });
     const tryNumbers = [resolvedChatNumber, phone];
     const variant = getBrazilianPhoneVariant(phone);
     if (variant && variant !== phone) tryNumbers.push(variant);
