@@ -74,3 +74,60 @@ export function getBrazilianPhoneVariant(raw: string | null | undefined): string
 
   return null;
 }
+
+// Resolve o JID REAL do WhatsApp consultando o endpoint
+// /chat/whatsappNumbers/{instance} da Evolution. Tenta as duas formas
+// (com e sem o "9") e retorna a primeira que existir no WhatsApp.
+// Importante: Baileys aceita o POST de envio mesmo para JIDs inexistentes
+// (retorna 200 OK pois apenas enfileira), por isso o fallback baseado em
+// erro HTTP não detecta esse caso — precisamos resolver ANTES de enviar.
+export async function resolveExistingWhatsappJid(args: {
+  evolutionUrl: string;
+  evolutionKey: string;
+  instanceName: string;
+  phone: string;
+}): Promise<string | null> {
+  const candidates: string[] = [];
+  const canonical = normalizeBrazilianPhone(args.phone);
+  if (canonical) candidates.push(canonical);
+  const variant = getBrazilianPhoneVariant(canonical);
+  if (variant && !candidates.includes(variant)) candidates.push(variant);
+  if (candidates.length === 0) return null;
+
+  const url = `${args.evolutionUrl.replace(/\/+$/, "")}/chat/whatsappNumbers/${args.instanceName}`;
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: args.evolutionKey,
+        Authorization: `Bearer ${args.evolutionKey}`,
+      },
+      body: JSON.stringify({ numbers: candidates }),
+    });
+    if (!r.ok) return null;
+    const data = await r.json().catch(() => null) as Array<{ exists?: boolean; jid?: string; number?: string }> | null;
+    if (!Array.isArray(data)) return null;
+    // Procura na ordem de preferência: canonical primeiro, depois variant.
+    for (const cand of candidates) {
+      const hit = data.find((d) => d?.exists && (
+        (d.number && d.number.replace(/\D/g, "") === cand) ||
+        (d.jid && d.jid.split("@")[0] === cand)
+      ));
+      if (hit) {
+        const j = (hit.number || hit.jid || "").toString().split("@")[0].replace(/\D/g, "");
+        if (j) return j;
+      }
+    }
+    // Se nenhum match estrito, pega o primeiro existente.
+    const firstExists = data.find((d) => d?.exists);
+    if (firstExists) {
+      const j = (firstExists.number || firstExists.jid || "").toString().split("@")[0].replace(/\D/g, "");
+      if (j) return j;
+    }
+    return null;
+  } catch (e) {
+    console.warn("[resolveExistingWhatsappJid] lookup failed:", (e as Error)?.message);
+    return null;
+  }
+}
