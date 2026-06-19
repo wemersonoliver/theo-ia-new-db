@@ -1,67 +1,51 @@
-# Corrigir disparos noturnos do iGreen Scenario Dispatcher
+## Diagnóstico
 
-## Problema
+A mensagem que chegou ao Theo às **01:15 da madrugada (BRT)** (`2026-06-19 04:15 UTC`) foi gerada pelo dispatcher `followup-ai` (assinatura `sent_by: "followup_ai"`). Ao analisar o código, encontrei dois bugs reais que afetam **qualquer conta** que use o follow-up clássico:
 
-A conta `marcioevandrocosta@hotmail.com` enviou mensagens de cenários (`sent_by: igreen_scenario`) às **23:15 BRT** para os contatos `5571983459826` e `5541985171405`. A causa é que o `igreen-scenario-dispatcher` **não respeita janela horária**, ao contrário do `followup-dispatch` clássico (08–19 BRT). Após o travamento do WhatsApp do usuário, o backlog foi disparado de madrugada — risco real de ban do número.
+1. **`followup-ai/index.ts` não checa janela horária no envio.** Ele só pega `followup_tracking` com `next_scheduled_at <= now()` e despacha — diferente do `followup-dispatch` que já chama `isWithinWindow(config)` antes de enviar. Resultado: se o agendamento cair de madrugada (por bug ou backlog), o envio acontece sem barreira.
 
-## Objetivo
+2. **`calculateNextSchedule` (em `followup-ai` e em `followup-check-inactive`) opera em UTC, não em BRT.** Faz `new Date().setHours(8, ...)` — ou seja, configura "08:00" no fuso do servidor (UTC). Como BRT = UTC−3, "08:00 UTC" cai às **05:00 da manhã em São Paulo**. Quando o passo da manhã é avançado a partir de um envio noturno, o próximo `next_scheduled_at` cai antes do amanhecer no Brasil. Também não bloqueia domingo.
 
-Garantir que mensagens de cenários iGreen **só sejam enviadas entre 08:00 e 19:00 BRT, de segunda a sábado**, mesmo quando há backlog após reconexão ou quando o delay de um item cairia fora da janela.
+A conta `consultoriafontoura@gmail.com` (Mexicomigo, plano emagrecimento) tem `followup_config` ativa com janela 08:00–12:00 e 13:00–19:00 BRT, mas o tracking foi reagendado em UTC e disparou de madrugada (já é a 2ª recorrência desse mesmo lead — mensagens em 17/06 e 19/06 todas com assinatura followup_ai).
 
-## Mudanças em `supabase/functions/igreen-scenario-dispatcher/index.ts`
+## Mudanças no código
 
-### 1. Reusar helpers de janela existentes
-Importar `isWithinWindow` e `generateScheduleSequence` de `../_followup-window.ts` (já testados e usados pelo followup clássico). Janela padrão: `morning_window_start=08:00`, `evening_window_end=19:00`, bloqueia domingo.
+### 1. `supabase/functions/followup-ai/index.ts`
 
-### 2. Guard global no loop (antes de processar cada enrollment)
-No início do `for (const enrollment of due)`, se `!isWithinWindow({})`:
-- Reagendar `next_run_at` para o próximo slot válido via `generateScheduleSequence({}, 1)[0]`
-- `skipped++` e `continue`
-- **Não enviar nada fora da janela, ponto final.**
+- Importar `isWithinWindow` e `generateScheduleSequence` de `../_followup-window.ts`.
+- Logo após carregar `config` para cada `item` (após linha 364), checar `isWithinWindow(config)`. Se estiver **fora da janela**:
+  - Reverter o "claim" reagendando `next_scheduled_at` para o **próximo slot válido em BRT** via `generateScheduleSequence(config, 1)[0]`.
+  - Não enviar mensagem, não consumir o passo, `continue`.
+- Substituir a função `calculateNextSchedule` (linhas 752–782) por uma versão BRT-aware:
+  - Reaproveitar `generateScheduleSequence` quando possível, ou implementar o cálculo manualmente convertendo o "agora" para `America/Sao_Paulo` antes de aplicar `setHours`, gerando o slot em horário local BRT e devolvendo o UTC equivalente.
+  - Pular domingo (`day === 0`) automaticamente.
+  - Manter a regra de "manhã x tarde" (passos ímpares de manhã, pares à tarde) e o avanço de dia quando o passo atual foi à tarde.
+  - Garantir que se o slot calculado cair no passado, avança 1 dia (já pulando domingo).
 
-### 3. Clamp do `addDelay` para dentro da janela (linha 265)
-Nova função `clampToWindow(target: Date): Date`:
-- Converte `target` para BRT
-- Se cair antes das 08:00 → move para 08:00 do mesmo dia
-- Se cair depois das 19:00 → move para 08:00 + jitter do próximo dia útil
-- Se cair em domingo → pula para segunda
-- Retorna em UTC
-Aplicar em todos os `next_run_at` calculados: linha 191 (instance disconnected), 231 (retry), 265 (próximo item do bundle), 281 (catch error), 327 (applyFinalTag retry), 399/449 (advanceToNext).
+### 2. `supabase/functions/followup-check-inactive/index.ts`
 
-### 4. Corrigir `slotForPeriod` para nunca retornar passado
-No final da função, se `result < new Date()`, recursar com `forDay = amanhã` (e pular domingo). Garante que backlog não dispare instantaneamente.
+- Substituir `calculateNextSchedule` (linhas 213–250) pela mesma lógica BRT-aware.
+- Garantir que o primeiro agendamento de qualquer novo tracking só cai entre 08:00 e 19:00 BRT, segunda a sábado.
 
-### 5. Cap de envios por run por contato
-Adicionar `Set<string>` de `account_id:phone` já processados no run. Se o contato já recebeu uma mensagem neste tick, pular os demais enrollments do mesmo contato (defesa contra múltiplos enrollments simultâneos).
+### 3. Nenhuma mudança em `followup-dispatch/index.ts`
+Já chama `isWithinWindow(config)` e usa `generateScheduleSequence` corretamente.
 
-## Mudança no banco (migration)
+## Mudanças no banco (via `supabase--insert`, sem migration)
 
-Reagendar os enrollments ativos cujo `next_run_at` está no passado ou cairia fora da janela, para o próximo slot válido (amanhã 08:00–19:00 BRT, segunda a sábado). Isso limpa o backlog acumulado de TODOS os usuários, não só do Márcio.
+São ações pontuais de **reagendamento de dados**, não alteração de schema:
 
-```sql
-UPDATE igreen_scenario_enrollments
-SET next_run_at = (
-  (date_trunc('day', (now() AT TIME ZONE 'America/Sao_Paulo')) + interval '1 day'
-   + (interval '8 hours') + (random() * interval '11 hours'))
-  AT TIME ZONE 'America/Sao_Paulo'
-),
-updated_at = now()
-WHERE status IN ('active','pending_tag')
-  AND (
-    next_run_at < now()
-    OR EXTRACT(HOUR FROM (next_run_at AT TIME ZONE 'America/Sao_Paulo')) NOT BETWEEN 8 AND 18
-    OR EXTRACT(DOW  FROM (next_run_at AT TIME ZONE 'America/Sao_Paulo')) = 0
-  );
-```
+- **Para todos os usuários:** todo `followup_tracking` com `status='pending'` cujo `next_scheduled_at` está no passado **ou** cairia fora da janela BRT (08–19h, seg–sáb), é empurrado para amanhã entre 08:00 e 19:00 BRT (jitter aleatório), pulando domingo. Isso limpa o backlog global que o cron pode disparar a qualquer momento.
+- **Para o usuário `consultoriafontoura@gmail.com` e o contato `5547991293662`:** marcar o tracking corrente como `declined` (cancela o ciclo atual) — assim o lead não recebe a próxima rodada do follow-up até que uma nova janela de inatividade dispare naturalmente, agora já pelo código corrigido.
 
-## Não-mudanças
+## Como verificar
 
-- Não mexo no `followup-dispatch` (já tem `isWithinWindow`).
-- Não mexo no `whatsapp-ai-agent` — ele responde quando o cliente escreve, não dispara em massa.
-- Não desativo cenários existentes; apenas atraso para a próxima janela válida.
+1. Após o deploy, listar `followup_tracking` `pending` da conta `9f9b5baf-…-bd55-…` e confirmar que `next_scheduled_at` cai dentro de 08:00–19:00 BRT em dia útil.
+2. Forçar uma chamada manual da função `followup-ai` fora da janela (ex.: agora à noite) e confirmar nos logs que retorna `processed: 0` com reagendamentos para o próximo slot válido.
+3. Acompanhar `whatsapp_conversations` do telefone 5547991293662 por 48h e confirmar ausência de mensagens `sent_by:followup_ai` fora do horário comercial brasileiro.
 
-## Verificação
+## O que NÃO muda
 
-1. Após o deploy, consultar `igreen_scenario_enrollments` dos dois números e confirmar que `next_run_at` está dentro de 08–19 BRT em dia útil.
-2. Forçar uma chamada do dispatcher fora de janela e verificar nos logs que retorna `sent: 0, skipped: N>0`.
-3. Acompanhar `igreen_scenario_events` por 24h para confirmar ausência de envios fora da janela.
+- `followup-dispatch` (já correto).
+- `igreen-scenario-dispatcher` (objeto de outro plano).
+- `whatsapp-ai-agent` (responde quando o cliente escreve, não dispara em massa).
+- Schema do banco — não há `CREATE TABLE`, `ALTER`, RLS ou migration. Apenas `UPDATE` de dados.
