@@ -767,34 +767,9 @@ Retorne APENAS a mensagem final pronta pra enviar, sem explicações, sem aspas,
   }
 });
 
-function calculateNextSchedule(config: any, nextStep: number, currentIsMorning: boolean): string {
-  const isNextMorning = nextStep % 2 === 1;
-  const windowStart = isNextMorning ? config.morning_window_start : config.evening_window_start;
-  const windowEnd = isNextMorning ? config.morning_window_end : config.evening_window_end;
-
-  const nextDate = new Date();
-
-  // If current step was afternoon, next (morning) is tomorrow
-  // If current step was morning, next (afternoon) is today
-  if (!currentIsMorning) {
-    nextDate.setDate(nextDate.getDate() + 1);
-  }
-
-  const [startH, startM] = (windowStart || "08:00").split(":").map(Number);
-  const [endH, endM] = (windowEnd || "19:00").split(":").map(Number);
-  const startMinutes = startH * 60 + startM;
-  const endMinutes = endH * 60 + endM;
-
-  // Ensure we have a valid range
-  const range = Math.max(endMinutes - startMinutes, 1);
-  const randomMinutes = startMinutes + Math.floor(Math.random() * range);
-
-  nextDate.setHours(Math.floor(randomMinutes / 60), randomMinutes % 60, 0, 0);
-
-  // Safety: if scheduled in the past, push to tomorrow
-  if (nextDate.getTime() < Date.now()) {
-    nextDate.setDate(nextDate.getDate() + 1);
-  }
-
-  return nextDate.toISOString();
+function calculateNextSchedule(config: any, _nextStep: number, _currentIsMorning: boolean): string {
+  // Sempre delega para o gerador BRT-aware do _followup-window.ts.
+  // Ele cuida de: janela horária BRT (08–19 por padrão), pular domingos
+  // e empurrar para amanhã se já passou da janela do dia.
+  return generateScheduleSequence(config, 1)[0];
 }
