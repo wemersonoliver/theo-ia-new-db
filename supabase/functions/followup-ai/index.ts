@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cleanAIText } from "../_ai_text.ts";
 import { logTextUsage, extractGeminiTokens } from "../_shared/ai-usage.ts";
 import { openAITextFallback } from "../_shared/ai-fallback/index.ts";
+import { isWithinWindow, generateScheduleSequence } from "../_followup-window.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
