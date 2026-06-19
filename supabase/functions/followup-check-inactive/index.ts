@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveAccountId } from "../_account.ts";
 import { requireInternalKey } from "../_cron_auth.ts";
+import { generateScheduleSequence } from "../_followup-window.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -211,40 +212,7 @@ serve(async (req) => {
 });
 
 function calculateNextSchedule(config: any): string {
-  const now = new Date();
-  const [mStartH, mStartM] = (config.morning_window_start || "08:00").split(":").map(Number);
-  const [mEndH, mEndM] = (config.morning_window_end || "12:00").split(":").map(Number);
-  const [eStartH, eStartM] = (config.evening_window_start || "13:00").split(":").map(Number);
-  const [eEndH, eEndM] = (config.evening_window_end || "19:00").split(":").map(Number);
-
-  const mStartMinutes = mStartH * 60 + mStartM;
-  const mEndMinutes = mEndH * 60 + mEndM;
-  const eStartMinutes = eStartH * 60 + eStartM;
-  const eEndMinutes = eEndH * 60 + eEndM;
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
-  const scheduledDate = new Date(now);
-
-  if (nowMinutes < mEndMinutes) {
-    const start = Math.max(mStartMinutes, nowMinutes + 10);
-    if (start < mEndMinutes) {
-      const randomMin = start + Math.floor(Math.random() * (mEndMinutes - start));
-      scheduledDate.setHours(Math.floor(randomMin / 60), randomMin % 60, 0, 0);
-      return scheduledDate.toISOString();
-    }
-  }
-
-  if (nowMinutes < eEndMinutes) {
-    const start = Math.max(eStartMinutes, nowMinutes + 10);
-    if (start < eEndMinutes) {
-      const randomMin = start + Math.floor(Math.random() * (eEndMinutes - start));
-      scheduledDate.setHours(Math.floor(randomMin / 60), randomMin % 60, 0, 0);
-      return scheduledDate.toISOString();
-    }
-  }
-
-  scheduledDate.setDate(scheduledDate.getDate() + 1);
-  const randomMin = mStartMinutes + Math.floor(Math.random() * (mEndMinutes - mStartMinutes));
-  scheduledDate.setHours(Math.floor(randomMin / 60), randomMin % 60, 0, 0);
-  return scheduledDate.toISOString();
+  // BRT-aware: respeita janela 08–19 (default), pula domingo e empurra para
+  // amanhã se já passou da janela do dia. Implementado em _followup-window.ts.
+  return generateScheduleSequence(config, 1)[0];
 }
