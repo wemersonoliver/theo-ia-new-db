@@ -373,6 +373,23 @@ serve(async (req) => {
           continue;
         }
 
+        // Bloqueio de janela horária (BRT). Se estiver fora da janela ou em
+        // domingo, reagenda para o próximo slot válido e NÃO envia.
+        if (!isWithinWindow(config)) {
+          const nextSlot = generateScheduleSequence(config, 1)[0];
+          await supabase
+            .from("followup_tracking")
+            .update({
+              next_scheduled_at: nextSlot,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", item.id);
+          console.log(
+            `Skipping ${item.phone}: out of BRT window — rescheduled to ${nextSlot}`,
+          );
+          continue;
+        }
+
         // Load conversation history
         const { data: conversation } = await supabase
           .from("whatsapp_conversations")
