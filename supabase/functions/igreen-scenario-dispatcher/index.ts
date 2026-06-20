@@ -478,6 +478,7 @@ async function sendItem(
 }
 
 async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
+  try {
   // morning → evening (same day); evening → next enabled day, morning
   if (enrollment.current_period === "morning") {
     const next = slotForPeriod("evening");
@@ -516,6 +517,7 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
         status: "pending_tag",
         current_item_position: 0,
         next_run_at: due,
+        last_sent_at: isoNow(),
         updated_at: isoNow(),
       }).eq("id", enrollment.id);
     } else {
@@ -523,6 +525,7 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
         status: "completed",
         next_run_at: null,
         current_item_position: 0,
+        last_sent_at: isoNow(),
         updated_at: isoNow(),
       }).eq("id", enrollment.id);
     }
@@ -539,4 +542,12 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
     last_sent_at: isoNow(),
     updated_at: isoNow(),
   }).eq("id", enrollment.id);
+  } catch (e) {
+    console.error("[advanceToNext] failed", enrollment.id, e);
+    // Reagenda para 1h à frente, mas dentro da janela, para impedir loop por minuto.
+    await supabase.from("igreen_scenario_enrollments").update({
+      next_run_at: clampToWindow(new Date(Date.now() + 60 * 60_000)).toISOString(),
+      updated_at: isoNow(),
+    }).eq("id", enrollment.id);
+  }
 }
