@@ -230,8 +230,13 @@ serve(async (req) => {
       }
 
       // Locate next item to send
-      const nextItem = items.find((it) => it.position > (enrollment.current_item_position || 0))
-                      ?? (enrollment.current_item_position === 0 ? items[0] : null);
+      // Se o bloco ainda não enviou nada (last_sent_at não bate com esse bundle),
+      // começa pela menor position (geralmente 0). Caso contrário, próximo > atual.
+      const hasStarted = items.some((it) => it.position === enrollment.current_item_position)
+        && (enrollment.current_item_position ?? 0) > 0;
+      const nextItem = hasStarted
+        ? (items.find((it) => it.position > (enrollment.current_item_position ?? 0)) ?? null)
+        : items[0];
 
       if (!nextItem) {
         // bundle finished → advance to next period/day
@@ -239,6 +244,20 @@ serve(async (req) => {
         advanced++;
         continue;
       }
+
+      // Lock otimista — só processa quem conseguir reservar (CAS no next_run_at).
+      // Empurra next_run_at para 5min à frente ANTES de qualquer envio.
+      const { data: claim } = await supabase
+        .from("igreen_scenario_enrollments")
+        .update({
+          next_run_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+          updated_at: isoNow(),
+        })
+        .eq("id", enrollment.id)
+        .eq("next_run_at", enrollment.next_run_at)
+        .select("id")
+        .maybeSingle();
+      if (!claim) { skipped++; continue; }
 
       // Resolve a connected instance for the account
       const { data: inst } = await supabase
@@ -459,6 +478,7 @@ async function sendItem(
 }
 
 async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
+  try {
   // morning → evening (same day); evening → next enabled day, morning
   if (enrollment.current_period === "morning") {
     const next = slotForPeriod("evening");
@@ -497,6 +517,7 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
         status: "pending_tag",
         current_item_position: 0,
         next_run_at: due,
+        last_sent_at: isoNow(),
         updated_at: isoNow(),
       }).eq("id", enrollment.id);
     } else {
@@ -504,6 +525,7 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
         status: "completed",
         next_run_at: null,
         current_item_position: 0,
+        last_sent_at: isoNow(),
         updated_at: isoNow(),
       }).eq("id", enrollment.id);
     }
@@ -520,4 +542,12 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
     last_sent_at: isoNow(),
     updated_at: isoNow(),
   }).eq("id", enrollment.id);
+  } catch (e) {
+    console.error("[advanceToNext] failed", enrollment.id, e);
+    // Reagenda para 1h à frente, mas dentro da janela, para impedir loop por minuto.
+    await supabase.from("igreen_scenario_enrollments").update({
+      next_run_at: clampToWindow(new Date(Date.now() + 60 * 60_000)).toISOString(),
+      updated_at: isoNow(),
+    }).eq("id", enrollment.id);
+  }
 }
