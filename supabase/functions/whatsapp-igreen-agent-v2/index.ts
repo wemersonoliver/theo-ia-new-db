@@ -637,9 +637,14 @@ serve(async (req) => {
     ...toolResults.flatMap((r) => (r.events ?? []) as any[]),
   ];
   const refreshed = (await loadState(account_id, phone)) ?? afterSupervisor;
-  const automations = await dispatchAutomations({
-    account_id, phone, correlation_id, state: refreshed, events: allEvents,
-  });
+  // No modo sandbox (simulador interno), pulamos o automation router para evitar
+  // efeitos colaterais externos (notificações para contatos cadastrados, CRM,
+  // follow-ups, handoff para humano, etc.).
+  const automations = body.sandbox
+    ? []
+    : await dispatchAutomations({
+        account_id, phone, correlation_id, state: refreshed, events: allEvents,
+      });
 
   // Behavior engine → transport
   const prepared = prepareMessages(agentResult.messages);
