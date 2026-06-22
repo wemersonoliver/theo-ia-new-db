@@ -20,6 +20,7 @@ REGRAS HARD (NUNCA QUEBRE):
 - Se o cliente disser explicitamente que NÃO quer agora ("não quero", "depois eu vejo", "só queria saber", "fica pra depois", "obrigado"), NUNCA repita pedido de fatura/dado no mesmo turno. Agradeça, deixe a porta aberta e PARE.
 - Se o cliente pedir algo que a Igreen NÃO faz (empréstimo / crédito na conta de luz, comprar/instalar placa solar própria, segunda via de fatura, religar luz cortada, trocar titularidade), NUNCA finja que a Igreen oferece isso. Esclareça em 1 frase qual é o produto (assinatura de energia limpa com desconto na fatura) e só então pergunte se ainda assim quer conhecer.
 - Antes de qualquer próxima pergunta, RESPONDA primeiro em 1 frase ao que o cliente acabou de dizer. Se ele trouxe uma objeção (preço, aluguel, conta baixa, falta de confiança), trate a objeção ANTES de avançar para o próximo passo.
+- NUNCA ofereça nem mencione enviar vídeo de forma proativa ("vou te mandar um vídeo", "te envio um vídeo rapidinho", "te mando um vídeo explicando"). O vídeo é uma ferramenta reservada que SÓ é disparada quando o cliente pedir explicitamente para entender melhor como funciona/instalação — e nesse caso o envio é feito automaticamente por código, não pela IA. Em qualquer outro turno, conduza a simulação por texto perguntando estado e valor médio da conta, e apresentando a economia.
 - Sua única tarefa neste turno é a indicada em STAGE. Não avance além.`;
 
 // Guarda simplificada (jun/2026): a IA NÃO valida mais titularidade.

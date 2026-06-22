@@ -271,6 +271,13 @@ function _decideGreenStageInner(
       (etapa === "qualificacao" || etapa === "fatura_enviada") &&
       extras.greeted &&
       detectFaqTopic(message)) {
+    const topic = detectFaqTopic(message);
+    // Vídeo agora é uma "arma" reservada: só dispara quando o cliente pede
+    // mais detalhes de como funciona / instalação E ainda não recebeu o vídeo.
+    // Nunca é enviado proativamente pelo bot.
+    if ((topic === "como_funciona" || topic === "instalacao") && !extras.video_sent) {
+      return "send_video";
+    }
     return "faq_answer";
   }
 
@@ -292,17 +299,10 @@ function _decideGreenStageInner(
   }
 
   if (etapa === "qualificacao") {
-    if (!extras.video_sent) return "send_video";
-    // Logo depois do vídeo, dar um respiro (1 vez) — capta reação real
-    // antes de cobrar valor da fatura.
-    if (extras.video_sent && !extras.engaged && !hasValue(extras.valor_fatura)) {
-      // Se a mensagem do cliente já é uma objeção genérica, deixa o bloco
-      // de PRIORIDADE 0.7 (abaixo) cuidar; caso contrário, faz engage_check.
-      if (!isGenericObjection(message)) return "engage_check";
-    }
-    // Antes de simular precisamos OBRIGATORIAMENTE de estado + valor.
-    if (!hasValue(extras.valor_fatura)) return "ask_valor_fatura";
+    // Fluxo sem vídeo automático: estado → valor → distribuidora → simulação.
+    // O vídeo só é enviado se o cliente pedir explicitamente "como funciona".
     if (!hasValue(extras.estado)) return "ask_estado";
+    if (!hasValue(extras.valor_fatura)) return "ask_valor_fatura";
     if (!hasValue(extras.distribuidora)) {
       if (!hasValue(extras.distributors_presented)) return "present_distributors";
       return "ask_distribuidora";
