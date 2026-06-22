@@ -1,130 +1,103 @@
-## O que aconteceu na conta marcioevandrocosta@hotmail.com
+## Problema
 
-Verifiquei os números **5541985171405** (Regina) e **5546999147790** (Dulce). A mensagem repetida — *"O que acha de fazer seu cadastro? Só preciso da foto da sua fatura para iniciar o processo."* — foi enviada **a cada 1 minuto**, de 19/06 15:50 até 16:25 UTC, totalizando ~35 envios em cada conversa.
+O **Simulador de Atendimento** (`/simulate-attendance`) chama a edge function `test-ai-prompt`, que é o caminho **V1 antigo** (um único Gemini com `_igreen_flow.ts`).
 
-Não é só com essas duas. Levantei pela conta toda (`igreen_scenario_events`) e encontrei o mesmo padrão em pelo menos 6 contatos no mesmo dia, com até **320 envios duplicados em um único contato** (5588992540407):
+O **WhatsApp real** das contas iGreen (ex.: `marcioevandrocosta@hotmail.com`) roda em `whatsapp-igreen-agent-v2`, com supervisor + specialists (green, telecom, expansao, qualifier, failsafe) + tools + RAG + state engine.
 
-| Contato | Envios em 19/06 |
-|---|---|
-| 5588992540407 | 320 |
-| 5599992188592 | 316 |
-| 5541985171405 (Regina) | 302 |
-| 5571983459826 | 143 |
-| 5551991962576 | 86 |
-| 5546999147790 (Dulce) | 86 |
+Resultado: o simulador responde de forma diferente do WhatsApp real, e ajustes feitos no fluxo V2 (specialists, qualifier, sticky-specialist, distributor discounts, etc.) **nunca aparecem** no simulador.
 
-Todos os enrollments travaram no mesmo estado:
-- `scenario = Cenário 1`
-- `current_day = 7`
-- `current_period = evening`
-- `current_item_position = 0`
-- `status = active`
+## Objetivo
 
-## Causa raiz
+Quando a conta logada for iGreen (`accounts.is_igreen = true`), o simulador deve executar **o mesmo pipeline V2** que roda em produção, em modo sandbox:
+- Sem enviar mensagem real pelo Evolution
+- Sem persistir state/memory/conversas no banco
+- Mantendo todos os outros componentes (supervisor, specialist routing, tools, RAG, guardrails)
 
-A edge function `igreen-scenario-dispatcher` (rodada por `pg_cron` a cada 1 minuto) tem dois defeitos sérios:
+Contas não-iGreen continuam usando o V1 (`test-ai-prompt`) sem alteração.
 
-### Bug 1 — Item de posição 0 é pulado e advanceToNext não conclui
+## Implementação
 
-Linha 233 do `index.ts`:
-```ts
-const nextItem = items.find((it) => it.position > (enrollment.current_item_position || 0))
-                ?? (enrollment.current_item_position === 0 ? items[0] : null);
+### 1. Nova edge function `test-igreen-prompt-v2`
+
+Cria `supabase/functions/test-igreen-prompt-v2/index.ts` que:
+
+- Autentica o usuário via JWT (mesmo padrão do `test-ai-prompt`).
+- Resolve `accountId` e bloqueia se a conta não for iGreen (retorna 400 com mensagem clara).
+- Monta um **contexto sandbox** equivalente ao que `whatsapp-igreen-agent-v2` recebe via webhook:
+  - `phone` fake estável por sessão (ex.: `sim-<userId>`)
+  - `messages` histórico vindo do front
+  - `userMessage` atual
+  - `attachments` (imagem/áudio/PDF) — reaproveita o tratamento já existente
+  - Flag `sandbox: true`
+- Reutiliza os módulos de `_igreen_v2/` **sem duplicar lógica**:
+  - `supervisor` → classifica intent + specialist
+  - `specialist-router` → escolhe specialist (green/telecom/expansao/qualifier/failsafe)
+  - `agents/<specialist>` → gera resposta
+  - `tool-router` → executa tools em modo sandbox (ver item 2)
+  - `rag` → busca documentos da conta
+  - `memory` → usa memória **em RAM** apenas (sem gravar)
+- Retorna `{ message, debug: { specialist, intent, confidence, tools_called } }` para o front exibir.
+
+### 2. Modo sandbox nas tools
+
+Adapta `_igreen_v2/tool-router/registry.ts` (e tools dependentes) para aceitar um flag `sandbox` no contexto:
+
+- `send_product_video` → não chama Evolution; retorna `{ ok: true, mocked: true }`
+- `add_contact_tag`, `save_green_lead_field` → não escrevem no CRM/DB; só logam
+- `get_distributor_discount`, `validate_green_invoice`, `validate_green_identity` → **executam normalmente** (são leitura/computação, ajudam no teste real)
+- `request_human_handoff` → não dispara notificação; só marca no debug
+
+Nenhuma tool deve persistir nada quando `sandbox = true`.
+
+### 3. Supervisor/specialists sem persistência
+
+Garante que, em modo sandbox:
+- `state-engine` lê estado opcional vindo do front (`messages`), mas **não grava** em `whatsapp_ai_sessions` nem em `igreen_lead_state`.
+- `memory` usa store em memória do request.
+- `analytics`/`observability` continuam logando (útil para debug), mas sem efeitos colaterais no funil real.
+
+### 4. Frontend — `PromptTestTab.tsx`
+
+Em `src/components/ai/PromptTestTab.tsx`:
+
+- Adiciona hook `useAccount()` (já existe) para ler `is_igreen` da conta atual.
+- Em `handleTestSend`:
+  - Se `is_igreen` → chama `/functions/v1/test-igreen-prompt-v2`
+  - Senão → mantém `/functions/v1/test-ai-prompt`
+- Adiciona um badge no header do painel "Simulador de Atendimento" indicando o pipeline ativo:
+  - Conta iGreen → `Pipeline: V2 (supervisor + specialists)`
+  - Outras → `Pipeline: V1`
+- (Opcional) Mostra collapsible com `debug.specialist`, `debug.intent`, `debug.tools_called` abaixo de cada resposta para facilitar o ajuste.
+
+### 5. `supabase/config.toml`
+
+Adiciona:
+
+```toml
+[functions.test-igreen-prompt-v2]
+verify_jwt = false
 ```
 
-Quando `current_item_position = 0` (estado inicial de cada bloco), o `find(pos > 0)` **encontra direto a posição 1** e nunca usa o fallback. Resultado:
+(autenticação é validada em código, mesmo padrão das outras functions iGreen)
 
-- O item da posição 0 ("Conseguiu ver o vídeo que te mandei…") **nunca é enviado**.
-- Vai direto para a posição 1 ("O que acha de fazer seu cadastro…").
-- Como não sobram itens após pos 1, o código chama `advanceToNext`. No dia 7 evening, como não existe `day_number > 7`, deveria marcar `status = pending_tag` ou `completed`.
+### 6. Validação
 
-Mas o estado atual dos enrollments mostra **`status = active`** e **`next_run_at` apontando para a manhã de amanhã** — sinal de que a transição final não persistiu corretamente em vários ciclos.
+- Logar como `marcioevandrocosta@hotmail.com` (conta iGreen) → simulador deve:
+  - Para "oi" → cair em `qualifier` e mostrar menu 1/2/3
+  - Para "quero saber mais sobre energia por assinatura" → cair em specialist `green`, pedir nome/UF/distribuidora, usar `get_distributor_discount`
+  - Para "quero ser licenciado" → cair em `expansao`
+  - Para "quero falar com humano" → cair em `failsafe` com `handoff_request`
+- Conferir nos logs do `test-igreen-prompt-v2` que **nenhuma** gravação foi feita em `whatsapp_conversations`, `whatsapp_ai_sessions`, `igreen_lead_state`, `crm_deals`.
+- Conferir conta não-iGreen → simulador continua chamando `test-ai-prompt` (V1) sem regressão.
 
-### Bug 2 — Cron sem lock + filtro por `next_run_at` permite reentrância
+## Detalhes técnicos
 
-O cron dispara a função **a cada minuto**, mas a função não tem lock por enrollment. Quando uma execução demora (chamada para Evolution API lenta, instância recém-criada como a do consultoriafontoura, rate limit, etc.) e a próxima invocação roda em paralelo, ambas selecionam o mesmo enrollment pelo filtro `lte("next_run_at", nowIso)` **antes** do `UPDATE` da execução anterior ser confirmado. Cada invocação envia a mensagem e tenta atualizar, gerando duplicatas.
+- Não modificar `whatsapp-igreen-agent-v2` em si — apenas extrair/reusar os módulos de `_igreen_v2/`. Se algum módulo hoje grava no DB diretamente sem aceitar flag de sandbox, criar um pequeno adapter no `test-igreen-prompt-v2` (ex.: passar um `mockClient` que não escreve), em vez de mexer em produção.
+- Reaproveitar exatamente o mesmo `SUPERVISOR_SYSTEM_PROMPT` e os system prompts dos specialists — qualquer ajuste futuro feito nos specialists passa a refletir automaticamente no simulador.
+- Manter o suporte a anexos (imagem/áudio/PDF) já existente no V1, encaminhando para os mesmos handlers que o webhook usa.
 
-A presença de `MAX_ENROLLMENTS = 25` e ausência de `SELECT … FOR UPDATE SKIP LOCKED` torna isso possível em qualquer pico.
+## Fora do escopo
 
-A combinação dos dois bugs explica perfeitamente o padrão observado: a mesma mensagem do dia 7 evening sendo enviada repetidamente a cada minuto até algo finalmente conseguir gravar o `next_run_at` de amanhã.
-
-## Plano de correção
-
-### 1. Corrigir `igreen-scenario-dispatcher/index.ts`
-
-**a)** Trocar a lógica de seleção do próximo item por uma forma sem ambiguidade:
-```ts
-// Se o bloco ainda não enviou nada, manda position 0.
-// Caso contrário, manda o próximo cuja position > current_item_position.
-const nextItem = (enrollment.current_item_position == null
-  || enrollment.last_sent_at == null
-  || !items.some(it => it.position <= enrollment.current_item_position))
-  ? items[0]
-  : items.find(it => it.position > enrollment.current_item_position) ?? null;
-```
-Garante que a posição 0 seja enviada, e que o avanço por posição funcione corretamente.
-
-**b)** Reservar o enrollment antes de enviar (lock otimista) para impedir reentrância:
-```ts
-// Empurra next_run_at para now + 5 min ANTES de enviar.
-// Se a outra invocação chegar primeiro, o update afetará 0 linhas e nós pulamos.
-const { data: claim } = await supabase
-  .from("igreen_scenario_enrollments")
-  .update({
-    next_run_at: new Date(Date.now() + 5 * 60_000).toISOString(),
-    updated_at: isoNow(),
-  })
-  .eq("id", enrollment.id)
-  .eq("next_run_at", enrollment.next_run_at)   // CAS — só vence quem leu primeiro
-  .select("id")
-  .maybeSingle();
-if (!claim) { skipped++; continue; }
-```
-Cada tick só processa enrollments que ele próprio conseguiu reservar; a outra invocação encontra `next_run_at` diferente do que leu e pula.
-
-**c)** Garantir que toda saída de `advanceToNext` (inclusive os branches `completed` e `pending_tag`) atualize `last_sent_at` — hoje só dois branches atualizam, o que dificulta auditoria.
-
-**d)** Garantir que, no branch `if (!nextDay)`, a query de `final_tag` use o `service_role` (já usa) e tenha `try/catch` próprio — se a leitura de `igreen_scenarios` falhar, hoje a exception sobe e o registro recai no catch externo que reagenda em +5 min, mantendo `status = active`. Em vez disso, reagendar em horário do dia útil seguinte.
-
-### 2. Limpar enrollments hoje travados
-
-Para os 6 enrollments listados acima (e qualquer outro do `Cenário 1` da conta com `current_day = 7`, `current_period = evening`, `status = active`), aplicar a finalização correta:
-
-```sql
-UPDATE igreen_scenario_enrollments
-SET status = 'pending_tag',
-    next_run_at = now() + interval '24 hours',
-    current_item_position = 0,
-    updated_at = now()
-WHERE account_id = '3f304fb6-fd4e-46d0-9831-b23fabd37b7a'
-  AND scenario_id = '829ad180-5e46-45e9-b26a-20d7d0ceaff7'
-  AND status = 'active'
-  AND current_day = 7
-  AND current_period = 'evening';
-```
-
-Isso para imediatamente o ciclo, agenda a aplicação da tag final ("NAO PASSOU CENARIO 1") em 24h, e segue o caminho previsto pelo cenário.
-
-### 3. Auditoria (opcional, recomendado)
-
-Adicionar índice/checagem para flagar enrollments com mais de N envios no mesmo `(day_number, period)`:
-
-```sql
-SELECT enrollment_id, day_number, period, count(*) AS sends
-FROM igreen_scenario_events
-WHERE sent_at > now() - interval '1 day'
-GROUP BY 1,2,3
-HAVING count(*) > 3;
-```
-Pode virar uma query do painel admin ou um alerta diário.
-
-## Resumo técnico
-
-| # | Mudança | Arquivo |
-|---|---------|---------|
-| 1a | Lógica de seleção do próximo item (envia pos 0) | `supabase/functions/igreen-scenario-dispatcher/index.ts` |
-| 1b | Lock otimista por CAS no `next_run_at` antes de enviar | mesmo |
-| 1c | Padronizar `last_sent_at` em todos os branches de `advanceToNext` | mesmo |
-| 1d | Try/catch interno em `advanceToNext` | mesmo |
-| 2  | Migration de cleanup dos 6 enrollments travados | nova migration |
-| 3  | Query de auditoria (opcional) | docs/admin |
+- Não toca em `whatsapp-igreen-agent-v2` em produção.
+- Não altera o `prompt-generator-ai` nem a aba "Ajustar Atendimento" (continua editando o `custom_prompt` da conta — V2 já lê esse prompt).
+- Não cria UI nova além do badge e do collapsible de debug; a tela `/simulate-attendance` permanece igual visualmente.
