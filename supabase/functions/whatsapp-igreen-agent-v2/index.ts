@@ -114,6 +114,14 @@ interface IncomingPayload {
   media?: { url: string; mime_type: string; byte_size: number };
   /** Correlation id externo (debug); senão é gerado. */
   correlation_id?: string;
+  /**
+   * Modo simulador: força dryRun no transporte (não chama Evolution),
+   * evitando que qualquer envio real saia para o WhatsApp quando o
+   * pipeline é exercitado pelo simulador interno do dashboard.
+   * State/memory continuam sendo gravados, mas sob um phone namespaced
+   * (ex.: "sim<userId>") que não conflita com clientes reais.
+   */
+  sandbox?: boolean;
 }
 
 serve(async (req) => {
@@ -629,9 +637,14 @@ serve(async (req) => {
     ...toolResults.flatMap((r) => (r.events ?? []) as any[]),
   ];
   const refreshed = (await loadState(account_id, phone)) ?? afterSupervisor;
-  const automations = await dispatchAutomations({
-    account_id, phone, correlation_id, state: refreshed, events: allEvents,
-  });
+  // No modo sandbox (simulador interno), pulamos o automation router para evitar
+  // efeitos colaterais externos (notificações para contatos cadastrados, CRM,
+  // follow-ups, handoff para humano, etc.).
+  const automations = body.sandbox
+    ? []
+    : await dispatchAutomations({
+        account_id, phone, correlation_id, state: refreshed, events: allEvents,
+      });
 
   // Behavior engine → transport
   const prepared = prepareMessages(agentResult.messages);
@@ -644,7 +657,9 @@ serve(async (req) => {
 
   // Phase 5 — transport orchestrator (lock → typing → send → record).
   const instance = await resolveInstanceName(account_id, (state as any)?.whatsapp_instance ?? null);
-  const dryRun = !Deno.env.get("EVOLUTION_API_URL") || !Deno.env.get("EVOLUTION_API_KEY");
+  const dryRun = !!body.sandbox
+    || !Deno.env.get("EVOLUTION_API_URL")
+    || !Deno.env.get("EVOLUTION_API_KEY");
   const sent = await withTimeout(
     "transport",
     DEFAULT_TIMEOUTS.transportMs * Math.max(chunkLimited.length, 1),

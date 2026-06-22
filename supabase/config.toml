@@ -42,6 +42,9 @@ verify_jwt = false
 [functions.whatsapp-igreen-agent-v2]
 verify_jwt = false
 
+[functions.test-igreen-prompt-v2]
+verify_jwt = false
+
 [functions.enforce-trial-expiration]
 verify_jwt = false
 

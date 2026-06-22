@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/lib/auth";
+import { useAccount } from "@/hooks/useAccount";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Send, RefreshCw, FlaskConical, Wand2, Paperclip, X, FileText, Image as ImageIcon, Mic } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 // ─── ABA TESTAR PROMPT ────────────────────────────────────────────────────────
 
@@ -75,6 +78,7 @@ const ChatPanel = ({
   attachments,
   onPickFile,
   onRemoveAttachment,
+  headerBadge,
 }: {
   title: string;
   subtitle: string;
@@ -94,6 +98,7 @@ const ChatPanel = ({
   attachments?: PendingAttachment[];
   onPickFile?: (files: FileList | null) => void;
   onRemoveAttachment?: (id: string) => void;
+  headerBadge?: React.ReactNode;
 }) => (
   <Card className="flex flex-col" style={{ maxHeight: "600px" }}>
     <CardHeader className="pb-3 shrink-0">
@@ -102,6 +107,7 @@ const ChatPanel = ({
           <CardTitle className="flex items-center gap-2 text-base">
             <Icon className={`h-4 w-4 ${accentClass}`} />
             {title}
+            {headerBadge}
           </CardTitle>
           <CardDescription className="text-xs mt-1">{subtitle}</CardDescription>
         </div>
@@ -229,6 +235,25 @@ function FilePickButton({ onPick, disabled }: { onPick: (files: FileList | null)
 
 export function PromptTestTab() {
   const { user } = useAuth();
+  const { membership } = useAccount();
+
+  // Detecta se a conta é iGreen para rotear o simulador para o pipeline V2.
+  const { data: isIgreenAccount = false } = useQuery({
+    queryKey: ["account-is-igreen", membership?.account_id],
+    enabled: !!membership?.account_id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("accounts")
+        .select("is_igreen")
+        .eq("id", membership!.account_id)
+        .maybeSingle();
+      return !!(data as any)?.is_igreen;
+    },
+  });
+
+  // Quando a conversa de teste estiver vazia, a próxima chamada V2 deve resetar
+  // o state/memory do sandbox para começar uma nova simulação do zero.
+  const [needsSandboxReset, setNeedsSandboxReset] = useState(true);
 
   // Test chat state
   const [testMessages, setTestMessages] = useState<TestMessage[]>([]);
@@ -319,21 +344,32 @@ export function PromptTestTab() {
       );
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const res = await fetch(`${supabaseUrl}/functions/v1/test-ai-prompt`, {
+      const endpoint = isIgreenAccount ? "test-igreen-prompt-v2" : "test-ai-prompt";
+      const payload = isIgreenAccount
+        ? {
+            // V2 não usa o histórico do front (state vive no banco). Mandamos
+            // reset=true na primeira mensagem da sessão para começar limpo.
+            userMessage: text || "(arquivo anexado pelo cliente)",
+            reset: needsSandboxReset,
+          }
+        : {
+            messages: testMessages,
+            userMessage: text || "(arquivo anexado pelo cliente)",
+            attachments: encodedAttachments,
+          };
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          messages: testMessages,
-          userMessage: text || "(arquivo anexado pelo cliente)",
-          attachments: encodedAttachments,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro na requisição");
+      if (isIgreenAccount) setNeedsSandboxReset(false);
       setTestMessages([...newMessages, { role: "assistant", content: data.message }]);
       // Liberar object URLs após o envio bem-sucedido
       sendingAttachments.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
@@ -395,6 +431,7 @@ export function PromptTestTab() {
   const handleTestRestart = () => {
     setTestMessages([]);
     setTestInput("");
+    setNeedsSandboxReset(true);
     setTestAttachments((prev) => {
       prev.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
       return [];
@@ -414,7 +451,11 @@ export function PromptTestTab() {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <ChatPanel
         title="Simulador de Atendimento"
-        subtitle="Teste o prompt atual como um cliente"
+        subtitle={
+          isIgreenAccount
+            ? "Pipeline V2 (supervisor + specialists) — espelha o WhatsApp real"
+            : "Teste o prompt atual como um cliente"
+        }
         icon={FlaskConical}
         messages={testMessages}
         input={testInput}
@@ -426,11 +467,20 @@ export function PromptTestTab() {
         placeholder="Escreva como um cliente faria... (anexe imagem, áudio ou PDF se quiser testar)"
         emptyIcon={FlaskConical}
         emptyTitle="Simulador de Atendimento"
-        emptyDesc="Envie uma mensagem como se fosse um cliente para testar o prompt atual."
+        emptyDesc={
+          isIgreenAccount
+            ? "Conta iGreen detectada — o simulador roda o mesmo pipeline V2 do WhatsApp real (supervisor, specialists green/telecom/expansao, qualifier, tools)."
+            : "Envie uma mensagem como se fosse um cliente para testar o prompt atual."
+        }
         accentClass="text-primary"
         attachments={testAttachments}
         onPickFile={handleAddAttachments}
         onRemoveAttachment={handleRemoveAttachment}
+        headerBadge={
+          isIgreenAccount ? (
+            <Badge variant="secondary" className="text-[10px]">Pipeline V2 · iGreen</Badge>
+          ) : null
+        }
       />
       <ChatPanel
         title="Ajustar Atendimento"
