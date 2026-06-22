@@ -78,6 +78,7 @@ const ChatPanel = ({
   attachments,
   onPickFile,
   onRemoveAttachment,
+  headerBadge,
 }: {
   title: string;
   subtitle: string;
@@ -97,6 +98,7 @@ const ChatPanel = ({
   attachments?: PendingAttachment[];
   onPickFile?: (files: FileList | null) => void;
   onRemoveAttachment?: (id: string) => void;
+  headerBadge?: React.ReactNode;
 }) => (
   <Card className="flex flex-col" style={{ maxHeight: "600px" }}>
     <CardHeader className="pb-3 shrink-0">
@@ -105,6 +107,7 @@ const ChatPanel = ({
           <CardTitle className="flex items-center gap-2 text-base">
             <Icon className={`h-4 w-4 ${accentClass}`} />
             {title}
+            {headerBadge}
           </CardTitle>
           <CardDescription className="text-xs mt-1">{subtitle}</CardDescription>
         </div>
