@@ -114,6 +114,14 @@ interface IncomingPayload {
   media?: { url: string; mime_type: string; byte_size: number };
   /** Correlation id externo (debug); senão é gerado. */
   correlation_id?: string;
+  /**
+   * Modo simulador: força dryRun no transporte (não chama Evolution),
+   * evitando que qualquer envio real saia para o WhatsApp quando o
+   * pipeline é exercitado pelo simulador interno do dashboard.
+   * State/memory continuam sendo gravados, mas sob um phone namespaced
+   * (ex.: "sim<userId>") que não conflita com clientes reais.
+   */
+  sandbox?: boolean;
 }
 
 serve(async (req) => {
