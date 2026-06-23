@@ -981,13 +981,11 @@ serve(async (req) => {
               await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
             }
           } else if (conversation.ai_active && instanceData.ai_enabled !== false) {
-            // AI already active — se gatilho está ligado, exige palavra-chave em cada mensagem
+            // AI já está ativa nessa conversa — a palavra-chave já cumpriu o papel de
+            // ATIVAR a IA, então as mensagens seguintes do mesmo cliente fluem normalmente
+            // (sem exigir keyword em cada nova mensagem).
             const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
-            if (keywordGateOn && !checkKeywordActivation()) {
-              console.log("AI skipped (keyword gate, no match):", phone);
-            } else {
-              await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
-            }
+            await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
           }
         } else {
           // New conversation - check if should activate AI
