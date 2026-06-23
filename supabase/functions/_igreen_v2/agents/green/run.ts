@@ -878,7 +878,7 @@ Quer que eu já comece seu cadastro agora? 😉`;
       }
       else if (stage === "simulate_discount_concreto") {
         const estado = (mergedExtras.estado as string | undefined) ?? "";
-        const distribuidora = (mergedExtras.distribuidora as string | undefined) ?? "";
+        let distribuidora = (mergedExtras.distribuidora as string | undefined) ?? "";
         const valor = Number(mergedExtras.valor_fatura ?? 0);
         const nome = (mergedExtras.client_name as string | undefined) ?? "";
         // Guard: distribuidora precisa estar entre as oficiais do estado.
@@ -889,6 +889,7 @@ Quer que eu já comece seu cadastro agora? 😉`;
           if (!valid) {
             if (optsCheck2.length === 1) {
               const chosen = optsCheck2[0];
+              distribuidora = chosen;
               patch.extras = { ...(patch.extras as object ?? mergedExtras), distribuidora: chosen };
               tool_calls.push({
                 name: "save_green_lead_field",
