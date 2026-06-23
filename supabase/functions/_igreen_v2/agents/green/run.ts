@@ -461,6 +461,11 @@ Quer que eu já comece seu cadastro agora? 😉`;
       name: "add_contact_tag",
       args: { tag: "objecao_seguranca" },
     });
+    const nomeObj = (currentExtras as any)?.client_name as string | undefined;
+    deterministicText =
+      `${nomeObj ? nomeObj + ", " : ""}entendo perfeitamente sua preocupação — hoje em dia é essencial ter cuidado, e fico feliz que você tenha levantado isso.\n\n` +
+      `Só pra te trazer mais tranquilidade: a iGreen Energy faz parte do GRUPO BR, o mesmo grupo dos postos de gasolina BR espalhados pelo Brasil inteiro. É uma empresa sólida, consolidada no mercado de energia limpa, regulamentada pela ANEEL, parceira oficial das principais distribuidoras e com milhares de clientes ativos. Nosso modelo é assinatura de energia por compensação: sem obra, sem trocar de distribuidora e sem custo de adesão — você continua recebendo a mesma fatura da sua distribuidora, só que com desconto.\n\n` +
+      `E pra você ficar 100% à vontade, você pode fazer todo o cadastro VOCÊ MESMO, direto pelo nosso app oficial da iGreen, sem precisar passar nenhum dado por aqui. Quer que eu te envie agora o link oficial pra você fazer com calma?`;
   }
 
   if (stage === "request_identity") {
