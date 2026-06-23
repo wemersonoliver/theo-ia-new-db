@@ -955,11 +955,17 @@ serve(async (req) => {
           }
 
           // Check if AI should be activated (for inactive conversations)
+          const keywordGateOn = !!aiConfig?.keyword_activation_enabled && (aiConfig?.trigger_keywords?.length ?? 0) > 0;
           if (wasFinalized) {
-            // Conversa reaberta: dispara IA imediatamente para seguir o fluxo (handoff → roleta)
+            // Conversa reaberta: respeita o gatilho de palavras-chave se estiver ativo
             const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
             if (instanceData.ai_enabled !== false) {
-              await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
+              if (keywordGateOn && !checkKeywordActivation()) {
+                await supabase.from("whatsapp_conversations").update({ ai_active: false }).eq("id", conversation.id);
+                console.log("AI not activated on reopen (no keyword match):", phone);
+              } else {
+                await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
+              }
             }
           } else if (!conversation.ai_active && aiConfig?.keyword_activation_enabled && instanceData.ai_enabled !== false) {
             const hasKeyword = checkKeywordActivation();
@@ -975,9 +981,13 @@ serve(async (req) => {
               await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
             }
           } else if (conversation.ai_active && instanceData.ai_enabled !== false) {
-            // AI already active, trigger response with delay
+            // AI already active — se gatilho está ligado, exige palavra-chave em cada mensagem
             const mediaInfo = (isImageMessage || isDocumentMessage || isStickerMessage) ? { messageKey, instanceName, mediaType: isImageMessage ? "image" : isDocumentMessage ? "document" : "sticker" } : undefined;
-            await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
+            if (keywordGateOn && !checkKeywordActivation()) {
+              console.log("AI skipped (keyword gate, no match):", phone);
+            } else {
+              await triggerAIResponse(supabase, userId, accountId, phone, content, aiConfig?.response_delay_seconds, mediaInfo);
+            }
           }
         } else {
           // New conversation - check if should activate AI
