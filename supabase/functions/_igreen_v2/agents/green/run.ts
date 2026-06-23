@@ -282,9 +282,12 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     const opts = (currentExtras.distributors_options as string[] | undefined) ?? [];
     const msg = cleanedMsg.trim();
     let chosen: string | null = null;
+    // Se o sistema só tem uma distribuidora cadastrada para o estado, não
+    // pergunta nem confirma: assume automaticamente e segue para a simulação.
+    if (opts.length === 1) chosen = opts[0];
     // 1) resposta numérica (1, 2, 3…)
     const numMatch = msg.match(/^\s*(\d{1,2})\b/);
-    if (numMatch && opts.length > 0) {
+    if (!chosen && numMatch && opts.length > 0) {
       const idx = Number(numMatch[1]) - 1;
       if (idx >= 0 && idx < opts.length) chosen = opts[idx];
     }
@@ -884,16 +887,25 @@ Quer que eu já comece seu cadastro agora? 😉`;
           const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
           const valid = optsCheck2.some((o) => norm(o) === norm(distribuidora) || norm(o).includes(norm(distribuidora)) || norm(distribuidora).includes(norm(o)));
           if (!valid) {
-            patch.extras = { ...(patch.extras as object ?? mergedExtras), distribuidora: null };
-            const optsList = optsCheck2.map((d, i) => `${i + 1} - ${d}`).join("\n");
-            deterministicText = `${nome ? nome + ", " : ""}só pra confirmar qual é a sua distribuidora no seu estado:\n\n${optsList}\n\nQual dessas é a sua?`;
-            stage = "ask_distribuidora";
-            return {
-              messages: [deterministicText],
-              events,
-              tool_calls,
-              suggested_state_patch: patch,
-            };
+            if (optsCheck2.length === 1) {
+              const chosen = optsCheck2[0];
+              patch.extras = { ...(patch.extras as object ?? mergedExtras), distribuidora: chosen };
+              tool_calls.push({
+                name: "save_green_lead_field",
+                args: { field: "distribuidora", value: chosen },
+              });
+            } else {
+              patch.extras = { ...(patch.extras as object ?? mergedExtras), distribuidora: null };
+              const optsList = optsCheck2.map((d, i) => `${i + 1} - ${d}`).join("\n");
+              deterministicText = `${nome ? nome + ", " : ""}só pra confirmar qual é a sua distribuidora no seu estado:\n\n${optsList}\n\nQual dessas é a sua?`;
+              stage = "ask_distribuidora";
+              return {
+                messages: [deterministicText],
+                events,
+                tool_calls,
+                suggested_state_patch: patch,
+              };
+            }
           }
         }
         let min = 0, max = 0;
