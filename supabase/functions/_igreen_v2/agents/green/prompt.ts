@@ -106,7 +106,7 @@ export function buildGreenUserPrompt(args: {
     case "confirm_signup":
       return ""; // texto determinístico gerado em run.ts
     case "objection_security":
-      return baseCtx + "STAGE: objection_security. Cliente demonstrou preocupação com segurança ou medo de golpe. Em 2 blocos curtos: 1) acolha a preocupação sem minimizar; 2) ofereça a alternativa de fazer o cadastro pelo próprio aplicativo oficial da iGreen e diga que pode enviar o link. Pergunte se prefere essa via. NÃO seja informal. NÃO use gírias.";
+      return baseCtx + "STAGE: objection_security. (Normalmente o texto é determinístico em run.ts — só use este prompt como fallback.) Cliente demonstrou preocupação com segurança ou medo de golpe. Em 3 blocos curtos: 1) acolha a preocupação sem minimizar; 2) FORTALEÇA a empresa dizendo EXPLICITAMENTE que a iGreen Energy faz parte do GRUPO BR (o mesmo grupo dos postos de gasolina BR no Brasil inteiro), que é regulamentada pela ANEEL, parceira oficial das principais distribuidoras, com milhares de clientes ativos, modelo de assinatura por compensação (sem obra, sem troca de distribuidora, sem custo de adesão); 3) ofereça a alternativa de o próprio cliente fazer o cadastro direto pelo app oficial da iGreen e pergunte se pode enviar o link. NÃO seja informal. NÃO use gírias.";
     case "send_autocadastro_link":
       return baseCtx + "STAGE: send_autocadastro_link. Cliente aceitou receber o link de auto-cadastro oficial da iGreen. Em 2 frases curtas: 1) envie o link oficial (use o placeholder {{AUTOCADASTRO_URL}} se não tiver o real); 2) diga que fica à disposição caso precise de ajuda no preenchimento. NÃO use gírias.";
     case "soft_close":
