@@ -266,13 +266,15 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     if (list.length === 1) {
       const chosen = list[0].distributor;
       patch.extras = { ...(patch.extras as object), distribuidora: chosen };
+      Object.assign(currentExtras, patch.extras as Record<string, unknown>);
       tool_calls.push({
         name: "save_green_lead_field",
         args: { field: "distribuidora", value: chosen },
       });
-      // O bloco de redecide abaixo (STAGES_REDECIDABLE) cuidará de avançar
-      // pra simulate_discount_concreto / ask_valor_fatura no mesmo turno.
-      stage = "ask_distribuidora";
+      // Com apenas uma distribuidora cadastrada, nunca pedir confirmação:
+      // assume a opção única e segue direto para a simulação no mesmo turno.
+      deterministicText = null;
+      stage = "simulate_discount_concreto";
     }
   }
 
@@ -280,9 +282,12 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     const opts = (currentExtras.distributors_options as string[] | undefined) ?? [];
     const msg = cleanedMsg.trim();
     let chosen: string | null = null;
+    // Se o sistema só tem uma distribuidora cadastrada para o estado, não
+    // pergunta nem confirma: assume automaticamente e segue para a simulação.
+    if (opts.length === 1) chosen = opts[0];
     // 1) resposta numérica (1, 2, 3…)
     const numMatch = msg.match(/^\s*(\d{1,2})\b/);
-    if (numMatch && opts.length > 0) {
+    if (!chosen && numMatch && opts.length > 0) {
       const idx = Number(numMatch[1]) - 1;
       if (idx >= 0 && idx < opts.length) chosen = opts[idx];
     }
@@ -342,17 +347,27 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
       const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
       const valid = optsCheck.some((o) => norm(o) === norm(distribuidora) || norm(o).includes(norm(distribuidora)) || norm(distribuidora).includes(norm(o)));
       if (!valid) {
-        // Limpa o valor inválido para o próximo turno cair em ask_distribuidora.
-        patch.extras = { ...(patch.extras as object ?? currentExtras), distribuidora: null };
-        const nome = (currentExtras.client_name as string | undefined) ?? "";
-        const optsList = optsCheck.map((d, i) => `${i + 1} - ${d}`).join("\n");
-        deterministicText = `${nome ? nome + ", " : ""}só pra confirmar qual é a sua distribuidora no seu estado:\n\n${optsList}\n\nQual dessas é a sua?`;
-        return {
-          messages: [deterministicText],
-          events,
-          tool_calls,
-          suggested_state_patch: patch,
-        };
+        if (optsCheck.length === 1) {
+          distribuidora = optsCheck[0];
+          patch.extras = { ...(patch.extras as object ?? currentExtras), distribuidora };
+          Object.assign(currentExtras, { distribuidora });
+          tool_calls.push({
+            name: "save_green_lead_field",
+            args: { field: "distribuidora", value: distribuidora },
+          });
+        } else {
+          // Limpa o valor inválido para o próximo turno cair em ask_distribuidora.
+          patch.extras = { ...(patch.extras as object ?? currentExtras), distribuidora: null };
+          const nome = (currentExtras.client_name as string | undefined) ?? "";
+          const optsList = optsCheck.map((d, i) => `${i + 1} - ${d}`).join("\n");
+          deterministicText = `${nome ? nome + ", " : ""}só pra confirmar qual é a sua distribuidora no seu estado:\n\n${optsList}\n\nQual dessas é a sua?`;
+          return {
+            messages: [deterministicText],
+            events,
+            tool_calls,
+            suggested_state_patch: patch,
+          };
+        }
       }
     }
     const valor = Number(currentExtras.valor_fatura ?? 0);
@@ -863,7 +878,7 @@ Quer que eu já comece seu cadastro agora? 😉`;
       }
       else if (stage === "simulate_discount_concreto") {
         const estado = (mergedExtras.estado as string | undefined) ?? "";
-        const distribuidora = (mergedExtras.distribuidora as string | undefined) ?? "";
+        let distribuidora = (mergedExtras.distribuidora as string | undefined) ?? "";
         const valor = Number(mergedExtras.valor_fatura ?? 0);
         const nome = (mergedExtras.client_name as string | undefined) ?? "";
         // Guard: distribuidora precisa estar entre as oficiais do estado.
@@ -872,16 +887,26 @@ Quer que eu já comece seu cadastro agora? 😉`;
           const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
           const valid = optsCheck2.some((o) => norm(o) === norm(distribuidora) || norm(o).includes(norm(distribuidora)) || norm(distribuidora).includes(norm(o)));
           if (!valid) {
-            patch.extras = { ...(patch.extras as object ?? mergedExtras), distribuidora: null };
-            const optsList = optsCheck2.map((d, i) => `${i + 1} - ${d}`).join("\n");
-            deterministicText = `${nome ? nome + ", " : ""}só pra confirmar qual é a sua distribuidora no seu estado:\n\n${optsList}\n\nQual dessas é a sua?`;
-            stage = "ask_distribuidora";
-            return {
-              messages: [deterministicText],
-              events,
-              tool_calls,
-              suggested_state_patch: patch,
-            };
+            if (optsCheck2.length === 1) {
+              const chosen = optsCheck2[0];
+              distribuidora = chosen;
+              patch.extras = { ...(patch.extras as object ?? mergedExtras), distribuidora: chosen };
+              tool_calls.push({
+                name: "save_green_lead_field",
+                args: { field: "distribuidora", value: chosen },
+              });
+            } else {
+              patch.extras = { ...(patch.extras as object ?? mergedExtras), distribuidora: null };
+              const optsList = optsCheck2.map((d, i) => `${i + 1} - ${d}`).join("\n");
+              deterministicText = `${nome ? nome + ", " : ""}só pra confirmar qual é a sua distribuidora no seu estado:\n\n${optsList}\n\nQual dessas é a sua?`;
+              stage = "ask_distribuidora";
+              return {
+                messages: [deterministicText],
+                events,
+                tool_calls,
+                suggested_state_patch: patch,
+              };
+            }
           }
         }
         let min = 0, max = 0;
