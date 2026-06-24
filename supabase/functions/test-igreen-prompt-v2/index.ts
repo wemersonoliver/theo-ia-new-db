@@ -102,23 +102,6 @@ serve(async (req) => {
       return json({ error: "Conta não encontrada para o usuário." }, 400);
     }
 
-    const { data: accRow } = await service
-      .from("accounts")
-      .select("is_igreen")
-      .eq("id", accountId)
-      .maybeSingle();
-
-    if (!(accRow as any)?.is_igreen) {
-      return json(
-        {
-          error: "account_not_igreen",
-          message:
-            "Esta função só roda para contas iGreen. Use test-ai-prompt para outras contas.",
-        },
-        400,
-      );
-    }
-
     const body = await req.json().catch(() => ({}));
     const userMessage = String(body?.userMessage ?? "").trim();
     const reset = Boolean(body?.reset);
