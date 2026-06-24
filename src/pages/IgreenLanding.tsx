@@ -39,7 +39,6 @@ const igreenFeatures = [
   { icon: Sun, title: "Treinado em Energia por Assinatura", desc: "A IA já entende o modelo Igreen, energia limpa, desconto na conta e como explicar tudo isso em linguagem simples." },
   { icon: DollarSign, title: "Simulação de Economia Automática", desc: "Quando o lead manda o valor da conta, a IA já calcula e apresenta a economia mensal e anual de forma persuasiva." },
   { icon: FileText, title: "Coleta de Documentos pelo WhatsApp", desc: "A IA solicita conta de luz, RG/CNH e CPF/CNPJ e organiza tudo no painel pronto para o cadastro." },
-  { icon: Users, title: "Qualificação de Lead Igreen", desc: "Filtra automaticamente CPF x CNPJ, região atendida pela Igreen e perfil de consumo antes de marcar reunião." },
   { icon: AlertCircle, title: "Quebra de Objeções Prontas", desc: "Respostas testadas para 'é golpe?', 'preciso instalar painel?', 'e se eu mudar de endereço?' e as principais dúvidas do cliente Igreen." },
   { icon: MessageSquare, title: "Atendimento 24/7 no seu Número", desc: "Trabalha enquanto você dorme. Nunca mais perca um lead que chegou de madrugada ou no fim de semana." },
   { icon: Repeat, title: "Follow-up Igreen de 2 Meses", desc: "Cadência automática de 60 dias que reativa leads frios — tanto quem pediu para 'pensar' quanto quem nunca respondeu a primeira mensagem — e te avisa assim que o lead voltar a interagir." },
