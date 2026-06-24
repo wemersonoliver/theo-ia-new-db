@@ -44,6 +44,7 @@ const Followup = lazy(() => import("./pages/Followup"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const IgreenTrial = lazy(() => import("./pages/IgreenTrial"));
+const IgreenLanding = lazy(() => import("./pages/IgreenLanding"));
 const AcademiasLanding = lazy(() => import("./pages/AcademiasLanding"));
 
 // Admin pages (lazy)
@@ -137,6 +138,7 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/igreen-trial" element={<IgreenTrial />} />
+              <Route path="/igreen" element={<IgreenLanding />} />
               <Route path="/academias" element={<AcademiasLanding />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/privacy" element={<Privacy />} />
