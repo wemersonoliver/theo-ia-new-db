@@ -513,7 +513,7 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
     const next = slotForPeriod("evening");
     await supabase.from("igreen_scenario_enrollments").update({
       current_period: "evening",
-      current_item_position: 0,
+      current_item_position: -1,
       next_run_at: next.toISOString(),
       last_sent_at: isoNow(),
       updated_at: isoNow(),
@@ -544,7 +544,7 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
       const due = new Date(Date.now() + delayH * 3_600_000).toISOString();
       await supabase.from("igreen_scenario_enrollments").update({
         status: "pending_tag",
-        current_item_position: 0,
+        current_item_position: -1,
         next_run_at: due,
         last_sent_at: isoNow(),
         updated_at: isoNow(),
@@ -553,7 +553,7 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
       await supabase.from("igreen_scenario_enrollments").update({
         status: "completed",
         next_run_at: null,
-        current_item_position: 0,
+        current_item_position: -1,
         last_sent_at: isoNow(),
         updated_at: isoNow(),
       }).eq("id", enrollment.id);
@@ -566,7 +566,7 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
   await supabase.from("igreen_scenario_enrollments").update({
     current_day: nextDay.day_number,
     current_period: "morning",
-    current_item_position: 0,
+    current_item_position: -1,
     next_run_at: next.toISOString(),
     last_sent_at: isoNow(),
     updated_at: isoNow(),
