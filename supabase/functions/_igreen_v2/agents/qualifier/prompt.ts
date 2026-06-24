@@ -19,7 +19,7 @@ function greetingPrefix(): string {
  * apresentando a Assistente Virtual da iGreen Energy.
  */
 export function buildGreetOpenText(): string {
-  return `${greetingPrefix()}! Aqui é a Assistente Virtual da iGreen Energy. Com quem eu tenho o prazer de falar?`;
+  return `${greetingPrefix()}! Aqui é a Assistente da iGreen Energy.`;
 }
 
 /**
@@ -27,10 +27,7 @@ export function buildGreetOpenText(): string {
  * já personalizando com o primeiro nome.
  */
 export function buildMenuText(clientName?: string | null): string {
-  const nome = (clientName ?? "").trim();
-  const intro = nome
-    ? `Prazer em falar com você, ${nome}. Para eu te direcionar da melhor forma, me conta: você está buscando?`
-    : `Perfeito 😊 Para eu te direcionar da melhor forma, me conta: você está buscando?`;
+  const intro = `Para eu te direcionar da melhor forma, me conta: você está buscando?`;
   return `${intro}
 
 1 - Economia na conta de luz sem instalar nada
@@ -47,10 +44,7 @@ Qual dessas opções faz mais sentido para você?`;
  * inteira em um único bloco (sem ser quebrada pelo chunker de 220 chars).
  */
 export function buildMenuTextChunks(clientName?: string | null): string[] {
-  const nome = (clientName ?? "").trim();
-  const intro = nome
-    ? `Prazer em falar com você, ${nome}. Para eu te direcionar da melhor forma, me conta: você está buscando?`
-    : `Perfeito 😊 Para eu te direcionar da melhor forma, me conta: você está buscando?`;
+  const intro = `Para eu te direcionar da melhor forma, me conta: você está buscando?`;
   const options =
     `1 - Economia na conta de luz sem instalar nada\n` +
     `2 - Planos de telefonia e internet para seu telefone\n` +
