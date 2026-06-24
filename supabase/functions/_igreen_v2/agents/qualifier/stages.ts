@@ -5,7 +5,6 @@ import type { IgreenConversationState } from "../../types.ts";
 
 export type QualifierStage =
   | "greet_open"
-  | "ask_name"
   | "present_menu"
   | "route_green"
   | "route_telecom"
