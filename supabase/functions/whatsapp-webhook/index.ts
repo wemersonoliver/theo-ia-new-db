@@ -567,6 +567,18 @@ serve(async (req) => {
 
         console.log("WhatsApp disconnected for user:", userId);
 
+        // Limpa qualquer fila pendente de IA para esse usuário — senão, ao
+        // reconectar, todas as pendências acumuladas viram um flood.
+        try {
+          const { error: delErr } = await supabase
+            .from("whatsapp_pending_responses")
+            .delete()
+            .eq("user_id", userId);
+          if (delErr) console.error("Error purging pending responses on disconnect:", delErr);
+        } catch (e) {
+          console.error("Purge pending exception on disconnect:", e);
+        }
+
         // Notify user only on real connection drops (was previously connected)
         if (previousStatus === "connected") {
           notifyUserDisconnected(supabase, userId).catch((err) =>

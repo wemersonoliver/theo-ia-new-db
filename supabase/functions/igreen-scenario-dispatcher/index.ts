@@ -229,14 +229,43 @@ serve(async (req) => {
         continue;
       }
 
-      // Locate next item to send
-      // Se o bloco ainda não enviou nada (last_sent_at não bate com esse bundle),
-      // começa pela menor position (geralmente 0). Caso contrário, próximo > atual.
-      const hasStarted = items.some((it) => it.position === enrollment.current_item_position)
-        && (enrollment.current_item_position ?? 0) > 0;
-      const nextItem = hasStarted
-        ? (items.find((it) => it.position > (enrollment.current_item_position ?? 0)) ?? null)
+      // Locate next item to send.
+      // Sentinela: current_item_position = -1 significa "bundle ainda não começou";
+      // qualquer valor >= 0 indica a última position já enviada deste bundle.
+      // (Antes usávamos 0 como sentinela, mas a position 0 é um item real — isso
+      // criava loop infinito reenviando o item 0 a cada tick do cron.)
+      const lastPos = enrollment.current_item_position;
+      const bundleStarted = typeof lastPos === "number" && lastPos >= 0;
+      const nextItem = bundleStarted
+        ? (items.find((it) => it.position > lastPos) ?? null)
         : items[0];
+
+      if (nextItem) {
+        // Anti-flood (cinto-e-suspensórios): se já existe um evento `sent` para
+        // (enrollment, day, period, message) nos últimos 90s, pula e empurra
+        // o próximo run em +5min. Garante que mesmo se algo regredir a posição,
+        // não há reenvio em loop.
+        const since = new Date(Date.now() - 90_000).toISOString();
+        const { data: dup } = await supabase
+          .from("igreen_scenario_events")
+          .select("id")
+          .eq("enrollment_id", enrollment.id)
+          .eq("day_number", enrollment.current_day)
+          .eq("period", enrollment.current_period)
+          .eq("message_id", msgRow.id)
+          .eq("status", "sent")
+          .gte("sent_at", since)
+          .limit(1)
+          .maybeSingle();
+        if (dup) {
+          await supabase.from("igreen_scenario_enrollments").update({
+            next_run_at: clampToWindow(new Date(Date.now() + 5 * 60_000)).toISOString(),
+            updated_at: isoNow(),
+          }).eq("id", enrollment.id);
+          skipped++;
+          continue;
+        }
+      }
 
       if (!nextItem) {
         // bundle finished → advance to next period/day
@@ -484,7 +513,7 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
     const next = slotForPeriod("evening");
     await supabase.from("igreen_scenario_enrollments").update({
       current_period: "evening",
-      current_item_position: 0,
+      current_item_position: -1,
       next_run_at: next.toISOString(),
       last_sent_at: isoNow(),
       updated_at: isoNow(),
@@ -515,7 +544,7 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
       const due = new Date(Date.now() + delayH * 3_600_000).toISOString();
       await supabase.from("igreen_scenario_enrollments").update({
         status: "pending_tag",
-        current_item_position: 0,
+        current_item_position: -1,
         next_run_at: due,
         last_sent_at: isoNow(),
         updated_at: isoNow(),
@@ -524,7 +553,7 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
       await supabase.from("igreen_scenario_enrollments").update({
         status: "completed",
         next_run_at: null,
-        current_item_position: 0,
+        current_item_position: -1,
         last_sent_at: isoNow(),
         updated_at: isoNow(),
       }).eq("id", enrollment.id);
@@ -537,7 +566,7 @@ async function advanceToNext(supabase: any, enrollment: any, _reason: string) {
   await supabase.from("igreen_scenario_enrollments").update({
     current_day: nextDay.day_number,
     current_period: "morning",
-    current_item_position: 0,
+    current_item_position: -1,
     next_run_at: next.toISOString(),
     last_sent_at: isoNow(),
     updated_at: isoNow(),

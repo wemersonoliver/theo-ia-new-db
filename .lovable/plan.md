@@ -1,69 +1,90 @@
-# Ajuste do prompt — ISA (Wemerson Oliveira)
 
-## Objetivo
-Atualizar o campo `custom_prompt` da configuração de IA do usuário `wemerson.tw@gmail.com` (tabela `whatsapp_ai_config`) para incluir a persona ISA + meta de coleta de informações para proposta de site, com transferência para humano ao final ou em casos fora de escopo.
+## Plano aprovado — aplicar correções
 
-## O que será feito
-1. Localizar o `user_id` em `auth.users` pelo email `wemerson.tw@gmail.com`.
-2. Atualizar `whatsapp_ai_config.custom_prompt` desse usuário com o novo texto abaixo, via SQL UPDATE (sem alterar nenhum outro campo).
+### Etapa 1 — Bug do dispatcher iGreen (causa raiz do flood)
 
-## Novo conteúdo do `custom_prompt`
+Editar `supabase/functions/igreen-scenario-dispatcher/index.ts`:
 
-```
-Você é a ISA, assistente virtual do Wemerson Oliveira.
-Sempre se apresente como "ISA, assistente do Wemerson Oliveira".
+1. **Linhas 232-239** — trocar a detecção de "primeiro item do bundle" para usar sentinela `-1`:
+   ```ts
+   const lastPos = enrollment.current_item_position;
+   const bundleStarted = typeof lastPos === "number" && lastPos >= 0;
+   const nextItem = bundleStarted
+     ? (items.find((it) => it.position > lastPos) ?? null)
+     : items[0];
+   ```
+   (com a lógica antiga, `> 0` fazia a posição 0 nunca ser reconhecida como "já enviada", reenviando infinitamente o item 0 a cada tick do cron.)
 
-OBJETIVO PRINCIPAL (META — não é um fluxo engessado):
-Quando estiver atendendo um lead da promoção de criação de sites, sua meta é gerar uma prévia visual personalizada. Para isso você precisa coletar informações básicas do negócio do cliente. Não force, não trate como formulário rígido: conduza com naturalidade e empatia.
+2. **`advanceToNext`** — trocar todos os `current_item_position: 0` por `current_item_position: -1` (linhas 487, 518, 527, 540), para que ao iniciar o próximo bundle o sentinela esteja correto.
 
-ABERTURA APÓS OBTER O NOME DO CLIENTE:
-Assim que o cliente informar o nome, envie uma mensagem como:
+3. **Anti-flood (cinto-e-suspensórios)** — antes do envio, checar se já existe `igreen_scenario_events` `sent` com `(enrollment_id, day_number, period, message_id)` nos últimos 90 segundos. Se sim, pula e empurra `next_run_at` em +5min.
 
-"(nome), nosso maior diferencial é garantir a satisfação dos nossos clientes. Por isso, começamos fazendo uma prévia de como ficaria o seu site caso decida fechar com a gente.
+### Etapa 2 — Salvaguarda no `process-pending-ai`
 
-Para montar essa prévia eu só preciso de algumas informações básicas sobre o seu negócio.
+Editar `supabase/functions/process-pending-ai/index.ts`:
 
-Podemos prosseguir assim?"
+- Logo após buscar `pending`, descartar (marcar `processed=true` e retornar) qualquer item cujo `scheduled_at` esteja há mais de **30 minutos** no passado. Evita que filas acumuladas durante semanas de desconexão disparem todas juntas no reconnect.
 
-Se o cliente aceitar, colete (uma pergunta de cada vez, conversacional, sem despejar tudo junto):
-1. Nome profissional
-2. Cidade ou região onde atende
-3. Principais serviços que oferece
-4. Atendimento presencial, online ou ambos
-5. Perfil profissional do Instagram (se tiver)
-6. Alguma referência de site ou perfil do Instagram que goste (se tiver)
+### Etapa 3 — Salvaguarda no `whatsapp-webhook`
 
-Após coletar essas informações, diga algo como:
-"Perfeito, com isso já consigo montar uma proposta visual pensada para transmitir profissionalismo e facilitar o contato com novos pacientes/clientes. Vou te transferir agora para o Wemerson dar sequência, tudo bem?"
-E IMEDIATAMENTE chame a tool request_human_handoff. Não envie mais mensagens depois disso.
+Editar `supabase/functions/whatsapp-webhook/index.ts`:
 
-REGRAS DE FLEXIBILIDADE:
-- Se o cliente mudar de assunto, NÃO insista no roteiro. Atenda a dúvida dele normalmente e, quando fizer sentido, retome de forma natural rumo à meta de coletar as informações.
-- Se o cliente já enviar várias informações de uma vez, aproveite-as e só pergunte o que estiver faltando.
-- Nunca repita pergunta cuja resposta o cliente já deu.
+- No handler de `connection.update` com `state === "close"`, além da lógica atual, executar:
+  ```sql
+  DELETE FROM whatsapp_pending_responses WHERE user_id = <userId>;
+  ```
+  Não adianta segurar respostas IA enquanto o WA está desconectado — quando reconectar elas viram flood.
 
-REGRAS CRÍTICAS DE TRANSFERÊNCIA PARA HUMANO:
-- NUNCA invente informação. Se o cliente perguntar algo cuja resposta você não tem (preço fechado, prazo específico, condições comerciais detalhadas, suporte técnico, qualquer dado não confirmado), diga educadamente que vai chamar o Wemerson para responder com precisão e CHAME request_human_handoff.
-- Se o cliente pedir para falar com humano/atendente/pessoa, chame request_human_handoff imediatamente.
-- Após coletar todas as informações da meta acima, transfira para humano via request_human_handoff.
+### Etapa 4 — Migration de limpeza (escopo Marcio + reset global suave)
 
-TOM:
-- Cordial, próxima, profissional, direta. Sem floreios, sem pressão.
-- Mensagens curtas, no máximo 2-3 blocos curtos por turno.
-- Uma pergunta por vez.
-```
-
-## Detalhe técnico
-SQL a executar (via migration):
+Uma migration única:
 
 ```sql
-UPDATE public.whatsapp_ai_config
-SET custom_prompt = $NEW_PROMPT$, updated_at = now()
-WHERE user_id = (SELECT id FROM auth.users WHERE email = 'wemerson.tw@gmail.com');
+-- (a) Default do current_item_position passa a ser -1 (novo sentinela)
+ALTER TABLE public.igreen_scenario_enrollments
+  ALTER COLUMN current_item_position SET DEFAULT -1;
+
+-- (b) Reset suave de enrollments ativos: para cada um, posiciona current_item_position
+-- no MAIOR position já enviado nas últimas 48h dentro do (day,period) corrente.
+-- Se nada foi enviado, fica -1 (começa do início do bundle).
+UPDATE public.igreen_scenario_enrollments e
+SET current_item_position = COALESCE((
+  SELECT MAX(i.position)
+  FROM public.igreen_scenario_events ev
+  JOIN public.igreen_scenario_items i ON i.message_id = ev.message_id
+  WHERE ev.enrollment_id = e.id
+    AND ev.day_number = e.current_day
+    AND ev.period = e.current_period
+    AND ev.status = 'sent'
+    AND ev.sent_at > now() - interval '2 days'
+), -1),
+updated_at = now()
+WHERE e.status IN ('active','pending_tag');
+
+-- (c) Estanca o flood do Marcio
+DELETE FROM public.whatsapp_pending_responses
+WHERE user_id = 'fbc9254d-6577-468d-adba-5d639ed0e759';
+
+DELETE FROM public.whatsapp_ai_sessions
+WHERE user_id = 'fbc9254d-6577-468d-adba-5d639ed0e759';
+
+-- Cancela os 8 cenários iGreen ativos dele (conforme solicitado)
+UPDATE public.igreen_scenario_enrollments
+SET status = 'cancelled',
+    stop_reason = 'manual_cleanup_loop_2026_06_24',
+    next_run_at = NULL,
+    updated_at = now()
+WHERE account_id IN (SELECT id FROM public.accounts WHERE owner_user_id = 'fbc9254d-6577-468d-adba-5d639ed0e759')
+  AND status IN ('active','pending_tag');
 ```
 
-Nenhuma outra alteração de código, schema ou função é necessária. O `agent_name` pode ser ajustado para "ISA" no mesmo UPDATE se quiser garantir consistência (incluir `agent_name = 'ISA'`).
+### Etapa 5 — Validação
 
-## Confirmação necessária
-- Posso também setar `agent_name = 'ISA'` no mesmo update? (recomendado)
-- O texto da abertura acima está aprovado como está, ou quer ajustar alguma palavra?
+- `SELECT enrollment_id, message_id, count(*) FROM igreen_scenario_events WHERE sent_at > now()-interval '30 minutes' AND status='sent' GROUP BY 1,2 HAVING count(*) > 1` → deve ficar vazio nos próximos minutos.
+- `SELECT count(*) FROM whatsapp_pending_responses WHERE user_id='fbc9254d-...'` → 0.
+- Confirmar com o Marcio que o flood parou.
+
+### Detalhe técnico
+- 3 arquivos editados: `igreen-scenario-dispatcher/index.ts`, `process-pending-ai/index.ts`, `whatsapp-webhook/index.ts`.
+- 1 migration (Etapa 4) com 4 statements.
+- Sem mudança de UI.
