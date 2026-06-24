@@ -324,6 +324,14 @@ export function PromptTestTab() {
   const handleTestSend = async () => {
     const text = testInput.trim();
     if ((!text && testAttachments.length === 0) || testLoading || !user) return;
+    // Bloqueio crítico: enquanto a flag is_igreen da conta não tiver carregado
+    // (típico durante impersonação/troca de sessão), NÃO chamamos o backend —
+    // caso contrário cairíamos no V1 antigo e o atendimento ignoraria todo o
+    // fluxo novo configurado no V2.
+    if (!igreenRouteReady) {
+      toast.error("Carregando configuração da conta… tente novamente em 1s.");
+      return;
+    }
     setTestInput("");
 
     const attachmentSummary = testAttachments.length
