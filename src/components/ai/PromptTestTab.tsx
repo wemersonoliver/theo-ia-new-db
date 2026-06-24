@@ -441,20 +441,12 @@ export function PromptTestTab() {
         placeholder="Escreva como um cliente faria... (anexe imagem, áudio ou PDF se quiser testar)"
         emptyIcon={FlaskConical}
         emptyTitle="Simulador de Atendimento"
-        emptyDesc={
-          isIgreenAccount
-            ? "Conta iGreen detectada — o simulador roda o mesmo pipeline V2 do WhatsApp real (supervisor, specialists green/telecom/expansao, qualifier, tools)."
-            : "Envie uma mensagem como se fosse um cliente para testar o prompt atual."
-        }
+        emptyDesc="O simulador roda o mesmo pipeline V2 do WhatsApp real (supervisor, specialists green/telecom/expansao, qualifier, tools)."
         accentClass="text-primary"
         attachments={testAttachments}
         onPickFile={handleAddAttachments}
         onRemoveAttachment={handleRemoveAttachment}
-        headerBadge={
-          isIgreenAccount ? (
-            <Badge variant="secondary" className="text-[10px]">Pipeline V2 · iGreen</Badge>
-          ) : null
-        }
+        headerBadge={<Badge variant="secondary" className="text-[10px]">Pipeline V2</Badge>}
       />
       <ChatPanel
         title="Ajustar Atendimento"
