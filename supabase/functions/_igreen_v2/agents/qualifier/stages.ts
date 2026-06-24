@@ -35,19 +35,16 @@ export function decideQualifierStage(
 ): QualifierStage {
   const extras = (state.extras ?? {}) as Record<string, unknown>;
 
-  // Turno 1: cumprimentar (com base no horário) E já pedir o nome.
-  if (!extras.greeted) return "greet_open";
-
-  // Turno 2+: enquanto não tivermos o nome do cliente, NUNCA apresentar menu.
-  // O run.ts tenta capturar nome de forma espontânea (extractFirstName).
-  // Aqui só decidimos: se ainda não temos nome, reforçamos o pedido.
-  if (!extras.client_name) {
-    // Se o cliente já mandou um produto antes de dar o nome, ainda assim
-    // pedimos o nome primeiro com um template que reconhece o interesse.
-    return "ask_name";
+  // Turno 1: se cliente já citou produto direto, roteia sem saudação extensa.
+  if (!extras.greeted) {
+    const hint = detectProductMention(message);
+    if (hint === "green") return "route_green";
+    if (hint === "telecom") return "route_telecom";
+    if (hint === "expansao") return "route_expansao";
+    return "greet_open";
   }
 
-  // Já temos nome. Se já apresentou menu, tenta extrair escolha.
+  // Já saudou. Se já apresentou menu, tenta extrair escolha.
   if (extras.menu_presented) {
     const choice = parseMenuChoice(message);
     if (choice === "green") return "route_green";
@@ -56,7 +53,7 @@ export function decideQualifierStage(
     return "menu_repeat";
   }
 
-  // Tem nome mas ainda não mostrou menu: se cliente já citou produto, roteia direto.
+  // Já saudou mas ainda não mostrou menu: se cliente citou produto, roteia direto.
   const hint = detectProductMention(message);
   if (hint === "green") return "route_green";
   if (hint === "telecom") return "route_telecom";
