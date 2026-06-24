@@ -476,7 +476,7 @@ export function PromptTestTab() {
         setInput={setTestInput}
         onSend={handleTestSend}
         onRestart={handleTestRestart}
-        loading={testLoading}
+        loading={testLoading || !igreenRouteReady}
         endRef={testEndRef}
         placeholder="Escreva como um cliente faria... (anexe imagem, áudio ou PDF se quiser testar)"
         emptyIcon={FlaskConical}
