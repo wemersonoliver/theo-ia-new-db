@@ -314,10 +314,6 @@ export function PromptTestTab() {
     setTestAttachments([]);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      if (!token) throw new Error("Não autenticado");
-
       const encodedAttachments = await Promise.all(
         sendingAttachments.map(async (a) => ({
           name: a.file.name,
@@ -326,27 +322,17 @@ export function PromptTestTab() {
         }))
       );
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       // Pipeline único V2 — V1 (test-ai-prompt) foi removido.
       // V2 não usa o histórico do front (state vive no banco). Mandamos
       // reset=true na primeira mensagem da sessão para começar limpo.
-      const endpoint = "test-igreen-prompt-v2";
-      const payload = {
-        userMessage: text || "(arquivo anexado pelo cliente)",
-        reset: needsSandboxReset,
-      };
-
-      const res = await fetch(`${supabaseUrl}/functions/v1/${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const { data, error } = await supabase.functions.invoke("test-igreen-prompt-v2", {
+        body: {
+          userMessage: text || "(arquivo anexado pelo cliente)",
+          reset: needsSandboxReset,
         },
-        body: JSON.stringify(payload),
       });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro na requisição");
+      if (error) throw new Error(error.message || "Erro na requisição");
+      if (data?.error) throw new Error(data.error);
       setNeedsSandboxReset(false);
       setTestMessages([...newMessages, { role: "assistant", content: data.message }]);
       // Liberar object URLs após o envio bem-sucedido
