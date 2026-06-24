@@ -44,9 +44,8 @@ const igreenFeatures = [
   { icon: MessageSquare, title: "Atendimento 24/7 no seu Número", desc: "Trabalha enquanto você dorme. Nunca mais perca um lead que chegou de madrugada ou no fim de semana." },
   { icon: Repeat, title: "Follow-up Igreen de 6 Dias", desc: "Cadência automática que reaquece o lead que pediu para 'pensar' e te avisa quando ele responder." },
   { icon: Mic, title: "Entende Áudio do Cliente", desc: "Cliente Igreen adora mandar áudio. A IA escuta, transcreve e responde do mesmo jeito — texto ou áudio." },
-  { icon: ImageIcon, title: "Lê a Conta de Luz na Hora", desc: "Cliente mandou foto da fatura? A IA identifica valor, distribuidora e já devolve a simulação de economia." },
+  { icon: ImageIcon, title: "Valida a Conta de Luz Automaticamente", desc: "Cliente mandou foto da fatura? A IA confirma se é uma conta de luz real, identifica titular, distribuidora e valor — bloqueando documentos inválidos antes de seguir o atendimento." },
   { icon: Bot, title: "Transferência Inteligente", desc: "Quando o lead está quente, a IA te avisa no WhatsApp para você só assinar o contrato." },
-  { icon: CheckCircle2, title: "Agendamento de Reuniões", desc: "Marca call ou visita presencial direto na sua agenda — com confirmação automática antes do horário." },
   { icon: Smartphone, title: "100% Mobile", desc: "Configure, acompanhe leads e feche contratos Igreen direto do celular, em qualquer lugar." },
 ];
 
