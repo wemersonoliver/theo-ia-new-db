@@ -238,9 +238,14 @@ export function PromptTestTab() {
   const { membership } = useAccount();
 
   // Detecta se a conta é iGreen para rotear o simulador para o pipeline V2.
-  const { data: isIgreenAccount = false } = useQuery({
+  // IMPORTANTE: aguardamos a query terminar antes de permitir envio — caso
+  // contrário durante a impersonação/troca de sessão isIgreenAccount cai pra
+  // false por um instante e o simulador roteia pro V1 (test-ai-prompt) com
+  // o template antigo "Aqui é a seu assistente..." em vez do V2.
+  const { data: isIgreenAccount, isLoading: isIgreenLoading } = useQuery({
     queryKey: ["account-is-igreen", membership?.account_id],
     enabled: !!membership?.account_id,
+    staleTime: 30_000,
     queryFn: async () => {
       const { data } = await supabase
         .from("accounts")
@@ -250,6 +255,7 @@ export function PromptTestTab() {
       return !!(data as any)?.is_igreen;
     },
   });
+  const igreenRouteReady = !!membership?.account_id && !isIgreenLoading && isIgreenAccount !== undefined;
 
   // Quando a conversa de teste estiver vazia, a próxima chamada V2 deve resetar
   // o state/memory do sandbox para começar uma nova simulação do zero.
@@ -318,6 +324,14 @@ export function PromptTestTab() {
   const handleTestSend = async () => {
     const text = testInput.trim();
     if ((!text && testAttachments.length === 0) || testLoading || !user) return;
+    // Bloqueio crítico: enquanto a flag is_igreen da conta não tiver carregado
+    // (típico durante impersonação/troca de sessão), NÃO chamamos o backend —
+    // caso contrário cairíamos no V1 antigo e o atendimento ignoraria todo o
+    // fluxo novo configurado no V2.
+    if (!igreenRouteReady) {
+      toast.error("Carregando configuração da conta… tente novamente em 1s.");
+      return;
+    }
     setTestInput("");
 
     const attachmentSummary = testAttachments.length
@@ -462,7 +476,7 @@ export function PromptTestTab() {
         setInput={setTestInput}
         onSend={handleTestSend}
         onRestart={handleTestRestart}
-        loading={testLoading}
+        loading={testLoading || !igreenRouteReady}
         endRef={testEndRef}
         placeholder="Escreva como um cliente faria... (anexe imagem, áudio ou PDF se quiser testar)"
         emptyIcon={FlaskConical}
