@@ -783,6 +783,7 @@ function TestPromptStep({ onNext }: { onNext: () => void }) {
   const [testMessages, setTestMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [testInput, setTestInput] = useState("");
   const [testLoading, setTestLoading] = useState(false);
+  const [needsSandboxReset, setNeedsSandboxReset] = useState(true);
   const testEndRef = useRef<HTMLDivElement>(null);
 
   // Generator chat state
@@ -805,13 +806,14 @@ function TestPromptStep({ onNext }: { onNext: () => void }) {
       const { data: sd } = await supabase.auth.getSession();
       const token = sd.session?.access_token;
       if (!token) throw new Error("Não autenticado");
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/test-ai-prompt`, {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/test-igreen-prompt-v2`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ messages: testMessages, userMessage: text }),
+        body: JSON.stringify({ userMessage: text, reset: needsSandboxReset }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro");
+      setNeedsSandboxReset(false);
       setTestMessages([...newMsgs, { role: "assistant", content: data.message }]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao testar");
