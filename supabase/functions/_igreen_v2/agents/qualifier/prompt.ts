@@ -80,7 +80,7 @@ export function buildRouteGreenText(clientName?: string | null): string {
 
 É a nossa solução de energia por assinatura, que te dá desconto na conta de luz todo mês, sem precisar de obra ou instalação.
 
-Vou te enviar um vídeo rápido explicando como funciona. Me avisa quando assistir, tá? 😉`;
+Pra eu já te trazer uma simulação de quanto você economiza, me conta: em qual estado (UF) fica a unidade consumidora?`;
 }
 
 export const ROUTE_TELECOM_TEXT = `Massa! Vou te direcionar pro nosso time de telefonia e internet. Me conta rapidinho: você quer plano novo ou portabilidade?`;

@@ -85,10 +85,10 @@ export async function runQualifier(ctx: AgentContext): Promise<AgentResult> {
         product_choice: "green",
         explained: true,
         solution_confirmed: true,
+        estado_asked: true,
       };
       tool_calls.push({ name: "set_product", args: { produto: "green" } });
       tool_calls.push({ name: "set_stage", args: { etapa: "qualificacao" } });
-      tool_calls.push({ name: "send_discovery_video", args: { produto: "green" } });
       events.push({ type: "product_chosen", priority: "medium", source: "specialist", payload: { product: "green" } });
       break;
     }
