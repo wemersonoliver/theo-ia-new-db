@@ -129,6 +129,23 @@ serve(async (req) => {
       });
     }
 
+    // STALE GUARD: descartar pendências cujo scheduled_at está há mais de 30
+    // minutos no passado. Evita que filas acumuladas durante longas janelas
+    // de desconexão do WhatsApp disparem todas juntas no reconnect.
+    const scheduledTs = new Date(pending.scheduled_at).getTime();
+    const STALE_AFTER_MS = 30 * 60 * 1000;
+    if (Number.isFinite(scheduledTs) && Date.now() - scheduledTs > STALE_AFTER_MS) {
+      console.log(`[stale-pending] discarding pending older than 30min for: ${phone} (scheduled ${pending.scheduled_at})`);
+      await supabase
+        .from("whatsapp_pending_responses")
+        .update({ processed: true, updated_at: new Date().toISOString() })
+        .eq("id", pending.id)
+        .eq("processed", false);
+      return new Response(JSON.stringify({ skipped: true, reason: "stale_pending_discarded" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
     const scheduledAt = new Date(pending.scheduled_at).getTime();
     const nowMs = Date.now();
 
