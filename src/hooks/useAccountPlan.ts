@@ -83,9 +83,10 @@ export function useAccountPlan() {
   // Tier efetivo: se trial ativou Pro Trial e ainda dentro do período, comporta-se como pro
   const tier: PlanTier = proTrialActive ? "pro" : baseTier;
 
-  // Tester tem acesso completo (equivalente ao Pro ou superior). Igreen permite 2.
+  // Tester tem acesso completo (equivalente ao Pro ou superior).
+  // Igreen temporariamente limitado a 1 instância até definirmos o fluxo correto.
   const maxInstances =
-    tier === "pro" || tier === "tester" ? 3 : tier === "igreen" ? 2 : 1;
+    tier === "pro" || tier === "tester" ? 3 : 1;
 
   return {
     tier,
