@@ -951,7 +951,7 @@ function TestPromptStep({ onNext }: { onNext: () => void }) {
           "Teste como um cliente",
           FlaskConical,
           testMessages, testInput, setTestInput, handleTestSend,
-          () => { setTestMessages([]); setTestInput(""); toast.success("Conversa reiniciada!"); },
+          () => { setTestMessages([]); setTestInput(""); setNeedsSandboxReset(true); toast.success("Conversa reiniciada!"); },
           testLoading, testEndRef,
           "Escreva como um cliente faria...",
           FlaskConical, "Simulador de Atendimento", "Envie uma mensagem como se fosse um cliente.",
