@@ -92,6 +92,56 @@ export function useAIConfig() {
     },
   });
 
+  // Salva alterações de prompt com auditoria (registra autor)
+  // Usado após confirmação de senha.
+  const saveConfigAudited = useMutation({
+    mutationFn: async (updates: Partial<AIConfig>) => {
+      if (!user) throw new Error("Usuário não autenticado");
+      const ctx = await resolveAccountContext(user.id);
+
+      const { data: existing } = await supabase
+        .from("whatsapp_ai_config")
+        .select("id, custom_prompt, business_description, business_niche, agent_name")
+        .eq("account_id", ctx?.accountId)
+        .maybeSingle();
+
+      if (existing) {
+        // 1) Auditoria + atualização dos campos sensíveis via RPC
+        const { error: rpcErr } = await (supabase as any).rpc("save_ai_prompt_with_audit", {
+          p_config_id: existing.id,
+          p_custom_prompt: updates.custom_prompt ?? existing.custom_prompt ?? "",
+          p_business_description: updates.business_description ?? existing.business_description ?? "",
+          p_business_niche: updates.business_niche ?? existing.business_niche ?? "",
+          p_agent_name: updates.agent_name ?? existing.agent_name ?? "Assistente Virtual",
+          p_method: "password_confirmed",
+        });
+        if (rpcErr) throw rpcErr;
+
+        // 2) Demais campos (não sensíveis) via UPDATE normal
+        const { custom_prompt, business_description, business_niche, agent_name, ...rest } = updates;
+        if (Object.keys(rest).length > 0) {
+          const { error } = await supabase
+            .from("whatsapp_ai_config")
+            .update(rest)
+            .eq("id", existing.id);
+          if (error) throw error;
+        }
+      } else {
+        const { error } = await supabase
+          .from("whatsapp_ai_config")
+          .insert({ user_id: user.id, account_id: ctx?.accountId, ...updates });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai-config", accountId] });
+      toast.success("Configurações salvas com auditoria!");
+    },
+    onError: (error: Error) => {
+      toast.error(`Erro ao salvar: ${error.message}`);
+    },
+  });
+
   const toggleActive = useMutation({
     mutationFn: async (active: boolean) => {
       if (!user) throw new Error("Usuário não autenticado");
@@ -129,6 +179,7 @@ export function useAIConfig() {
     config,
     isLoading,
     saveConfig,
+    saveConfigAudited,
     toggleActive,
   };
 }
