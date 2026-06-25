@@ -3,7 +3,7 @@
 // LLM só preenche texto curto. Stage e tool_calls são decididos em código (D1).
 
 import type { AgentContext, AgentResult } from "../_types.ts";
-import { decideGreenStage, isAffirmation, detectFaqTopic, detectOutOfScope, isGenericObjection } from "./stages.ts";
+import { decideGreenStage, isAffirmation, detectFaqTopic, detectOutOfScope, isGenericObjection, detectVoiceVideoChannel } from "./stages.ts";
 import { GREEN_SYSTEM, HOLDER_GUARD, buildGreenUserPrompt } from "./prompt.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { openAITextFallback, isProviderOutOfCredits, markProviderOutOfCredits } from "../../../_shared/ai-fallback/index.ts";
@@ -679,7 +679,7 @@ Quer que eu já comece seu cadastro agora? 😉`;
   }
 
   if (stage === "handoff_voice_video") {
-    const channel = detectVoiceVideoChannel(ctx.user_message ?? "");
+    const channel = detectVoiceVideoChannel(ctx.message ?? "");
     const msgs: string[] = [
       "Entendi! Eu sou uma assistente virtual e por aqui só consigo te atender por mensagens de texto. 🤖",
       `Mas sem problema — já estou chamando um(a) atendente humano(a) da equipe pra continuar com você por ${channel}. Em instantes alguém te responde por aqui. 🙌`,
