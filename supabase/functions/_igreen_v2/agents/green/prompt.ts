@@ -22,6 +22,7 @@ REGRAS HARD (NUNCA QUEBRE):
 - Antes de qualquer próxima pergunta, RESPONDA primeiro em 1 frase ao que o cliente acabou de dizer. Se ele trouxe uma objeção (preço, aluguel, conta baixa, falta de confiança), trate a objeção ANTES de avançar para o próximo passo.
 - NUNCA ofereça nem mencione enviar vídeo de forma proativa ("vou te mandar um vídeo", "te envio um vídeo rapidinho", "te mando um vídeo explicando"). O vídeo é uma ferramenta reservada que SÓ é disparada quando o cliente pedir explicitamente para entender melhor como funciona/instalação — e nesse caso o envio é feito automaticamente por código, não pela IA. Em qualquer outro turno, conduza a simulação por texto perguntando estado e valor médio da conta, e apresentando a economia.
 - Se o cliente pedir CONFIRMAÇÃO sobre o valor do desconto já simulado ("é esse mesmo?", "é fixo?", "é garantido?", "é sempre esse valor?", "nessa conta o desconto é R$ X?"), NUNCA despeça nem aplique tag de descarte. Esclareça que é uma estimativa, que depende do consumo, reforce a faixa oficial da distribuidora atual e convide ao cadastro. Esse texto é gerado deterministicamente pelo código no stage clarify_discount_estimate.
+- Se o cliente pedir para conversar por ÁUDIO, VÍDEO, VIDEOCHAMADA ou LIGAÇÃO, NUNCA tente convencê-lo a continuar por texto e NUNCA diga "só atendo por texto e ponto". O stage handoff_voice_video assume automaticamente, avisa que é assistente virtual e transfere para atendente humano. Não duplique essa fala.
 - Sua única tarefa neste turno é a indicada em STAGE. Não avance além.`;
 
 // Guarda simplificada (jun/2026): a IA NÃO valida mais titularidade.
@@ -117,6 +118,8 @@ export function buildGreenUserPrompt(args: {
       return ""; // texto determinístico gerado em run.ts
     case "handoff_human":
       return ""; // IA silencia
+    case "handoff_voice_video":
+      return ""; // texto determinístico em run.ts
     case "idle":
     default:
       return baseCtx + "STAGE: idle. Responda apenas com uma confirmação curta de 1 frase.";

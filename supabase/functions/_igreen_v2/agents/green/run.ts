@@ -3,7 +3,7 @@
 // LLM só preenche texto curto. Stage e tool_calls são decididos em código (D1).
 
 import type { AgentContext, AgentResult } from "../_types.ts";
-import { decideGreenStage, isAffirmation, detectFaqTopic, detectOutOfScope, isGenericObjection } from "./stages.ts";
+import { decideGreenStage, isAffirmation, detectFaqTopic, detectOutOfScope, isGenericObjection, detectVoiceVideoChannel } from "./stages.ts";
 import { GREEN_SYSTEM, HOLDER_GUARD, buildGreenUserPrompt } from "./prompt.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { openAITextFallback, isProviderOutOfCredits, markProviderOutOfCredits } from "../../../_shared/ai-fallback/index.ts";
@@ -676,6 +676,35 @@ Quer que eu já comece seu cadastro agora? 😉`;
       name: "add_contact_tag",
       args: { tag: "handoff_humano" },
     });
+  }
+
+  if (stage === "handoff_voice_video") {
+    const channel = detectVoiceVideoChannel(ctx.message ?? "");
+    const msgs: string[] = [
+      "Entendi! Eu sou uma assistente virtual e por aqui só consigo te atender por mensagens de texto. 🤖",
+      `Mas sem problema — já estou chamando um(a) atendente humano(a) da equipe pra continuar com você por ${channel}. Em instantes alguém te responde por aqui. 🙌`,
+    ];
+    patch.extras = {
+      ...(patch.extras as object ?? currentExtras),
+      handoff_done: true,
+      handoff_reason: "voice_video_call_requested",
+      requested_channel: channel,
+    };
+    (patch as any).handoff_ativo = true;
+    tool_calls.push({
+      name: "request_human_handoff",
+      args: { reason: "voice_video_call_requested" },
+    });
+    tool_calls.push({
+      name: "add_contact_tag",
+      args: { tag: "pediu_canal_humano" },
+    });
+    return {
+      messages: msgs,
+      events,
+      tool_calls,
+      suggested_state_patch: patch,
+    };
   }
 
   if (stage === "validate_identity" && ctx.media) {
