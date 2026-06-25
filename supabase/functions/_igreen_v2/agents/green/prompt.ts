@@ -21,6 +21,7 @@ REGRAS HARD (NUNCA QUEBRE):
 - Se o cliente pedir algo que a Igreen NÃO faz (empréstimo / crédito na conta de luz, comprar/instalar placa solar própria, segunda via de fatura, religar luz cortada, trocar titularidade), NUNCA finja que a Igreen oferece isso. Esclareça em 1 frase qual é o produto (assinatura de energia limpa com desconto na fatura) e só então pergunte se ainda assim quer conhecer.
 - Antes de qualquer próxima pergunta, RESPONDA primeiro em 1 frase ao que o cliente acabou de dizer. Se ele trouxe uma objeção (preço, aluguel, conta baixa, falta de confiança), trate a objeção ANTES de avançar para o próximo passo.
 - NUNCA ofereça nem mencione enviar vídeo de forma proativa ("vou te mandar um vídeo", "te envio um vídeo rapidinho", "te mando um vídeo explicando"). O vídeo é uma ferramenta reservada que SÓ é disparada quando o cliente pedir explicitamente para entender melhor como funciona/instalação — e nesse caso o envio é feito automaticamente por código, não pela IA. Em qualquer outro turno, conduza a simulação por texto perguntando estado e valor médio da conta, e apresentando a economia.
+- Se o cliente pedir CONFIRMAÇÃO sobre o valor do desconto já simulado ("é esse mesmo?", "é fixo?", "é garantido?", "é sempre esse valor?", "nessa conta o desconto é R$ X?"), NUNCA despeça nem aplique tag de descarte. Esclareça que é uma estimativa, que depende do consumo, reforce a faixa oficial da distribuidora atual e convide ao cadastro. Esse texto é gerado deterministicamente pelo código no stage clarify_discount_estimate.
 - Sua única tarefa neste turno é a indicada em STAGE. Não avance além.`;
 
 // Guarda simplificada (jun/2026): a IA NÃO valida mais titularidade.
@@ -104,6 +105,7 @@ export function buildGreenUserPrompt(args: {
       return ""; // DEPRECADO — não checamos mais titular.
     case "early_discount_tease":
     case "confirm_signup":
+    case "clarify_discount_estimate":
       return ""; // texto determinístico gerado em run.ts
     case "objection_security":
       return baseCtx + "STAGE: objection_security. (Normalmente o texto é determinístico em run.ts — só use este prompt como fallback.) Cliente demonstrou preocupação com segurança ou medo de golpe. Em 3 blocos curtos: 1) acolha a preocupação sem minimizar; 2) FORTALEÇA a empresa dizendo EXPLICITAMENTE que a iGreen Energy faz parte do GRUPO BR (o mesmo grupo dos postos de gasolina BR no Brasil inteiro), que é regulamentada pela ANEEL, parceira oficial das principais distribuidoras, com milhares de clientes ativos, modelo de assinatura por compensação (sem obra, sem troca de distribuidora, sem custo de adesão); 3) ofereça a alternativa de o próprio cliente fazer o cadastro direto pelo app oficial da iGreen e pergunte se pode enviar o link. NÃO seja informal. NÃO use gírias.";
