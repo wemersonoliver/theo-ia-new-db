@@ -12,6 +12,13 @@ const DEFAULTS = [
   { key: "CENARIO3", name: "Cenário 3" },
 ];
 
+// Conta-modelo Igreen: o conteúdo dos cenários (dias/mensagens/vídeos)
+// é clonado a partir desta conta para toda nova conta Igreen provisionada.
+// Para trocar a conta-modelo, basta atualizar este UUID.
+const IGREEN_TEMPLATE_ACCOUNT_ID =
+  Deno.env.get("IGREEN_TEMPLATE_ACCOUNT_ID") ||
+  "3f304fb6-fd4e-46d0-9831-b23fabd37b7a";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -55,6 +62,25 @@ serve(async (req) => {
       onConflict: "account_id,scenario_key",
       ignoreDuplicates: true,
     });
+
+    // Clona o conteúdo (dias, mensagens e itens) da conta-modelo para esta conta.
+    // O RPC só copia para cenários que ainda estão vazios — não sobrescreve nada.
+    let cloned: any = null;
+    if (IGREEN_TEMPLATE_ACCOUNT_ID && IGREEN_TEMPLATE_ACCOUNT_ID !== account_id) {
+      try {
+        const { data: cloneRes, error: cloneErr } = await supabase.rpc(
+          "clone_igreen_scenario_content",
+          {
+            _source_account: IGREEN_TEMPLATE_ACCOUNT_ID,
+            _target_account: account_id,
+          },
+        );
+        if (cloneErr) console.warn("clone_igreen_scenario_content failed", cloneErr);
+        else cloned = cloneRes;
+      } catch (e) {
+        console.warn("clone_igreen_scenario_content threw", e);
+      }
+    }
 
     // Provisiona pipeline CRM Igreen (etapas + automações por tag)
     try {
@@ -111,7 +137,7 @@ serve(async (req) => {
       console.warn("apply igreen default ai failed", e);
     }
 
-    return new Response(JSON.stringify({ ok: true, scenarios: DEFAULTS.length, ai_applied: aiApplied }), {
+    return new Response(JSON.stringify({ ok: true, scenarios: DEFAULTS.length, ai_applied: aiApplied, cloned }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

@@ -5493,6 +5493,10 @@ export type Database = {
         Args: { p_account_id: string; p_reason: string }
         Returns: number
       }
+      clone_igreen_scenario_content: {
+        Args: { _source_account: string; _target_account: string }
+        Returns: Json
+      }
       current_account_id: { Args: never; Returns: string }
       custom_followup_stop_for_phone: {
         Args: { _account_id: string; _phone: string; _reason: string }
