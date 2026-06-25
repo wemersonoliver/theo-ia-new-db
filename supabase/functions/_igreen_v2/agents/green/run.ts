@@ -678,6 +678,35 @@ Quer que eu já comece seu cadastro agora? 😉`;
     });
   }
 
+  if (stage === "handoff_voice_video") {
+    const channel = detectVoiceVideoChannel(ctx.user_message ?? "");
+    const msgs: string[] = [
+      "Entendi! Eu sou uma assistente virtual e por aqui só consigo te atender por mensagens de texto. 🤖",
+      `Mas sem problema — já estou chamando um(a) atendente humano(a) da equipe pra continuar com você por ${channel}. Em instantes alguém te responde por aqui. 🙌`,
+    ];
+    patch.extras = {
+      ...(patch.extras as object ?? currentExtras),
+      handoff_done: true,
+      handoff_reason: "voice_video_call_requested",
+      requested_channel: channel,
+    };
+    (patch as any).handoff_ativo = true;
+    tool_calls.push({
+      name: "request_human_handoff",
+      args: { reason: "voice_video_call_requested" },
+    });
+    tool_calls.push({
+      name: "add_contact_tag",
+      args: { tag: "pediu_canal_humano" },
+    });
+    return {
+      messages: msgs,
+      events,
+      tool_calls,
+      suggested_state_patch: patch,
+    };
+  }
+
   if (stage === "validate_identity" && ctx.media) {
     tool_calls.push({
       name: "validate_green_identity",
