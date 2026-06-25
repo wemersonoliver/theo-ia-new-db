@@ -425,6 +425,40 @@ Quer que eu já comece seu cadastro agora? 😉`;
     };
   }
 
+  if (stage === "clarify_discount_estimate") {
+    const nome = (currentExtras.client_name as string | undefined) ?? "";
+    const distribuidora = (currentExtras.distribuidora as string | undefined) ?? "sua distribuidora";
+    const valor = Number(currentExtras.valor_fatura ?? 0);
+    const min = Number(currentExtras.discount_min_percent ?? 0);
+    const max = Number(currentExtras.discount_max_percent ?? 0);
+    const msgs: string[] = [];
+    msgs.push(
+      `${nome ? nome + ", " : ""}esse valor é uma **estimativa**, viu? O desconto real **depende do seu consumo no mês** — pode variar dentro da faixa oficial da ${distribuidora}.`,
+    );
+    if (min > 0 && max > 0 && valor > 0) {
+      const eMin = (valor * min) / 100;
+      const eMax = (valor * max) / 100;
+      msgs.push(
+        `Pra ${distribuidora} a faixa fica entre ${min}% e ${max}%. Na sua conta de R$ ${formatBRL(valor)}, normalmente o desconto cai entre R$ ${formatBRL(eMin)} e R$ ${formatBRL(eMax)} todo mês. 💰`,
+      );
+    } else if (min > 0 && max > 0) {
+      msgs.push(`Pra ${distribuidora} a faixa fica entre ${min}% e ${max}% da sua fatura todo mês.`);
+    }
+    msgs.push("Quer que eu já comece seu cadastro agora pra você travar esse desconto? 😉");
+    patch.extras = {
+      ...(patch.extras as object ?? currentExtras),
+      discount_clarified: true,
+      discount_clarified_at: new Date().toISOString(),
+      // Mantém signup_pitch_sent=true mas NÃO marca soft_closed.
+    };
+    return {
+      messages: msgs,
+      events,
+      tool_calls,
+      suggested_state_patch: patch,
+    };
+  }
+
   if (stage === "confirm_signup") {
     const nome = (currentExtras.client_name as string | undefined) ?? "";
     // Resposta afirmativa → confirma e o redecide abaixo joga em request_invoice.
