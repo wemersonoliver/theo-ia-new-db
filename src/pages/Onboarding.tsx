@@ -13,6 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useWhatsAppInstance } from "@/hooks/useWhatsAppInstance";
 import { useAIConfig } from "@/hooks/useAIConfig";
+import { useAccountPlan } from "@/hooks/useAccountPlan";
+import { useIgreenAccountProducts } from "@/hooks/useIgreenAccountProducts";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { OnboardingVideo } from "@/components/OnboardingVideo";
@@ -20,14 +22,14 @@ import {
   Sparkles, Smartphone, QrCode, Loader2, RefreshCw, CheckCircle2, XCircle,
   Calendar, Bot, FlaskConical, PartyPopper, ArrowRight,
   Check, Send, Wand2, Copy,
-  MessageCircle, Hash,
+  MessageCircle, Hash, Link as LinkIcon, Package, Save,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuroraBackground } from "@/components/fx/AuroraBackground";
 import { FloatingSparkles } from "@/components/fx/FloatingSparkles";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-type OnboardingStep = "welcome" | "interview" | "whatsapp" | "test_prompt" | "completed";
+type OnboardingStep = "welcome" | "interview" | "whatsapp" | "test_prompt" | "igreen_products" | "completed";
 
 type InterviewMessage = { role: "user" | "assistant"; content: string };
 
@@ -35,11 +37,16 @@ const STEP_ORDER: OnboardingStep[] = [
   "welcome", "interview", "whatsapp", "test_prompt", "completed"
 ];
 
+const IGREEN_STEP_ORDER: OnboardingStep[] = [
+  "welcome", "igreen_products", "whatsapp", "completed"
+];
+
 const STEP_LABELS: Record<string, string> = {
   welcome: "Boas-vindas",
   interview: "Entrevista IA",
   whatsapp: "Conectar WhatsApp",
   test_prompt: "Testar Prompt",
+  igreen_products: "Links de Cadastro",
   completed: "Concluído",
 };
 
@@ -65,6 +72,8 @@ const LOADING_MESSAGES = [
 export default function Onboarding() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { tier } = useAccountPlan();
+  const isIgreen = tier === "igreen";
   const [currentStep, setCurrentStep] = useState<OnboardingStep>("welcome");
 
   // Membros secundários (não-owner) não fazem onboarding
@@ -82,17 +91,18 @@ export default function Onboarding() {
     })();
   }, [user, navigate]);
 
-  // All steps are always visible (no skip logic anymore)
-  const visibleSteps = STEP_ORDER;
+  // Igreen users follow a simplified flow: welcome -> product links -> whatsapp -> done
+  const visibleSteps = isIgreen ? IGREEN_STEP_ORDER : STEP_ORDER;
   const currentIndex = visibleSteps.indexOf(currentStep);
   const progressPercent = ((currentIndex) / (visibleSteps.length - 1)) * 100;
 
   const goToStep = (step: OnboardingStep) => setCurrentStep(step);
 
   const goNext = () => {
-    const idx = STEP_ORDER.indexOf(currentStep);
-    if (idx + 1 < STEP_ORDER.length) {
-      setCurrentStep(STEP_ORDER[idx + 1]);
+    const order = isIgreen ? IGREEN_STEP_ORDER : STEP_ORDER;
+    const idx = order.indexOf(currentStep);
+    if (idx + 1 < order.length) {
+      setCurrentStep(order[idx + 1]);
     }
   };
 
@@ -185,10 +195,16 @@ export default function Onboarding() {
         <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto overflow-x-hidden">
           <div className={cn("mx-auto w-full min-w-0", currentStep === "test_prompt" ? "max-w-6xl" : "max-w-3xl")}>
             {currentStep === "welcome" && (
-              <WelcomeStep onNext={() => goToStep("interview")} />
+              <WelcomeStep
+                isIgreen={isIgreen}
+                onNext={() => goToStep(isIgreen ? "igreen_products" : "interview")}
+              />
             )}
             {currentStep === "whatsapp" && (
               <WhatsAppStep onNext={goNext} />
+            )}
+            {currentStep === "igreen_products" && (
+              <IgreenProductsStep onNext={goNext} />
             )}
             {currentStep === "interview" && (
               <InterviewStep onNext={goNext} />
