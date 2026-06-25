@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Sparkles, Send, Copy, Check, RefreshCw, ChevronRight } from "lucide-react";
+import { PasswordConfirmDialog } from "@/components/ai/PasswordConfirmDialog";
 
 const LOADING_MESSAGES = [
   "Analisando gargalos do setor...",
@@ -38,7 +39,7 @@ const INTERVIEW_DRAFT_KEY = "theo-ai-interview-draft";
 
 export function InterviewTab({ onPromptApplied }: { onPromptApplied?: () => void }) {
   const { user } = useAuth();
-  const { saveConfig } = useAIConfig();
+  const { saveConfigAudited } = useAIConfig();
 
   const [interviewState, setInterviewState] = useState<InterviewState>("idle");
   const [companyName, setCompanyName] = useState("");
@@ -55,6 +56,7 @@ export function InterviewTab({ onPromptApplied }: { onPromptApplied?: () => void
   const [analysisMode, setAnalysisMode] = useState<"idle" | "awaiting_consent" | "awaiting_choice" | "entering_phones" | "analyzing">("idle");
   const [phonesInput, setPhonesInput] = useState("");
   const [phonesError, setPhonesError] = useState("");
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -289,8 +291,12 @@ export function InterviewTab({ onPromptApplied }: { onPromptApplied?: () => void
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleApply = async () => {
+  const handleApply = () => {
     if (!editablePrompt.trim()) return;
+    setPasswordDialogOpen(true);
+  };
+
+  const persistPrompt = async () => {
     setIsApplying(true);
     try {
       if (interviewId) {
@@ -299,7 +305,7 @@ export function InterviewTab({ onPromptApplied }: { onPromptApplied?: () => void
           .update({ generated_prompt: editablePrompt, status: "completed" })
           .eq("id", interviewId);
       }
-      await saveConfig.mutateAsync({
+      await saveConfigAudited.mutateAsync({
         custom_prompt: editablePrompt,
         active: true,
         business_hours_start: "00:00",
