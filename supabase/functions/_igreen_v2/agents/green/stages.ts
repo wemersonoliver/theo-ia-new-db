@@ -4,6 +4,27 @@ export function isHandoffRequest(msg: string): boolean {
   return HANDOFF_RX.test(msg ?? "");
 }
 
+// Pedido para mudar de canal: áudio, vídeo ou ligação.
+// Só casa quando o cliente PEDE que o atendimento use esse canal.
+// Frases como "vou te mandar um áudio" (cliente vai mandar) são excluídas
+// pelo padrão SELF_SEND_RX abaixo.
+const SELF_SEND_RX = /\b(vou|j[aá]|agora|posso|deixa eu|deixe-me)\s+(te\s+)?(mandar|enviar|gravar|te enviar)\s+(um\s+)?(áudio|audio|v[ií]deo|video)\b/i;
+const VOICE_VIDEO_CALL_RX = /\b(me\s+(mand[ae]|envi[ae]|responde|retorna|chama)\s+(um\s+|por\s+|em\s+)?(áudio|audio|v[ií]deo|video|liga(ção|cao))|responde\s+(por|em|com)\s+(áudio|audio|v[ií]deo|video)|por\s+(áudio|audio|v[ií]deo|video|liga(ção|cao)|chamada)|conversa(r)?\s+(comigo|com\s+voc[eê])?\s*(por|em|via|num|no)\s+(áudio|audio|v[ií]deo|video|liga(ção|cao)|chamada)|video\s*chamada|videochamada|chamada\s+de\s+v[ií]deo|chamada\s+de\s+voz|video\s*call|me\s+lig(a|ar|ue)|pode(m)?\s+lig(ar|ue)|liga(r)?\s+(pra|para)\s+mim|aceita(m)?\s+lig(ar|ação)|atende(r)?\s+no\s+telefone|chama(r)?\s+no\s+whats(app)?\s+(em|por)\s+(v[ií]deo|video|áudio|audio|voz|chamada))\b/i;
+export function isVoiceVideoCallRequest(msg: string): boolean {
+  const raw = (msg ?? "").trim();
+  if (!raw) return false;
+  if (SELF_SEND_RX.test(raw)) return false; // cliente vai mandar áudio/vídeo, não pede o canal.
+  return VOICE_VIDEO_CALL_RX.test(raw);
+}
+
+// Detecta qual canal o cliente pediu para personalizar a mensagem.
+export function detectVoiceVideoChannel(msg: string): "vídeo" | "áudio" | "ligação" {
+  const raw = (msg ?? "").toLowerCase();
+  if (/\b(v[ií]deo|videochamada|video\s*chamada|video\s*call)\b/.test(raw)) return "vídeo";
+  if (/\b(liga(ção|cao)|me\s+lig(a|ar|ue)|pode(m)?\s+lig(ar|ue)|liga(r)?\s+(pra|para)\s+mim|chamada\s+de\s+voz|telefone)\b/.test(raw)) return "ligação";
+  return "áudio";
+}
+
 // Aceite explícito do link de auto-cadastro (após objection_security).
 const AUTOCADASTRO_ACCEPT_RX = /\b(sim|pode|envia|manda|me envia|me manda|por favor|prefiro|quero o link)\b/i;
 export function acceptsAutoCadastro(msg: string): boolean {
@@ -47,6 +68,7 @@ export type GreenStage =
   | "objection_security"
   | "send_autocadastro_link"
   | "handoff_human"
+  | "handoff_voice_video"
   | "ask_full_name_cpf"
   | "soft_close"
   | "out_of_scope_clarify"
@@ -232,6 +254,11 @@ function _decideGreenStageInner(
   const msg = (message ?? "").toLowerCase();
   const extras = (state.extras ?? {}) as Record<string, unknown>;
   const hasValue = (value: unknown) => value !== undefined && value !== null && String(value).trim() !== "";
+
+  // PRIORIDADE -2 — cliente pediu áudio/vídeo/ligação: handoff com aviso.
+  if (isVoiceVideoCallRequest(message) && !extras.handoff_done) {
+    return "handoff_voice_video";
+  }
 
   // PRIORIDADE -1 — pedido explícito de humano: handoff imediato.
   if (isHandoffRequest(message) && !extras.handoff_done) {
