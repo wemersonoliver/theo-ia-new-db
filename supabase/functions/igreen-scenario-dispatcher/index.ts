@@ -186,6 +186,22 @@ serve(async (req) => {
           skipped++;
           continue;
         }
+        // Fail-safe: se houve mensagem humana nas últimas 6h (independente do
+        // started_at), adia o disparo em +24h dentro da janela. Evita o
+        // follow-up "Bom dia, imagino que ontem foi corrido" enquanto o
+        // cliente acabou de conversar com o atendimento.
+        if (lastInbound?.timestamp) {
+          const ageMs = Date.now() - new Date(lastInbound.timestamp).getTime();
+          if (ageMs < 6 * 3_600_000) {
+            const next = clampToWindow(new Date(Date.now() + 24 * 3_600_000));
+            await supabase.from("igreen_scenario_enrollments").update({
+              next_run_at: next.toISOString(),
+              updated_at: isoNow(),
+            }).eq("id", enrollment.id);
+            skipped++;
+            continue;
+          }
+        }
       }
 
       // Resolve current day row
