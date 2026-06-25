@@ -117,6 +117,8 @@ export function buildGreenUserPrompt(args: {
       return ""; // texto determinístico gerado em run.ts
     case "handoff_human":
       return ""; // IA silencia
+    case "handoff_voice_video":
+      return ""; // texto determinístico em run.ts
     case "idle":
     default:
       return baseCtx + "STAGE: idle. Responda apenas com uma confirmação curta de 1 frase.";
