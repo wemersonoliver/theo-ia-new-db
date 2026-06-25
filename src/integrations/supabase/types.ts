@@ -5218,9 +5218,11 @@ export type Database = {
           agent_name: string | null
           business_description: string | null
           business_niche: string | null
+          change_method: string | null
           change_source: string | null
           changed_at: string
           changed_by: string | null
+          changed_by_email: string | null
           config_id: string
           custom_prompt: string | null
           id: string
@@ -5230,9 +5232,11 @@ export type Database = {
           agent_name?: string | null
           business_description?: string | null
           business_niche?: string | null
+          change_method?: string | null
           change_source?: string | null
           changed_at?: string
           changed_by?: string | null
+          changed_by_email?: string | null
           config_id: string
           custom_prompt?: string | null
           id?: string
@@ -5242,9 +5246,11 @@ export type Database = {
           agent_name?: string | null
           business_description?: string | null
           business_niche?: string | null
+          change_method?: string | null
           change_source?: string | null
           changed_at?: string
           changed_by?: string | null
+          changed_by_email?: string | null
           config_id?: string
           custom_prompt?: string | null
           id?: string
@@ -5618,6 +5624,17 @@ export type Database = {
             }
             Returns: string
           }
+      save_ai_prompt_with_audit: {
+        Args: {
+          p_agent_name: string
+          p_business_description: string
+          p_business_niche: string
+          p_config_id: string
+          p_custom_prompt: string
+          p_method?: string
+        }
+        Returns: undefined
+      }
       system_cancel_followup_sequence: {
         Args: { p_phone: string; p_reason: string }
         Returns: number

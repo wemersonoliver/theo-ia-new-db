@@ -7,6 +7,7 @@ import { Loader2, Timer } from "lucide-react";
 import { useAIConfig } from "@/hooks/useAIConfig";
 import { useAccountId } from "@/hooks/useAccount";
 import { useEffect, useState } from "react";
+import { PasswordConfirmDialog } from "@/components/ai/PasswordConfirmDialog";
 
 const DRAFT_PREFIX = "theo-ai-general-draft";
 const draftKeyFor = (accountId: string | null) =>
@@ -25,7 +26,7 @@ const getStoredDraft = (key: string | null) => {
 };
 
 export function AIGeneralTab() {
-  const { config, saveConfig } = useAIConfig();
+  const { config, saveConfig, saveConfigAudited } = useAIConfig();
   const { accountId } = useAccountId();
   const draftKey = draftKeyFor(accountId);
   const [formData, setFormData] = useState(() => {
@@ -40,6 +41,7 @@ export function AIGeneralTab() {
     };
   });
   const [readyToPersist, setReadyToPersist] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
   useEffect(() => {
     // Reset persistence flag whenever the account changes (e.g. impersonation switch)
@@ -72,9 +74,31 @@ export function AIGeneralTab() {
     sessionStorage.setItem(draftKey, JSON.stringify(formData));
   }, [formData, readyToPersist, draftKey]);
 
-  const handleSave = () => saveConfig.mutate(formData, {
-    onSuccess: () => { if (draftKey) sessionStorage.removeItem(draftKey); },
-  });
+  const isPromptChanged = () => {
+    if (!config) return true;
+    return (
+      (formData.custom_prompt || "") !== (config.custom_prompt || "") ||
+      (formData.business_description || "") !== (config.business_description || "") ||
+      (formData.business_niche || "") !== (config.business_niche || "") ||
+      (formData.agent_name || "") !== (config.agent_name || "")
+    );
+  };
+
+  const persistAfterAudit = () => {
+    saveConfigAudited.mutate(formData, {
+      onSuccess: () => { if (draftKey) sessionStorage.removeItem(draftKey); },
+    });
+  };
+
+  const handleSave = () => {
+    if (isPromptChanged()) {
+      setPasswordDialogOpen(true);
+      return;
+    }
+    saveConfig.mutate(formData, {
+      onSuccess: () => { if (draftKey) sessionStorage.removeItem(draftKey); },
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -199,10 +223,17 @@ export function AIGeneralTab() {
         </CardContent>
       </Card>
 
-      <Button onClick={handleSave} disabled={saveConfig.isPending}>
-        {saveConfig.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+      <Button onClick={handleSave} disabled={saveConfig.isPending || saveConfigAudited.isPending}>
+        {(saveConfig.isPending || saveConfigAudited.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Salvar Configurações
       </Button>
+
+      <PasswordConfirmDialog
+        open={passwordDialogOpen}
+        onOpenChange={setPasswordDialogOpen}
+        onConfirmed={persistAfterAudit}
+        description="Toda alteração no prompt do agente IA exige confirmação de senha para garantir a rastreabilidade de quem editou."
+      />
     </div>
   );
 }
