@@ -234,7 +234,44 @@ export default function Onboarding() {
 }
 
 // ─── STEP 1: WELCOME ───────────────────────────────────────────────────────────
-function WelcomeStep({ onNext }: { onNext: () => void }) {
+function WelcomeStep({ onNext, isIgreen }: { onNext: () => void; isIgreen?: boolean }) {
+  if (isIgreen) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8">
+        <div className="space-y-4">
+          <div className="h-20 w-20 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto">
+            <Sparkles className="h-10 w-10 text-emerald-500" />
+          </div>
+          <h1 className="text-3xl md:text-4xl font-bold text-foreground">
+            Bem-vindo à Theo IA Igreen! ⚡
+          </h1>
+          <p className="text-lg text-muted-foreground max-w-lg mx-auto">
+            Sua IA já vem pré-configurada para vender Energia Igreen.
+            Em apenas <strong>2 passos rápidos</strong> você começa a atender.
+          </p>
+        </div>
+
+        <div className="grid gap-3 text-left max-w-md w-full">
+          {[
+            { icon: LinkIcon, text: "Colar seus links de cadastro de cada produto" },
+            { icon: Smartphone, text: "Conectar seu WhatsApp" },
+          ].map((item, i) => (
+            <div key={i} className="flex items-center gap-3 rounded-lg border p-3">
+              <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <item.icon className="h-4 w-4 text-emerald-500" />
+              </div>
+              <span className="text-sm font-medium">{item.text}</span>
+            </div>
+          ))}
+        </div>
+
+        <Button size="lg" onClick={onNext} className="gap-2 text-base px-8">
+          Começar Configuração
+          <ArrowRight className="h-5 w-5" />
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8">
       <OnboardingVideo stepKey="welcome" />
@@ -270,6 +307,102 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         Começar Configuração
         <ArrowRight className="h-5 w-5" />
       </Button>
+    </div>
+  );
+}
+
+// ─── STEP: IGREEN PRODUCT LINKS ─────────────────────────────────────────────
+function IgreenProductsStep({ onNext }: { onNext: () => void }) {
+  const { productsQ, updateProduct } = useIgreenAccountProducts();
+  const [links, setLinks] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (productsQ.data) {
+      const init: Record<string, string> = {};
+      productsQ.data.forEach((p) => { init[p.id] = (p as any).signup_url ?? ""; });
+      setLinks(init);
+    }
+  }, [productsQ.data]);
+
+  const products = productsQ.data ?? [];
+
+  const handleSaveAll = async () => {
+    setSaving(true);
+    try {
+      await Promise.all(
+        products.map((p) => {
+          const newUrl = (links[p.id] ?? "").trim();
+          const current = (p as any).signup_url ?? "";
+          if (newUrl === current) return Promise.resolve();
+          return updateProduct.mutateAsync({
+            id: p.id,
+            patch: { signup_url: newUrl || null } as any,
+          });
+        }),
+      );
+      toast.success("Links salvos com sucesso!");
+      onNext();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Erro ao salvar links");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <LinkIcon className="h-6 w-6 text-primary" />
+          Links de Cadastro dos Produtos
+        </h2>
+        <p className="text-muted-foreground">
+          Cole o link oficial de auto-cadastro de cada produto. A IA enviará esse link aos clientes que preferirem se cadastrar sozinhos. Você pode editar depois na aba <strong>Produtos</strong>.
+        </p>
+      </div>
+
+      <Card>
+        <CardContent className="p-6 space-y-4">
+          {productsQ.isLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : products.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              Nenhum produto cadastrado ainda. Você poderá cadastrar depois na aba Produtos.
+            </p>
+          ) : (
+            products.map((p) => (
+              <div key={p.id} className="space-y-1.5 pb-4 border-b last:border-b-0 last:pb-0">
+                <Label className="flex items-center gap-2 text-sm font-medium">
+                  <Package className="h-4 w-4 text-primary" />
+                  {p.name}
+                </Label>
+                <Input
+                  type="url"
+                  placeholder="https://..."
+                  value={links[p.id] ?? ""}
+                  onChange={(e) => setLinks((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                />
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-end">
+        <Button
+          onClick={handleSaveAll}
+          disabled={saving || productsQ.isLoading}
+          size="lg"
+          className="gap-2"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Salvar e Continuar
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }
