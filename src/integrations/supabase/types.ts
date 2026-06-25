@@ -2418,6 +2418,36 @@ export type Database = {
         }
         Relationships: []
       }
+      igreen_default_pipeline_stages: {
+        Row: {
+          automation_tag: string | null
+          color: string
+          created_at: string
+          id: string
+          name: string
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          automation_tag?: string | null
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          position: number
+          updated_at?: string
+        }
+        Update: {
+          automation_tag?: string | null
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       igreen_distributor_discounts: {
         Row: {
           created_at: string
