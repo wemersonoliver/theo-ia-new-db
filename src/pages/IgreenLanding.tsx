@@ -94,6 +94,7 @@ const igreenIncluded = [
 ];
 
 const igreenFaq = [
+  { q: "Vocês são da Igreen Energy?", a: "Não. Theo IA é uma empresa independente de tecnologia. Não temos vínculo societário, comercial ou de representação com a Igreen Energy. Criamos uma versão do nosso sistema de atendimento por IA pensada para o dia a dia de quem já é licenciado/parceiro oficial da Igreen. Todas as marcas, logos e nomes citados pertencem aos seus respectivos titulares." },
   { q: "Preciso já ser parceiro Igreen para usar?", a: "Sim. O sistema é otimizado para representantes e parceiros oficiais da Igreen Energy que já têm acesso ao portal de cadastro." },
   { q: "A IA conhece os planos e regras da Igreen?", a: "Sim. O agente vem com base de conhecimento focada em energia por assinatura, descontos, áreas atendidas, perfil CPF/CNPJ e principais objeções. Você ainda pode personalizar com seu próprio script." },
   { q: "Funciona com o WhatsApp que eu já uso para atender?", a: "Sim. Conectamos via QR Code ao seu número atual. Você continua atendendo do mesmo número, com a IA trabalhando em paralelo." },
@@ -126,6 +127,13 @@ export default function IgreenLanding() {
         </div>
       </nav>
 
+      {/* Aviso de não-afiliação */}
+      <div className="border-b border-amber-400/30 bg-amber-400/10">
+        <div className="mx-auto max-w-6xl px-4 py-2.5 text-center text-[11px] leading-snug text-amber-200/90 md:text-xs">
+          <strong className="text-amber-200">Aviso:</strong> Theo IA é uma empresa independente. Não somos afiliados, associados, autorizados, endossados ou de qualquer forma oficialmente conectados à Igreen Energy. Marcas e nomes citados pertencem aos seus respectivos donos.
+        </div>
+      </div>
+
       {/* Hero */}
       <section className="relative overflow-hidden px-4 py-20 md:py-28">
         <div className="absolute inset-0 bg-gradient-to-b from-emerald-600/15 via-amber-500/5 to-transparent" />
@@ -135,7 +143,7 @@ export default function IgreenLanding() {
             <Leaf className="h-10 w-10" />
           </div>
           <Badge className="mb-6 border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20">
-            <Sparkles className="mr-1 h-3 w-3" /> Versão exclusiva para parceiros Igreen Energy
+            <Sparkles className="mr-1 h-3 w-3" /> Ferramenta independente feita para licenciados Igreen Energy
           </Badge>
           <h1 className="mb-6 text-4xl font-extrabold leading-tight tracking-tight md:text-6xl">
             A IA que vende{" "}
@@ -145,7 +153,7 @@ export default function IgreenLanding() {
             por você no WhatsApp
           </h1>
           <p className="mx-auto mb-8 max-w-2xl text-lg md:text-xl">
-            Sistema personalizado para representantes Igreen Energy. A IA qualifica o lead,
+            Sistema independente, personalizado para o dia a dia de licenciados Igreen Energy. A IA qualifica o lead,
             simula a economia, coleta documentos e marca a reunião — você só assina o contrato.
           </p>
 
@@ -349,6 +357,9 @@ export default function IgreenLanding() {
       {/* Footer */}
       <footer className="border-t border-emerald-900/50 px-4 py-8">
         <div className="mx-auto max-w-6xl flex flex-col items-center gap-3 text-center text-sm">
+          <p className="max-w-3xl text-xs leading-relaxed text-white/60">
+            Theo IA é um produto independente e não possui vínculo, parceria, patrocínio ou autorização da Igreen Energy Ltda. As referências à Igreen são feitas apenas para descrever o público-alvo da ferramenta (licenciados e parceiros oficiais da Igreen). Todas as marcas registradas pertencem aos seus respectivos titulares.
+          </p>
           <p>© {new Date().getFullYear()} Theo IA · Versão Igreen Energy. Todos os direitos reservados.</p>
           <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-white/60">
             <a href="/terms" className="hover:text-white transition-colors">Termos de Uso</a>
