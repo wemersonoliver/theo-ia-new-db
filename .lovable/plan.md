@@ -1,59 +1,47 @@
-## Problema
 
-Na conversa com `5569992264209`, o cliente mandou áudio dizendo "conversa comigo por um vídeo, como eu estou falando com vocês". A IA respondeu que "é só consultor de energia" e seguiu pedindo valor da fatura, ignorando o pedido de canal diferente.
+## 1. Restauração do prompt — consultoriafontoura@gmail.com
 
-A regra correta: **sempre que o cliente pedir áudio, vídeo ou ligação, a IA deve avisar que vai chamar um atendente humano e disparar o handoff** — não improvisar.
+Vou rodar um UPDATE em `whatsapp_ai_config` restaurando o valor exato do `custom_prompt` da versão de **25/06 16:08:54 BRT (4.908 chars)** que está em `whatsapp_ai_config_history`. Antes do UPDATE, o trigger `trg_snapshot_ai_config` salvará automaticamente a versão atual (1.375 chars) no histórico como backup.
 
-## Mudanças
+## 2. Senha obrigatória para salvar alterações no prompt (todas as contas)
 
-### 1. Detecção de pedido de canal humano (`agents/green/stages.ts`)
+A senha exigida será a **mesma senha de login** do usuário Theo IA. Não criamos senha nova — a confirmação é feita reautenticando contra o Supabase Auth (`signInWithPassword` no e-mail da sessão atual). Se a senha estiver errada, o salvamento é bloqueado.
 
-Criar nova heurística `isVoiceVideoCallRequest(msg)` que casa frases como:
-- "manda áudio", "me responde por áudio", "responde em áudio"
-- "vídeo", "videochamada", "chamada de vídeo", "video call"
-- "me liga", "ligação", "pode ligar", "ligar pra mim", "atende no telefone"
-- "chamar no whatsapp" / "chamada de voz"
+### Onde aplicar
+Componente `src/components/ai/AIGeneralTab.tsx` (campo "Instruções Personalizadas" / botão "Salvar Configurações").
 
-Importante: NÃO casar quando o cliente fala "vou te mandar um áudio" ou descreve o próprio envio — só quando ele PEDE para a IA usar áudio/vídeo/ligação.
+### Fluxo de UX
+1. Usuário edita o prompt e clica em **Salvar Configurações**.
+2. Se o campo `custom_prompt` mudou em relação ao valor original do banco, abre um `Dialog` (shadcn) pedindo a senha.
+3. Usuário digita a senha → chamamos `supabase.auth.signInWithPassword({ email, password })`.
+4. Em caso de sucesso: prossegue com o `saveConfig.mutate(...)` normalmente.
+5. Em caso de falha: toast de erro "Senha incorreta" e o salvamento é abortado.
+6. Se nenhum campo do prompt mudou (apenas outros campos como nome do agente, delay, etc.), salva direto sem pedir senha.
 
-### 2. Roteamento prioritário para handoff (`agents/green/stages.ts`)
+### Observações
+- A reautenticação NÃO desloga o usuário (apenas valida credenciais).
+- A senha nunca é armazenada, apenas usada na verificação imediata.
+- O mesmo padrão valerá também para o botão de aplicar prompt da aba **Entrevista IA** (`InterviewTab`), para evitar bypass.
 
-Em `decideStage`, adicionar regra antes de qualquer outra (prioridade -2, acima do `handoff_human` por palavra-chave):
+## 3. Correção da auditoria (registrar quem alterou)
 
-```text
-se isVoiceVideoCallRequest(message) && !extras.handoff_done:
-    retorna "handoff_voice_video"
-```
+O trigger atual `trg_snapshot_ai_config` já tenta gravar `changed_by = auth.uid()`, mas está vindo NULL porque o trigger roda como `SECURITY DEFINER`. Vou ajustar o fluxo para garantir o registro do autor:
 
-Criar o novo stage `handoff_voice_video` no union de `GreenStage`.
+- Adicionar coluna `changed_by_email text` em `whatsapp_ai_config_history` (mais robusto que UUID quando a sessão é definer).
+- Reescrever o trigger para capturar `auth.uid()` corretamente (removendo `SECURITY DEFINER` ou usando `current_setting('request.jwt.claims', true)` para extrair sub/email).
+- Adicionar coluna `change_method text` para diferenciar `password_confirmed` (UI normal) de `admin_override` (impersonação).
+- Ao salvar pelo frontend, passar o e-mail confirmado via RPC `record_ai_prompt_change(...)` antes do UPDATE, garantindo rastro mesmo se o trigger falhar.
 
-### 3. Resposta determinística + handoff (`agents/green/run.ts`)
+## 4. Ordem de execução
 
-Adicionar bloco para `stage === "handoff_voice_video"`:
-- Detecta no texto qual canal o cliente pediu (áudio / vídeo / ligação) para personalizar a mensagem.
-- Envia 2 mensagens curtas:
-  1. "Entendi! Eu sou uma assistente virtual e só consigo te atender por mensagens de texto aqui no WhatsApp. 🤖"
-  2. "Mas sem problema — já estou chamando um(a) atendente humano(a) da equipe pra continuar com você por [áudio/vídeo/ligação], tudo bem? Em instantes alguém te responde. 🙌"
-- Dispara `request_human_handoff` com `reason: "voice_video_call_requested"` e `add_contact_tag` com `tag: "pediu_canal_humano"`.
-- Marca `extras.handoff_done = true` e `patch.handoff_ativo = true` (mesmo padrão do `handoff_human`).
+1. Migração SQL: ajusta trigger de auditoria + colunas extras em `whatsapp_ai_config_history`.
+2. INSERT/UPDATE de dados: restaura o `custom_prompt` da `consultoriafontoura@gmail.com` para a versão de 4.908 chars.
+3. Frontend: novo componente `PasswordConfirmDialog` reutilizável + integração em `AIGeneralTab.tsx` e `InterviewTab.tsx`.
 
-### 4. Prompt (`agents/green/prompt.ts`)
+## Detalhes técnicos (referência)
 
-- Adicionar `case "handoff_voice_video": return "";` (texto determinístico).
-- Reforçar no system prompt uma regra: "Se o cliente pedir áudio, vídeo ou ligação, NUNCA tente convencer a seguir por texto — o stage handoff_voice_video assume e transfere para humano."
-
-### 5. Limpeza da conversa atual
-
-Executar SQL para esta lead específica:
-- `request_human_handoff` manual: setar `igreen_conversation_state.handoff_ativo = true` e `etapa_funil = 'handoff'` para a conversa `5569992264209` da conta `3f304fb6-...`, evitando que a IA continue respondendo enquanto o atendente entra.
-- Adicionar tag `pediu_canal_humano` ao contato.
-
-## Detalhes técnicos
-
-Arquivos tocados:
-- `supabase/functions/_igreen_v2/agents/green/stages.ts` — nova função `isVoiceVideoCallRequest` + branch em `decideStage` + novo stage no union.
-- `supabase/functions/_igreen_v2/agents/green/run.ts` — bloco `handoff_voice_video` espelhando o `handoff_human` mas com mensagem ao cliente.
-- `supabase/functions/_igreen_v2/agents/green/prompt.ts` — case para silenciar a LLM nesse stage + regra no prompt base.
-- SQL pontual de cleanup na lead atual.
-
-Sem mudanças em outras contas: a regra vive dentro do specialist Green (iGreen V2), que é o pipeline usado pelo `marcioevandrocosta@hotmail.com` e demais contas iGreen.
+- **Tabela alvo**: `public.whatsapp_ai_config` (campo `custom_prompt`)
+- **Tabela de histórico**: `public.whatsapp_ai_config_history`
+- **Auth**: `supabase.auth.signInWithPassword` usando `user.email` da sessão atual
+- **Componentes shadcn**: `Dialog`, `Input type="password"`, `Button`
+- **Não altera**: lógica de IA, edge functions, ou demais configurações
