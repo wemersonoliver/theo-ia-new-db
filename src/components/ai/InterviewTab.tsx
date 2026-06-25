@@ -477,6 +477,12 @@ export function InterviewTab({ onPromptApplied }: { onPromptApplied?: () => void
             </div>
           </CardContent>
         </Card>
+        <PasswordConfirmDialog
+          open={passwordDialogOpen}
+          onOpenChange={setPasswordDialogOpen}
+          onConfirmed={persistPrompt}
+          description="Aplicar este prompt ao agente IA exige confirmação de senha para garantir a rastreabilidade da alteração."
+        />
       </div>
     );
   }
