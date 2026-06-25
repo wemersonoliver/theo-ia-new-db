@@ -30,6 +30,7 @@ export type GreenStage =
   | "simulate_discount"
   | "simulate_discount_concreto"
   | "early_discount_tease"
+  | "clarify_discount_estimate"
   | "confirm_signup"
   | "ask_valor_fatura"
   | "request_invoice"
@@ -170,6 +171,21 @@ export function isDiscountQuestion(msg: string): boolean {
   return !!msg && DISCOUNT_QUESTION_RX.test(msg);
 }
 
+// Dúvida de confirmação sobre o valor já simulado.
+// Ex.: "Nessa conta o desconto é esse R$ 91,00?", "é fixo?", "é sempre esse?",
+// "é garantido?", "é esse mesmo?", "é certo?", "é só isso?".
+// Usado APÓS simulate_discount_concreto (discount_lookup_done=true).
+const DISCOUNT_CONFIRM_RX = /\?\s*$|\b(fixo|garantid[oa]|sempre\s+(?:é|eh|esse|esses)|(?:é|eh)\s+(?:esse|esses|isso|certo|fixo|garantid[oa]|sempre|só\s+isso))\b/i;
+const DISCOUNT_CONTEXT_RX = /\b(desconto|economia|abatimento|reais?|r\$|por\s*cento|porcento|%|valor|esse\s+valor|esses\s+valor|nessa\s+conta|na\s+(?:minha|nossa)\s+conta)\b/i;
+export function isDiscountConfirmationQuestion(msg: string): boolean {
+  const raw = (msg ?? "").trim();
+  if (!raw) return false;
+  // Precisa ter algum sinal de pergunta/dúvida E contexto de desconto/valor.
+  if (!DISCOUNT_CONFIRM_RX.test(raw)) return false;
+  if (!DISCOUNT_CONTEXT_RX.test(raw)) return false;
+  return true;
+}
+
 export function decideGreenStage(
   state: Pick<IgreenConversationState, "etapa_funil" | "produto" | "extras">,
   message: string,
@@ -178,6 +194,18 @@ export function decideGreenStage(
 ): GreenStage {
   const intended = _decideGreenStageInner(state, message, hasMedia, documentStatus);
   const extras = (state.extras ?? {}) as Record<string, unknown>;
+  // PRIORIDADE 0.55 — Cliente está pedindo confirmação sobre o desconto/valor
+  // simulado. Não é afirmação nem objeção: é dúvida. NUNCA cair em soft_close
+  // ou confirm_signup (else branch) — responde determinístico explicando a
+  // faixa e que é estimativa.
+  if (
+    !hasMedia &&
+    extras.discount_lookup_done &&
+    isDiscountConfirmationQuestion(message) &&
+    !isAffirmation(message)
+  ) {
+    return "clarify_discount_estimate";
+  }
   // PRIORIDADE 0.7 — se íamos cobrar um dado/fatura, mas o cliente trouxe uma
   // objeção genérica (não é número, UF, distribuidora nem afirmação), trata
   // a objeção primeiro. Uma única objeção por turno; controle de repetição

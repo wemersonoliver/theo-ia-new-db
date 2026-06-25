@@ -6,9 +6,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Calcula próximo slot na janela manhã (08:00–12:00) ou tarde (12:00–19:55) em BRT
-function nextSlot(period: "morning" | "evening"): Date {
-  const now = new Date();
+// Próximo slot na janela manhã (08:00–12:00) ou tarde (12:00–19:55) em BRT,
+// SEMPRE no dia seguinte. O cenário não deve disparar no mesmo dia em que o
+// cliente teve conversa — Day 1 sai aproximadamente 24h depois.
+function nextSlot(period: "morning" | "evening", minDate?: Date): Date {
+  const now = minDate ?? new Date();
   const local = new Date(now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
   const tzOffset = local.getTime() - now.getTime();
   const startH = period === "morning" ? 8 : 12;
@@ -16,24 +18,40 @@ function nextSlot(period: "morning" | "evening"): Date {
   const endM = period === "morning" ? 0 : 55;
 
   const target = new Date(local);
+  // SEMPRE avança para o próximo dia.
+  target.setDate(target.getDate() + 1);
   const startMin = startH * 60;
   const endMin = endH * 60 + endM;
-  const curMin = local.getHours() * 60 + local.getMinutes();
-
-  if (curMin < startMin) {
-    // sortear dentro da janela
-    const slot = startMin + Math.floor(Math.random() * (endMin - startMin));
-    target.setHours(Math.floor(slot / 60), slot % 60, 0, 0);
-  } else if (curMin <= endMin) {
-    // agora + 1-3 min (envio imediato dentro da janela)
-    target.setMinutes(target.getMinutes() + 1 + Math.floor(Math.random() * 3));
-  } else {
-    // próximo dia, mesma janela
-    target.setDate(target.getDate() + 1);
-    const slot = startMin + Math.floor(Math.random() * (endMin - startMin));
-    target.setHours(Math.floor(slot / 60), slot % 60, 0, 0);
-  }
+  const slot = startMin + Math.floor(Math.random() * (endMin - startMin));
+  target.setHours(Math.floor(slot / 60), slot % 60, 0, 0);
   return new Date(target.getTime() - tzOffset);
+}
+
+// Última mensagem humana (sent_by='human' / from_me=false) nas últimas N horas?
+async function hasRecentHumanActivity(
+  supabase: any, account_id: string, phone: string, hours: number,
+): Promise<Date | null> {
+  try {
+    const { data: conv } = await supabase
+      .from("whatsapp_conversations")
+      .select("messages")
+      .eq("account_id", account_id)
+      .eq("phone", phone)
+      .maybeSingle();
+    const msgs = (conv?.messages as any[]) || [];
+    const cutoff = Date.now() - hours * 3_600_000;
+    let latest: Date | null = null;
+    for (const m of msgs) {
+      if (m?.from_me) continue;
+      const t = m?.timestamp ? new Date(m.timestamp) : null;
+      if (!t || isNaN(t.getTime())) continue;
+      if (t.getTime() < cutoff) continue;
+      if (!latest || t > latest) latest = t;
+    }
+    return latest;
+  } catch (_) {
+    return null;
+  }
 }
 
 serve(async (req) => {
@@ -84,7 +102,12 @@ serve(async (req) => {
       });
     }
 
-    const next_run_at = nextSlot("morning").toISOString();
+    // Garante intervalo mínimo de 24h após a última mensagem humana.
+    const lastHuman = await hasRecentHumanActivity(supabase, account_id, phone, 24);
+    const minDate = lastHuman
+      ? new Date(lastHuman.getTime() + 24 * 3_600_000)
+      : undefined;
+    const next_run_at = nextSlot("morning", minDate).toISOString();
 
     const { data: enrollment, error } = await supabase
       .from("igreen_scenario_enrollments")
