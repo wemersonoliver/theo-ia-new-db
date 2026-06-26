@@ -2418,6 +2418,39 @@ export type Database = {
         }
         Relationships: []
       }
+      igreen_default_greeting_audios: {
+        Row: {
+          created_at: string
+          delay_after_ms: number
+          enabled: boolean
+          id: string
+          slot: number
+          storage_path: string | null
+          transcript: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          delay_after_ms?: number
+          enabled?: boolean
+          id?: string
+          slot: number
+          storage_path?: string | null
+          transcript?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          delay_after_ms?: number
+          enabled?: boolean
+          id?: string
+          slot?: number
+          storage_path?: string | null
+          transcript?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       igreen_default_pipeline_stages: {
         Row: {
           automation_tag: string | null
