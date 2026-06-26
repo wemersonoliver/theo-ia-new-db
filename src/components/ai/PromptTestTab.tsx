@@ -329,6 +329,7 @@ export function PromptTestTab() {
         body: {
           userMessage: text || "(arquivo anexado pelo cliente)",
           reset: needsSandboxReset,
+          history: testMessages,
         },
       });
       if (error) throw new Error(error.message || "Erro na requisição");
