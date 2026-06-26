@@ -479,8 +479,14 @@ Quer que eu já comece seu cadastro agora? 😉`;
     const nome = (currentExtras.client_name as string | undefined) ?? "";
     const distribuidora = (currentExtras.distribuidora as string | undefined) ?? "sua distribuidora";
     const valor = Number(currentExtras.valor_fatura ?? 0);
-    const min = Number(currentExtras.discount_min_percent ?? 0);
-    const max = Number(currentExtras.discount_max_percent ?? 0);
+    let min = Number(currentExtras.discount_min_percent ?? 0);
+    let max = Number(currentExtras.discount_max_percent ?? 0);
+    // Fallback: se não temos a faixa salva (distribuidora/estado sem cadastro),
+    // usa a faixa institucional iGreen (10% a 20%) para não travar a simulação.
+    if (!(min > 0 && max > 0)) {
+      min = 10;
+      max = 20;
+    }
     const msgs: string[] = [];
     msgs.push(
       `${nome ? nome + ", " : ""}esse valor é uma **estimativa**, viu? O desconto real **depende do seu consumo no mês** — pode variar dentro da faixa oficial da ${distribuidora}.`,
@@ -499,6 +505,12 @@ Quer que eu já comece seu cadastro agora? 😉`;
       ...(patch.extras as object ?? currentExtras),
       discount_clarified: true,
       discount_clarified_at: new Date().toISOString(),
+      discount_min_percent: Number(currentExtras.discount_min_percent ?? 0) || min,
+      discount_max_percent: Number(currentExtras.discount_max_percent ?? 0) || max,
+      // Limpa flag de declínio caso tenha sido marcada erroneamente em turno anterior.
+      signup_declined_at: null,
+      soft_closed: false,
+      soft_closed_at: null,
       // Mantém signup_pitch_sent=true mas NÃO marca soft_closed.
     };
     return {
