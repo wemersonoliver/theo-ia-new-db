@@ -199,9 +199,15 @@ export function isDiscountQuestion(msg: string): boolean {
 // Usado APÓS simulate_discount_concreto (discount_lookup_done=true).
 const DISCOUNT_CONFIRM_RX = /\?\s*$|\b(fixo|garantid[oa]|sempre\s+(?:é|eh|esse|esses)|(?:é|eh)\s+(?:esse|esses|isso|certo|fixo|garantid[oa]|sempre|só\s+isso))\b/i;
 const DISCOUNT_CONTEXT_RX = /\b(desconto|economia|abatimento|reais?|r\$|por\s*cento|porcento|%|valor|esse\s+valor|esses\s+valor|nessa\s+conta|na\s+(?:minha|nossa)\s+conta)\b/i;
+// Cliente está pedindo PARA VER a simulação/economia (não é dúvida sobre um número
+// já mostrado, mas pedido explícito de número). Ex.: "queria qual economia",
+// "quero ver", "ver", "me mostra", "quanto vou economizar", "simula".
+const DISCOUNT_REQUEST_RX = /\b(queria\s+(saber|ver)|quero\s+(saber|ver)|me\s+(mostr[ae]|envi[ae]|passa|d[aá])\s+(a\s+)?(economia|desconto|simula|valor)|mostra(r)?\s+(a\s+)?(economia|desconto|simula|valor)|simula(r|ç[aã]o)?|qual\s+(a\s+|o\s+)?(minha\s+)?(economia|desconto)|quanto\s+(vou|eu)?\s*economiz|^\s*ver\s*$|quero\s+saber|me\s+passa)\b/i;
 export function isDiscountConfirmationQuestion(msg: string): boolean {
   const raw = (msg ?? "").trim();
   if (!raw) return false;
+  // Pedido explícito de ver a simulação/economia.
+  if (DISCOUNT_REQUEST_RX.test(raw)) return true;
   // Precisa ter algum sinal de pergunta/dúvida E contexto de desconto/valor.
   if (!DISCOUNT_CONFIRM_RX.test(raw)) return false;
   if (!DISCOUNT_CONTEXT_RX.test(raw)) return false;
