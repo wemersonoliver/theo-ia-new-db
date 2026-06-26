@@ -47,6 +47,9 @@ function planFromEvents(events: IgreenEvent[]): PlannedAutomation[] {
       case "contact_tag_added":
         plan.push({ name: "tagging", args: { tag: String(p.tag ?? "") } });
         break;
+      case "greeting_audio_dispatch":
+        plan.push({ name: "greeting-audio-dispatch", args: { slot: Number(p.slot ?? 1) } });
+        break;
       // NOTA: 'discovery_video_sent' NÃO dispara mais 'media-dispatch'.
       // O envio do vídeo é feito apenas pela tool send_discovery_video.
       // Anteriormente, isso causava envio duplicado.
