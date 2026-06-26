@@ -29,13 +29,173 @@ export default function AdminIgreenTemplate() {
           <TabsTrigger value="products">Produtos</TabsTrigger>
           <TabsTrigger value="kb">Base de Conhecimento</TabsTrigger>
           <TabsTrigger value="discounts">Regras por Distribuidora</TabsTrigger>
+          <TabsTrigger value="audios">Áudios de Saudação</TabsTrigger>
         </TabsList>
         <TabsContent value="prompt"><PromptTab /></TabsContent>
         <TabsContent value="products"><ProductsTab /></TabsContent>
         <TabsContent value="kb"><KnowledgeTab /></TabsContent>
         <TabsContent value="discounts"><DiscountsTab /></TabsContent>
+        <TabsContent value="audios"><GreetingAudiosTab /></TabsContent>
       </Tabs>
     </AdminLayout>
+  );
+}
+
+/* ============================== ÁUDIOS DE SAUDAÇÃO ============================== */
+function GreetingAudiosTab() {
+  return (
+    <div className="space-y-4">
+      <Card className="bg-slate-900/60 border-slate-800">
+        <CardHeader>
+          <CardTitle className="text-base text-amber-400">Áudios de Saudação (Green)</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-slate-400 space-y-1">
+          <p>Estes 2 áudios substituem o texto de boas-vindas atual do produto <strong>green</strong>. Valem para <strong>todas as contas iGreen</strong>.</p>
+          <p>O áudio 1 é enviado assim que o cliente abre a conversa. O áudio 2 é enviado <strong>10 segundos depois</strong>. O WhatsApp do cliente mostra "gravando áudio…" antes de cada um.</p>
+          <p className="text-xs text-amber-300/80">A transcrição é o que a IA "lembra" do que falou. Sempre revise a transcrição ao trocar o áudio para o atendimento continuar coerente.</p>
+        </CardContent>
+      </Card>
+      <GreetingAudioSlotCard slot={1} title="Áudio 1 — Apresentação" />
+      <GreetingAudioSlotCard slot={2} title="Áudio 2 — Pedir estado" />
+    </div>
+  );
+}
+
+function GreetingAudioSlotCard({ slot, title }: { slot: number; title: string }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [row, setRow] = useState<any>({ slot, storage_path: null, transcript: "", delay_after_ms: slot === 2 ? 10000 : 0, enabled: true });
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await (supabase as any)
+      .from("igreen_default_greeting_audios")
+      .select("*").eq("slot", slot).maybeSingle();
+    if (data) setRow(data);
+    if (data?.storage_path) {
+      const { data: sig } = await (supabase as any).storage
+        .from("igreen-audios").createSignedUrl(data.storage_path, 60 * 30);
+      setSignedUrl(sig?.signedUrl ?? null);
+    } else {
+      setSignedUrl(null);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [slot]);
+
+  const handleUpload = async (file: File) => {
+    if (!file) return;
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("Arquivo acima de 16 MB");
+      return;
+    }
+    setUploading(true);
+    const ext = file.name.split(".").pop()?.toLowerCase() || "ogg";
+    const path = `slot-${slot}/${Date.now()}.${ext}`;
+    const { error: upErr } = await (supabase as any).storage
+      .from("igreen-audios").upload(path, file, { upsert: false, contentType: file.type || "audio/ogg" });
+    if (upErr) { toast.error("Falha no upload: " + upErr.message); setUploading(false); return; }
+    // Apaga arquivo anterior se existir
+    if (row.storage_path) {
+      await (supabase as any).storage.from("igreen-audios").remove([row.storage_path]);
+    }
+    const { error: updErr } = await (supabase as any)
+      .from("igreen_default_greeting_audios")
+      .update({ storage_path: path })
+      .eq("slot", slot);
+    if (updErr) { toast.error("Erro salvando caminho: " + updErr.message); setUploading(false); return; }
+    toast.success("Áudio enviado");
+    setUploading(false);
+    await load();
+  };
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await (supabase as any)
+      .from("igreen_default_greeting_audios")
+      .update({
+        transcript: row.transcript ?? "",
+        delay_after_ms: Number(row.delay_after_ms) || 0,
+        enabled: !!row.enabled,
+      })
+      .eq("slot", slot);
+    setSaving(false);
+    if (error) { toast.error("Erro ao salvar: " + error.message); return; }
+    toast.success("Salvo");
+  };
+
+  if (loading) return (
+    <Card className="bg-slate-900/60 border-slate-800">
+      <CardContent className="p-6 flex items-center gap-2 text-slate-400"><Loader2 className="h-4 w-4 animate-spin" /> Carregando…</CardContent>
+    </Card>
+  );
+
+  return (
+    <Card className="bg-slate-900/60 border-slate-800">
+      <CardHeader>
+        <CardTitle className="text-base text-amber-400 flex items-center justify-between">
+          <span>{title}</span>
+          <span className="flex items-center gap-2 text-xs text-slate-400">
+            <Switch checked={!!row.enabled} onCheckedChange={(v) => setRow({ ...row, enabled: v })} />
+            {row.enabled ? "Ativo" : "Inativo"}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <Label className="text-xs text-slate-400">Arquivo de áudio (mp3, ogg ou m4a — até 16 MB)</Label>
+          <div className="flex items-center gap-3 mt-1">
+            <Input
+              type="file"
+              accept="audio/mpeg,audio/mp3,audio/ogg,audio/mp4,audio/m4a,audio/aac,audio/wav,audio/*"
+              disabled={uploading}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
+              className="bg-slate-950 border-slate-700"
+            />
+            {uploading && <Loader2 className="h-4 w-4 animate-spin text-amber-400" />}
+          </div>
+          {signedUrl ? (
+            <audio controls src={signedUrl} className="mt-3 w-full" />
+          ) : (
+            <p className="mt-2 text-xs text-amber-300/80">Nenhum áudio enviado ainda — o agente usa o texto antigo até você subir um arquivo.</p>
+          )}
+        </div>
+
+        <div>
+          <Label className="text-xs text-slate-400">Transcrição (a IA usa este texto como contexto da conversa)</Label>
+          <Textarea
+            value={row.transcript ?? ""}
+            onChange={(e) => setRow({ ...row, transcript: e.target.value })}
+            rows={5}
+            className="bg-slate-950 border-slate-700 mt-1"
+            placeholder="Cole aqui exatamente o que está dito no áudio."
+          />
+        </div>
+
+        {slot === 2 && (
+          <div>
+            <Label className="text-xs text-slate-400">Intervalo antes deste áudio (ms)</Label>
+            <Input
+              type="number"
+              value={row.delay_after_ms ?? 10000}
+              onChange={(e) => setRow({ ...row, delay_after_ms: e.target.value })}
+              className="bg-slate-950 border-slate-700 mt-1 w-40"
+            />
+            <p className="text-xs text-slate-500 mt-1">Padrão: 10000 (10 segundos depois do áudio 1)</p>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <Button onClick={save} disabled={saving} className="bg-amber-500 hover:bg-amber-600 text-slate-950">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+            Salvar
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

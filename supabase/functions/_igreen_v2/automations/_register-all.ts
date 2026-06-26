@@ -3,6 +3,7 @@
 import { handoffAutomation } from "./handoff.ts";
 import { taggingAutomation } from "./tagging.ts";
 import { mediaDispatchAutomation } from "./media-dispatch.ts";
+import { greetingAudioDispatchAutomation } from "./greeting-audio-dispatch.ts";
 
 export interface AutomationDispatchContext {
   account_id: string;
@@ -41,6 +42,11 @@ export function registerAllAutomations(): void {
     correlation_id: ctx.correlation_id,
     media_key: String(a.media_key ?? ""),
     state: ctx.state,
+  }));
+  register("greeting-audio-dispatch", (ctx, a) => greetingAudioDispatchAutomation({
+    account_id: ctx.account_id, phone: ctx.phone,
+    correlation_id: ctx.correlation_id,
+    slot: Number(a.slot ?? 1),
   }));
   _registered = true;
 }
