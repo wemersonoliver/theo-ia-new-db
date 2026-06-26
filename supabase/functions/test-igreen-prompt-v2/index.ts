@@ -106,9 +106,25 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const userMessage = String(body?.userMessage ?? "").trim();
     const reset = Boolean(body?.reset);
+    const history: Array<{ role: string; content: string }> = Array.isArray(body?.history)
+      ? body.history.filter((m: any) => m && typeof m.content === "string")
+      : [];
 
     if (!userMessage && !reset) {
       return json({ error: "userMessage é obrigatório." }, 400);
+    }
+
+    // Verifica se a conta é iGreen. Se não for, roda simulador genérico
+    // (chamada stateless ao Gemini com o custom_prompt do usuário).
+    const { data: accountRow } = await service
+      .from("accounts")
+      .select("is_igreen")
+      .eq("id", accountId)
+      .maybeSingle();
+
+    if (!accountRow?.is_igreen) {
+      if (reset && !userMessage) return json({ ok: true, reset: true });
+      return await runGenericSimulator({ service, userId, userMessage, history });
     }
 
     const phone = buildSandboxPhone(userId);
@@ -183,3 +199,74 @@ serve(async (req) => {
     return json({ error: (e as Error)?.message ?? "unknown_error" }, 500);
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Simulador genérico (contas não-iGreen) — stateless, usa custom_prompt.
+// ─────────────────────────────────────────────────────────────────────────────
+async function runGenericSimulator(args: {
+  service: ReturnType<typeof createClient>;
+  userId: string;
+  userMessage: string;
+  history: Array<{ role: string; content: string }>;
+}): Promise<Response> {
+  const { service, userId, userMessage, history } = args;
+  const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
+  if (!apiKey) return json({ error: "GOOGLE_GEMINI_API_KEY não configurado" }, 500);
+
+  const { data: cfg } = await service
+    .from("whatsapp_ai_config")
+    .select("custom_prompt, agent_name, niche, business_description, is_active")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const agentName = (cfg as any)?.agent_name || "Assistente";
+  const niche = (cfg as any)?.niche || "";
+  const businessDesc = (cfg as any)?.business_description || "";
+  const customPrompt = (cfg as any)?.custom_prompt || "";
+
+  const systemPrompt = [
+    `Você é ${agentName}, um(a) atendente virtual via WhatsApp.`,
+    niche ? `Nicho/segmento do negócio: ${niche}.` : "",
+    businessDesc ? `Sobre o negócio: ${businessDesc}` : "",
+    "",
+    "=== INSTRUÇÕES PERSONALIZADAS ===",
+    customPrompt || "(nenhuma instrução personalizada cadastrada)",
+    "",
+    "Regras gerais: responda de forma natural, curta e humana. Não invente informações que não estão nas instruções. Esta é uma simulação de atendimento para testes.",
+  ].filter(Boolean).join("\n");
+
+  const contents = [
+    ...history.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: String(m.content || "") }],
+    })),
+    { role: "user", parts: [{ text: userMessage }] },
+  ];
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents,
+          generationConfig: { temperature: 0.7, maxOutputTokens: 800 },
+        }),
+      },
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error("[test-igreen-prompt-v2] gemini error:", res.status, data);
+      return json({ error: `Gemini retornou ${res.status}`, details: data }, 502);
+    }
+    const message =
+      data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).filter(Boolean).join("\n").trim()
+      || "(o agente não devolveu resposta neste turno)";
+    return json({ message, debug: { pipeline: "generic-v1", model: "gemini-2.5-flash" } });
+  } catch (e) {
+    console.error("[test-igreen-prompt-v2] generic simulator error:", e);
+    return json({ error: (e as Error).message ?? "gemini_failed" }, 500);
+  }
+}
