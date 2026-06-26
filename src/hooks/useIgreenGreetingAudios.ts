@@ -84,18 +84,18 @@ export function useIgreenGreetingAudios() {
         storage_path = path;
       }
 
-      const row: Record<string, unknown> = {
+      const row = {
         account_id: accountId,
         slot: input.slot,
         transcript: input.transcript,
         enabled: input.enabled,
         delay_after_ms: input.delay_after_ms,
+        ...(storage_path ? { storage_path } : {}),
       };
-      if (storage_path) row.storage_path = storage_path;
 
       const { error } = await supabase
         .from("igreen_account_greeting_audios")
-        .upsert(row, { onConflict: "account_id,slot" });
+        .upsert([row], { onConflict: "account_id,slot" });
       if (error) throw error;
     },
     onSuccess: () => {
