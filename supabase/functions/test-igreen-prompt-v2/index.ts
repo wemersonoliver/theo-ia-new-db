@@ -19,6 +19,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveAccountId } from "../_account.ts";
+import { buildAgentSystemPrompt, buildCalendarBlock } from "../_ai_system_prompt.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -213,27 +214,62 @@ async function runGenericSimulator(args: {
   const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
   if (!apiKey) return json({ error: "GOOGLE_GEMINI_API_KEY não configurado" }, 500);
 
-  const { data: cfg } = await service
+  // Carrega a config completa do agente (mesmos campos usados em produção).
+  const { data: aiConfig } = await service
     .from("whatsapp_ai_config")
-    .select("custom_prompt, agent_name, niche, business_description, is_active")
+    .select("*")
     .eq("user_id", userId)
     .maybeSingle();
 
-  const agentName = (cfg as any)?.agent_name || "Assistente";
-  const niche = (cfg as any)?.niche || "";
-  const businessDesc = (cfg as any)?.business_description || "";
-  const customPrompt = (cfg as any)?.custom_prompt || "";
+  // Carrega base de conhecimento (texto completo de todos os docs do usuário).
+  let knowledgeBase = "";
+  try {
+    const { data: docs } = await service
+      .from("knowledge_base_documents")
+      .select("title, content, product_name")
+      .eq("user_id", userId)
+      .eq("status", "processed")
+      .limit(20);
+    if (Array.isArray(docs) && docs.length) {
+      knowledgeBase = docs
+        .map((d: any) => {
+          const tag = d?.product_name ? `[PRODUTO: ${d.product_name}]` : "[GERAL]";
+          return `${tag} ${d?.title || ""}\n${(d?.content || "").slice(0, 4000)}`;
+        })
+        .join("\n\n---\n\n");
+    }
+  } catch (e) {
+    console.error("[test-igreen-prompt-v2] knowledge load error:", e);
+  }
 
-  const systemPrompt = [
-    `Você é ${agentName}, um(a) atendente virtual via WhatsApp.`,
-    niche ? `Nicho/segmento do negócio: ${niche}.` : "",
-    businessDesc ? `Sobre o negócio: ${businessDesc}` : "",
-    "",
-    "=== INSTRUÇÕES PERSONALIZADAS ===",
-    customPrompt || "(nenhuma instrução personalizada cadastrada)",
-    "",
-    "Regras gerais: responda de forma natural, curta e humana. Não invente informações que não estão nas instruções. Esta é uma simulação de atendimento para testes.",
-  ].filter(Boolean).join("\n");
+  // Hora BRT (UTC-3) para saudação/calendário.
+  const nowUtc = new Date();
+  const brt = new Date(nowUtc.getTime() - 3 * 60 * 60 * 1000);
+  const hh = String(brt.getUTCHours()).padStart(2, "0");
+  const mm = String(brt.getUTCMinutes()).padStart(2, "0");
+  const brtTime = `${hh}:${mm}`;
+  const hour = brt.getUTCHours();
+  const brtGreeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  const todayLocal = new Date(brt.getUTCFullYear(), brt.getUTCMonth(), brt.getUTCDate());
+  const ymd = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, "0")}-${String(todayLocal.getDate()).padStart(2, "0")}`;
+  const months = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+  const weekdays = ["domingo","segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado"];
+  const todayFormatted = `${weekdays[todayLocal.getDay()]}, ${todayLocal.getDate()} de ${months[todayLocal.getMonth()]} de ${todayLocal.getFullYear()}`;
+
+  const systemPrompt = buildAgentSystemPrompt({
+    aiConfig: aiConfig || {},
+    knowledgeBase,
+    productsCatalog: "",
+    returningClientContext: "",
+    departmentsBlock: "",
+    existingAppointmentsContext: "",
+    pendingConfirmationContext: "",
+    todayStr: ymd,
+    todayFormatted,
+    brtTime,
+    brtGreeting,
+    calendarBlock: buildCalendarBlock(todayLocal),
+  }) + "\n\n[MODO SIMULAÇÃO] Esta conversa é um teste do dashboard — não há cliente real, nem ferramentas reais (agendamento, handoff, localização). Responda como responderia ao cliente real, mas não chame tools.";
 
   const contents = [
     ...history.map((m) => ({
