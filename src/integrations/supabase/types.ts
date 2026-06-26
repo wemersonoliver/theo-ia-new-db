@@ -72,6 +72,7 @@ export type Database = {
           business_code: number
           created_at: string
           id: string
+          igreen_greeting_audio_enabled: boolean
           is_igreen: boolean
           name: string
           owner_user_id: string
@@ -84,6 +85,7 @@ export type Database = {
           business_code?: number
           created_at?: string
           id?: string
+          igreen_greeting_audio_enabled?: boolean
           is_igreen?: boolean
           name?: string
           owner_user_id: string
@@ -96,6 +98,7 @@ export type Database = {
           business_code?: number
           created_at?: string
           id?: string
+          igreen_greeting_audio_enabled?: boolean
           is_igreen?: boolean
           name?: string
           owner_user_id?: string
@@ -2000,6 +2003,47 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      igreen_account_greeting_audios: {
+        Row: {
+          account_id: string
+          created_at: string
+          delay_after_ms: number
+          enabled: boolean
+          slot: number
+          storage_path: string | null
+          transcript: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          delay_after_ms?: number
+          enabled?: boolean
+          slot: number
+          storage_path?: string | null
+          transcript?: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          delay_after_ms?: number
+          enabled?: boolean
+          slot?: number
+          storage_path?: string | null
+          transcript?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "igreen_account_greeting_audios_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       igreen_account_limits: {
         Row: {

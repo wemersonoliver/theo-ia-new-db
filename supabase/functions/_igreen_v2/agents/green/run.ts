@@ -159,19 +159,34 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
       tool_calls.push({ name: "add_contact_tag", args: { tag: "em atendimento" } });
     }
 
-    // Tenta carregar os áudios configurados
+    // Feature opt-in por conta: só usa áudios se o toggle estiver ligado E
+    // os 2 slots estiverem configurados para a conta. Caso contrário, mantém
+    // o comportamento antigo (5 bolhas de texto).
     let audiosConfigured = false;
     try {
-      const { data: audios } = await svc()
-        .from("igreen_default_greeting_audios")
-        .select("slot, storage_path, enabled")
-        .in("slot", [1, 2])
-        .order("slot", { ascending: true });
-      const slot1 = (audios ?? []).find((a: { slot: number }) => a.slot === 1) as
-        { storage_path?: string | null; enabled?: boolean } | undefined;
-      const slot2 = (audios ?? []).find((a: { slot: number }) => a.slot === 2) as
-        { storage_path?: string | null; enabled?: boolean } | undefined;
-      audiosConfigured = !!(slot1?.enabled && slot1?.storage_path && slot2?.enabled && slot2?.storage_path);
+      const accountId = ctx.account_id ?? null;
+      if (accountId) {
+        const { data: acc } = await svc()
+          .from("accounts")
+          .select("igreen_greeting_audio_enabled")
+          .eq("id", accountId)
+          .maybeSingle();
+        const toggleOn = !!(acc as { igreen_greeting_audio_enabled?: boolean } | null)
+          ?.igreen_greeting_audio_enabled;
+        if (toggleOn) {
+          const { data: audios } = await svc()
+            .from("igreen_account_greeting_audios")
+            .select("slot, storage_path, enabled")
+            .eq("account_id", accountId)
+            .in("slot", [1, 2]);
+          const slot1 = (audios ?? []).find((a: { slot: number }) => a.slot === 1) as
+            { storage_path?: string | null; enabled?: boolean } | undefined;
+          const slot2 = (audios ?? []).find((a: { slot: number }) => a.slot === 2) as
+            { storage_path?: string | null; enabled?: boolean } | undefined;
+          audiosConfigured = !!(slot1?.enabled && slot1?.storage_path
+            && slot2?.enabled && slot2?.storage_path);
+        }
+      }
     } catch (e) {
       console.error("[green/greet] erro carregando greeting audios", e);
     }
