@@ -41,15 +41,16 @@ async function resolveInstanceName(account_id: string): Promise<string | null> {
   return null;
 }
 
-async function fetchSlot(slot: number): Promise<{
+async function fetchSlot(account_id: string, slot: number): Promise<{
   storage_path: string | null;
   transcript: string;
   delay_after_ms: number;
   enabled: boolean;
 } | null> {
   const { data, error } = await svc()
-    .from("igreen_default_greeting_audios")
+    .from("igreen_account_greeting_audios")
     .select("storage_path, transcript, delay_after_ms, enabled")
+    .eq("account_id", account_id)
     .eq("slot", slot)
     .maybeSingle();
   if (error) {
@@ -177,7 +178,7 @@ export async function greetingAudioDispatchAutomation(args: {
       correlation_id: args.correlation_id ?? null,
     },
     async () => {
-      const slotRow = await fetchSlot(args.slot);
+      const slotRow = await fetchSlot(args.account_id, args.slot);
       if (!slotRow || !slotRow.enabled || !slotRow.storage_path) {
         return {
           success: false,
