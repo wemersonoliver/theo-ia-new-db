@@ -164,9 +164,7 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     // o comportamento antigo (5 bolhas de texto).
     let audiosConfigured = false;
     try {
-      const accountId = (ctx as { account_id?: string }).account_id
-        ?? (ctx.state as { account_id?: string }).account_id
-        ?? null;
+      const accountId = ctx.account_id ?? null;
       if (accountId) {
         const { data: acc } = await svc()
           .from("accounts")
