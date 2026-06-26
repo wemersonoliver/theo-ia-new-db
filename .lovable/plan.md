@@ -1,47 +1,79 @@
+## Objetivo
+Substituir as 5 bolhas de texto da abertura do agente **green** (iGreen) por **2 áudios em sequência**, com indicador "gravando áudio" antes de cada um, intervalo de 10 segundos entre eles, e gerenciados por um painel admin (vale para todas as contas iGreen).
 
-## 1. Restauração do prompt — consultoriafontoura@gmail.com
+---
 
-Vou rodar um UPDATE em `whatsapp_ai_config` restaurando o valor exato do `custom_prompt` da versão de **25/06 16:08:54 BRT (4.908 chars)** que está em `whatsapp_ai_config_history`. Antes do UPDATE, o trigger `trg_snapshot_ai_config` salvará automaticamente a versão atual (1.375 chars) no histórico como backup.
+## 1. Banco de dados
+Nova tabela global (sem `account_id` — é template padrão para toda a vertical green):
 
-## 2. Senha obrigatória para salvar alterações no prompt (todas as contas)
+`public.igreen_default_greeting_audios`
+- `id uuid pk`
+- `slot int` (1 ou 2 — ordem de envio)
+- `audio_url text` (URL pública do áudio no Storage)
+- `transcript text` (texto da gravação — vai para o histórico da IA como contexto)
+- `delay_after_ms int default 0` (slot 1 = 0, slot 2 = 10000)
+- `enabled bool default true`
+- `updated_at timestamptz`
 
-A senha exigida será a **mesma senha de login** do usuário Theo IA. Não criamos senha nova — a confirmação é feita reautenticando contra o Supabase Auth (`signInWithPassword` no e-mail da sessão atual). Se a senha estiver errada, o salvamento é bloqueado.
+Constraint `unique(slot)`. RLS: leitura para `authenticated` e `service_role`; escrita só para `super_admin` (via `has_role`).
 
-### Onde aplicar
-Componente `src/components/ai/AIGeneralTab.tsx` (campo "Instruções Personalizadas" / botão "Salvar Configurações").
+Seed inicial com slot 1 e slot 2 vazios (URLs preenchidas depois pelo upload no admin).
 
-### Fluxo de UX
-1. Usuário edita o prompt e clica em **Salvar Configurações**.
-2. Se o campo `custom_prompt` mudou em relação ao valor original do banco, abre um `Dialog` (shadcn) pedindo a senha.
-3. Usuário digita a senha → chamamos `supabase.auth.signInWithPassword({ email, password })`.
-4. Em caso de sucesso: prossegue com o `saveConfig.mutate(...)` normalmente.
-5. Em caso de falha: toast de erro "Senha incorreta" e o salvamento é abortado.
-6. Se nenhum campo do prompt mudou (apenas outros campos como nome do agente, delay, etc.), salva direto sem pedir senha.
+## 2. Storage
+Novo bucket **público** `igreen-audios` para hospedar os MP3/OGG. Sem RLS de leitura (público); upload restrito a `super_admin` via policy em `storage.objects`.
 
-### Observações
-- A reautenticação NÃO desloga o usuário (apenas valida credenciais).
-- A senha nunca é armazenada, apenas usada na verificação imediata.
-- O mesmo padrão valerá também para o botão de aplicar prompt da aba **Entrevista IA** (`InterviewTab`), para evitar bypass.
+## 3. Painel admin
+Nova aba em **/admin** → "Áudios iGreen (Green)":
+- Lista os 2 slots (Saudação 1 / Saudação 2)
+- Para cada um: player atual + botão "Substituir áudio" (upload mp3/ogg/m4a até 16 MB) + textarea com a **transcrição** + toggle ativo/inativo
+- Botão "Salvar" — faz upload no bucket, atualiza `audio_url` e `transcript` na tabela
+- Apenas `super_admin` acessa (igual outras rotas admin)
 
-## 3. Correção da auditoria (registrar quem alterou)
+## 4. Edge function — mudança no agente green
+Arquivo: `supabase/functions/_igreen_v2/agents/green/run.ts` (bloco `if (stage === "greet")`, linhas 140-170).
 
-O trigger atual `trg_snapshot_ai_config` já tenta gravar `changed_by = auth.uid()`, mas está vindo NULL porque o trigger roda como `SECURITY DEFINER`. Vou ajustar o fluxo para garantir o registro do autor:
+Em vez de devolver `messages: [5 strings]`, o agente vai:
+1. Buscar os 2 áudios em `igreen_default_greeting_audios` (ordenados por slot, só `enabled`).
+2. Se algum áudio não estiver configurado → **fallback** para o texto atual (segurança).
+3. Emitir 2 `tool_calls` do tipo `send_greeting_audio` (slot 1 e slot 2) que serão executados pelo router de automações.
+4. Injetar as **transcrições** no histórico/state como mensagens "from_me" da IA, para que o contexto do agente nos próximos turnos saiba o que foi falado (idêntico ao que hoje as 5 bolhas de texto representam).
+5. Manter `intro_sent`, `greeted`, `explained`, `atendimento_started` no patch (como hoje).
 
-- Adicionar coluna `changed_by_email text` em `whatsapp_ai_config_history` (mais robusto que UUID quando a sessão é definer).
-- Reescrever o trigger para capturar `auth.uid()` corretamente (removendo `SECURITY DEFINER` ou usando `current_setting('request.jwt.claims', true)` para extrair sub/email).
-- Adicionar coluna `change_method text` para diferenciar `password_confirmed` (UI normal) de `admin_override` (impersonação).
-- Ao salvar pelo frontend, passar o e-mail confirmado via RPC `record_ai_prompt_change(...)` antes do UPDATE, garantindo rastro mesmo se o trigger falhar.
+## 5. Nova automação `greeting-audio-dispatch`
+Arquivo novo: `supabase/functions/_igreen_v2/automations/greeting-audio-dispatch.ts`, registrada em `_register-all.ts`.
 
-## 4. Ordem de execução
+Por slot:
+1. Envia presença **`recording`** via `POST /chat/sendPresence/{instance}` (presence: `recording`, delay = duração estimada do áudio, mínimo 3s — usa metadata do upload ou um valor padrão).
+2. Aguarda o delay do "recording" (curto, ~2-3s).
+3. Envia o áudio via Evolution: `POST /message/sendWhatsAppAudio/{instance}` com `{ number, audio: <url> }` (endpoint correto para "áudio de PTT" que mostra recording).
+4. Persiste no `whatsapp_conversations` como mensagem `from_me`, `type: "audio"`, com `media_url` e `content: transcript` (a transcrição vai no `content` para a IA ter contexto nas próximas rodadas).
+5. Aplica idempotência via `withIdempotency` (chave `greeting-audio:{account_id}:{phone}:{slot}`).
+6. Slot 2 aguarda `delay_after_ms` (10.000 ms) antes do passo 1.
 
-1. Migração SQL: ajusta trigger de auditoria + colunas extras em `whatsapp_ai_config_history`.
-2. INSERT/UPDATE de dados: restaura o `custom_prompt` da `consultoriafontoura@gmail.com` para a versão de 4.908 chars.
-3. Frontend: novo componente `PasswordConfirmDialog` reutilizável + integração em `AIGeneralTab.tsx` e `InterviewTab.tsx`.
+Como há 2 slots, o agente emite 2 events `greeting_audio_dispatch` e o `dispatchAutomations` chama a automação para cada um sequencialmente (o `await` em loop já garante ordem; o delay de 10s do slot 2 acontece dentro da automação dele).
 
-## Detalhes técnicos (referência)
+## 6. Trigger atual continua igual
+A condição que hoje dispara o `stage === "greet"` (qualquer primeira mensagem que o `qualifier/stages.ts` classifica como "green") permanece — o usuário não pediu mudança no gatilho, só na resposta.
 
-- **Tabela alvo**: `public.whatsapp_ai_config` (campo `custom_prompt`)
-- **Tabela de histórico**: `public.whatsapp_ai_config_history`
-- **Auth**: `supabase.auth.signInWithPassword` usando `user.email` da sessão atual
-- **Componentes shadcn**: `Dialog`, `Input type="password"`, `Button`
-- **Não altera**: lógica de IA, edge functions, ou demais configurações
+---
+
+## Detalhes técnicos
+- Tabela usa `GRANT SELECT TO authenticated`, `GRANT ALL TO service_role`. Função `has_role(auth.uid(),'super_admin')` controla escrita.
+- Edge function lê via `service_role` (já é o padrão de `_igreen_v2`).
+- Bucket público porque a Evolution API precisa baixar a URL para enviar no WhatsApp.
+- Endpoint Evolution para áudio PTT (mostra "gravando áudio" nativamente no WhatsApp): `/message/sendWhatsAppAudio/{instance}` — diferente do `/sendMedia` usado para vídeo. Aceita URL pública direto.
+- O `recording` presence é enviado **antes** do `sendWhatsAppAudio`; o WhatsApp do cliente mostra "gravando áudio…" enquanto a Evolution processa.
+- A transcrição vira mensagem no `whatsapp_conversations.messages` com `type: "audio"` + `content: "<transcrição>"`. Isso é exatamente como o agente lê histórico hoje, então o contexto fica preservado para a IA continuar o atendimento normalmente (cliente responde com estado → segue fluxo de simulação existente).
+- Fallback de segurança: se a tabela tiver `audio_url` vazio ou o upload falhar, o agente volta para as 5 bolhas de texto originais (nenhum cliente fica sem resposta).
+
+---
+
+## Entregáveis
+1. Migration: tabela `igreen_default_greeting_audios` + grants + RLS + seed dos 2 slots vazios.
+2. Bucket `igreen-audios` (público) + policy de upload restrita a super_admin.
+3. Página admin nova: `src/pages/admin/AdminIgreenAudios.tsx` + rota em `App.tsx` + link no `AdminSidebar`.
+4. Hook `src/hooks/useIgreenGreetingAudios.ts` (CRUD + upload).
+5. Edge function `_igreen_v2/automations/greeting-audio-dispatch.ts` + registro em `_register-all.ts` + handler no `dispatch.ts` para o event `greeting_audio_dispatch`.
+6. Edit em `_igreen_v2/agents/green/run.ts` (bloco `greet`): troca 5 bolhas por busca dos áudios + emissão dos 2 events + injeção das transcrições no patch de mensagens persistidas.
+
+Depois do plano aprovado, você sobe os 2 arquivos de áudio pelo painel admin e cola as 2 transcrições nos campos correspondentes.
