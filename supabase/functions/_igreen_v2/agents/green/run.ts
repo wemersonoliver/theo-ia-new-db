@@ -138,8 +138,11 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
   }
 
   if (stage === "greet") {
-    // Nova abertura determinística: 5 bolhas em sequência terminando com
-    // o pedido do estado. NÃO pergunta nome, NÃO envia vídeo.
+    // Nova abertura determinística: 2 ÁUDIOS em sequência (slot 1 e slot 2).
+    // O slot 2 já espera 10s internamente (delay_after_ms da tabela).
+    // Mostra "gravando áudio" antes de cada um.
+    // Fallback de segurança: se os áudios não estiverem configurados, volta
+    // para o texto antigo para nunca deixar o cliente sem resposta.
     patch.produto = "green";
     patch.etapa_funil = "qualificacao";
     patch.extras = {
@@ -155,6 +158,38 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     if (!currentExtras.atendimento_started) {
       tool_calls.push({ name: "add_contact_tag", args: { tag: "em atendimento" } });
     }
+
+    // Tenta carregar os áudios configurados
+    let audiosConfigured = false;
+    try {
+      const { data: audios } = await svc()
+        .from("igreen_default_greeting_audios")
+        .select("slot, storage_path, enabled")
+        .in("slot", [1, 2])
+        .order("slot", { ascending: true });
+      const slot1 = (audios ?? []).find((a: { slot: number }) => a.slot === 1) as
+        { storage_path?: string | null; enabled?: boolean } | undefined;
+      const slot2 = (audios ?? []).find((a: { slot: number }) => a.slot === 2) as
+        { storage_path?: string | null; enabled?: boolean } | undefined;
+      audiosConfigured = !!(slot1?.enabled && slot1?.storage_path && slot2?.enabled && slot2?.storage_path);
+    } catch (e) {
+      console.error("[green/greet] erro carregando greeting audios", e);
+    }
+
+    if (audiosConfigured) {
+      events.push(
+        { type: "greeting_audio_dispatch", priority: "high", source: "specialist", payload: { slot: 1 } },
+        { type: "greeting_audio_dispatch", priority: "high", source: "specialist", payload: { slot: 2 } },
+      );
+      return {
+        messages: [], // Nenhum texto — só áudios
+        events,
+        tool_calls,
+        suggested_state_patch: patch,
+      };
+    }
+
+    // Fallback (áudios não configurados): mantém o texto antigo
     return {
       messages: [
         "Olá! 👋 Seja muito bem-vindo(a)! É um prazer falar com você.",
