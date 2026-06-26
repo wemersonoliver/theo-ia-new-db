@@ -301,19 +301,37 @@ export async function runGreen(ctx: AgentContext): Promise<AgentResult> {
     const estado = (currentExtras.estado as string | undefined) ?? "";
     const list = estado ? await listDistributors(estado) : [];
     const nome = (currentExtras.client_name as string | undefined) ?? "";
-    if (list.length === 0) {
-      deterministicText = `${nome ? nome + ", " : ""}me confirma só uma coisa: qual é a sua distribuidora de energia?`;
+    // Estado fora da nossa cobertura — informa e encerra com leveza.
+    if (estado && list.length === 0) {
+      patch.extras = {
+        ...(patch.extras as object ?? currentExtras),
+        distributors_presented: true,
+        distributors_options: [],
+        state_unsupported: true,
+        state_unsupported_uf: estado,
+        soft_closed: true,
+        soft_closed_at: new Date().toISOString(),
+      };
+      tool_calls.push({ name: "add_contact_tag", args: { tag: "estado_nao_atendido" } });
+      deterministicText = `${nome ? nome + ", " : ""}poxa, hoje a iGreen ainda não atende o estado de ${estado}. 😕 Estamos expandindo aos poucos — assim que liberar pra sua região eu te aviso por aqui. Obrigado pelo interesse!`;
+      stage = "soft_close";
     } else if (list.length > 1) {
       const opts = list.map((d, i) => `${i + 1} - ${d.distributor}`).join("\n");
       deterministicText = `No seu estado trabalhamos com:\n\n${opts}\n\nQual dessas é a sua?`;
+      patch.extras = {
+        ...(patch.extras as object ?? currentExtras),
+        distributors_presented: true,
+        distributors_options: list.map((d) => d.distributor),
+      };
+    } else {
+      patch.extras = {
+        ...(patch.extras as object ?? currentExtras),
+        distributors_presented: true,
+        distributors_options: list.map((d) => d.distributor),
+      };
     }
-    patch.extras = {
-      ...(patch.extras as object ?? currentExtras),
-      distributors_presented: true,
-      distributors_options: list.map((d) => d.distributor),
-    };
     // Apenas uma distribuidora atende o estado → assume direto e pula confirmação.
-    if (list.length === 1) {
+    if (list.length === 1 && !(currentExtras.state_unsupported)) {
       const chosen = list[0].distributor;
       patch.extras = { ...(patch.extras as object), distribuidora: chosen };
       Object.assign(currentExtras, patch.extras as Record<string, unknown>);
