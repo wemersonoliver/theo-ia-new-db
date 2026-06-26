@@ -126,6 +126,27 @@ export async function decideSupervisor(args: {
           source: "low_confidence_sticky",
         };
       }
+      // Conversa nova (sem specialist ativo): não jogar para failsafe.
+      // O default de roteamento é o qualifier, que apresenta o menu de produtos.
+      // Failsafe só é acionado quando o cliente pede handoff explicitamente
+      // (intent === "handoff_request") ou em erro/timeout do supervisor.
+      if (!currentSpecialist && intent !== "handoff_request") {
+        await trace({
+          account_id: args.account_id, phone: args.phone,
+          step: "supervisor.low_confidence_default_qualifier",
+          level: "standard", duration_ms: Date.now() - t0,
+          payload: { intent, specialist_llm: specialist, confidence },
+        });
+        auditDecision({ ...auditBase, specialist_after: "qualifier",
+          intent: intent || "greeting", confidence, decision_source: "low_confidence",
+          trigger_reason: `no_current_specialist confidence<0.5 llm_said=${specialist}` });
+        return {
+          intent: intent || "greeting",
+          specialist: "qualifier",
+          confidence,
+          source: "low_confidence",
+        };
+      }
       await trace({ account_id: args.account_id, phone: args.phone, step: "supervisor.low_confidence",
         level: "standard", duration_ms: Date.now() - t0, payload: { intent, specialist, confidence } });
       auditDecision({ ...auditBase, specialist_after: "failsafe",
