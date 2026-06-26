@@ -1,0 +1,1 @@
+UPDATE igreen_conversation_state SET handoff_ativo=false, specialist=null, intent=null, version=version+1, updated_at=now() WHERE account_id='b2a9f8da-d3c0-46db-a39f-4c3e79bd2509' AND phone='5547991293662';
