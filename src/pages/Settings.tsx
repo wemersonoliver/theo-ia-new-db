@@ -19,6 +19,7 @@ import { KnowledgeBaseTab } from "@/components/settings/KnowledgeBaseTab";
 import { AISettingsTab } from "@/components/settings/AISettingsTab";
 import { RemindersTab } from "@/components/settings/RemindersTab";
 import { IgreenProductsTab } from "@/components/settings/IgreenProductsTab";
+import { IgreenGreetingAudiosTab } from "@/components/settings/IgreenGreetingAudiosTab";
 import { useAccountPlan } from "@/hooks/useAccountPlan";
 import { useAccount } from "@/hooks/useAccount";
 import { useQueryClient } from "@tanstack/react-query";
@@ -143,6 +144,7 @@ export default function Settings() {
     { value: "subscriptions", label: "Assinatura" },
     { value: "knowledge-base", label: "Base de Conhecimento" },
     { value: "igreen-products", label: "Produtos Igreen", show: isIgreen },
+    { value: "igreen-audios", label: "Áudios de Saudação (iGreen)", show: isIgreen },
     { value: "team", label: "Equipe", show: !!isOwner },
     { value: "roulette", label: "Roleta" },
     { value: "notifications", label: "Notificações" },
@@ -285,6 +287,12 @@ export default function Settings() {
         {isIgreen && (
           <TabsContent value="igreen-products">
             <IgreenProductsTab />
+          </TabsContent>
+        )}
+
+        {isIgreen && (
+          <TabsContent value="igreen-audios">
+            <IgreenGreetingAudiosTab />
           </TabsContent>
         )}
 
