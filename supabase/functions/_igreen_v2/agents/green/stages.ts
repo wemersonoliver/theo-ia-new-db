@@ -73,6 +73,7 @@ export type GreenStage =
   | "soft_close"
   | "out_of_scope_clarify"
   | "objection_reply"
+  | "objection_cost"
   | "idle";
 
 const INVOICE_KEYWORDS = [
@@ -96,6 +97,15 @@ export function isIntentSearchingInvoice(msg: string): boolean {
 }
 export function isObjectionSecurity(msg: string): boolean {
   return OBJECTION_SECURITY_RX.test(msg ?? "");
+}
+
+// Objeção/dúvida de CUSTO: cliente quer entender o que ele tem que pagar.
+// NÃO é recusa — é pergunta legítima. Deve sempre ser respondida de forma
+// determinística (sem adesão, sem mensalidade, sem fidelidade) e NUNCA cair
+// em soft_close.
+const COST_QUESTION_RX = /\b(o\s+que\s+(eu\s+)?(tenho|preciso|vou)\s+(que\s+)?pagar|tenho\s+que\s+pagar|preciso\s+pagar|vou\s+pagar|quanto\s+(vou|eu|tenho que|preciso)\s*pagar|qual\s+(o\s+)?(valor|custo|pre[cç]o)|quanto\s+custa|tem\s+(taxa|mensalidade|custo|cobran[cç]a|ades[aã]o|fidelidade|multa|contrato|carencia|car[eê]ncia)|cobra(m|do|n[cç]a)?\s+(taxa|alguma\s+coisa|algo)|paga\s+(alguma\s+coisa|algo|taxa|mensalidade)|(é|eh)\s+(gr[aá]tis|gratuito|pago)|tem\s+que\s+instalar|precisa\s+instalar|tem\s+obra|tem\s+investimento)\b/i;
+export function isCostQuestion(msg: string): boolean {
+  return COST_QUESTION_RX.test(msg ?? "");
 }
 
 // Cliente declina educadamente / pede pra parar. NÃO é objeção a ser
@@ -234,6 +244,18 @@ export function decideGreenStage(
   ) {
     return "clarify_discount_estimate";
   }
+  // PRIORIDADE 0.56 — Cliente pergunta sobre CUSTO/pagamento (ex.: "o que
+  // eu tenho que pagar", "tem taxa?", "tem mensalidade?"). NÃO é recusa.
+  // Sempre responde com a verdade do modelo iGreen (sem adesão, sem taxa,
+  // sem fidelidade) e mantém o lead vivo. Limitamos a 1x para não virar
+  // disco riscado.
+  if (
+    !hasMedia &&
+    isCostQuestion(message) &&
+    !extras.cost_clarified
+  ) {
+    return "objection_cost";
+  }
   // PRIORIDADE 0.7 — se íamos cobrar um dado/fatura, mas o cliente trouxe uma
   // objeção genérica (não é número, UF, distribuidora nem afirmação), trata
   // a objeção primeiro. Uma única objeção por turno; controle de repetição
@@ -286,6 +308,11 @@ function _decideGreenStageInner(
 
   // PRIORIDADE 0.6 — cliente declinou educadamente após já estar engajado.
   // Solta com leveza, sem repetir pedido de dado/fatura.
+  // Mas antes: se a "recusa" for na verdade pergunta sobre custo, trate como
+  // objeção de custo, não como descarte.
+  if (isCostQuestion(message) && !extras.cost_clarified && !hasMedia) {
+    return "objection_cost";
+  }
   if (isSoftDecline(message) && extras.greeted && !extras.soft_closed && !hasMedia) {
     return "soft_close";
   }
