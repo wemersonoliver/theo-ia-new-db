@@ -99,6 +99,15 @@ export function isObjectionSecurity(msg: string): boolean {
   return OBJECTION_SECURITY_RX.test(msg ?? "");
 }
 
+// Objeção/dúvida de CUSTO: cliente quer entender o que ele tem que pagar.
+// NÃO é recusa — é pergunta legítima. Deve sempre ser respondida de forma
+// determinística (sem adesão, sem mensalidade, sem fidelidade) e NUNCA cair
+// em soft_close.
+const COST_QUESTION_RX = /\b(o\s+que\s+(eu\s+)?(tenho|preciso|vou)\s+(que\s+)?pagar|tenho\s+que\s+pagar|preciso\s+pagar|vou\s+pagar|quanto\s+(vou|eu|tenho que|preciso)\s*pagar|qual\s+(o\s+)?(valor|custo|pre[cç]o)|quanto\s+custa|tem\s+(taxa|mensalidade|custo|cobran[cç]a|ades[aã]o|fidelidade|multa|contrato|carencia|car[eê]ncia)|cobra(m|do|n[cç]a)?\s+(taxa|alguma\s+coisa|algo)|paga\s+(alguma\s+coisa|algo|taxa|mensalidade)|(é|eh)\s+(gr[aá]tis|gratuito|pago)|tem\s+que\s+instalar|precisa\s+instalar|tem\s+obra|tem\s+investimento)\b/i;
+export function isCostQuestion(msg: string): boolean {
+  return COST_QUESTION_RX.test(msg ?? "");
+}
+
 // Cliente declina educadamente / pede pra parar. NÃO é objeção a ser
 // rebatida — é hora de soltar o lead com gentileza.
 const SOFT_DECLINE_RX = /(n[aã]o quero(?:\s+(?:agora|por enquanto|mais|n[aã]o))?|por enquanto n[aã]o|agora n[aã]o|depois (?:eu )?(?:vejo|penso|falo|retorno)|fica pra depois|deixa pra (?:depois|l[aá])|deixa (?:quieto|assim|isso|pra l[aá])|vou pensar|s[oó] (?:queria|quero|tava querendo) saber|s[oó] tava (?:vendo|olhando|curioso)|era s[oó] (?:isso|pra saber)|t[aá] (?:bom|ok)(?:\s+assim)?(?:,?\s*obrigad[oa])?|pode deixar|obrigad[oa](?:[\s,.!]|$)|valeu(?:[\s,.!]|$)|n[aã]o tenho interesse|n[aã]o me interessa|n[aã]o precisa|deixa|esquece(?:\s+isso)?|chega|desisto|para de (?:insistir|mandar)|n[aã]o insista)/i;
