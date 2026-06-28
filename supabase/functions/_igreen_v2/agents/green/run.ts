@@ -532,7 +532,6 @@ Quer que eu já comece seu cadastro agora? 😉`;
   }
 
   if (stage === "confirm_signup") {
-    const nome0 = (currentExtras.client_name as string | undefined) ?? "";
     // Guarda extra: se a mensagem é dúvida sobre custo, NUNCA tratar como
     // declínio. Redireciona para objection_cost (caso o decideGreenStage
     // não tenha pego — defesa em profundidade).
@@ -565,10 +564,6 @@ Quer que eu já comece seu cadastro agora? 😉`;
       tool_calls,
       suggested_state_patch: patch,
     };
-  }
-
-  if (stage === "confirm_signup__legacy_unused") {
-    // placeholder — bloco original abaixo ainda roda
   }
 
   if (stage === "confirm_signup") {
