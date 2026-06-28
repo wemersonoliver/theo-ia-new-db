@@ -73,6 +73,7 @@ export type GreenStage =
   | "soft_close"
   | "out_of_scope_clarify"
   | "objection_reply"
+  | "objection_cost"
   | "idle";
 
 const INVOICE_KEYWORDS = [
