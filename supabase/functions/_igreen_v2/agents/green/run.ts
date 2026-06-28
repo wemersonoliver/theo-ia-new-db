@@ -532,6 +532,46 @@ Quer que eu já comece seu cadastro agora? 😉`;
   }
 
   if (stage === "confirm_signup") {
+    const nome0 = (currentExtras.client_name as string | undefined) ?? "";
+    // Guarda extra: se a mensagem é dúvida sobre custo, NUNCA tratar como
+    // declínio. Redireciona para objection_cost (caso o decideGreenStage
+    // não tenha pego — defesa em profundidade).
+    if (burstLines.some((l) => isCostQuestion(l)) && !currentExtras.cost_clarified) {
+      stage = "objection_cost";
+    }
+  }
+
+  if (stage === "objection_cost") {
+    const nome = (currentExtras.client_name as string | undefined) ?? "";
+    const msgs: string[] = [
+      `${nome ? nome + ", " : ""}ótima pergunta! 🙌 Com a iGreen você **não paga nenhuma taxa extra, mensalidade ou adesão**. Não tem instalação, não tem obra, não tem fidelidade e nem multa.`,
+      `O que muda é só isso: no lugar (ou junto) da sua fatura da distribuidora, você passa a receber a fatura da iGreen **já com o desconto aplicado**. Ou seja, você continua pagando sua energia normalmente — só que mais barato. 💡`,
+      `Posso seguir com seu cadastro agora? É rapidinho — só preciso de uma foto da sua última fatura pra começar.`,
+    ];
+    patch.extras = {
+      ...(patch.extras as object ?? currentExtras),
+      cost_clarified: true,
+      cost_clarified_at: new Date().toISOString(),
+      // Limpa qualquer flag de declínio aplicada erroneamente em turno anterior.
+      signup_declined_at: null,
+      soft_closed: false,
+      soft_closed_at: null,
+      // Mantém pitch enviado para não repetir.
+      signup_pitch_sent: true,
+    };
+    return {
+      messages: msgs,
+      events,
+      tool_calls,
+      suggested_state_patch: patch,
+    };
+  }
+
+  if (stage === "confirm_signup__legacy_unused") {
+    // placeholder — bloco original abaixo ainda roda
+  }
+
+  if (stage === "confirm_signup") {
     const nome = (currentExtras.client_name as string | undefined) ?? "";
     // Resposta afirmativa → confirma e o redecide abaixo joga em request_invoice.
     if (burstLines.some((l) => isAffirmation(l))) {
