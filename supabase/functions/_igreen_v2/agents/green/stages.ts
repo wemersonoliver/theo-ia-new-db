@@ -244,6 +244,18 @@ export function decideGreenStage(
   ) {
     return "clarify_discount_estimate";
   }
+  // PRIORIDADE 0.56 — Cliente pergunta sobre CUSTO/pagamento (ex.: "o que
+  // eu tenho que pagar", "tem taxa?", "tem mensalidade?"). NÃO é recusa.
+  // Sempre responde com a verdade do modelo iGreen (sem adesão, sem taxa,
+  // sem fidelidade) e mantém o lead vivo. Limitamos a 1x para não virar
+  // disco riscado.
+  if (
+    !hasMedia &&
+    isCostQuestion(message) &&
+    !extras.cost_clarified
+  ) {
+    return "objection_cost";
+  }
   // PRIORIDADE 0.7 — se íamos cobrar um dado/fatura, mas o cliente trouxe uma
   // objeção genérica (não é número, UF, distribuidora nem afirmação), trata
   // a objeção primeiro. Uma única objeção por turno; controle de repetição
