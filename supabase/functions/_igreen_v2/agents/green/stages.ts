@@ -308,6 +308,11 @@ function _decideGreenStageInner(
 
   // PRIORIDADE 0.6 — cliente declinou educadamente após já estar engajado.
   // Solta com leveza, sem repetir pedido de dado/fatura.
+  // Mas antes: se a "recusa" for na verdade pergunta sobre custo, trate como
+  // objeção de custo, não como descarte.
+  if (isCostQuestion(message) && !extras.cost_clarified && !hasMedia) {
+    return "objection_cost";
+  }
   if (isSoftDecline(message) && extras.greeted && !extras.soft_closed && !hasMedia) {
     return "soft_close";
   }
