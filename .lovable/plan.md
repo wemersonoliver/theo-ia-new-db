@@ -1,70 +1,51 @@
-## Objetivo
-Tornar o envio de áudios de saudação (Conexão Green) **opcional por usuário**, com default DESLIGADO. Cada conta iGreen passa a ter seus próprios áudios (slot 1 e 2) e um toggle para ativar/desativar. Enquanto estiver desativado ou sem áudios, o agente volta ao comportamento antigo (5 bolhas de texto).
+## Problema diagnosticado
 
----
+Conversa do lead `5519988331972` (usuário `marcioevandrocosta@hotmail.com`):
 
-## 1. Banco de dados
+1. Cliente passou por toda qualificação (SP → Elektro → conta R$ 300).
+2. IA simulou desconto e perguntou: *"Quer que eu já comece seu cadastro agora?"*.
+3. Cliente respondeu: **"E o que eu tenho que pagar"** (objeção legítima de custo — quer entender o modelo).
+4. IA interpretou como recusa, caiu em `soft_close`, marcou `lead_frio` e respondeu *"Tranquilo! Fico à disposição..."* — efetivamente descartando o cliente.
+5. Cliente repetiu *"O que eu tenho que pagar"* — IA repetiu o mesmo descarte.
+6. Marcio (humano) precisou intervir manualmente para explicar que não há cobrança extra.
 
-Nova tabela por conta (substitui o uso da `igreen_default_greeting_audios` global como fonte em produção — a global vira apenas template inicial opcional):
+Causa raiz: o estágio `confirm_signup` em `run.ts` trata qualquer mensagem não-afirmativa após o pitch como declínio. Não existe nenhuma detecção de pergunta sobre custo/pagamento/mensalidade/taxa antes desse fallback.
 
-`public.igreen_account_greeting_audios`
-- `account_id uuid` (FK accounts)
-- `slot int` (1 ou 2)
-- `storage_path text` (caminho no bucket)
-- `transcript text`
-- `delay_after_ms int default 0` (slot 1=0, slot 2=10000)
-- `enabled bool default true` (do slot individual)
-- `updated_at timestamptz`
-- PK composta `(account_id, slot)`
+## Solução
 
-Nova coluna em `accounts`:
-- `igreen_greeting_audio_enabled bool default false` — **toggle mestre** da feature por conta.
+Adicionar **detecção determinística de objeção de custo** em `stages.ts` e um novo estágio `objection_cost` em `run.ts` que responde com a verdade sobre o modelo iGreen: zero adesão, zero mensalidade extra, sem instalação, sem fidelidade, sem multa — o cliente paga apenas a fatura iGreen (já com desconto) no lugar/complemento da fatura da distribuidora.
 
-Grants/RLS:
-- `authenticated`: SELECT/INSERT/UPDATE/DELETE apenas onde a conta for sua (membro/owner).
-- `service_role`: ALL (edge functions).
-- Super admin: ALL via `has_role`.
+### 1. `supabase/functions/_igreen_v2/agents/green/stages.ts`
 
-Bucket `igreen-audios` já existe → arquivos passam a ser organizados por `account_id/{slot}.{ext}`.
+- Adicionar `COST_QUESTION_RX` cobrindo variações:
+  - "o que (eu) tenho que pagar", "tem que pagar", "vou pagar", "preciso pagar"
+  - "tem taxa", "tem mensalidade", "tem custo", "tem cobrança", "tem adesão"
+  - "qual o valor", "qual o custo", "quanto custa", "quanto vou pagar"
+  - "tem fidelidade", "tem multa", "tem contrato", "preciso instalar"
+  - "é grátis?", "é gratuito?", "tem alguma cobrança"
+- Exportar `isCostQuestion(msg)`.
+- Adicionar `"objection_cost"` ao type `GreenStage`.
+- Em `decideGreenStage` (prioridade ~0.55, antes do `soft_close` e antes do `confirm_signup` else-branch): se `isCostQuestion(message)` e `!extras.cost_clarified`, retornar `"objection_cost"`.
 
-## 2. Edge function — `_igreen_v2/agents/green/run.ts` (bloco `greet`)
+### 2. `supabase/functions/_igreen_v2/agents/green/run.ts`
 
-Ordem da decisão:
-1. Lê `accounts.igreen_greeting_audio_enabled` da conta.
-2. Se **false** → fallback imediato para as 5 bolhas de texto originais (comportamento antigo, default para todos).
-3. Se **true** → busca `igreen_account_greeting_audios` da conta:
-   - Se faltar slot 1 ou 2 (sem `storage_path`) → fallback texto.
-   - Se ambos OK → emite os 2 events `greeting_audio_dispatch` como hoje, com `account_id` já no payload.
+- Adicionar bloco de handler para `stage === "objection_cost"` com texto determinístico (2 chunks):
+  1. *"{nome}, ótima pergunta! Com a iGreen você **não paga nenhuma taxa extra, mensalidade ou adesão**. Não tem instalação, não tem obra, não tem fidelidade nem multa."*
+  2. *"O que muda é só isso: no lugar (ou junto) da sua fatura da distribuidora, você passa a receber a fatura da iGreen **já com o desconto aplicado**. Ou seja, você só paga sua energia — só que mais barato. 💡"*
+  3. Fecha com CTA suave: *"Posso seguir com seu cadastro agora?"*
+- Setar `extras.cost_clarified = true`, `cost_clarified_at`.
+- **Limpar** flags indevidas de declínio: `signup_declined_at: null`, `soft_closed: false`, `soft_closed_at: null`.
+- **Não** adicionar tag `lead_frio`.
+- Se houver tag `lead_frio` já aplicada (turno anterior), adicionar `remove_contact_tag` (se a tool existir) — senão, apenas registrar evento.
 
-A automação `greeting-audio-dispatch.ts` passa a ler da tabela por conta (`igreen_account_greeting_audios` filtrando por `account_id`) em vez da global.
+### 3. Reset do lead atual
 
-## 3. Painel do usuário (Settings)
+SQL para destravar a conversa `a255ebbe-d51d-4b4e-8efd-5363f61f6dcc`:
+- `UPDATE igreen_conversation_state` zerando `soft_closed`, `signup_declined_at`, `handoff_ativo`, `etapa_funil` voltando para `confirm_signup`.
+- Cliente já está em atendimento humano (Marcio interveio), então **não** reativar IA automaticamente — apenas garantir que, se o humano devolver para IA, o estado esteja limpo.
 
-Nova aba **"Áudios de Saudação (iGreen)"** em `src/pages/Settings.tsx`, visível só para contas iGreen (`accounts.is_igreen = true`):
-- Toggle mestre "Ativar envio de áudios na saudação" (vinculado a `accounts.igreen_greeting_audio_enabled`).
-- 2 cards (Saudação 1 / Saudação 2): player do áudio atual + botão "Substituir áudio" (mp3/ogg/m4a até 16 MB) + textarea de transcrição + toggle ativo/inativo do slot.
-- Aviso visual: "Enquanto a função estiver desativada ou sem os 2 áudios configurados, a saudação volta para o formato em texto."
-- Botão Salvar grava na `igreen_account_greeting_audios` e faz upload em `igreen-audios/{account_id}/{slot}.{ext}`.
+## Detalhes técnicos
 
-Hook novo: `src/hooks/useIgreenAccountGreetingAudios.ts` (CRUD + upload via Supabase Storage).
-
-## 4. Painel admin
-
-Em `src/pages/admin/AdminIgreenTemplate.tsx` (aba "Áudios de Saudação"):
-- A aba global vira **apenas template padrão** (referência), com aviso: "Estes áudios são exemplo. Cada conta configura os próprios em Configurações."
-- Em `/admin/users`: nova coluna/toggle "Áudios Saudação iGreen" para super admin forçar ligar/desligar por conta (escreve em `accounts.igreen_greeting_audio_enabled`).
-
-## 5. Migração de contas existentes
-
-- A migration **não** ativa o toggle em nenhuma conta (`default false`).
-- Não copia áudios da tabela global automaticamente — cada usuário sobe os seus quando quiser testar.
-- Resultado: todas as contas iGreen voltam imediatamente para o comportamento antigo (5 bolhas) até o usuário ativar.
-
----
-
-## Entregáveis
-1. Migration: criar `igreen_account_greeting_audios` (com grants + RLS) + coluna `accounts.igreen_greeting_audio_enabled`.
-2. Update no `_igreen_v2/agents/green/run.ts` (decisão no bloco `greet`).
-3. Update na automação `greeting-audio-dispatch.ts` (lê tabela por conta).
-4. Hook `useIgreenAccountGreetingAudios.ts` + nova aba em `Settings.tsx`.
-5. Toggle admin em `AdminUsers.tsx` + aviso na aba do `AdminIgreenTemplate.tsx`.
+- A regex `COST_QUESTION_RX` deve ter prioridade **maior** que `isSoftDecline` (a frase "o que eu tenho que pagar" não bate em soft decline, mas garantia extra: testar `isCostQuestion` antes).
+- Manter consistência: o estágio `objection_cost` não deve disparar mais de uma vez por conversa (`cost_clarified` flag). Se cliente reperguntar, cair em fluxo normal com confiança de que já foi explicado.
+- Não mexer em prompt LLM — toda a resposta é determinística para evitar alucinação sobre preço.
