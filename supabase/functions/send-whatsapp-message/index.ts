@@ -47,7 +47,6 @@ serve(async (req) => {
       return jsonResponse({ error: "Phone and content required" }, 400);
     }
 
-    let instanceName: string;
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -95,8 +94,6 @@ serve(async (req) => {
     if (ctx.status !== "connected") {
       return jsonResponse({ error: system ? "WhatsApp do sistema não está conectado" : "WhatsApp não está conectado" }, 400);
     }
-    instanceName = ctx.instanceName;
-
     const normalizedPhone = normalizeBrazilianPhone(phone);
 
     const sendResult = await sendWhatsAppText(ctx, normalizedPhone, outgoingText);
