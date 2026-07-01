@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 import { resolveAccountId } from "../_account.ts";
-import { getBrazilianPhoneVariant, normalizeBrazilianPhone, resolveExistingWhatsappJid, resolvePreferredWhatsappChatNumber } from "../_phone.ts";
+import { normalizeBrazilianPhone } from "../_phone.ts";
+import { resolveInstanceContext, sendWhatsAppText } from "../_wa_provider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,121 +70,39 @@ serve(async (req) => {
     }
     const outgoingText = attendantName ? `*${attendantName}*:\n${content}` : content;
 
-    if (system) {
-      // Use system WhatsApp instance (admin/support)
-      const { data: sysInstance } = await supabaseAdmin
-        .from("system_whatsapp_instance")
-        .select("instance_name, status")
-        .maybeSingle();
-
-      if (!sysInstance || sysInstance.status !== "connected") {
-        return jsonResponse({ error: "WhatsApp do sistema não está conectado" }, 400);
-      }
-      instanceName = sysInstance.instance_name;
-    } else {
-      // Resolve a instância correta: preferir a vinculada à conversa (departamento)
-      const normalizedPhoneEarly = normalizeBrazilianPhone(phone);
-      let convInstanceId: string | null = null;
-      {
-        let q = supabaseAdmin
-          .from("whatsapp_conversations")
-          .select("instance_id")
-          .eq("phone", normalizedPhoneEarly);
-        q = accountId ? q.eq("account_id", accountId) : q.eq("user_id", userId);
-        const { data: conv } = await q.maybeSingle();
-        convInstanceId = (conv as any)?.instance_id || null;
-      }
-
-      let instance: { instance_name: string; status: string } | null = null;
-      if (convInstanceId) {
-        const { data } = await supabaseAdmin
-          .from("whatsapp_instances")
-          .select("instance_name, status")
-          .eq("id", convInstanceId)
-          .maybeSingle();
-        instance = data as any;
-      }
-      if (!instance) {
-        let instanceQuery = supabaseAdmin
-          .from("whatsapp_instances")
-          .select("instance_name, status, user_id, is_primary")
-          .order("is_primary", { ascending: false });
-        instanceQuery = accountId
-          ? instanceQuery.eq("account_id", accountId)
-          : instanceQuery.eq("user_id", userId);
-        const { data } = await instanceQuery.limit(1).maybeSingle();
-        instance = data as any;
-      }
-
-      if (!instance || instance.status !== "connected") {
-        return jsonResponse({ error: "WhatsApp não está conectado" }, 400);
-      }
-      instanceName = instance.instance_name;
+    // Resolve o contexto (provider + credenciais) da instância que deve enviar
+    const normalizedPhoneEarly = normalizeBrazilianPhone(phone);
+    let convInstanceId: string | null = null;
+    if (!system) {
+      let q = supabaseAdmin
+        .from("whatsapp_conversations")
+        .select("instance_id")
+        .eq("phone", normalizedPhoneEarly);
+      q = accountId ? q.eq("account_id", accountId) : q.eq("user_id", userId);
+      const { data: conv } = await q.maybeSingle();
+      convInstanceId = (conv as any)?.instance_id || null;
     }
 
-    // Get Evolution API from global secrets
-    const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-
-    if (!evolutionUrl || !evolutionKey) {
-      console.error("Evolution API not configured in secrets");
-      return jsonResponse({ error: "Erro de configuração do servidor" }, 500);
+    const ctx = await resolveInstanceContext(supabaseAdmin, {
+      system,
+      instanceId: convInstanceId,
+      accountId,
+      userId,
+    });
+    if (!ctx) {
+      return jsonResponse({ error: system ? "WhatsApp do sistema não configurado" : "WhatsApp não configurado" }, 400);
     }
+    if (ctx.status !== "connected") {
+      return jsonResponse({ error: system ? "WhatsApp do sistema não está conectado" : "WhatsApp não está conectado" }, 400);
+    }
+    instanceName = ctx.instanceName;
 
-    // Normalize Brazilian phone to canonical 13-digit form (with 9th digit)
     const normalizedPhone = normalizeBrazilianPhone(phone);
 
-    // Send via Evolution API with automatic fallback for the "9th digit" issue:
-    // some Brazilian WhatsApp accounts (legacy DDDs) only accept the 12-digit
-    // form. We try the canonical (13-digit) first and, if Evolution rejects
-    // the number as invalid/non-existent, retry with the variant.
-    // IMPORTANTE: Baileys aceita o POST mesmo para JIDs inexistentes
-    // (retorna 200 OK porque apenas enfileira), então o fallback por erro
-    // HTTP não pega o caso de "número errado". Por isso resolvemos o JID
-    // real antes via /chat/whatsappNumbers.
-    const resolvedChatNumber = await resolvePreferredWhatsappChatNumber({
-      evolutionUrl,
-      evolutionKey,
-      instanceName,
-      phone: normalizedPhone,
-    });
-    const resolvedJid = await resolveExistingWhatsappJid({
-      evolutionUrl,
-      evolutionKey,
-      instanceName,
-      phone: normalizedPhone,
-    });
-    const candidates: string[] = [];
-    if (resolvedChatNumber) candidates.push(resolvedChatNumber);
-    if (resolvedJid && !candidates.includes(resolvedJid)) candidates.push(resolvedJid);
-    if (!candidates.includes(normalizedPhone)) candidates.push(normalizedPhone);
-    const variant = getBrazilianPhoneVariant(normalizedPhone);
-    if (variant && !candidates.includes(variant)) candidates.push(variant);
-
-    let sendResponse: Awaited<ReturnType<typeof evolutionRequest>> | null = null;
-    for (const candidate of candidates) {
-      sendResponse = await evolutionRequest({
-        evolutionUrl,
-        evolutionKey,
-        path: `/message/sendText/${instanceName}`,
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ number: candidate, text: outgoingText }),
-      });
-      if (sendResponse.ok) break;
-
-      const body = sendResponse.text || "";
-      const isInvalidNumber =
-        sendResponse.status === 400 ||
-        sendResponse.status === 404 ||
-        /not.?exists|invalid.?number|number.?does.?not|not.?in.?whatsapp|jid/i.test(body);
-      if (!isInvalidNumber) break;
-      console.warn(`Number ${candidate} rejected by Evolution, trying variant...`);
-    }
-
-    if (!sendResponse || !sendResponse.ok) {
-      console.error("Evolution send error:", sendResponse);
-      return jsonResponse(buildEvolutionErrorPayload(sendResponse!, "Erro ao enviar mensagem"), 502);
+    const sendResult = await sendWhatsAppText(ctx, normalizedPhone, outgoingText);
+    if (!sendResult.ok) {
+      console.error("send failed:", ctx.provider, sendResult);
+      return jsonResponse(sendResult.errorPayload || { ok: false, error: "Erro ao enviar mensagem" }, 502);
     }
 
     const newMessage = {
