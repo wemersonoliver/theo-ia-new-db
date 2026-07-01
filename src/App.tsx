@@ -67,6 +67,7 @@ const AdminTasks = lazy(() => import("./pages/admin/AdminTasks"));
 const AdminPlans = lazy(() => import("./pages/admin/AdminPlans"));
 const AdminAICosts = lazy(() => import("./pages/admin/AdminAICosts"));
 const AdminAIProvider = lazy(() => import("./pages/admin/AdminAIProvider"));
+const AdminWhatsAppProvider = lazy(() => import("./pages/admin/AdminWhatsAppProvider"));
 const AdminSimulateSupport = lazy(() => import("./pages/admin/AdminSimulateSupport"));
 const AdminFlows = lazy(() => import("./pages/admin/AdminFlows"));
 const AdminFlowEditor = lazy(() => import("./pages/admin/AdminFlowEditor"));
@@ -189,6 +190,7 @@ const App = () => (
               <Route path="/admin/plans" element={<AdminPlans />} />
               <Route path="/admin/ai-costs" element={<AdminAICosts />} />
               <Route path="/admin/ai-provider" element={<AdminAIProvider />} />
+              <Route path="/admin/wa-provider" element={<AdminWhatsAppProvider />} />
               <Route path="/admin/flows" element={<AdminFlows />} />
               <Route path="/admin/flows/:id" element={<AdminFlowEditor />} />
               <Route path="/admin/trial-followup" element={<AdminTrialFollowup />} />

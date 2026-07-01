@@ -40,6 +40,7 @@ const adminNavItems = [
   { to: "/admin/conversations", icon: MessageSquare, label: "Conversas" },
   { to: "/admin/ai-config", icon: Bot, label: "IA Suporte" },
   { to: "/admin/ai-provider", icon: Cpu, label: "Provedor de IA" },
+  { to: "/admin/wa-provider", icon: Smartphone, label: "Provedor WhatsApp" },
   { to: "/admin/simulate-support", icon: FlaskConical, label: "Simular Suporte" },
   { to: "/admin/ai-costs", icon: DollarSign, label: "Custos de IA" },
   { to: "/admin/voice-costs", icon: DollarSign, label: "Custos de Voz IA" },
