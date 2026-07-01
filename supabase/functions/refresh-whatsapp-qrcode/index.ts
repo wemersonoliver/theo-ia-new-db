@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import { resolveInstanceContext, waConnect, waConnectionState } from "../_wa_provider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -81,7 +82,7 @@ serve(async (req) => {
         .from("accounts").select("id").eq("owner_user_id", userId).maybeSingle();
       const { data } = await supabase
         .from("whatsapp_instances")
-        .select("id, instance_name, status, account_id")
+        .select("id, instance_name, status, account_id, provider, waha_session_name")
         .eq("id", bodyInstanceId)
         .maybeSingle();
       if (!data || (ownedAccount?.id && data.account_id !== ownedAccount.id)) {
@@ -91,7 +92,7 @@ serve(async (req) => {
     } else {
       const { data } = await supabase
         .from("whatsapp_instances")
-        .select("id, instance_name, status")
+        .select("id, instance_name, status, provider, waha_session_name")
         .eq("user_id", userId)
         .maybeSingle();
       instance = data;
@@ -101,11 +102,40 @@ serve(async (req) => {
       return jsonResponse({ error: "Nenhuma instância encontrada" }, 404);
     }
 
-    const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) {
-      return jsonResponse({ error: "Erro de configuração do servidor" }, 500);
+    const ctx = await resolveInstanceContext(supabase, { instanceId: instance.id });
+    if (!ctx) {
+      return jsonResponse({ error: "Provedor não configurado" }, 500);
     }
+
+    // Fluxo WAHA (simplificado — pairing code futuro)
+    if (ctx.provider === "waha") {
+      const conn = await waConnect(ctx, {
+        webhookUrl: `${supabaseUrl}/functions/v1/whatsapp-webhook`,
+      });
+      if (!conn.ok) {
+        return jsonResponse({ error: conn.error || "Falha ao obter QR (WAHA)" }, 502);
+      }
+      const qrCodeBase64 = conn.qrCodeBase64 || null;
+      const pairingCode = conn.pairingCode || null;
+      await supabase.from("whatsapp_instances").update({
+        status: qrCodeBase64 || pairingCode ? "qr_ready" : "pending",
+        qr_code_base64: qrCodeBase64,
+        pairing_code: pairingCode,
+        updated_at: new Date().toISOString(),
+      }).eq("id", instance.id);
+      return jsonResponse({
+        success: !!qrCodeBase64,
+        qrCode: qrCodeBase64,
+        pairingCode,
+        message: phoneNumber
+          ? "WAHA: pairing code por número ainda em beta — use o QR Code."
+          : undefined,
+      });
+    }
+
+    // Fluxo Evolution (original)
+    const evolutionUrl = ctx.evolutionUrl!;
+    const evolutionKey = ctx.evolutionKey!;
 
     // Check real connection state
     let evolutionState: string | null = null;
