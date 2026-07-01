@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import { normalizeWahaUrl, wahaGetQrCode, wahaSessionCreate, wahaSessionStatus } from "../_waha.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -115,11 +116,13 @@ serve(async (req) => {
     let phoneNumber: string | null = null;
     let departmentName: string | null = null;
     let bodyInstanceId: string | null = null;
+    let providerOverride: "evolution" | "waha" | null = null;
     try {
       const body = await req.json();
       phoneNumber = body?.phoneNumber || null;
       departmentName = body?.departmentName || null;
       bodyInstanceId = body?.instanceId || null;
+      providerOverride = body?.provider === "waha" ? "waha" : (body?.provider === "evolution" ? "evolution" : null);
     } catch { /* no body */ }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -147,8 +150,32 @@ serve(async (req) => {
 
     const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) {
-      return jsonResponse({ error: "Erro de configuração do servidor" }, 500);
+    const wahaUrl = normalizeWahaUrl(Deno.env.get("WAHA_API_URL"));
+    const wahaKey = Deno.env.get("WAHA_API_KEY") ?? null;
+
+    // Determina qual provider usar. Prioridade:
+    // 1) providerOverride (body)
+    // 2) row.provider (para reconexões)
+    // 3) system_wa_provider.default_provider
+    // 4) 'evolution'
+    let chosenProvider: "evolution" | "waha" = "evolution";
+    if (providerOverride) {
+      chosenProvider = providerOverride;
+    } else if (bodyInstanceId) {
+      const { data: existing } = await supabase
+        .from("whatsapp_instances").select("provider").eq("id", bodyInstanceId).maybeSingle();
+      if (existing?.provider === "waha") chosenProvider = "waha";
+    } else {
+      const { data: defaultRow } = await supabase
+        .from("system_wa_provider").select("default_provider").limit(1).maybeSingle();
+      if ((defaultRow as any)?.default_provider === "waha") chosenProvider = "waha";
+    }
+
+    if (chosenProvider === "evolution" && (!evolutionUrl || !evolutionKey)) {
+      return jsonResponse({ error: "Erro de configuração do servidor (Evolution)" }, 500);
+    }
+    if (chosenProvider === "waha" && (!wahaUrl || !wahaKey)) {
+      return jsonResponse({ error: "WAHA API não configurada. Adicione WAHA_API_URL e WAHA_API_KEY nos secrets." }, 500);
     }
 
     // Helper para slug
@@ -219,6 +246,58 @@ serve(async (req) => {
       }
       isNewRow = true;
     }
+
+    // --------- Fluxo WAHA ---------
+    if (chosenProvider === "waha") {
+      const sessionName = row?.waha_session_name || instanceName;
+      const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
+
+      // Cria sessão (idempotente — trata 409/422 como "já existe")
+      const create = await wahaSessionCreate({
+        wahaUrl: wahaUrl!, wahaKey: wahaKey!, session: sessionName,
+        webhookUrl, phoneNumber: phoneNumber ?? null,
+      });
+      if (!create.ok && ![409, 422].includes(create.status)) {
+        console.error("WAHA create session error:", create);
+        return jsonResponse({ error: (create.data as any)?.message || `WAHA erro ${create.status}` }, 502);
+      }
+
+      // Verifica status
+      const status = await wahaSessionStatus({ wahaUrl: wahaUrl!, wahaKey: wahaKey!, session: sessionName });
+      const statusRaw = String((status.data as any)?.status || "").toUpperCase();
+
+      if (statusRaw === "WORKING") {
+        await persistInstance(supabase, row, {
+          user_id: userId, account_id: accountId, instance_name: instanceName,
+          display_name: displayName, department_slug: departmentSlug,
+          provider: "waha", waha_session_name: sessionName,
+          status: "connected", qr_code_base64: null, pairing_code: null,
+        });
+        return jsonResponse({ success: true, message: "WhatsApp já está conectado (WAHA)", status: "connected", provider: "waha" });
+      }
+
+      // Busca QR
+      const qr = await wahaGetQrCode({ wahaUrl: wahaUrl!, wahaKey: wahaKey!, session: sessionName });
+      const qrCodeBase64 = qr.base64;
+      const persisted = await persistInstance(supabase, row, {
+        user_id: userId, account_id: accountId, instance_name: instanceName,
+        display_name: displayName, department_slug: departmentSlug,
+        provider: "waha", waha_session_name: sessionName,
+        status: qrCodeBase64 ? "qr_ready" : "pending",
+        qr_code_base64: qrCodeBase64, pairing_code: null,
+      });
+      return jsonResponse({
+        success: !!qrCodeBase64,
+        qrCode: qrCodeBase64,
+        pairingCode: null,
+        instanceId: persisted?.id,
+        status: qrCodeBase64 ? "qr_ready" : "pending",
+        provider: "waha",
+        message: !qrCodeBase64 ? "Aguardando QR do WAHA. Chame novamente em alguns segundos." : undefined,
+      });
+    }
+
+    // --------- Fluxo Evolution (original abaixo) ---------
 
     // Check if instance exists
     let instanceExists = false;

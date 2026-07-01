@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import { resolveInstanceContext, waDelete, waLogout } from "../_wa_provider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -54,7 +54,7 @@ serve(async (req) => {
         .from("accounts").select("id").eq("owner_user_id", userId).maybeSingle();
       const { data } = await supabase
         .from("whatsapp_instances")
-        .select("id, instance_name, account_id, status, is_primary")
+        .select("id, instance_name, account_id, status, is_primary, provider, waha_session_name")
         .eq("id", bodyInstanceId)
         .maybeSingle();
       if (!data || (ownedAccount?.id && data.account_id !== ownedAccount.id)) {
@@ -64,7 +64,7 @@ serve(async (req) => {
     } else {
       const { data } = await supabase
         .from("whatsapp_instances")
-        .select("id, instance_name, status, is_primary")
+        .select("id, instance_name, status, is_primary, provider, waha_session_name")
         .eq("user_id", userId)
         .maybeSingle();
       instance = data;
@@ -74,44 +74,19 @@ serve(async (req) => {
       return jsonResponse({ error: "Nenhuma instância encontrada" }, 404);
     }
 
-    // Get Evolution API from global secrets
-    const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-
-    if (!evolutionUrl || !evolutionKey) {
-      console.error("Evolution API not configured in secrets");
-      return jsonResponse({ error: "Erro de configuração do servidor" }, 500);
+    const ctx = await resolveInstanceContext(supabase, { instanceId: instance.id });
+    if (!ctx) {
+      return jsonResponse({ error: "Provedor não configurado" }, 500);
     }
 
     const wasConnected = instance.status === "connected";
 
-    // Try logout (ignore errors like "instance is not connected")
-    try {
-      await evolutionRequest({
-        evolutionUrl,
-        evolutionKey,
-        path: `/instance/logout/${instance.instance_name}`,
-        method: "DELETE",
-      });
-    } catch (e) {
-      console.log("Logout skipped:", e instanceof Error ? e.message : e);
-    }
+    await waLogout(ctx);
 
     // If instance was not fully connected (cancel during QR/pending) OR is not the primary,
     // delete it entirely from Evolution API. Always for non-connected cancellations.
     if (!wasConnected) {
-      try {
-        await evolutionRequest({
-          evolutionUrl,
-          evolutionKey,
-          path: `/instance/delete/${instance.instance_name}`,
-          method: "DELETE",
-        });
-      } catch (e) {
-        console.log("Delete instance skipped:", e instanceof Error ? e.message : e);
-      }
-
-      // Remove DB row so user can start fresh
+      await waDelete(ctx);
       await supabase.from("whatsapp_instances").delete().eq("id", instance.id);
       return jsonResponse({ success: true, deleted: true });
     }

@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 import { resolveAccountId } from "../_account.ts";
-import { getBrazilianPhoneVariant, normalizeBrazilianPhone } from "../_phone.ts";
+import { normalizeBrazilianPhone } from "../_phone.ts";
+import { resolveInstanceContext, sendWhatsAppMedia } from "../_wa_provider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -88,65 +88,33 @@ serve(async (req) => {
       if (raw) attendantName = raw.split(/\s+/)[0];
     }
 
-    // Resolve instance name
-    let instanceName: string;
-    if (system) {
-      const { data: sysInstance } = await supabaseAdmin
-        .from("system_whatsapp_instance")
-        .select("instance_name, status")
-        .maybeSingle();
-      if (!sysInstance || sysInstance.status !== "connected") {
-        return jsonResponse({ error: "WhatsApp do sistema não está conectado" }, 400);
-      }
-      instanceName = sysInstance.instance_name;
-    } else {
-      const normalizedPhoneEarly = normalizeBrazilianPhone(phone);
-      let convInstanceId: string | null = null;
-      {
-        let q = supabaseAdmin
-          .from("whatsapp_conversations")
-          .select("instance_id")
-          .eq("phone", normalizedPhoneEarly);
-        q = accountId ? q.eq("account_id", accountId) : q.eq("user_id", userId);
-        const { data: conv } = await q.maybeSingle();
-        convInstanceId = (conv as any)?.instance_id || null;
-      }
-
-      let instance: { instance_name: string; status: string } | null = null;
-      if (convInstanceId) {
-        const { data } = await supabaseAdmin
-          .from("whatsapp_instances")
-          .select("instance_name, status")
-          .eq("id", convInstanceId)
-          .maybeSingle();
-        instance = data as any;
-      }
-      if (!instance) {
-        let q = supabaseAdmin
-          .from("whatsapp_instances")
-          .select("instance_name, status, user_id, is_primary")
-          .order("is_primary", { ascending: false });
-        q = accountId ? q.eq("account_id", accountId) : q.eq("user_id", userId);
-        const { data } = await q.limit(1).maybeSingle();
-        instance = data as any;
-      }
-      if (!instance || instance.status !== "connected") {
-        return jsonResponse({ error: "WhatsApp não está conectado" }, 400);
-      }
-      instanceName = instance.instance_name;
+    // Resolve contexto (provider + credenciais)
+    const normalizedPhoneEarly = normalizeBrazilianPhone(phone);
+    let convInstanceId: string | null = null;
+    if (!system) {
+      let q = supabaseAdmin
+        .from("whatsapp_conversations")
+        .select("instance_id")
+        .eq("phone", normalizedPhoneEarly);
+      q = accountId ? q.eq("account_id", accountId) : q.eq("user_id", userId);
+      const { data: conv } = await q.maybeSingle();
+      convInstanceId = (conv as any)?.instance_id || null;
     }
 
-    const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) {
-      console.error("Evolution API not configured in secrets");
-      return jsonResponse({ error: "Erro de configuração do servidor" }, 500);
+    const ctx = await resolveInstanceContext(supabaseAdmin, {
+      system,
+      instanceId: convInstanceId,
+      accountId,
+      userId,
+    });
+    if (!ctx) {
+      return jsonResponse({ error: system ? "WhatsApp do sistema não configurado" : "WhatsApp não configurado" }, 400);
+    }
+    if (ctx.status !== "connected") {
+      return jsonResponse({ error: system ? "WhatsApp do sistema não está conectado" : "WhatsApp não está conectado" }, 400);
     }
 
     const normalizedPhone = normalizeBrazilianPhone(phone);
-    const candidates = [normalizedPhone];
-    const variant = getBrazilianPhoneVariant(normalizedPhone);
-    if (variant && variant !== normalizedPhone) candidates.push(variant);
 
     // Build prefixed caption (only for non-audio, where the user actually sees text)
     const cleanCaption = (caption || "").trim();
@@ -157,46 +125,17 @@ serve(async (req) => {
           : `*${attendantName}*`
         : cleanCaption;
 
-    const isAudio = mediaType === "audio";
-    const path = isAudio
-      ? `/message/sendWhatsAppAudio/${instanceName}`
-      : `/message/sendMedia/${instanceName}`;
-
-    let sendResponse: Awaited<ReturnType<typeof evolutionRequest>> | null = null;
-    for (const candidate of candidates) {
-      const reqBody = isAudio
-        ? { number: candidate, audio: mediaUrl }
-        : {
-            number: candidate,
-            mediatype: mediaType,
-            mimetype: mimetype || undefined,
-            caption: captionWithName || undefined,
-            media: mediaUrl,
-            fileName: filename || undefined,
-          };
-
-      sendResponse = await evolutionRequest({
-        evolutionUrl,
-        evolutionKey,
-        path,
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(reqBody),
-      });
-      if (sendResponse.ok) break;
-
-      const txt = sendResponse.text || "";
-      const isInvalidNumber =
-        sendResponse.status === 400 ||
-        sendResponse.status === 404 ||
-        /not.?exists|invalid.?number|number.?does.?not|not.?in.?whatsapp|jid/i.test(txt);
-      if (!isInvalidNumber) break;
-      console.warn(`Number ${candidate} rejected by Evolution (media), trying variant...`);
-    }
-
-    if (!sendResponse || !sendResponse.ok) {
-      console.error("Evolution sendMedia error:", sendResponse);
-      return jsonResponse(buildEvolutionErrorPayload(sendResponse!, "Erro ao enviar mídia"), 502);
+    const sendResult = await sendWhatsAppMedia(ctx, {
+      phone: normalizedPhone,
+      mediaUrl,
+      mediaType,
+      mimetype: mimetype || undefined,
+      filename: filename || undefined,
+      caption: captionWithName,
+    });
+    if (!sendResult.ok) {
+      console.error("sendMedia failed:", ctx.provider, sendResult);
+      return jsonResponse(sendResult.errorPayload || { ok: false, error: "Erro ao enviar mídia" }, 502);
     }
 
     const newMessage = {
