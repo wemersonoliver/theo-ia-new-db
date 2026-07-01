@@ -4823,6 +4823,30 @@ export type Database = {
         }
         Relationships: []
       }
+      system_wa_provider: {
+        Row: {
+          created_at: string
+          default_provider: string
+          id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          default_provider?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          default_provider?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       system_welcome_queue: {
         Row: {
           created_at: string
@@ -4915,9 +4939,11 @@ export type Database = {
           last_sync_at: string | null
           phone_number: string | null
           profile_name: string | null
+          provider: string
           qr_code_base64: string | null
           status: string | null
           updated_at: string | null
+          waha_session_name: string | null
         }
         Insert: {
           created_at?: string | null
@@ -4926,9 +4952,11 @@ export type Database = {
           last_sync_at?: string | null
           phone_number?: string | null
           profile_name?: string | null
+          provider?: string
           qr_code_base64?: string | null
           status?: string | null
           updated_at?: string | null
+          waha_session_name?: string | null
         }
         Update: {
           created_at?: string | null
@@ -4937,9 +4965,11 @@ export type Database = {
           last_sync_at?: string | null
           phone_number?: string | null
           profile_name?: string | null
+          provider?: string
           qr_code_base64?: string | null
           status?: string | null
           updated_at?: string | null
+          waha_session_name?: string | null
         }
         Relationships: []
       }
@@ -5468,11 +5498,13 @@ export type Database = {
           pairing_code: string | null
           phone_number: string | null
           profile_name: string | null
+          provider: string
           qr_code_base64: string | null
           status: string | null
           transfer_message: string | null
           updated_at: string | null
           user_id: string
+          waha_session_name: string | null
         }
         Insert: {
           account_id?: string | null
@@ -5489,11 +5521,13 @@ export type Database = {
           pairing_code?: string | null
           phone_number?: string | null
           profile_name?: string | null
+          provider?: string
           qr_code_base64?: string | null
           status?: string | null
           transfer_message?: string | null
           updated_at?: string | null
           user_id: string
+          waha_session_name?: string | null
         }
         Update: {
           account_id?: string | null
@@ -5510,11 +5544,13 @@ export type Database = {
           pairing_code?: string | null
           phone_number?: string | null
           profile_name?: string | null
+          provider?: string
           qr_code_base64?: string | null
           status?: string | null
           transfer_message?: string | null
           updated_at?: string | null
           user_id?: string
+          waha_session_name?: string | null
         }
         Relationships: []
       }
