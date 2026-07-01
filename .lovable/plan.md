@@ -1,51 +1,142 @@
-## Problema diagnosticado
+## Objetivo
 
-Conversa do lead `5519988331972` (usuário `marcioevandrocosta@hotmail.com`):
+Adicionar suporte à API **WAHA** como alternativa à **Evolution API**, com toggle por cliente (instância). Fase inicial: opt-in por instância. Fase futura: WAHA como padrão para novos usuários. Fase final: descontinuar Evolution.
 
-1. Cliente passou por toda qualificação (SP → Elektro → conta R$ 300).
-2. IA simulou desconto e perguntou: *"Quer que eu já comece seu cadastro agora?"*.
-3. Cliente respondeu: **"E o que eu tenho que pagar"** (objeção legítima de custo — quer entender o modelo).
-4. IA interpretou como recusa, caiu em `soft_close`, marcou `lead_frio` e respondeu *"Tranquilo! Fico à disposição..."* — efetivamente descartando o cliente.
-5. Cliente repetiu *"O que eu tenho que pagar"* — IA repetiu o mesmo descarte.
-6. Marcio (humano) precisou intervir manualmente para explicar que não há cobrança extra.
+---
 
-Causa raiz: o estágio `confirm_signup` em `run.ts` trata qualquer mensagem não-afirmativa após o pitch como declínio. Não existe nenhuma detecção de pergunta sobre custo/pagamento/mensalidade/taxa antes desse fallback.
+## Estratégia geral
 
-## Solução
+Criar uma **camada de abstração de provedor** (`_wa_provider.ts`) que unifica as operações usadas hoje pela Evolution. Todas as ~40 edge functions passam a chamar essa camada em vez de `evolutionRequest` direto. A camada decide, por instância, se roteia para Evolution ou WAHA.
 
-Adicionar **detecção determinística de objeção de custo** em `stages.ts` e um novo estágio `objection_cost` em `run.ts` que responde com a verdade sobre o modelo iGreen: zero adesão, zero mensalidade extra, sem instalação, sem fidelidade, sem multa — o cliente paga apenas a fatura iGreen (já com desconto) no lugar/complemento da fatura da distribuidora.
+```text
+Edge Functions (ai-agent, send-message, dispatchers, etc.)
+        │
+        ▼
+  _wa_provider.ts  ── resolve provider da instância
+     │        │
+     ▼        ▼
+_evolution.ts   _waha.ts   (adapters — mesma interface)
+     │            │
+     ▼            ▼
+Evolution API   WAHA API
+```
 
-### 1. `supabase/functions/_igreen_v2/agents/green/stages.ts`
+---
 
-- Adicionar `COST_QUESTION_RX` cobrindo variações:
-  - "o que (eu) tenho que pagar", "tem que pagar", "vou pagar", "preciso pagar"
-  - "tem taxa", "tem mensalidade", "tem custo", "tem cobrança", "tem adesão"
-  - "qual o valor", "qual o custo", "quanto custa", "quanto vou pagar"
-  - "tem fidelidade", "tem multa", "tem contrato", "preciso instalar"
-  - "é grátis?", "é gratuito?", "tem alguma cobrança"
-- Exportar `isCostQuestion(msg)`.
-- Adicionar `"objection_cost"` ao type `GreenStage`.
-- Em `decideGreenStage` (prioridade ~0.55, antes do `soft_close` e antes do `confirm_signup` else-branch): se `isCostQuestion(message)` e `!extras.cost_clarified`, retornar `"objection_cost"`.
+## Fase 1 — Infraestrutura (opt-in por instância)
 
-### 2. `supabase/functions/_igreen_v2/agents/green/run.ts`
+### 1.1 Banco de dados
 
-- Adicionar bloco de handler para `stage === "objection_cost"` com texto determinístico (2 chunks):
-  1. *"{nome}, ótima pergunta! Com a iGreen você **não paga nenhuma taxa extra, mensalidade ou adesão**. Não tem instalação, não tem obra, não tem fidelidade nem multa."*
-  2. *"O que muda é só isso: no lugar (ou junto) da sua fatura da distribuidora, você passa a receber a fatura da iGreen **já com o desconto aplicado**. Ou seja, você só paga sua energia — só que mais barato. 💡"*
-  3. Fecha com CTA suave: *"Posso seguir com seu cadastro agora?"*
-- Setar `extras.cost_clarified = true`, `cost_clarified_at`.
-- **Limpar** flags indevidas de declínio: `signup_declined_at: null`, `soft_closed: false`, `soft_closed_at: null`.
-- **Não** adicionar tag `lead_frio`.
-- Se houver tag `lead_frio` já aplicada (turno anterior), adicionar `remove_contact_tag` (se a tool existir) — senão, apenas registrar evento.
+Migration com:
 
-### 3. Reset do lead atual
+- `whatsapp_instances.provider text NOT NULL DEFAULT 'evolution'` (`'evolution' | 'waha'`)
+- `whatsapp_instances.waha_session_name text` (WAHA usa "session" no lugar de "instance")
+- `system_whatsapp_instance.provider text NOT NULL DEFAULT 'evolution'`
+- `accounts.default_wa_provider text` (para override por conta — nulo = usa global)
+- `system_ai_provider`-style: nova linha em `platform_settings` (ou tabela `system_wa_provider`) para o **provedor padrão de novos cadastros** (`evolution` por enquanto).
 
-SQL para destravar a conversa `a255ebbe-d51d-4b4e-8efd-5363f61f6dcc`:
-- `UPDATE igreen_conversation_state` zerando `soft_closed`, `signup_declined_at`, `handoff_ativo`, `etapa_funil` voltando para `confirm_signup`.
-- Cliente já está em atendimento humano (Marcio interveio), então **não** reativar IA automaticamente — apenas garantir que, se o humano devolver para IA, o estado esteja limpo.
+### 1.2 Secrets
 
-## Detalhes técnicos
+- `WAHA_API_URL` (base URL do servidor WAHA)
+- `WAHA_API_KEY` (X-Api-Key global)
+- Evolution atual permanece intacta.
 
-- A regex `COST_QUESTION_RX` deve ter prioridade **maior** que `isSoftDecline` (a frase "o que eu tenho que pagar" não bate em soft decline, mas garantia extra: testar `isCostQuestion` antes).
-- Manter consistência: o estágio `objection_cost` não deve disparar mais de uma vez por conversa (`cost_clarified` flag). Se cliente reperguntar, cair em fluxo normal com confiança de que já foi explicado.
-- Não mexer em prompt LLM — toda a resposta é determinística para evitar alucinação sobre preço.
+### 1.3 Nova abstração `supabase/functions/_wa_provider.ts`
+
+Interface única cobrindo todas as operações usadas hoje:
+
+```text
+createInstance / deleteInstance / getInstanceStatus
+getQrCode / getPairingCode / logout
+sendText / sendMedia / sendAudio / sendPresence (composing, recording)
+setWebhook / getProfilePicture / checkNumberExists (resolveJid)
+downloadMediaBase64  (usado por transcribe-audio, process-image-ocr)
+```
+
+Cada operação recebe `{ provider, instance, credentials, ... }` e delega para `_evolution.ts` ou o novo `_waha.ts`. Retorno normalizado (`{ ok, status, data, text }`) igual ao atual, para minimizar mudanças nos callers.
+
+### 1.4 Novo adapter `supabase/functions/_waha.ts`
+
+Implementa a mesma interface acima chamando os endpoints WAHA (`POST /api/sendText`, `/api/sendImage`, `/api/sessions/{name}/...`, `/api/{session}/chats/{chatId}/messages`, webhook config via `/api/sessions`). Inclui:
+
+- Header `X-Api-Key: WAHA_API_KEY`
+- Normalização de JID (WAHA usa `5547...@c.us`)
+- Fallback e tratamento de erros equivalente ao `evolutionRequest` (com `reportApiFailure` / `reportApiSuccess` já existentes)
+- Suporte a áudio base64 (WAHA aceita `file.url` ou `file.data`)
+- Presença "composing" e "recording" (WAHA: `POST /api/startTyping`, `POST /api/stopTyping`; áudio: `sendSeen`/presença "recording" via `/api/sendPresence`)
+
+### 1.5 Refactor incremental dos callers
+
+Substituir `evolutionRequest(...)` por `waProvider.sendText(...)` (etc.) em todas as edge functions listadas. Para minimizar risco, primeiro refatoramos as **críticas de envio** (ordem):
+
+1. `send-whatsapp-message`, `send-whatsapp-media`
+2. `whatsapp-ai-agent`, `whatsapp-igreen-agent-v2`, `process-pending-ai`
+3. `create-whatsapp-instance`, `disconnect-whatsapp-instance`, `refresh-whatsapp-qrcode`, `repair-whatsapp-webhook`
+4. Todos os dispatchers de follow-up, cenários iGreen, lembretes, etc.
+5. `whatsapp-webhook` — passa a aceitar payloads dos **dois formatos** (Evolution flat e WAHA event-based).
+
+### 1.6 Webhook unificado
+
+`whatsapp-webhook` detecta o formato:
+
+- Evolution: `{ event: 'messages.upsert', instance, data: { key, message, ... } }`
+- WAHA: `{ event: 'message', session, payload: { from, body, hasMedia, ... } }`
+
+Normaliza para o formato interno já usado antes de gravar em `whatsapp_conversations`.
+
+### 1.7 UI — toggle por instância
+
+- Em `src/pages/WhatsApp.tsx` (e admin equivalente), adicionar seletor **Provedor: Evolution | WAHA (beta)**. Só aparece se o secret WAHA estiver configurado.
+- Ao trocar o provider de uma instância existente: exigir reconexão (deleta a sessão antiga do provider anterior, cria nova no novo provider, mostra novo QR).
+- Painel Admin (`/admin`) — nova tela **Provedor WhatsApp** análoga a `AdminAIProvider.tsx`, para:
+  - Definir provedor padrão de **novos cadastros**
+  - Migrar clientes específicos em lote
+
+---
+
+## Fase 2 — WAHA padrão para novos usuários
+
+Depois de validação em produção (métricas de entrega, estabilidade, custo):
+
+- Mudar o default de `provider` em `whatsapp_instances` para `'waha'`.
+- Atualizar `create-whatsapp-instance` para respeitar `system_wa_provider.default_provider`.
+- Clientes antigos permanecem em Evolution até migração manual.
+
+## Fase 3 — Descontinuação da Evolution
+
+- Ferramenta admin de migração em lote (desconecta Evolution → cria sessão WAHA → notifica cliente para escanear QR).
+- Remover `_evolution.ts` e código morto após 100% migrado.
+
+---
+
+## Detalhes técnicos importantes
+
+- **Nenhuma mudança para o cliente final** enquanto estiver em Evolution — a abstração preserva assinaturas e payloads salvos.
+- **JID / normalização de telefone**: já centralizada em `_phone.ts` — WAHA usa `@c.us`, Evolution usa `@s.whatsapp.net`. A conversão fica no adapter, o resto do sistema continua usando o telefone puro.
+- **Base64 de mídia**: WAHA aceita URL pública OU base64 sem prefixo `data:` — igual à regra já documentada da Evolution.
+- **Health monitoring**: reaproveitar `_health.ts` (`reportApiFailure`/`Success`) marcando o `provider` no log para separar métricas.
+- **Rollback**: como o campo `provider` é por instância, basta alterar de volta para `'evolution'` em qualquer cliente com problema.
+
+---
+
+## Riscos & mitigação
+
+| Risco | Mitigação |
+|---|---|
+| Diferença de payload no webhook quebrar histórico | Testar com instância de laboratório antes de expor UI |
+| WAHA sem paridade em algum recurso (ex.: pairing code, presence "recording") | Mapear gaps no adapter; retornar `notSupported` e degradar suavemente |
+| Custo de refatorar ~40 functions | Fazer em PRs pequenos por grupo (envio → agente → dispatchers → sync) |
+| Instâncias legadas ficarem órfãs na Evolution | Botão admin "desconectar do provedor antigo" ao trocar |
+
+---
+
+## Entregáveis da Fase 1 (o que vou implementar quando aprovar)
+
+1. Migration com novas colunas + secrets `WAHA_API_URL` / `WAHA_API_KEY`.
+2. `_wa_provider.ts` + `_waha.ts` (adapters completos).
+3. Refactor dos 4 grupos de edge functions acima.
+4. `whatsapp-webhook` dual-format.
+5. Toggle na UI da página WhatsApp + tela admin **Provedor WhatsApp**.
+6. Documentação curta no README interno de como trocar um cliente.
+
+Confirma que posso seguir com **apenas a Fase 1** (opt-in por cliente, Evolution segue padrão)?
