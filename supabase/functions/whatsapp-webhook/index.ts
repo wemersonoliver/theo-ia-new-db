@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { persistEvolutionMedia } from "../_media.ts";
 import { resolveAccountId } from "../_account.ts";
 import { normalizeBrazilianPhone } from "../_phone.ts";
+import { isWahaWebhookPayload, wahaToInternalEvent } from "../_wa_provider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -118,8 +119,23 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const body = await req.json();
-    console.log("Webhook received:", JSON.stringify(body).slice(0, 500));
+    const rawBody = await req.json();
+    console.log("Webhook received:", JSON.stringify(rawBody).slice(0, 500));
+
+    // Se o payload for do formato WAHA, convertemos para o formato interno
+    // (mesmo shape dos eventos Evolution: {event, instance, data}) antes de processar.
+    let body: any = rawBody;
+    if (isWahaWebhookPayload(rawBody)) {
+      const converted = wahaToInternalEvent(rawBody);
+      if (!converted) {
+        console.log("WAHA event ignored:", rawBody?.event);
+        return new Response(JSON.stringify({ ok: true, ignored: "waha_event_unsupported" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      body = converted;
+      console.log("WAHA event converted →", body.event, body.instance);
+    }
 
     const { event, instance, data } = body;
     const instanceName = instance || body.instanceName;
