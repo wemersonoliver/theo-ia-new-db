@@ -159,6 +159,7 @@ serve(async (req) => {
             total_messages: updatedMessages.length,
             ai_active: false,
             updated_at: new Date().toISOString(),
+            ...(resolvedWaChatId ? { wa_chat_id: resolvedWaChatId } : {}),
           })
           .eq("id", conversation.id);
       } else {
@@ -170,6 +171,7 @@ serve(async (req) => {
             last_message_at: new Date().toISOString(),
             total_messages: 1,
             ai_active: false,
+            wa_chat_id: resolvedWaChatId,
           });
       }
     } else {
@@ -196,6 +198,7 @@ serve(async (req) => {
             total_messages: updatedMessages.length,
             ai_active: false,
             updated_at: new Date().toISOString(),
+            ...(resolvedWaChatId ? { wa_chat_id: resolvedWaChatId } : {}),
           })
           .eq("id", conversation.id);
       } else {
@@ -209,6 +212,7 @@ serve(async (req) => {
             last_message_at: new Date().toISOString(),
             total_messages: 1,
             ai_active: false,
+            wa_chat_id: resolvedWaChatId,
           });
       }
 
