@@ -1,10 +1,49 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { persistEvolutionMedia } from "../_media.ts";
+import { persistEvolutionMedia, persistWahaMedia } from "../_media.ts";
 import { resolveAccountId } from "../_account.ts";
 import { normalizeBrazilianPhone } from "../_phone.ts";
 import { isWahaWebhookPayload, wahaToInternalEvent } from "../_wa_provider.ts";
 import { wahaDownloadMediaBase64 } from "../_waha.ts";
+
+/**
+ * Helper unificado: baixa base64 da mídia (WAHA via URL, Evolution via getBase64FromMediaMessage).
+ * Retorna null se não conseguiu baixar. Usado apenas para OCR/transcrição — a persistência em Storage
+ * é feita separadamente por persistWahaMedia/persistEvolutionMedia.
+ */
+async function fetchMediaBase64Unified(args: {
+  isWaha: boolean;
+  data: any;
+  msg: any;
+  evolutionUrl: string;
+  evolutionKey: string;
+  instanceName: string;
+}): Promise<{ base64: string; mime: string } | null> {
+  if (args.isWaha) {
+    const wahaUrl = Deno.env.get("WAHA_API_URL") || "";
+    const wahaKey = Deno.env.get("WAHA_API_KEY") || "";
+    const mediaUrl = args.msg?._waha?.mediaUrl || args.data?._waha?.mediaUrl || null;
+    if (!mediaUrl || !wahaUrl || !wahaKey) return null;
+    const dl = await wahaDownloadMediaBase64({ wahaUrl, wahaKey, mediaUrl });
+    if (!dl) return null;
+    return { base64: dl.base64, mime: dl.mime };
+  }
+  try {
+    const resp = await fetch(
+      `${args.evolutionUrl.replace(/\/$/, "")}/chat/getBase64FromMediaMessage/${args.instanceName}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: args.evolutionKey },
+        body: JSON.stringify({ message: { key: args.msg?.key }, convertToMp4: false }),
+      },
+    );
+    if (!resp.ok) return null;
+    const j = await resp.json();
+    return j?.base64 ? { base64: j.base64, mime: j.mimetype || "application/octet-stream" } : null;
+  } catch (_) {
+    return null;
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
