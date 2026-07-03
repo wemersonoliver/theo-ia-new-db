@@ -402,6 +402,38 @@ export async function wahaGetQrCode(opts: {
   return { base64: typeof b64 === "string" ? b64 : null, raw };
 }
 
+/**
+ * Solicita pairing code (login por número) ao WAHA.
+ * Endpoint: POST /api/{session}/auth/request-code
+ * Body: { phoneNumber: "5511999999999" }
+ * Resposta típica: { code: "ABCD-1234" } (NOWEB) — apenas com sessão STARTED e não autenticada.
+ */
+export async function wahaRequestCode(opts: {
+  wahaUrl: string;
+  wahaKey: string;
+  session: string;
+  phoneNumber: string;
+  method?: "sms" | "voice";
+}): Promise<{ code: string | null; raw: WahaRequestResult }> {
+  const digits = String(opts.phoneNumber || "").replace(/\D/g, "");
+  const raw = await wahaRequest({
+    wahaUrl: opts.wahaUrl,
+    wahaKey: opts.wahaKey,
+    path: `/api/${encodeURIComponent(opts.session)}/auth/request-code`,
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phoneNumber: digits, ...(opts.method ? { method: opts.method } : {}) }),
+  });
+  if (!raw.ok) return { code: null, raw };
+  const data: any = raw.data || {};
+  const c = data?.code || data?.pairingCode || data?.value || null;
+  const normalized =
+    typeof c === "string" ? c.replace(/[^A-Za-z0-9]/g, "").toUpperCase() : null;
+  const finalCode =
+    normalized && normalized.length >= 4 && normalized.length <= 16 ? normalized : null;
+  return { code: finalCode, raw };
+}
+
 export async function wahaCheckNumberExists(opts: {
   wahaUrl: string;
   wahaKey: string;
