@@ -61,6 +61,13 @@ export default function AdminWhatsAppProvider() {
       toast.error("Nada foi alterado. Sua conta não tem permissão para trocar esta instância (RLS bloqueou).");
       return;
     }
+    // Persiste a escolha por conta — sobrevive a desconexões/recriações da instância
+    if (row.account_id) {
+      const { error: ovErr } = await (supabase as any)
+        .from("account_wa_provider")
+        .upsert({ account_id: row.account_id, provider: target, updated_at: new Date().toISOString() });
+      if (ovErr) toast.error(`Aviso: não foi possível fixar o provedor da conta: ${ovErr.message}`);
+    }
     toast.success(`Provedor alterado para ${updated[0].provider.toUpperCase()}. Peça ao cliente para reconectar.`);
     reload();
   }
