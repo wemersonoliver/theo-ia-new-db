@@ -600,6 +600,16 @@ export async function wahaToInternalEvent(body: any): Promise<{ event: string; i
         p.participantAlt || p.senderAlt || p._data?.senderAlt ||
         (typeof p.author === "string" && p.author.includes("@c.us") ? p.author : null) ||
         (typeof p.pn === "string" ? p.pn : null);
+      // Log de diagnóstico: quais chaves o payload tem quando chega um LID
+      console.log(
+        `[waha] LID recebido ${rawChatId}. payload keys=`,
+        Object.keys(p).join(","),
+        "| _data keys=",
+        p._data ? Object.keys(p._data).join(",") : "(sem _data)",
+        "| from=", p.from, "to=", p.to, "author=", p.author,
+        "participant=", p.participant, "participantAlt=", p.participantAlt,
+        "senderAlt=", p.senderAlt, "pn=", p.pn,
+      );
       if (alt && String(alt).includes("@")) {
         resolvedChatId = String(alt);
       } else {
@@ -613,7 +623,7 @@ export async function wahaToInternalEvent(body: any): Promise<{ event: string; i
           }
         }
         if (resolvedChatId === rawChatId) {
-          console.log("[waha] LID recebido, não foi possível resolver, ignorando:", rawChatId);
+          console.log("[waha] LID sem resolução — ignorando mensagem:", rawChatId);
           return null;
         }
       }
