@@ -72,14 +72,23 @@ serve(async (req) => {
     // Resolve o contexto (provider + credenciais) da instância que deve enviar
     const normalizedPhoneEarly = normalizeBrazilianPhone(phone);
     let convInstanceId: string | null = null;
+    let convWaChatId: string | null = null;
     if (!system) {
       let q = supabaseAdmin
         .from("whatsapp_conversations")
-        .select("instance_id")
+        .select("instance_id, wa_chat_id")
         .eq("phone", normalizedPhoneEarly);
       q = accountId ? q.eq("account_id", accountId) : q.eq("user_id", userId);
       const { data: conv } = await q.maybeSingle();
       convInstanceId = (conv as any)?.instance_id || null;
+      convWaChatId = (conv as any)?.wa_chat_id || null;
+    } else {
+      const { data: conv } = await supabaseAdmin
+        .from("system_whatsapp_conversations")
+        .select("wa_chat_id")
+        .eq("phone", normalizedPhoneEarly)
+        .maybeSingle();
+      convWaChatId = (conv as any)?.wa_chat_id || null;
     }
 
     const ctx = await resolveInstanceContext(supabaseAdmin, {
@@ -96,14 +105,29 @@ serve(async (req) => {
     }
     const normalizedPhone = normalizeBrazilianPhone(phone);
 
-    const sendResult = await sendWhatsAppText(ctx, normalizedPhone, outgoingText);
+    const sendResult = await sendWhatsAppText(ctx, normalizedPhone, outgoingText, { waChatId: convWaChatId });
     if (!sendResult.ok) {
       console.error("send failed:", ctx.provider, sendResult);
       return jsonResponse(sendResult.errorPayload || { ok: false, error: "Erro ao enviar mensagem" }, 502);
     }
 
+    // Registra id da mensagem enviada por nós para o webhook não pausar a IA
+    // ao receber o eco fromMe=true.
+    const providerMsgId = sendResult.messageId || null;
+    if (providerMsgId) {
+      await supabaseAdmin.from("wa_outgoing_messages").insert({
+        message_id: providerMsgId,
+        instance_id: convInstanceId,
+        account_id: accountId,
+        user_id: userId,
+        phone: normalizedPhone,
+        origin: "panel",
+        sender_user_id: userId,
+      }).then(() => {}, (e) => console.error("wa_outgoing_messages insert:", e?.message || e));
+    }
+
     const newMessage = {
-      id: crypto.randomUUID(),
+      id: providerMsgId || crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       from_me: true,
       content: outgoingText,
@@ -112,6 +136,9 @@ serve(async (req) => {
       attendant_name: attendantName || null,
       attendant_user_id: userId,
     };
+
+    // Se conseguimos resolver o wa_chat_id na hora do envio, cacheia na conversa para próximas mensagens.
+    const resolvedWaChatId = sendResult.waChatId || null;
 
     if (system) {
       // Save to system conversations
