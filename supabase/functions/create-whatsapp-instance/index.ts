@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
-import { normalizeWahaUrl, wahaGetQrCode, wahaSessionCreate, wahaSessionStatus } from "../_waha.ts";
+import { normalizeWahaUrl, wahaGetQrCode, wahaRequestCode, wahaSessionCreate, wahaSessionStatus } from "../_waha.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -289,21 +289,34 @@ serve(async (req) => {
       // Busca QR
       const qr = await wahaGetQrCode({ wahaUrl: wahaUrl!, wahaKey: wahaKey!, session: sessionName });
       const qrCodeBase64 = qr.base64;
+
+      // Se o usuário forneceu número, tenta obter pairing code WAHA
+      let pairingCode: string | null = null;
+      if (phoneNumber) {
+        const rc = await wahaRequestCode({
+          wahaUrl: wahaUrl!, wahaKey: wahaKey!, session: sessionName, phoneNumber,
+        });
+        if (rc.code) pairingCode = rc.code;
+        else console.log("WAHA request-code falhou:", rc.raw.status, (rc.raw.text || "").slice(0, 200));
+      }
+
       const persisted = await persistInstance(supabase, row, {
         user_id: userId, account_id: accountId, instance_name: instanceName,
         display_name: displayName, department_slug: departmentSlug,
         provider: "waha", waha_session_name: sessionName,
-        status: qrCodeBase64 ? "qr_ready" : "pending",
-        qr_code_base64: qrCodeBase64, pairing_code: null,
+        status: qrCodeBase64 || pairingCode ? "qr_ready" : "pending",
+        qr_code_base64: qrCodeBase64, pairing_code: pairingCode,
       });
       return jsonResponse({
-        success: !!qrCodeBase64,
+        success: phoneNumber ? !!pairingCode : !!qrCodeBase64,
         qrCode: qrCodeBase64,
-        pairingCode: null,
+        pairingCode,
         instanceId: persisted?.id,
-        status: qrCodeBase64 ? "qr_ready" : "pending",
+        status: qrCodeBase64 || pairingCode ? "qr_ready" : "pending",
         provider: "waha",
-        message: !qrCodeBase64 ? "Aguardando QR do WAHA. Chame novamente em alguns segundos." : undefined,
+        message: phoneNumber && !pairingCode
+          ? "WAHA não retornou pairing code para este número. Use o QR Code."
+          : (!qrCodeBase64 && !pairingCode ? "Aguardando QR do WAHA. Chame novamente em alguns segundos." : undefined),
       });
     }
 
