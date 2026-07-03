@@ -128,7 +128,7 @@ serve(async (req) => {
     let body: any = rawBody;
     let isWaha = false;
     if (isWahaWebhookPayload(rawBody)) {
-      const converted = wahaToInternalEvent(rawBody);
+      const converted = await wahaToInternalEvent(rawBody);
       if (!converted) {
         console.log("WAHA event ignored:", rawBody?.event);
         return new Response(JSON.stringify({ ok: true, ignored: "waha_event_unsupported" }), {
