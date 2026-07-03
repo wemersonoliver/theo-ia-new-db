@@ -4,6 +4,7 @@ import { persistEvolutionMedia } from "../_media.ts";
 import { resolveAccountId } from "../_account.ts";
 import { normalizeBrazilianPhone } from "../_phone.ts";
 import { isWahaWebhookPayload, wahaToInternalEvent } from "../_wa_provider.ts";
+import { wahaDownloadMediaBase64 } from "../_waha.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -125,6 +126,7 @@ serve(async (req) => {
     // Se o payload for do formato WAHA, convertemos para o formato interno
     // (mesmo shape dos eventos Evolution: {event, instance, data}) antes de processar.
     let body: any = rawBody;
+    let isWaha = false;
     if (isWahaWebhookPayload(rawBody)) {
       const converted = wahaToInternalEvent(rawBody);
       if (!converted) {
@@ -134,6 +136,7 @@ serve(async (req) => {
         });
       }
       body = converted;
+      isWaha = true;
       console.log("WAHA event converted →", body.event, body.instance);
     }
 
