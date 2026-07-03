@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 import { resolveInstanceContext, waConnect, waConnectionState } from "../_wa_provider.ts";
+import { wahaRequestCode } from "../_waha.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -116,7 +117,20 @@ serve(async (req) => {
         return jsonResponse({ error: conn.error || "Falha ao obter QR (WAHA)" }, 502);
       }
       const qrCodeBase64 = conn.qrCodeBase64 || null;
-      const pairingCode = conn.pairingCode || null;
+      let pairingCode = conn.pairingCode || null;
+
+      // Se o usuário pediu conexão por número, tenta obter pairing code WAHA
+      if (phoneNumber) {
+        const rc = await wahaRequestCode({
+          wahaUrl: ctx.wahaUrl!,
+          wahaKey: ctx.wahaKey!,
+          session: ctx.wahaSession,
+          phoneNumber,
+        });
+        if (rc.code) pairingCode = rc.code;
+        else console.log("WAHA request-code falhou:", rc.raw.status, (rc.raw.text || "").slice(0, 200));
+      }
+
       await supabase.from("whatsapp_instances").update({
         status: qrCodeBase64 || pairingCode ? "qr_ready" : "pending",
         qr_code_base64: qrCodeBase64,
@@ -124,11 +138,11 @@ serve(async (req) => {
         updated_at: new Date().toISOString(),
       }).eq("id", instance.id);
       return jsonResponse({
-        success: !!qrCodeBase64,
+        success: phoneNumber ? !!pairingCode : !!qrCodeBase64,
         qrCode: qrCodeBase64,
         pairingCode,
-        message: phoneNumber
-          ? "WAHA: pairing code por número ainda em beta — use o QR Code."
+        message: phoneNumber && !pairingCode
+          ? "WAHA não retornou pairing code (verifique se o número é válido no WhatsApp). Use o QR Code."
           : undefined,
       });
     }
