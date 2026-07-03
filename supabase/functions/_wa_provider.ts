@@ -30,6 +30,7 @@ import {
   wahaCheckNumberExists,
   extractWahaMessageId,
   stripWahaSuffix,
+  wahaResolveLid,
   type WahaRequestResult,
 } from "./_waha.ts";
 import {
