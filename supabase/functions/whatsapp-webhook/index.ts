@@ -1,10 +1,49 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { persistEvolutionMedia } from "../_media.ts";
+import { persistEvolutionMedia, persistWahaMedia } from "../_media.ts";
 import { resolveAccountId } from "../_account.ts";
 import { normalizeBrazilianPhone } from "../_phone.ts";
 import { isWahaWebhookPayload, wahaToInternalEvent } from "../_wa_provider.ts";
 import { wahaDownloadMediaBase64 } from "../_waha.ts";
+
+/**
+ * Helper unificado: baixa base64 da mídia (WAHA via URL, Evolution via getBase64FromMediaMessage).
+ * Retorna null se não conseguiu baixar. Usado apenas para OCR/transcrição — a persistência em Storage
+ * é feita separadamente por persistWahaMedia/persistEvolutionMedia.
+ */
+async function fetchMediaBase64Unified(args: {
+  isWaha: boolean;
+  data: any;
+  msg: any;
+  evolutionUrl: string;
+  evolutionKey: string;
+  instanceName: string;
+}): Promise<{ base64: string; mime: string } | null> {
+  if (args.isWaha) {
+    const wahaUrl = Deno.env.get("WAHA_API_URL") || "";
+    const wahaKey = Deno.env.get("WAHA_API_KEY") || "";
+    const mediaUrl = args.msg?._waha?.mediaUrl || args.data?._waha?.mediaUrl || null;
+    if (!mediaUrl || !wahaUrl || !wahaKey) return null;
+    const dl = await wahaDownloadMediaBase64({ wahaUrl, wahaKey, mediaUrl });
+    if (!dl) return null;
+    return { base64: dl.base64, mime: dl.mime };
+  }
+  try {
+    const resp = await fetch(
+      `${args.evolutionUrl.replace(/\/$/, "")}/chat/getBase64FromMediaMessage/${args.instanceName}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: args.evolutionKey },
+        body: JSON.stringify({ message: { key: args.msg?.key }, convertToMp4: false }),
+      },
+    );
+    if (!resp.ok) return null;
+    const j = await resp.json();
+    return j?.base64 ? { base64: j.base64, mime: j.mimetype || "application/octet-stream" } : null;
+  } catch (_) {
+    return null;
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -307,19 +346,42 @@ serve(async (req) => {
             const caption = msg.message?.imageMessage?.caption || msg.message?.documentMessage?.caption || "";
             const docFilename = msg.message?.documentMessage?.fileName || null;
             try {
-              persistedMedia = await persistEvolutionMedia({
-                supabase, evolutionUrl, evolutionKey, instanceName,
-                messageKey, scope: "system", phone,
-                messageId: msg.key?.id || crypto.randomUUID(),
-                fallbackExt: isDocumentMessage ? "bin" : (isStickerMessage ? "webp" : "jpg"),
-                filename: docFilename,
-                knownMime: msg.message?.imageMessage?.mimetype || msg.message?.documentMessage?.mimetype || msg.message?.stickerMessage?.mimetype || null,
-              });
+              if (isWaha) {
+                const mediaUrl = data?._waha?.mediaUrl;
+                const wahaUrl = Deno.env.get("WAHA_API_URL") || "";
+                const wahaKey = Deno.env.get("WAHA_API_KEY") || "";
+                if (mediaUrl && wahaUrl && wahaKey) {
+                  persistedMedia = await persistWahaMedia({
+                    supabase, wahaUrl, wahaKey, mediaUrl,
+                    scope: "system", phone,
+                    messageId: msg.key?.id || crypto.randomUUID(),
+                    fallbackExt: isDocumentMessage ? "bin" : (isStickerMessage ? "webp" : "jpg"),
+                    filename: docFilename,
+                    knownMime: data?._waha?.mediaMimetype || null,
+                  });
+                }
+              } else {
+                persistedMedia = await persistEvolutionMedia({
+                  supabase, evolutionUrl, evolutionKey, instanceName,
+                  messageKey, scope: "system", phone,
+                  messageId: msg.key?.id || crypto.randomUUID(),
+                  fallbackExt: isDocumentMessage ? "bin" : (isStickerMessage ? "webp" : "jpg"),
+                  filename: docFilename,
+                  knownMime: msg.message?.imageMessage?.mimetype || msg.message?.documentMessage?.mimetype || msg.message?.stickerMessage?.mimetype || null,
+                });
+              }
             } catch (e) { console.error("System persist media error:", e); }
             const labelUI = mediaType === "document" ? "Documento" : (mediaType === "sticker" ? "Figurinha" : "Imagem");
             content = `[${labelUI}]`;
             try {
               console.log("Processing system OCR for:", phone, mediaType);
+              const ocrBody: any = { messageKey, instanceName, mediaType };
+              if (isWaha) {
+                const dl = await fetchMediaBase64Unified({
+                  isWaha: true, data, msg, evolutionUrl, evolutionKey, instanceName,
+                });
+                if (dl) { ocrBody.mediaBase64 = dl.base64; ocrBody.mimeType = dl.mime; }
+              }
               const ocrResponse = await fetch(
                 `${supabaseUrl}/functions/v1/process-image-ocr`,
                 {
@@ -328,7 +390,7 @@ serve(async (req) => {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${supabaseServiceKey}`,
                   },
-                  body: JSON.stringify({ messageKey, instanceName, mediaType }),
+                  body: JSON.stringify(ocrBody),
                 }
               );
               if (ocrResponse.ok) {
@@ -706,20 +768,43 @@ serve(async (req) => {
           const caption = msg.message?.imageMessage?.caption || msg.message?.documentMessage?.caption || "";
           const docFilename = msg.message?.documentMessage?.fileName || null;
           try {
-            persistedMedia = await persistEvolutionMedia({
-              supabase, evolutionUrl, evolutionKey, instanceName,
-              messageKey, scope: userId, phone,
-              messageId: msg.key?.id || crypto.randomUUID(),
-              fallbackExt: isDocumentMessage ? "bin" : (isStickerMessage ? "webp" : "jpg"),
-              filename: docFilename,
-              knownMime: msg.message?.imageMessage?.mimetype || msg.message?.documentMessage?.mimetype || msg.message?.stickerMessage?.mimetype || null,
-            });
+            if (isWaha) {
+              const mediaUrl = data?._waha?.mediaUrl;
+              const wahaUrl = Deno.env.get("WAHA_API_URL") || "";
+              const wahaKey = Deno.env.get("WAHA_API_KEY") || "";
+              if (mediaUrl && wahaUrl && wahaKey) {
+                persistedMedia = await persistWahaMedia({
+                  supabase, wahaUrl, wahaKey, mediaUrl,
+                  scope: userId, phone,
+                  messageId: msg.key?.id || crypto.randomUUID(),
+                  fallbackExt: isDocumentMessage ? "bin" : (isStickerMessage ? "webp" : "jpg"),
+                  filename: docFilename,
+                  knownMime: data?._waha?.mediaMimetype || null,
+                });
+              }
+            } else {
+              persistedMedia = await persistEvolutionMedia({
+                supabase, evolutionUrl, evolutionKey, instanceName,
+                messageKey, scope: userId, phone,
+                messageId: msg.key?.id || crypto.randomUUID(),
+                fallbackExt: isDocumentMessage ? "bin" : (isStickerMessage ? "webp" : "jpg"),
+                filename: docFilename,
+                knownMime: msg.message?.imageMessage?.mimetype || msg.message?.documentMessage?.mimetype || msg.message?.stickerMessage?.mimetype || null,
+              });
+            }
           } catch (e) { console.error("Persist media error:", e); }
 
           const labelUI = mediaType === "document" ? "Documento" : (mediaType === "sticker" ? "Figurinha" : "Imagem");
           content = `[${labelUI}]`;
           try {
             console.log("Processing OCR for:", phone, mediaType);
+            const ocrBody: any = { messageKey, instanceName, mediaType, userId, phone };
+            if (isWaha) {
+              const dl = await fetchMediaBase64Unified({
+                isWaha: true, data, msg, evolutionUrl, evolutionKey, instanceName,
+              });
+              if (dl) { ocrBody.mediaBase64 = dl.base64; ocrBody.mimeType = dl.mime; }
+            }
             const ocrResponse = await fetch(
               `${supabaseUrl}/functions/v1/process-image-ocr`,
               {
@@ -728,13 +813,7 @@ serve(async (req) => {
                   "Content-Type": "application/json",
                   "Authorization": `Bearer ${supabaseServiceKey}`,
                 },
-                body: JSON.stringify({ 
-                  messageKey, 
-                  instanceName,
-                  mediaType,
-                  userId,
-                  phone,
-                }),
+                body: JSON.stringify(ocrBody),
               }
             );
 

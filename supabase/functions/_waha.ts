@@ -462,12 +462,29 @@ export async function wahaDownloadMediaBase64(opts: {
   mediaUrl: string;
 }): Promise<{ base64: string; mime: string; size: number } | null> {
   try {
-    // Se a URL for do próprio WAHA, autentica; se for pública (S3, etc.), tenta sem header
-    const isWahaHosted = opts.mediaUrl.startsWith(opts.wahaUrl);
+    // WAHA frequentemente retorna URLs com host interno (ex: http://localhost:3000/api/files/...)
+    // que não são alcançáveis a partir do edge. Reescrevemos o host para o WAHA_API_URL público.
+    let finalUrl = opts.mediaUrl;
+    try {
+      const u = new URL(opts.mediaUrl);
+      const looksInternal =
+        u.hostname === "localhost" ||
+        u.hostname === "127.0.0.1" ||
+        u.hostname === "0.0.0.0" ||
+        u.hostname.endsWith(".local") ||
+        u.pathname.startsWith("/api/files/");
+      if (looksInternal && opts.wahaUrl) {
+        const base = new URL(opts.wahaUrl.replace(/\/+$/, ""));
+        finalUrl = `${base.origin}${u.pathname}${u.search}`;
+      }
+    } catch (_) { /* mantém original */ }
+
+    // Se a URL final for do próprio WAHA, autentica; se for pública (S3, etc.), tenta sem header
+    const isWahaHosted = finalUrl.startsWith(opts.wahaUrl) || finalUrl.includes("/api/files/");
     const headers: HeadersInit = isWahaHosted ? { "X-Api-Key": opts.wahaKey } : {};
-    const resp = await fetch(opts.mediaUrl, { headers });
+    const resp = await fetch(finalUrl, { headers });
     if (!resp.ok) {
-      console.error("wahaDownloadMediaBase64: HTTP", resp.status, opts.mediaUrl.slice(0, 120));
+      console.error("wahaDownloadMediaBase64: HTTP", resp.status, finalUrl.slice(0, 160));
       return null;
     }
     const buf = new Uint8Array(await resp.arrayBuffer());

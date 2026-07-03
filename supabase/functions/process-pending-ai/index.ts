@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 import { normalizeBrazilianPhone } from "../_phone.ts";
+import { resolveInstanceContext, setWhatsAppPresence, type WaInstanceContext } from "../_wa_provider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,20 +41,35 @@ async function resolveInstanceName(supabase: any, userId: string, phone: string)
   return null;
 }
 
-async function sendTypingPresence(instanceName: string, phone: string) {
+async function resolveWaCtx(supabase: any, userId: string, phone: string): Promise<WaInstanceContext | null> {
   try {
-    const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) return;
     const normalizedPhone = normalizeBrazilianPhone(phone);
-    await evolutionRequest({
-      evolutionUrl,
-      evolutionKey,
-      path: `/chat/sendPresence/${instanceName}`,
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ number: normalizedPhone, presence: "composing", delay: 25000 }),
-    });
+    const { data: conv } = await supabase
+      .from("whatsapp_conversations")
+      .select("instance_id, account_id")
+      .eq("user_id", userId)
+      .eq("phone", normalizedPhone)
+      .maybeSingle();
+    if (conv?.instance_id) {
+      const ctx = await resolveInstanceContext(supabase, { instanceId: conv.instance_id });
+      if (ctx) return ctx;
+    }
+    if (conv?.account_id) {
+      const ctx = await resolveInstanceContext(supabase, { accountId: conv.account_id });
+      if (ctx) return ctx;
+    }
+    return await resolveInstanceContext(supabase, { userId });
+  } catch (e) {
+    console.error("resolveWaCtx error:", e);
+    return null;
+  }
+}
+
+async function sendTypingPresence(ctx: WaInstanceContext | null, phone: string) {
+  if (!ctx) return;
+  try {
+    const normalizedPhone = normalizeBrazilianPhone(phone);
+    await setWhatsAppPresence(ctx, { phone: normalizedPhone, presence: "composing", delayMs: 25000 });
   } catch (e) {
     console.error("sendTypingPresence error:", e);
   }
@@ -89,12 +105,13 @@ serve(async (req) => {
     // Send "typing..." presence to WhatsApp during the wait so the customer
     // sees that someone is composing a reply. Evolution presence expires
     // after ~25s, so we re-emit it every 20s while we wait.
-    const instanceName = await resolveInstanceName(supabase, userId, phone);
-    if (instanceName) {
+    const waCtx = await resolveWaCtx(supabase, userId, phone);
+    const instanceName = waCtx?.instanceName || null;
+    if (waCtx) {
       // Fire first presence immediately (don't await long)
-      sendTypingPresence(instanceName, phone);
+      sendTypingPresence(waCtx, phone);
       const interval = setInterval(() => {
-        sendTypingPresence(instanceName, phone);
+        sendTypingPresence(waCtx, phone);
       }, 20000);
       try {
         await new Promise(resolve => setTimeout(resolve, sleepTime));
@@ -175,7 +192,7 @@ serve(async (req) => {
         .sort((a, b) => b - a)[0] ?? 0;
       if (lastInboundTs && Date.now() - lastInboundTs < 8000) {
         console.log(`[debounce-extra] last inbound ${Date.now() - lastInboundTs}ms ago, sleeping +8s for: ${phone}`);
-        if (instanceName) sendTypingPresence(instanceName, phone);
+        if (waCtx) sendTypingPresence(waCtx, phone);
         await new Promise((r) => setTimeout(r, 8000));
         extraWaits++;
         continue;
