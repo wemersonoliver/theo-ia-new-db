@@ -313,6 +313,38 @@ export async function wahaSessionStart(opts: {
   });
 }
 
+/**
+ * Atualiza a config da sessão (webhooks, eventos). WAHA aceita PUT em /api/sessions/{session}.
+ */
+export async function wahaSessionUpdate(opts: {
+  wahaUrl: string;
+  wahaKey: string;
+  session: string;
+  webhookUrl: string;
+  events?: string[];
+}): Promise<WahaRequestResult> {
+  const events = opts.events && opts.events.length ? opts.events : ["message.any", "session.status"];
+  const body = {
+    config: {
+      webhooks: [
+        {
+          url: opts.webhookUrl,
+          events,
+          retries: { policy: "linear", delaySeconds: 2, attempts: 5 },
+        },
+      ],
+    },
+  };
+  return wahaRequest({
+    wahaUrl: opts.wahaUrl,
+    wahaKey: opts.wahaKey,
+    path: `/api/sessions/${encodeURIComponent(opts.session)}`,
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export async function wahaSessionStop(opts: {
   wahaUrl: string;
   wahaKey: string;
