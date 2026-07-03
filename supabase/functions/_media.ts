@@ -2,6 +2,7 @@
 // Used by whatsapp-webhook to persist incoming media so the frontend can render images, audio, video, documents.
 
 import { evolutionRequest, normalizeEvolutionUrl } from "./_evolution.ts";
+import { wahaDownloadMediaBase64 } from "./_waha.ts";
 
 interface DownloadResult {
   base64: string | null;
@@ -192,6 +193,41 @@ export async function persistEvolutionMedia(opts: {
     phone: opts.phone,
     base64,
     mimetype: opts.knownMime || mimetype,
+    messageId: opts.messageId,
+    fallbackExt: opts.fallbackExt,
+    filename: opts.filename ?? null,
+  });
+}
+
+/**
+ * Baixa a mídia diretamente da URL retornada pelo WAHA (payload.media.url) e sobe no storage.
+ * A URL do WAHA precisa do header X-Api-Key para autenticar.
+ */
+export async function persistWahaMedia(opts: {
+  supabase: any;
+  wahaUrl: string;
+  wahaKey: string;
+  mediaUrl: string;
+  scope: string;
+  phone: string;
+  messageId: string;
+  fallbackExt: string;
+  filename?: string | null;
+  knownMime?: string | null;
+}): Promise<UploadedMedia | null> {
+  const downloaded = await wahaDownloadMediaBase64({
+    wahaUrl: opts.wahaUrl,
+    wahaKey: opts.wahaKey,
+    mediaUrl: opts.mediaUrl,
+  });
+  if (!downloaded) return null;
+
+  return uploadMediaToStorage({
+    supabase: opts.supabase,
+    scope: opts.scope,
+    phone: opts.phone,
+    base64: downloaded.base64,
+    mimetype: opts.knownMime || downloaded.mime,
     messageId: opts.messageId,
     fallbackExt: opts.fallbackExt,
     filename: opts.filename ?? null,
