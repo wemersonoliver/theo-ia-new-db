@@ -403,17 +403,53 @@ export async function wahaResolveLid(opts: {
 }): Promise<string | null> {
   const lidValue = String(opts.lid || "").split("@")[0].replace(/\D/g, "");
   if (!lidValue) return null;
-  const res = await wahaRequest({
-    wahaUrl: opts.wahaUrl,
-    wahaKey: opts.wahaKey,
-    path: `/api/${encodeURIComponent(opts.session)}/lids/${encodeURIComponent(lidValue)}`,
-    method: "GET",
-  });
-  if (!res.ok) return null;
-  const data: any = res.data || {};
-  const chatId = data?.chatId || data?.pn || data?.jid || null;
-  if (typeof chatId !== "string") return null;
-  return chatId.includes("@c.us") ? chatId : `${chatId.replace(/\D/g, "")}@c.us`;
+
+  // Tentativa 1: endpoint oficial /api/{session}/lids/{lid}
+  const attempts = [
+    `/api/${encodeURIComponent(opts.session)}/lids/${encodeURIComponent(lidValue)}`,
+    `/api/${encodeURIComponent(opts.session)}/lids/${encodeURIComponent(lidValue + "@lid")}`,
+    `/api/lids/${encodeURIComponent(lidValue)}?session=${encodeURIComponent(opts.session)}`,
+  ];
+  for (const path of attempts) {
+    const res = await wahaRequest({ wahaUrl: opts.wahaUrl, wahaKey: opts.wahaKey, path, method: "GET" });
+    if (res.ok) {
+      const d: any = res.data || {};
+      const chatId = d?.chatId || d?.pn || d?.jid || d?.phoneNumber || null;
+      if (typeof chatId === "string" && /\d/.test(chatId)) {
+        const digits = chatId.replace(/\D/g, "");
+        if (digits.length >= 10 && digits.length <= 15) {
+          console.log(`[waha] LID ${lidValue} resolvido via ${path} → ${digits}`);
+          return `${digits}@c.us`;
+        }
+      }
+    } else {
+      console.log(`[waha] tentativa LID falhou (${res.status}) em ${path}`);
+    }
+  }
+
+  // Tentativa 2: /api/contacts?contactId={lid}@lid&session=... (retorna contato se WAHA já indexou)
+  const contactPaths = [
+    `/api/contacts?contactId=${encodeURIComponent(lidValue + "@lid")}&session=${encodeURIComponent(opts.session)}`,
+    `/api/contacts?contactId=${encodeURIComponent(lidValue + "@c.us")}&session=${encodeURIComponent(opts.session)}`,
+  ];
+  for (const path of contactPaths) {
+    const res = await wahaRequest({ wahaUrl: opts.wahaUrl, wahaKey: opts.wahaKey, path, method: "GET" });
+    if (res.ok) {
+      const d: any = res.data || {};
+      const candidate =
+        d?.id?._serialized || d?.id || d?.number || d?.jid || d?.phoneNumber || d?.pn || null;
+      if (typeof candidate === "string" && /\d/.test(candidate) && !candidate.includes("@lid")) {
+        const digits = candidate.replace(/\D/g, "");
+        if (digits.length >= 10 && digits.length <= 15) {
+          console.log(`[waha] LID ${lidValue} resolvido via contacts → ${digits}`);
+          return `${digits}@c.us`;
+        }
+      }
+    }
+  }
+
+  console.log(`[waha] LID ${lidValue} não pôde ser resolvido em nenhum endpoint`);
+  return null;
 }
 
 /**
