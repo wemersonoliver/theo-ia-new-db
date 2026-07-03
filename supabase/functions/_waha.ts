@@ -408,6 +408,7 @@ export async function wahaCheckNumberExists(opts: {
   session: string;
   phone: string;
 }): Promise<string | null> {
+  // (unchanged)
   const digits = String(opts.phone || "").replace(/\D/g, "");
   const res = await wahaRequest({
     wahaUrl: opts.wahaUrl,
