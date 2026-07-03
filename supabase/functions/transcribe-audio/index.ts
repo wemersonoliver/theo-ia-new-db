@@ -14,19 +14,11 @@ serve(async (req) => {
   }
 
   try {
-    const { messageKey, instanceName, userId, phone } = await req.json();
-    
+    const { messageKey, instanceName, userId, phone, mediaBase64, mimeType } = await req.json();
+
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
     const groqApiKey = Deno.env.get("GROQ_API_KEY");
-
-    if (!evolutionUrl || !evolutionKey) {
-      console.error("Missing Evolution API configuration");
-      return new Response(JSON.stringify({ error: "Missing Evolution API configuration" }), { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
-    }
 
     if (!groqApiKey) {
       console.error("Missing GROQ_API_KEY");
@@ -36,35 +28,41 @@ serve(async (req) => {
       });
     }
 
-    console.log("Downloading audio from Evolution API for instance:", instanceName);
+    let base64Audio: string | null = null;
+    let audioMime: string = mimeType || "audio/ogg";
 
-    // 1. Download audio from Evolution API
-    const mediaResponse = await fetch(
-      `${evolutionUrl}/chat/getBase64FromMediaMessage/${instanceName}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: evolutionKey,
-        },
-        body: JSON.stringify({
-          message: { key: messageKey },
-          convertToMp4: false,
-        }),
+    if (mediaBase64) {
+      console.log("Using provided mediaBase64 (WAHA path), mime:", audioMime);
+      base64Audio = mediaBase64;
+    } else {
+      if (!evolutionUrl || !evolutionKey) {
+        console.error("Missing Evolution API configuration and no mediaBase64 provided");
+        return new Response(JSON.stringify({ error: "Missing Evolution API configuration" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-    );
-
-    if (!mediaResponse.ok) {
-      const errorText = await mediaResponse.text();
-      console.error("Evolution media error:", mediaResponse.status, errorText);
-      return new Response(JSON.stringify({ error: "Failed to download audio from Evolution API" }), { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      console.log("Downloading audio from Evolution API for instance:", instanceName);
+      const mediaResponse = await fetch(
+        `${evolutionUrl}/chat/getBase64FromMediaMessage/${instanceName}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: evolutionKey },
+          body: JSON.stringify({ message: { key: messageKey }, convertToMp4: false }),
+        },
+      );
+      if (!mediaResponse.ok) {
+        const errorText = await mediaResponse.text();
+        console.error("Evolution media error:", mediaResponse.status, errorText);
+        return new Response(JSON.stringify({ error: "Failed to download audio from Evolution API" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const mediaData = await mediaResponse.json();
+      base64Audio = mediaData.base64;
+      audioMime = mediaData.mimetype || audioMime;
     }
-
-    const mediaData = await mediaResponse.json();
-    const base64Audio = mediaData.base64;
 
     if (!base64Audio) {
       console.error("No audio data received from Evolution API");
@@ -76,8 +74,9 @@ serve(async (req) => {
 
     console.log("Audio downloaded, size:", base64Audio.length, "characters");
 
-    // 2. Convert Base64 to Buffer
-    const binaryString = atob(base64Audio);
+    // 2. Convert Base64 to Buffer (strip data URI prefix if present)
+    const cleanB64 = base64Audio.includes(",") ? base64Audio.split(",")[1] : base64Audio;
+    const binaryString = atob(cleanB64);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
@@ -86,12 +85,20 @@ serve(async (req) => {
     console.log("Sending audio to Groq Whisper API...");
 
     // 3. Send to Groq Whisper API
+    const baseMime = (audioMime || "audio/ogg").split(";")[0].trim().toLowerCase();
+    const extMap: Record<string, string> = {
+      "audio/ogg": "ogg",
+      "audio/opus": "ogg",
+      "audio/mpeg": "mp3",
+      "audio/mp3": "mp3",
+      "audio/mp4": "m4a",
+      "audio/x-m4a": "m4a",
+      "audio/wav": "wav",
+      "audio/webm": "webm",
+    };
+    const ext = extMap[baseMime] || "ogg";
     const formData = new FormData();
-    formData.append(
-      "file",
-      new Blob([bytes], { type: "audio/ogg" }),
-      "audio.ogg"
-    );
+    formData.append("file", new Blob([bytes], { type: baseMime }), `audio.${ext}`);
     formData.append("model", "whisper-large-v3-turbo");
     formData.append("language", "pt");
     formData.append("response_format", "verbose_json");
