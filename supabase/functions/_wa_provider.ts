@@ -575,9 +575,40 @@ export function wahaToInternalEvent(body: any): { event: string; instance: strin
   const p = body.payload || body.data || {};
 
   if (type === "message" || type === "message.any") {
-    const from = String(p.from || p.chatId || "");
-    const remoteJid = from.includes("@") ? from : `${from}@s.whatsapp.net`;
     const fromMe = !!p.fromMe;
+
+    // Descobrir o chatId real (identificador que o WhatsApp usa para essa conversa).
+    // Prioridade: chatId explícito > from (se não for do próprio) > to (quando fromMe).
+    // - Regra: WAHA emite sufixos "@c.us" (contato), "@lid" (identificador oculto),
+    //   "@g.us" (grupo), "@newsletter" e "@broadcast" (canais/status). Só processamos "@c.us".
+    const rawChatId = String(p.chatId || (fromMe ? (p.to || p.from) : (p.from || p.to)) || "");
+    if (!rawChatId) return null;
+
+    const suffixMatch = rawChatId.match(/@([a-z.]+)$/i);
+    const suffix = suffixMatch ? suffixMatch[1].toLowerCase() : "";
+
+    // Ignora grupos, canais e status
+    if (suffix === "g.us" || suffix === "newsletter" || suffix === "broadcast" || suffix === "status") {
+      return null;
+    }
+    // LID (identificador oculto do WhatsApp) — não é um telefone. Ignoramos até que o WAHA
+    // consiga resolver via /api/{session}/lids/{lid}, quando resolveremos assíncrono.
+    if (suffix === "lid") {
+      console.log("[waha] LID recebido, ignorando (sem número real disponível):", rawChatId);
+      return null;
+    }
+
+    // Extrai dígitos e valida — telefone real tem entre 10 e 15 dígitos (E.164)
+    const chatDigits = rawChatId.split("@")[0].replace(/\D/g, "");
+    if (chatDigits.length < 10 || chatDigits.length > 15) {
+      console.log("[waha] chatId com número inválido, ignorando:", rawChatId);
+      return null;
+    }
+
+    // Normaliza para o formato interno (mesmo shape do Evolution): "<digits>@s.whatsapp.net"
+    const remoteJid = `${chatDigits}@s.whatsapp.net`;
+    const waChatId = suffix === "c.us" ? rawChatId : `${chatDigits}@c.us`;
+
     const messageId = p.id || p._data?.id?._serialized || crypto.randomUUID();
     const timestamp = p.timestamp ? (typeof p.timestamp === "number" ? p.timestamp : Math.floor(new Date(p.timestamp).getTime() / 1000)) : Math.floor(Date.now() / 1000);
     const body_text = p.body || p.text || "";
@@ -602,7 +633,13 @@ export function wahaToInternalEvent(body: any): { event: string; instance: strin
         pushName: p.notifyName || p._data?.notifyName || null,
         message: messagePayload,
         messageTimestamp: timestamp,
-        _waha: { raw: p }, // preserva raw para debug
+        _waha: {
+          raw: p,
+          chatId: waChatId,          // ex "5511999999999@c.us"
+          mediaUrl: p.media?.url || null,
+          mediaMimetype: mimetype,
+          mediaFilename: p.media?.filename || null,
+        },
       },
     };
   }
