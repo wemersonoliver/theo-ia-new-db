@@ -4921,6 +4921,7 @@ export type Database = {
           phone: string
           total_messages: number | null
           updated_at: string | null
+          wa_chat_id: string | null
         }
         Insert: {
           ai_active?: boolean | null
@@ -4935,6 +4936,7 @@ export type Database = {
           phone: string
           total_messages?: number | null
           updated_at?: string | null
+          wa_chat_id?: string | null
         }
         Update: {
           ai_active?: boolean | null
@@ -4949,6 +4951,7 @@ export type Database = {
           phone?: string
           total_messages?: number | null
           updated_at?: string | null
+          wa_chat_id?: string | null
         }
         Relationships: []
       }
@@ -5236,6 +5239,39 @@ export type Database = {
         }
         Relationships: []
       }
+      wa_outgoing_messages: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          instance_id: string | null
+          message_id: string
+          origin: string
+          phone: string
+          sender_user_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          instance_id?: string | null
+          message_id: string
+          origin: string
+          phone: string
+          sender_user_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          instance_id?: string | null
+          message_id?: string
+          origin?: string
+          phone?: string
+          sender_user_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       whatsapp_ai_config: {
         Row: {
           account_id: string | null
@@ -5454,6 +5490,7 @@ export type Database = {
           total_messages: number | null
           updated_at: string | null
           user_id: string
+          wa_chat_id: string | null
         }
         Insert: {
           account_id?: string | null
@@ -5477,6 +5514,7 @@ export type Database = {
           total_messages?: number | null
           updated_at?: string | null
           user_id: string
+          wa_chat_id?: string | null
         }
         Update: {
           account_id?: string | null
@@ -5500,6 +5538,7 @@ export type Database = {
           total_messages?: number | null
           updated_at?: string | null
           user_id?: string
+          wa_chat_id?: string | null
         }
         Relationships: []
       }
@@ -5740,6 +5779,7 @@ export type Database = {
         Args: { _account_id: string }
         Returns: undefined
       }
+      purge_wa_outgoing_messages: { Args: never; Returns: undefined }
       recalc_admin_deal_stage: {
         Args: { _user_id: string }
         Returns: undefined
