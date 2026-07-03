@@ -568,7 +568,7 @@ export function isWahaWebhookPayload(body: any): boolean {
  * Normaliza um evento WAHA para o formato Evolution que o whatsapp-webhook já processa.
  * Suporta apenas os eventos usados hoje ("message" ~= "messages.upsert", "session.status" ~= "connection.update").
  */
-export function wahaToInternalEvent(body: any): { event: string; instance: string; data: any } | null {
+export async function wahaToInternalEvent(body: any): Promise<{ event: string; instance: string; data: any } | null> {
   if (!isWahaWebhookPayload(body)) return null;
   const session = String(body.session);
   const type = String(body.event);
@@ -585,29 +585,51 @@ export function wahaToInternalEvent(body: any): { event: string; instance: strin
     if (!rawChatId) return null;
 
     const suffixMatch = rawChatId.match(/@([a-z.]+)$/i);
-    const suffix = suffixMatch ? suffixMatch[1].toLowerCase() : "";
+    let suffix = suffixMatch ? suffixMatch[1].toLowerCase() : "";
+    let resolvedChatId = rawChatId;
 
     // Ignora grupos, canais e status
     if (suffix === "g.us" || suffix === "newsletter" || suffix === "broadcast" || suffix === "status") {
       return null;
     }
-    // LID (identificador oculto do WhatsApp) — não é um telefone. Ignoramos até que o WAHA
-    // consiga resolver via /api/{session}/lids/{lid}, quando resolveremos assíncrono.
+    // LID (identificador oculto do WhatsApp) — resolvemos para o número real via WAHA.
     if (suffix === "lid") {
-      console.log("[waha] LID recebido, ignorando (sem número real disponível):", rawChatId);
-      return null;
+      // Alguns payloads WAHA já trazem o número real em campos alternativos.
+      const alt =
+        p.participantAlt || p.senderAlt || p._data?.senderAlt ||
+        (typeof p.author === "string" && p.author.includes("@c.us") ? p.author : null) ||
+        (typeof p.pn === "string" ? p.pn : null);
+      if (alt && String(alt).includes("@")) {
+        resolvedChatId = String(alt);
+      } else {
+        const wahaUrl = normalizeWahaUrl(Deno.env.get("WAHA_API_URL"));
+        const wahaKey = Deno.env.get("WAHA_API_KEY");
+        if (wahaUrl && wahaKey) {
+          const resolved = await wahaResolveLid({ wahaUrl, wahaKey, session, lid: rawChatId }).catch(() => null);
+          if (resolved) {
+            resolvedChatId = resolved;
+            console.log("[waha] LID resolvido:", rawChatId, "→", resolved);
+          }
+        }
+        if (resolvedChatId === rawChatId) {
+          console.log("[waha] LID recebido, não foi possível resolver, ignorando:", rawChatId);
+          return null;
+        }
+      }
+      const m = resolvedChatId.match(/@([a-z.]+)$/i);
+      suffix = m ? m[1].toLowerCase() : "";
     }
 
     // Extrai dígitos e valida — telefone real tem entre 10 e 15 dígitos (E.164)
-    const chatDigits = rawChatId.split("@")[0].replace(/\D/g, "");
+    const chatDigits = resolvedChatId.split("@")[0].replace(/\D/g, "");
     if (chatDigits.length < 10 || chatDigits.length > 15) {
-      console.log("[waha] chatId com número inválido, ignorando:", rawChatId);
+      console.log("[waha] chatId com número inválido, ignorando:", resolvedChatId);
       return null;
     }
 
     // Normaliza para o formato interno (mesmo shape do Evolution): "<digits>@s.whatsapp.net"
     const remoteJid = `${chatDigits}@s.whatsapp.net`;
-    const waChatId = suffix === "c.us" ? rawChatId : `${chatDigits}@c.us`;
+    const waChatId = suffix === "c.us" ? resolvedChatId : `${chatDigits}@c.us`;
 
     const messageId = p.id || p._data?.id?._serialized || crypto.randomUUID();
     const timestamp = p.timestamp ? (typeof p.timestamp === "number" ? p.timestamp : Math.floor(new Date(p.timestamp).getTime() / 1000)) : Math.floor(Date.now() / 1000);
