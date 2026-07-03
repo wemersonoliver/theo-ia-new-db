@@ -27,6 +27,9 @@ import {
   wahaSessionStatus,
   wahaStartTyping,
   wahaStopTyping,
+  wahaCheckNumberExists,
+  extractWahaMessageId,
+  stripWahaSuffix,
   type WahaRequestResult,
 } from "./_waha.ts";
 import {
@@ -57,6 +60,10 @@ export interface WaSendResult {
   status: number;
   errorPayload?: Record<string, unknown>;
   raw?: EvolutionRequestResult | WahaRequestResult;
+  /** Id da mensagem retornado pelo provider (para dedupe/rastreio no webhook). */
+  messageId?: string | null;
+  /** ChatId real usado no envio (útil para gravar em whatsapp_conversations.wa_chat_id). */
+  waChatId?: string | null;
 }
 
 function getEvolutionCreds() {
@@ -157,6 +164,7 @@ export async function sendWhatsAppText(
   ctx: WaInstanceContext,
   phone: string,
   text: string,
+  opts?: { waChatId?: string | null },
 ): Promise<WaSendResult> {
   const creds = ctxHasCreds(ctx);
   if (!creds.ok) {
@@ -169,33 +177,59 @@ export async function sendWhatsAppText(
   const normalized = normalizeBrazilianPhone(phone);
 
   if (ctx.provider === "waha") {
-    const res = await wahaSendText({
-      wahaUrl: ctx.wahaUrl!,
-      wahaKey: ctx.wahaKey!,
-      session: ctx.wahaSession,
-      phone: normalized,
-      text,
-    });
-    if (!res.ok) {
-      // Retry com variante (com/sem 9º dígito)
+    // 1) Se já temos o wa_chat_id salvo (mensagem prévia), usar direto — é o formato canônico do WAHA.
+    let chatId = (opts?.waChatId || "").trim() || null;
+
+    // 2) Sem wa_chat_id, tentar resolver via check-exists (regra oficial BR: escolhe com ou sem 9)
+    if (!chatId) {
+      const resolved = await wahaCheckNumberExists({
+        wahaUrl: ctx.wahaUrl!,
+        wahaKey: ctx.wahaKey!,
+        session: ctx.wahaSession,
+        phone: normalized,
+      }).catch(() => null);
+      if (resolved) chatId = `${resolved}@c.us`;
+    }
+
+    // 3) Também tenta variante BR se check-exists falhou
+    if (!chatId) {
       const variant = getBrazilianPhoneVariant(normalized);
-      if (variant && variant !== normalized) {
-        const res2 = await wahaSendText({
+      if (variant) {
+        const alt = await wahaCheckNumberExists({
           wahaUrl: ctx.wahaUrl!,
           wahaKey: ctx.wahaKey!,
           session: ctx.wahaSession,
           phone: variant,
-          text,
-        });
-        if (res2.ok) return { ok: true, provider: "waha", status: res2.status, raw: res2 };
+        }).catch(() => null);
+        if (alt) chatId = `${alt}@c.us`;
       }
+    }
+
+    // 4) Fallback final: usar o número normalizado bruto
+    const sendChatId = chatId || `${normalized}@c.us`;
+
+    const res = await wahaSendText({
+      wahaUrl: ctx.wahaUrl!,
+      wahaKey: ctx.wahaKey!,
+      session: ctx.wahaSession,
+      phone: sendChatId,
+      text,
+    });
+    if (!res.ok) {
       return {
         ok: false, provider: "waha", status: res.status,
         errorPayload: buildWahaErrorPayload(res, "Erro ao enviar mensagem"),
         raw: res,
       };
     }
-    return { ok: true, provider: "waha", status: res.status, raw: res };
+    return {
+      ok: true,
+      provider: "waha",
+      status: res.status,
+      raw: res,
+      messageId: extractWahaMessageId(res),
+      waChatId: sendChatId,
+    };
   }
 
   // Evolution (com resolução de JID)
@@ -256,6 +290,7 @@ export async function sendWhatsAppMedia(
     mimetype?: string;
     filename?: string;
     caption?: string;
+    waChatId?: string | null;
   },
 ): Promise<WaSendResult> {
   const creds = ctxHasCreds(ctx);
@@ -269,11 +304,35 @@ export async function sendWhatsAppMedia(
   const normalized = normalizeBrazilianPhone(opts.phone);
 
   if (ctx.provider === "waha") {
+    let chatId = (opts.waChatId || "").trim() || null;
+    if (!chatId) {
+      const resolved = await wahaCheckNumberExists({
+        wahaUrl: ctx.wahaUrl!,
+        wahaKey: ctx.wahaKey!,
+        session: ctx.wahaSession,
+        phone: normalized,
+      }).catch(() => null);
+      if (resolved) chatId = `${resolved}@c.us`;
+    }
+    if (!chatId) {
+      const variant = getBrazilianPhoneVariant(normalized);
+      if (variant) {
+        const alt = await wahaCheckNumberExists({
+          wahaUrl: ctx.wahaUrl!,
+          wahaKey: ctx.wahaKey!,
+          session: ctx.wahaSession,
+          phone: variant,
+        }).catch(() => null);
+        if (alt) chatId = `${alt}@c.us`;
+      }
+    }
+    const sendChatId = chatId || `${normalized}@c.us`;
+
     const res = await wahaSendMedia({
       wahaUrl: ctx.wahaUrl!,
       wahaKey: ctx.wahaKey!,
       session: ctx.wahaSession,
-      phone: normalized,
+      phone: sendChatId,
       mediaUrl: opts.mediaUrl,
       mediaBase64: opts.mediaBase64,
       mediaType: opts.mediaType,
@@ -282,29 +341,20 @@ export async function sendWhatsAppMedia(
       caption: opts.caption,
     });
     if (!res.ok) {
-      const variant = getBrazilianPhoneVariant(normalized);
-      if (variant && variant !== normalized) {
-        const res2 = await wahaSendMedia({
-          wahaUrl: ctx.wahaUrl!,
-          wahaKey: ctx.wahaKey!,
-          session: ctx.wahaSession,
-          phone: variant,
-          mediaUrl: opts.mediaUrl,
-          mediaBase64: opts.mediaBase64,
-          mediaType: opts.mediaType,
-          mimetype: opts.mimetype,
-          filename: opts.filename,
-          caption: opts.caption,
-        });
-        if (res2.ok) return { ok: true, provider: "waha", status: res2.status, raw: res2 };
-      }
       return {
         ok: false, provider: "waha", status: res.status,
         errorPayload: buildWahaErrorPayload(res, "Erro ao enviar mídia"),
         raw: res,
       };
     }
-    return { ok: true, provider: "waha", status: res.status, raw: res };
+    return {
+      ok: true,
+      provider: "waha",
+      status: res.status,
+      raw: res,
+      messageId: extractWahaMessageId(res),
+      waChatId: sendChatId,
+    };
   }
 
   // Evolution
@@ -525,9 +575,40 @@ export function wahaToInternalEvent(body: any): { event: string; instance: strin
   const p = body.payload || body.data || {};
 
   if (type === "message" || type === "message.any") {
-    const from = String(p.from || p.chatId || "");
-    const remoteJid = from.includes("@") ? from : `${from}@s.whatsapp.net`;
     const fromMe = !!p.fromMe;
+
+    // Descobrir o chatId real (identificador que o WhatsApp usa para essa conversa).
+    // Prioridade: chatId explícito > from (se não for do próprio) > to (quando fromMe).
+    // - Regra: WAHA emite sufixos "@c.us" (contato), "@lid" (identificador oculto),
+    //   "@g.us" (grupo), "@newsletter" e "@broadcast" (canais/status). Só processamos "@c.us".
+    const rawChatId = String(p.chatId || (fromMe ? (p.to || p.from) : (p.from || p.to)) || "");
+    if (!rawChatId) return null;
+
+    const suffixMatch = rawChatId.match(/@([a-z.]+)$/i);
+    const suffix = suffixMatch ? suffixMatch[1].toLowerCase() : "";
+
+    // Ignora grupos, canais e status
+    if (suffix === "g.us" || suffix === "newsletter" || suffix === "broadcast" || suffix === "status") {
+      return null;
+    }
+    // LID (identificador oculto do WhatsApp) — não é um telefone. Ignoramos até que o WAHA
+    // consiga resolver via /api/{session}/lids/{lid}, quando resolveremos assíncrono.
+    if (suffix === "lid") {
+      console.log("[waha] LID recebido, ignorando (sem número real disponível):", rawChatId);
+      return null;
+    }
+
+    // Extrai dígitos e valida — telefone real tem entre 10 e 15 dígitos (E.164)
+    const chatDigits = rawChatId.split("@")[0].replace(/\D/g, "");
+    if (chatDigits.length < 10 || chatDigits.length > 15) {
+      console.log("[waha] chatId com número inválido, ignorando:", rawChatId);
+      return null;
+    }
+
+    // Normaliza para o formato interno (mesmo shape do Evolution): "<digits>@s.whatsapp.net"
+    const remoteJid = `${chatDigits}@s.whatsapp.net`;
+    const waChatId = suffix === "c.us" ? rawChatId : `${chatDigits}@c.us`;
+
     const messageId = p.id || p._data?.id?._serialized || crypto.randomUUID();
     const timestamp = p.timestamp ? (typeof p.timestamp === "number" ? p.timestamp : Math.floor(new Date(p.timestamp).getTime() / 1000)) : Math.floor(Date.now() / 1000);
     const body_text = p.body || p.text || "";
@@ -552,7 +633,13 @@ export function wahaToInternalEvent(body: any): { event: string; instance: strin
         pushName: p.notifyName || p._data?.notifyName || null,
         message: messagePayload,
         messageTimestamp: timestamp,
-        _waha: { raw: p }, // preserva raw para debug
+        _waha: {
+          raw: p,
+          chatId: waChatId,          // ex "5511999999999@c.us"
+          mediaUrl: p.media?.url || null,
+          mediaMimetype: mimetype,
+          mediaFilename: p.media?.filename || null,
+        },
       },
     };
   }
