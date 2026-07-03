@@ -48,15 +48,20 @@ export default function AdminWhatsAppProvider() {
       `Trocar a instância "${row.display_name || row.instance_name}" para ${target === "waha" ? "WAHA" : "Evolution API"}?\n\n` +
       `O cliente precisará escanear o QR Code novamente para o novo provedor.`;
     if (!confirm(confirmMsg)) return;
-    const { error } = await (supabase as any)
+    const { data: updated, error } = await (supabase as any)
       .from("whatsapp_instances")
       .update({ provider: target, status: "disconnected", qr_code_base64: null, pairing_code: null })
-      .eq("id", row.id);
+      .eq("id", row.id)
+      .select("id, provider");
     if (error) {
       toast.error(`Erro: ${error.message}`);
       return;
     }
-    toast.success("Provedor alterado. Peça ao cliente para reconectar.");
+    if (!updated || updated.length === 0) {
+      toast.error("Nada foi alterado. Sua conta não tem permissão para trocar esta instância (RLS bloqueou).");
+      return;
+    }
+    toast.success(`Provedor alterado para ${updated[0].provider.toUpperCase()}. Peça ao cliente para reconectar.`);
     reload();
   }
 
