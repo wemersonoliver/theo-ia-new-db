@@ -301,6 +301,14 @@ serve(async (req) => {
             } catch (e) { console.error("System persist audio error:", e); }
             try {
               console.log("Transcribing system audio for:", phone);
+              const transcribeBody: any = { messageKey, instanceName };
+              if (isWaha) {
+                const dl = await fetchMediaBase64Unified({
+                  isWaha: true, data, msg, evolutionUrl, evolutionKey, instanceName,
+                });
+                if (dl) { transcribeBody.mediaBase64 = dl.base64; transcribeBody.mimeType = dl.mime; }
+                else { console.error("WAHA system audio: fetchMediaBase64Unified returned null"); }
+              }
               const transcribeResponse = await fetch(
                 `${supabaseUrl}/functions/v1/transcribe-audio`,
                 {
@@ -309,7 +317,7 @@ serve(async (req) => {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${supabaseServiceKey}`,
                   },
-                  body: JSON.stringify({ messageKey, instanceName }),
+                  body: JSON.stringify(transcribeBody),
                 }
               );
               if (transcribeResponse.ok) {
@@ -729,6 +737,14 @@ serve(async (req) => {
           } catch (e) { console.error("Persist audio error:", e); }
           try {
             console.log("Transcribing audio message for:", phone);
+            const transcribeBody: any = { messageKey, instanceName, userId, phone };
+            if (isWaha) {
+              const dl = await fetchMediaBase64Unified({
+                isWaha: true, data, msg, evolutionUrl, evolutionKey, instanceName,
+              });
+              if (dl) { transcribeBody.mediaBase64 = dl.base64; transcribeBody.mimeType = dl.mime; }
+              else { console.error("WAHA audio: fetchMediaBase64Unified returned null"); }
+            }
             const transcribeResponse = await fetch(
               `${supabaseUrl}/functions/v1/transcribe-audio`,
               {
@@ -737,12 +753,7 @@ serve(async (req) => {
                   "Content-Type": "application/json",
                   "Authorization": `Bearer ${supabaseServiceKey}`,
                 },
-                body: JSON.stringify({ 
-                  messageKey, 
-                  instanceName,
-                  userId,
-                  phone,
-                }),
+                body: JSON.stringify(transcribeBody),
               }
             );
 
