@@ -390,3 +390,76 @@ export async function wahaCheckNumberExists(opts: {
   }
   return null;
 }
+
+/**
+ * Resolve um chatId real (@c.us) a partir de um LID (@lid). Retorna null se o WAHA não conseguir.
+ * Docs: GET /api/{session}/lids/{lid}
+ */
+export async function wahaResolveLid(opts: {
+  wahaUrl: string;
+  wahaKey: string;
+  session: string;
+  lid: string; // formato "12345678901234@lid" ou "12345678901234"
+}): Promise<string | null> {
+  const lidValue = String(opts.lid || "").split("@")[0].replace(/\D/g, "");
+  if (!lidValue) return null;
+  const res = await wahaRequest({
+    wahaUrl: opts.wahaUrl,
+    wahaKey: opts.wahaKey,
+    path: `/api/${encodeURIComponent(opts.session)}/lids/${encodeURIComponent(lidValue)}`,
+    method: "GET",
+  });
+  if (!res.ok) return null;
+  const data: any = res.data || {};
+  const chatId = data?.chatId || data?.pn || data?.jid || null;
+  if (typeof chatId !== "string") return null;
+  return chatId.includes("@c.us") ? chatId : `${chatId.replace(/\D/g, "")}@c.us`;
+}
+
+/**
+ * Baixa uma mídia hospedada no WAHA (URL retornada em payload.media.url) autenticando com X-Api-Key.
+ * Retorna base64 puro (sem prefixo data:) e o mime detectado.
+ */
+export async function wahaDownloadMediaBase64(opts: {
+  wahaUrl: string;
+  wahaKey: string;
+  mediaUrl: string;
+}): Promise<{ base64: string; mime: string; size: number } | null> {
+  try {
+    // Se a URL for do próprio WAHA, autentica; se for pública (S3, etc.), tenta sem header
+    const isWahaHosted = opts.mediaUrl.startsWith(opts.wahaUrl);
+    const headers: HeadersInit = isWahaHosted ? { "X-Api-Key": opts.wahaKey } : {};
+    const resp = await fetch(opts.mediaUrl, { headers });
+    if (!resp.ok) {
+      console.error("wahaDownloadMediaBase64: HTTP", resp.status, opts.mediaUrl.slice(0, 120));
+      return null;
+    }
+    const buf = new Uint8Array(await resp.arrayBuffer());
+    const mime = resp.headers.get("content-type") || "application/octet-stream";
+    // Convert to base64
+    let bin = "";
+    for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+    const base64 = btoa(bin);
+    return { base64, mime, size: buf.length };
+  } catch (e) {
+    console.error("wahaDownloadMediaBase64 error:", (e as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Extrai o messageId da resposta de POST /api/sendText|sendImage|... do WAHA.
+ * WAHA retorna algo como { id: "true_5511999999999@c.us_ABCDEF..." } ou {_data: { id: {...} }, id: "..." }.
+ */
+export function extractWahaMessageId(result: WahaRequestResult | null | undefined): string | null {
+  if (!result || !result.ok) return null;
+  const d: any = result.data || {};
+  const id =
+    d?.id?._serialized ||
+    d?.id ||
+    d?._data?.id?._serialized ||
+    d?.key?.id ||
+    d?.messageId ||
+    null;
+  return typeof id === "string" ? id : null;
+}
