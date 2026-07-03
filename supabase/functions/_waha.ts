@@ -278,7 +278,7 @@ export async function wahaSessionCreate(opts: {
         url: opts.webhookUrl,
         events: opts.events && opts.events.length
           ? opts.events
-          : ["message", "session.status"],
+          : ["message.any", "session.status"],
         retries: { policy: "linear", delaySeconds: 2, attempts: 5 },
       },
     ];
