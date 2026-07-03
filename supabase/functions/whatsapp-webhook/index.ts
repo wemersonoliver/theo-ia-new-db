@@ -791,17 +791,35 @@ serve(async (req) => {
         // Handle outgoing messages (sent by human via WhatsApp)
         if (isFromMe) {
           const outgoingId = msg.key?.id || null;
-          // Dedup: se a mensagem já foi gravada pelo whatsapp-ai-agent
-          // com o mesmo id da Evolution, este é apenas o eco do envio.
-          // NÃO duplica no histórico, NÃO desativa a IA, NÃO cancela follow-up.
+          // Dedup: se a mensagem já foi gravada pelo agente/painel
+          // com o mesmo id, este é apenas o eco do envio.
           if (outgoingId && conversation) {
             const existing = (conversation.messages || []) as any[];
             const already = existing.find((m) => m?.id === outgoingId);
             if (already) {
-              console.log(`[webhook] echo de mensagem da IA (id=${outgoingId}) — pulando duplicata`);
+              console.log(`[webhook] echo de mensagem já gravada (id=${outgoingId}) — pulando duplicata`);
               continue;
             }
           }
+
+          // Classifica origem: se o id está em wa_outgoing_messages,
+          // foi enviado pelo próprio sistema (IA/painel/notificação) e NÃO deve pausar a IA
+          // nem ser tratado como intervenção humana pelo aparelho.
+          let outgoingOrigin: string | null = null;
+          if (outgoingId) {
+            const { data: tracked } = await supabase
+              .from("wa_outgoing_messages")
+              .select("origin")
+              .eq("message_id", outgoingId)
+              .maybeSingle();
+            outgoingOrigin = (tracked as any)?.origin || null;
+          }
+          // Se veio marcador _waha=true e não achamos o id, é mensagem digitada pelo aparelho.
+          // Se veio de Evolution, mantém compat: source `app`/`android` também é aparelho.
+          const isFromDevice = isWaha
+            ? !outgoingOrigin
+            : (msg?.source === "android" || msg?.source === "ios" || msg?.source === "web" || (!outgoingOrigin && !msg?.source));
+          const isFromSystem = !!outgoingOrigin;
 
           const outgoingMessage: any = {
             id: outgoingId || crypto.randomUUID(),
@@ -809,8 +827,9 @@ serve(async (req) => {
             from_me: true,
             content,
             type: messageType,
-            sent_by: "human",
+            sent_by: isFromSystem ? (outgoingOrigin === "ai" ? "ai" : "human") : "human_phone",
           };
+          if (outgoingOrigin) outgoingMessage.origin = outgoingOrigin;
           if (aiContent) outgoingMessage.ai_content = aiContent;
           if (persistedMedia) {
             outgoingMessage.media_url = persistedMedia.url;
@@ -823,36 +842,62 @@ serve(async (req) => {
             const existingMessages = conversation.messages || [];
             const updatedMessages = [...existingMessages, outgoingMessage];
 
+            const updatePayload: Record<string, any> = {
+              messages: updatedMessages,
+              last_message_at: new Date().toISOString(),
+              total_messages: updatedMessages.length,
+              updated_at: new Date().toISOString(),
+            };
+            // Só desativa a IA se a mensagem foi digitada no aparelho.
+            // Se foi enviada pela própria IA/painel/notificação, NÃO desativa.
+            if (isFromDevice) updatePayload.ai_active = false;
+
             await supabase
               .from("whatsapp_conversations")
-              .update({
-                messages: updatedMessages,
-                last_message_at: new Date().toISOString(),
-                total_messages: updatedMessages.length,
-                ai_active: false, // Disable AI when human responds
-                updated_at: new Date().toISOString(),
-              })
+              .update(updatePayload)
               .eq("id", conversation.id);
 
-            // Move CRM deal to "Atendimento humano" when human responds
-            try {
-              await moveCRMDealToHumanStage(supabase, userId, accountId, phone);
-            } catch (e) {
-              console.error("Error moving CRM deal to human stage:", e);
-            }
+            if (isFromDevice) {
+              // Move CRM deal to "Atendimento humano" when the phone user intervenes
+              try {
+                await moveCRMDealToHumanStage(supabase, userId, accountId, phone);
+              } catch (e) {
+                console.error("Error moving CRM deal to human stage:", e);
+              }
 
-            // Humano assumiu → cancela toda a sequência de follow-up
-            try {
-              await supabase.rpc("cancel_followup_sequence", {
-                p_user_id: userId,
-                p_phone: phone,
-                p_reason: "handoff",
-              });
-            } catch (e) {
-              console.error("Error cancelling followup sequence (handoff):", e);
-            }
+              // Humano no aparelho assumiu → cancela toda a sequência de follow-up
+              try {
+                await supabase.rpc("cancel_followup_sequence", {
+                  p_user_id: userId,
+                  p_phone: phone,
+                  p_reason: "handoff",
+                });
+              } catch (e) {
+                console.error("Error cancelling followup sequence (handoff):", e);
+              }
 
-            console.log("Outgoing message saved, AI disabled:", phone);
+              // Marca sessão IA como handed_off para o painel refletir "atendente pelo aparelho"
+              try {
+                await supabase.from("whatsapp_ai_sessions").upsert(
+                  {
+                    user_id: userId,
+                    account_id: accountId,
+                    phone,
+                    status: "handed_off",
+                    last_human_message_at: new Date().toISOString(),
+                    handed_off_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                  },
+                  { onConflict: "user_id,phone" },
+                );
+              } catch (e) {
+                console.error("Error setting AI session handed_off:", e);
+              }
+
+              console.log("Outgoing message from PHONE — AI paused:", phone);
+            } else {
+              console.log(`Outgoing message from SYSTEM (${outgoingOrigin}) — AI kept active:`, phone);
+            }
           }
           continue; // Don't trigger AI for outgoing messages
         }
