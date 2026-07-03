@@ -91,14 +91,23 @@ serve(async (req) => {
     // Resolve contexto (provider + credenciais)
     const normalizedPhoneEarly = normalizeBrazilianPhone(phone);
     let convInstanceId: string | null = null;
+    let convWaChatId: string | null = null;
     if (!system) {
       let q = supabaseAdmin
         .from("whatsapp_conversations")
-        .select("instance_id")
+        .select("instance_id, wa_chat_id")
         .eq("phone", normalizedPhoneEarly);
       q = accountId ? q.eq("account_id", accountId) : q.eq("user_id", userId);
       const { data: conv } = await q.maybeSingle();
       convInstanceId = (conv as any)?.instance_id || null;
+      convWaChatId = (conv as any)?.wa_chat_id || null;
+    } else {
+      const { data: conv } = await supabaseAdmin
+        .from("system_whatsapp_conversations")
+        .select("wa_chat_id")
+        .eq("phone", normalizedPhoneEarly)
+        .maybeSingle();
+      convWaChatId = (conv as any)?.wa_chat_id || null;
     }
 
     const ctx = await resolveInstanceContext(supabaseAdmin, {
@@ -132,14 +141,29 @@ serve(async (req) => {
       mimetype: mimetype || undefined,
       filename: filename || undefined,
       caption: captionWithName,
+      waChatId: convWaChatId,
     });
     if (!sendResult.ok) {
       console.error("sendMedia failed:", ctx.provider, sendResult);
       return jsonResponse(sendResult.errorPayload || { ok: false, error: "Erro ao enviar mídia" }, 502);
     }
 
+    const providerMsgId = sendResult.messageId || null;
+    if (providerMsgId) {
+      await supabaseAdmin.from("wa_outgoing_messages").insert({
+        message_id: providerMsgId,
+        instance_id: convInstanceId,
+        account_id: accountId,
+        user_id: userId,
+        phone: normalizedPhone,
+        origin: "panel",
+        sender_user_id: userId,
+      }).then(() => {}, (e) => console.error("wa_outgoing_messages insert:", e?.message || e));
+    }
+    const resolvedWaChatId = sendResult.waChatId || null;
+
     const newMessage = {
-      id: crypto.randomUUID(),
+      id: providerMsgId || crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       from_me: true,
       content: cleanCaption,
@@ -170,6 +194,7 @@ serve(async (req) => {
             total_messages: updated.length,
             ai_active: false,
             updated_at: new Date().toISOString(),
+            ...(resolvedWaChatId ? { wa_chat_id: resolvedWaChatId } : {}),
           })
           .eq("id", conversation.id);
       } else {
@@ -179,6 +204,7 @@ serve(async (req) => {
           last_message_at: new Date().toISOString(),
           total_messages: 1,
           ai_active: false,
+          wa_chat_id: resolvedWaChatId,
         });
       }
     } else {
@@ -204,6 +230,7 @@ serve(async (req) => {
             total_messages: updated.length,
             ai_active: false,
             updated_at: new Date().toISOString(),
+            ...(resolvedWaChatId ? { wa_chat_id: resolvedWaChatId } : {}),
           })
           .eq("id", conversation.id);
       } else {
@@ -215,6 +242,7 @@ serve(async (req) => {
           last_message_at: new Date().toISOString(),
           total_messages: 1,
           ai_active: false,
+          wa_chat_id: resolvedWaChatId,
         });
       }
 
