@@ -67,6 +67,27 @@ export type Database = {
           },
         ]
       }
+      account_wa_provider: {
+        Row: {
+          account_id: string
+          provider: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          account_id: string
+          provider: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          account_id?: string
+          provider?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       accounts: {
         Row: {
           business_code: number

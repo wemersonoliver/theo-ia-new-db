@@ -155,12 +155,22 @@ serve(async (req) => {
 
     // Determina qual provider usar. Prioridade:
     // 1) providerOverride (body)
-    // 2) row.provider (para reconexões)
-    // 3) system_wa_provider.default_provider
-    // 4) 'evolution'
+    // 2) account_wa_provider (override fixo por conta — sobrevive a desconexões)
+    // 3) row.provider (para reconexões)
+    // 4) system_wa_provider.default_provider
+    // 5) 'evolution'
     let chosenProvider: "evolution" | "waha" = "evolution";
+    let accountOverride: "evolution" | "waha" | null = null;
+    if (accountId) {
+      const { data: acctRow } = await supabase
+        .from("account_wa_provider").select("provider").eq("account_id", accountId).maybeSingle();
+      if ((acctRow as any)?.provider === "waha") accountOverride = "waha";
+      else if ((acctRow as any)?.provider === "evolution") accountOverride = "evolution";
+    }
     if (providerOverride) {
       chosenProvider = providerOverride;
+    } else if (accountOverride) {
+      chosenProvider = accountOverride;
     } else if (bodyInstanceId) {
       const { data: existing } = await supabase
         .from("whatsapp_instances").select("provider").eq("id", bodyInstanceId).maybeSingle();
