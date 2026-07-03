@@ -14,59 +14,70 @@ serve(async (req) => {
   }
 
   try {
-    const { messageKey, instanceName, mediaType, userId, phone } = await req.json();
-    
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+    const payload = await req.json();
+    const {
+      messageKey,
+      instanceName,
+      mediaType,
+      userId,
+      phone,
+      mediaBase64: inlineBase64,
+      mimeType: inlineMime,
+    } = payload;
+
     const geminiApiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
-
-    if (!evolutionUrl || !evolutionKey || !geminiApiKey) {
-      console.error("Missing configuration:", { 
-        hasEvolutionUrl: !!evolutionUrl, 
-        hasEvolutionKey: !!evolutionKey, 
-        hasGeminiKey: !!geminiApiKey 
-      });
-      return new Response(JSON.stringify({ error: "Missing configuration" }), { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+    if (!geminiApiKey) {
+      console.error("Missing GOOGLE_GEMINI_API_KEY");
+      return new Response(JSON.stringify({ error: "Missing configuration" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
-    console.log("Processing OCR for:", { instanceName, mediaType });
+    console.log("Processing OCR for:", { instanceName, mediaType, hasInlineMedia: !!inlineBase64 });
 
-    // 1. Download media from Evolution API
-    const mediaResponse = await fetch(
-      `${evolutionUrl}/chat/getBase64FromMediaMessage/${instanceName}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: evolutionKey,
-        },
-        body: JSON.stringify({
-          message: { key: messageKey },
-          convertToMp4: false,
-        }),
+    let base64Media: string | null = null;
+    let mimeType: string = inlineMime || getMimeType(mediaType);
+
+    if (inlineBase64) {
+      // Caller já baixou a mídia (fluxo WAHA ou similar). Usamos direto.
+      base64Media = inlineBase64.includes(",") ? inlineBase64.split(",")[1] : inlineBase64;
+    } else {
+      // Fluxo Evolution API: baixa base64 diretamente da instância.
+      const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+      const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+      if (!evolutionUrl || !evolutionKey) {
+        console.error("Missing Evolution creds and no inline media supplied");
+        return new Response(JSON.stringify({ error: "Missing configuration" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
       }
-    );
-
-    if (!mediaResponse.ok) {
-      const errorText = await mediaResponse.text();
-      console.error("Evolution media error:", errorText);
-      return new Response(JSON.stringify({ error: "Failed to download media" }), { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      });
+      const mediaResponse = await fetch(
+        `${evolutionUrl}/chat/getBase64FromMediaMessage/${instanceName}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: evolutionKey },
+          body: JSON.stringify({ message: { key: messageKey }, convertToMp4: false }),
+        }
+      );
+      if (!mediaResponse.ok) {
+        const errorText = await mediaResponse.text();
+        console.error("Evolution media error:", errorText);
+        return new Response(JSON.stringify({ error: "Failed to download media" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      const mediaData = await mediaResponse.json();
+      base64Media = mediaData.base64 || null;
+      mimeType = mediaData.mimetype || mimeType;
     }
-
-    const mediaData = await mediaResponse.json();
-    const base64Media = mediaData.base64;
-    const mimeType = mediaData.mimetype || getMimeType(mediaType);
 
     if (!base64Media) {
-      return new Response(JSON.stringify({ error: "No media data received" }), { 
-        status: 400, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      return new Response(JSON.stringify({ error: "No media data received" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
