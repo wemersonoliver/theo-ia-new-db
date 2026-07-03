@@ -988,6 +988,10 @@ serve(async (req) => {
           if (!conversation.instance_id) {
             conversationUpdate.instance_id = instanceData.id;
           }
+          // Salva o chatId original do WAHA (importante para responder no chat certo,
+          // com ou sem o dígito 9 — o WAHA aceita apenas o formato que ele mesmo emitiu).
+          const incomingWaChatId = isWaha ? (msg?._waha?.chatId || data?._waha?.chatId || null) : null;
+          if (incomingWaChatId) conversationUpdate.wa_chat_id = incomingWaChatId;
           if (wasFinalized) {
             conversationUpdate.outcome = null;
             conversationUpdate.outcome_reason = null;
@@ -1080,6 +1084,7 @@ serve(async (req) => {
               last_message_at: new Date().toISOString(),
               total_messages: 1,
               ai_active: shouldActivateAI,
+              wa_chat_id: isWaha ? (msg?._waha?.chatId || data?._waha?.chatId || null) : null,
             });
 
           // Fire-and-forget: fetch WhatsApp profile picture for this new contact
