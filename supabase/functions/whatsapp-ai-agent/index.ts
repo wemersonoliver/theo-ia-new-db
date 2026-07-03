@@ -2869,113 +2869,60 @@ async function sendWhatsAppMessage(
   message: string,
 ): Promise<string | null> {
   try {
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-
-    if (!evolutionUrl || !evolutionKey) {
-      console.error("Evolution API not configured in secrets");
-      return null;
-    }
-
-    // Tenta usar a instância vinculada à conversa (departamento)
+    // Busca instância + wa_chat_id + account_id da conversa (usados para roteamento e rastreio)
     const { data: conv } = await supabase
       .from("whatsapp_conversations")
-      .select("instance_id")
+      .select("instance_id, wa_chat_id, account_id")
       .eq("user_id", userId)
       .eq("phone", phone)
       .maybeSingle();
 
-    let instance: { instance_name: string } | null = null;
-    if ((conv as any)?.instance_id) {
-      const { data } = await supabase
-        .from("whatsapp_instances")
-        .select("instance_name")
-        .eq("id", (conv as any).instance_id)
-        .maybeSingle();
-      instance = data as any;
-    }
-    if (!instance) {
-      const { data } = await supabase
-        .from("whatsapp_instances")
-        .select("instance_name, is_primary")
-        .eq("user_id", userId)
-        .order("is_primary", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      instance = data as any;
-    }
+    const convInstanceId = (conv as any)?.instance_id || null;
+    const convWaChatId = (conv as any)?.wa_chat_id || null;
+    const convAccountId = (conv as any)?.account_id || null;
 
-    if (!instance) {
-      console.error("Instance not found");
+    const ctx = await resolveInstanceContext(supabase, {
+      instanceId: convInstanceId,
+      userId,
+    });
+    if (!ctx) {
+      console.error("Instance context not found for user:", userId);
       return null;
     }
 
-    const resolvedChatNumber = await resolvePreferredChatNumber(instance.instance_name, phone, evolutionUrl, evolutionKey);
-
-    // Resolve o JID REAL via /chat/whatsappNumbers (definitivo: diz se o
-    // número existe no WhatsApp). Sem isso, Baileys aceita o POST mesmo
-    // para JIDs inexistentes (200 OK) e a entrega falha silenciosamente.
-    const resolvedExistingJid = await resolveExistingWhatsappJid({
-      evolutionUrl,
-      evolutionKey,
-      instanceName: instance.instance_name,
-      phone,
-    });
-
-    // Ordem de prioridade: JID confirmado existente → chat preferido →
-    // formato normalizado → variante BR.
-    const tryNumbers = [resolvedExistingJid, resolvedChatNumber, phone];
-    const variant = getBrazilianPhoneVariant(phone);
-    if (variant && variant !== phone) tryNumbers.push(variant);
-
-    const uniqueTryNumbers = [...new Set(tryNumbers.filter(Boolean) as string[])];
-
-    let lastErrorBody = "";
-    for (const candidate of uniqueTryNumbers) {
-      const response = await fetch(`${evolutionUrl}/message/sendText/${instance.instance_name}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: evolutionKey,
-        },
-        body: JSON.stringify({
-          number: candidate,
-          text: message,
-        }),
-      });
-
-      const responseText = await response.text();
-      if (response.ok) {
-        console.log(`Message sent via ${candidate} (instance: ${instance.instance_name})`);
-        // Evolution returns the WhatsApp message id in key.id — capture it so we
-        // can persist the message under that id and let the webhook dedupe by id.
-        try {
-          const parsed = JSON.parse(responseText);
-          const wid =
-            parsed?.key?.id ||
-            parsed?.messageId ||
-            parsed?.message?.key?.id ||
-            null;
-          return typeof wid === "string" ? wid : null;
-        } catch {
-          return null;
-        }
-      }
-
-      lastErrorBody = responseText;
-      const isInvalidNumber =
-        response.status === 400 ||
-        response.status === 404 ||
-        /not.?exists|invalid.?number|number.?does.?not|not.?in.?whatsapp|jid/i.test(responseText);
-
-      if (!isInvalidNumber) {
-        console.error(`Evolution send error (${candidate}):`, responseText);
-        return null;
-      }
-      console.warn(`Number ${candidate} rejected by Evolution, trying variant...`);
+    const sendResult = await providerSendText(ctx, phone, message, { waChatId: convWaChatId });
+    if (!sendResult.ok) {
+      console.error("AI sendText failed:", ctx.provider, sendResult.errorPayload);
+      return null;
     }
-    console.error("Evolution send failed for all variants:", lastErrorBody);
-    return null;
+
+    const providerMsgId = sendResult.messageId || null;
+
+    // Registra a mensagem como enviada pelo sistema (IA) — evita que o webhook
+    // trate o eco fromMe=true como intervenção humana pelo aparelho.
+    if (providerMsgId) {
+      await supabase.from("wa_outgoing_messages").insert({
+        message_id: providerMsgId,
+        instance_id: convInstanceId,
+        account_id: convAccountId,
+        user_id: userId,
+        phone,
+        origin: "ai",
+        sender_user_id: null,
+      }).then(() => {}, (e: any) => console.error("wa_outgoing_messages insert (ai):", e?.message || e));
+    }
+
+    // Cacheia wa_chat_id na conversa se foi resolvido agora
+    if (sendResult.waChatId && !convWaChatId) {
+      await supabase
+        .from("whatsapp_conversations")
+        .update({ wa_chat_id: sendResult.waChatId })
+        .eq("user_id", userId)
+        .eq("phone", phone)
+        .then(() => {}, (e: any) => console.error("cache wa_chat_id:", e?.message || e));
+    }
+
+    return providerMsgId;
   } catch (error) {
     console.error("Send message error:", error);
     return null;
