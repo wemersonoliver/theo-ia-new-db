@@ -2883,10 +2883,11 @@ async function sendWhatsAppMessage(
 
     const ctx = await resolveInstanceContext(supabase, {
       instanceId: convInstanceId,
+      accountId: convAccountId,
       userId,
     });
     if (!ctx) {
-      console.error("Instance context not found for user:", userId);
+      console.error("Instance context not found:", { userId, convInstanceId, convAccountId });
       return null;
     }
 
