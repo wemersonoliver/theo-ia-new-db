@@ -24,6 +24,7 @@ import {
   wahaSessionCreate,
   wahaSessionDelete,
   wahaSessionLogout,
+  wahaSessionStart,
   wahaSessionStatus,
   wahaStartTyping,
   wahaStopTyping,
@@ -461,26 +462,69 @@ export async function waConnect(
   if (!creds.ok) return { ok: false, status: 500, error: creds.error };
 
   if (ctx.provider === "waha") {
-    // Garante sessão criada; ignora erro se já existe
-    const create = await wahaSessionCreate({
-      wahaUrl: ctx.wahaUrl!,
-      wahaKey: ctx.wahaKey!,
-      session: ctx.wahaSession,
-      webhookUrl: opts.webhookUrl,
-      phoneNumber: opts.phoneNumber ?? null,
-    });
-    if (!create.ok && create.status !== 422 && create.status !== 409) {
-      const err = buildWahaErrorPayload(create as any, "Erro ao criar sessão WAHA");
-      return { ok: false, status: create.status, error: err.error };
+    const wahaUrl = ctx.wahaUrl!;
+    const wahaKey = ctx.wahaKey!;
+    const session = ctx.wahaSession;
+
+    // 1) Verifica estado atual
+    let statusRes = await wahaSessionStatus({ wahaUrl, wahaKey, session });
+    let sessionState = String((statusRes.data as any)?.status || (statusRes.data as any)?.state || "").toUpperCase();
+
+    // 2) Se sessão não existe (404), cria
+    if (!statusRes.ok && statusRes.status === 404) {
+      const create = await wahaSessionCreate({
+        wahaUrl, wahaKey, session,
+        webhookUrl: opts.webhookUrl,
+        phoneNumber: opts.phoneNumber ?? null,
+      });
+      if (!create.ok && create.status !== 422 && create.status !== 409) {
+        const err = buildWahaErrorPayload(create as any, "Erro ao criar sessão WAHA");
+        return { ok: false, status: create.status, error: err.error, raw: create };
+      }
+      // dá tempo pra sessão inicializar
+      await new Promise((r) => setTimeout(r, 1500));
+      statusRes = await wahaSessionStatus({ wahaUrl, wahaKey, session });
+      sessionState = String((statusRes.data as any)?.status || "").toUpperCase();
     }
 
-    // Busca QR
-    const qr = await wahaGetQrCode({ wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession });
+    // 3) Se STOPPED/FAILED, dá start
+    if (sessionState === "STOPPED" || sessionState === "FAILED") {
+      const started = await wahaSessionStart({ wahaUrl, wahaKey, session });
+      if (!started.ok && started.status !== 422) {
+        const err = buildWahaErrorPayload(started as any, "Erro ao iniciar sessão WAHA");
+        return { ok: false, status: started.status, error: err.error, raw: started };
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+
+    // 4) Se já autenticado, retorna ok sem QR
+    if (sessionState === "WORKING") {
+      return { ok: true, status: 200, qrCodeBase64: null, pairingCode: null, raw: statusRes };
+    }
+
+    // 5) Poll curto até SCAN_QR_CODE (até ~6s)
+    for (let i = 0; i < 6; i++) {
+      const s = await wahaSessionStatus({ wahaUrl, wahaKey, session });
+      const st = String((s.data as any)?.status || "").toUpperCase();
+      if (st === "SCAN_QR_CODE" || st === "WORKING") { sessionState = st; break; }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    if (sessionState === "WORKING") {
+      return { ok: true, status: 200, qrCodeBase64: null, pairingCode: null };
+    }
+
+    // 6) Busca QR
+    const qr = await wahaGetQrCode({ wahaUrl, wahaKey, session });
+    if (!qr.raw.ok && !qr.base64) {
+      const err = buildWahaErrorPayload(qr.raw as any, `Erro ao obter QR WAHA (session=${sessionState || "desconhecido"})`);
+      return { ok: false, status: qr.raw.status, error: err.error, raw: qr.raw };
+    }
     return {
-      ok: qr.raw.ok || !!qr.base64,
+      ok: true,
       status: qr.raw.status,
       qrCodeBase64: qr.base64,
-      pairingCode: null, // WAHA pairing code é feature separada; deixamos null por enquanto
+      pairingCode: null,
       raw: qr.raw,
     };
   }
