@@ -130,23 +130,34 @@ export async function resolveInstanceContext(
     };
   }
 
-  let query = supabase
-    .from("whatsapp_instances")
-    .select("id, instance_name, status, provider, waha_session_name, account_id, user_id, is_primary");
+  const base = () =>
+    supabase
+      .from("whatsapp_instances")
+      .select("id, instance_name, status, provider, waha_session_name, account_id, user_id, is_primary");
 
+  // Tenta cada critério em sequência — se um id/nome estiver desatualizado
+  // (instância recriada), cai para account_id / user_id em vez de falhar.
+  let data: any = null;
   if (opts.instanceId) {
-    query = query.eq("id", opts.instanceId).limit(1);
-  } else if (opts.instanceName) {
-    query = query.eq("instance_name", opts.instanceName).limit(1);
-  } else if (opts.accountId) {
-    query = query.eq("account_id", opts.accountId).order("is_primary", { ascending: false }).limit(1);
-  } else if (opts.userId) {
-    query = query.eq("user_id", opts.userId).limit(1);
-  } else {
-    return null;
+    const r = await base().eq("id", opts.instanceId).limit(1).maybeSingle();
+    data = r.data;
   }
-
-  const { data } = await query.maybeSingle();
+  if (!data && opts.instanceName) {
+    const r = await base().eq("instance_name", opts.instanceName).limit(1).maybeSingle();
+    data = r.data;
+  }
+  if (!data && opts.accountId) {
+    const r = await base()
+      .eq("account_id", opts.accountId)
+      .order("is_primary", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    data = r.data;
+  }
+  if (!data && opts.userId) {
+    const r = await base().eq("user_id", opts.userId).limit(1).maybeSingle();
+    data = r.data;
+  }
   if (!data) return null;
 
   const provider = (data.provider === "waha" ? "waha" : "evolution") as WaProvider;
