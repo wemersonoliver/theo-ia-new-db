@@ -42,6 +42,9 @@ verify_jwt = false
 [functions.waha-refresh-webhooks]
 verify_jwt = false
 
+[functions.waha-debug]
+verify_jwt = false
+
 [functions.whatsapp-igreen-agent-v2]
 verify_jwt = false
 
