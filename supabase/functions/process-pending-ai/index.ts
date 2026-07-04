@@ -65,11 +65,11 @@ async function resolveWaCtx(supabase: any, userId: string, phone: string): Promi
   }
 }
 
-async function sendTypingPresence(ctx: WaInstanceContext | null, phone: string) {
+async function sendTypingPresence(ctx: WaInstanceContext | null, phone: string, waChatId?: string | null) {
   if (!ctx) return;
   try {
     const normalizedPhone = normalizeBrazilianPhone(phone);
-    await setWhatsAppPresence(ctx, { phone: normalizedPhone, presence: "composing", delayMs: 25000 });
+    await setWhatsAppPresence(ctx, { phone: normalizedPhone, presence: "composing", delayMs: 25000, waChatId: waChatId ?? null });
   } catch (e) {
     console.error("sendTypingPresence error:", e);
   }
@@ -107,11 +107,22 @@ serve(async (req) => {
     // after ~25s, so we re-emit it every 20s while we wait.
     const waCtx = await resolveWaCtx(supabase, userId, phone);
     const instanceName = waCtx?.instanceName || null;
+    // Buscar wa_chat_id salvo pra que o typing use exatamente o chat correto.
+    let waChatIdCached: string | null = null;
+    try {
+      const { data: convChat } = await supabase
+        .from("whatsapp_conversations")
+        .select("wa_chat_id")
+        .eq("user_id", userId)
+        .eq("phone", phone)
+        .maybeSingle();
+      waChatIdCached = (convChat as any)?.wa_chat_id ?? null;
+    } catch (_) { /* ignore */ }
     if (waCtx) {
       // Fire first presence immediately (don't await long)
-      sendTypingPresence(waCtx, phone);
+      sendTypingPresence(waCtx, phone, waChatIdCached);
       const interval = setInterval(() => {
-        sendTypingPresence(waCtx, phone);
+        sendTypingPresence(waCtx, phone, waChatIdCached);
       }, 20000);
       try {
         await new Promise(resolve => setTimeout(resolve, sleepTime));
@@ -192,7 +203,7 @@ serve(async (req) => {
         .sort((a, b) => b - a)[0] ?? 0;
       if (lastInboundTs && Date.now() - lastInboundTs < 8000) {
         console.log(`[debounce-extra] last inbound ${Date.now() - lastInboundTs}ms ago, sleeping +8s for: ${phone}`);
-        if (waCtx) sendTypingPresence(waCtx, phone);
+        if (waCtx) sendTypingPresence(waCtx, phone, waChatIdCached);
         await new Promise((r) => setTimeout(r, 8000));
         extraWaits++;
         continue;

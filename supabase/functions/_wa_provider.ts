@@ -409,21 +409,52 @@ export async function sendWhatsAppMedia(
 
 export async function setWhatsAppPresence(
   ctx: WaInstanceContext,
-  opts: { phone: string; presence: "composing" | "recording" | "paused"; delayMs?: number },
+  opts: { phone: string; presence: "composing" | "recording" | "paused"; delayMs?: number; waChatId?: string | null },
 ): Promise<void> {
   const creds = ctxHasCreds(ctx);
   if (!creds.ok) return;
 
   if (ctx.provider === "waha") {
-    // WAHA só tem typing (para "composing"). Para "recording"/"paused", enviamos startTyping/stopTyping como aproximação.
+    // Resolver o chatId real igual ao envio de mensagens. Se o typing for
+    // enviado com um chatId inexistente (ex.: número com 9 mas WA sem 9),
+    // o WAHA aceita silenciosamente e nenhum "digitando..." aparece.
+    let chatId = (opts.waChatId || "").trim() || null;
+    const normalized = normalizeBrazilianPhone(opts.phone);
+    if (!chatId) {
+      try {
+        const resolved = await wahaCheckNumberExists({
+          wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession, phone: normalized,
+        });
+        if (resolved) chatId = `${resolved}@c.us`;
+      } catch (_) { /* ignore */ }
+    }
+    if (!chatId) {
+      const variant = getBrazilianPhoneVariant(normalized);
+      if (variant) {
+        try {
+          const alt = await wahaCheckNumberExists({
+            wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession, phone: variant,
+          });
+          if (alt) chatId = `${alt}@c.us`;
+        } catch (_) { /* ignore */ }
+      }
+    }
+    const finalChatId = chatId || `${normalized}@c.us`;
+
     if (opts.presence === "paused") {
-      await wahaStopTyping({ wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession, phone: opts.phone }).catch(() => {});
+      const r = await wahaStopTyping({ wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession, phone: finalChatId });
+      if (!r.ok) console.error(`[waha:stopTyping] status=${r.status} body=${(r.text || "").slice(0, 200)}`);
       return;
     }
-    await wahaStartTyping({ wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession, phone: opts.phone }).catch(() => {});
+    const r = await wahaStartTyping({ wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession, phone: finalChatId });
+    if (!r.ok) {
+      console.error(`[waha:startTyping] status=${r.status} chatId=${finalChatId} body=${(r.text || "").slice(0, 200)}`);
+    } else {
+      console.log(`[waha:startTyping] ok chatId=${finalChatId}`);
+    }
     if (opts.delayMs && opts.delayMs > 0) {
       setTimeout(() => {
-        wahaStopTyping({ wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession, phone: opts.phone }).catch(() => {});
+        wahaStopTyping({ wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession, phone: finalChatId }).catch(() => {});
       }, opts.delayMs);
     }
     return;
