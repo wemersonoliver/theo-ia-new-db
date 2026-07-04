@@ -83,27 +83,11 @@ serve(async (req) => {
 
     await waLogout(ctx);
 
-    // If instance was not fully connected (cancel during QR/pending) OR is not the primary,
-    // delete it entirely from Evolution API. Always for non-connected cancellations.
-    if (!wasConnected) {
-      await waDelete(ctx);
-      await supabase.from("whatsapp_instances").delete().eq("id", instance.id);
-      return jsonResponse({ success: true, deleted: true });
-    }
+    // Sempre excluir a instância ao desconectar (tanto no provedor quanto no banco).
+    await waDelete(ctx);
+    await supabase.from("whatsapp_instances").delete().eq("id", instance.id);
 
-    // Connected case: just mark as disconnected
-    await supabase
-      .from("whatsapp_instances")
-      .update({
-        status: "disconnected",
-        qr_code_base64: null,
-        phone_number: null,
-        profile_name: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", instance.id);
-
-    return jsonResponse({ success: true });
+    return jsonResponse({ success: true, deleted: true, wasConnected });
 
   } catch (error) {
     console.error("Error:", error);
