@@ -24,6 +24,7 @@ import {
   wahaSessionCreate,
   wahaSessionDelete,
   wahaSessionLogout,
+  wahaSessionStart,
   wahaSessionStatus,
   wahaStartTyping,
   wahaStopTyping,
