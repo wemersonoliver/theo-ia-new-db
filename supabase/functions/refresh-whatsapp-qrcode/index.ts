@@ -2,7 +2,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
 import { resolveInstanceContext, waConnect, waConnectionState } from "../_wa_provider.ts";
-import { wahaRequestCode } from "../_waha.ts";
+import {
+  wahaRequestCode,
+  wahaSessionCreate,
+  wahaSessionDelete,
+  wahaSessionStatus,
+} from "../_waha.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -110,6 +115,64 @@ serve(async (req) => {
 
     // Fluxo WAHA (simplificado — pairing code futuro)
     if (ctx.provider === "waha") {
+      // Se o usuário forneceu um número, precisamos DELETAR e RECRIAR a sessão
+      // com o phoneNumber em config.metadata (exigência do WAHA/NOWEB para pairing code).
+      if (phoneNumber) {
+        try {
+          await wahaSessionDelete({
+            wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession,
+          });
+        } catch (e) { console.log("waha delete falhou (segue):", e); }
+        await new Promise((r) => setTimeout(r, 1000));
+
+        const created = await wahaSessionCreate({
+          wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession,
+          webhookUrl: `${supabaseUrl}/functions/v1/whatsapp-webhook`,
+          phoneNumber,
+        });
+        if (!created.ok && ![409, 422].includes(created.status)) {
+          console.error("WAHA create com phoneNumber falhou:", created);
+          return jsonResponse({
+            error: (created.data as any)?.message || `WAHA erro ${created.status} ao criar sessão`,
+          }, 502);
+        }
+
+        // Aguarda a sessão sair de STARTING (até ~8s)
+        for (let i = 0; i < 8; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          const st = await wahaSessionStatus({
+            wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession,
+          });
+          const s = String((st.data as any)?.status || "").toUpperCase();
+          if (s === "SCAN_QR_CODE" || s === "WORKING" || s === "STARTED") break;
+        }
+
+        const rc = await wahaRequestCode({
+          wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!,
+          session: ctx.wahaSession, phoneNumber,
+        });
+        const pairingCode = rc.code;
+        await supabase.from("whatsapp_instances").update({
+          status: pairingCode ? "qr_ready" : "pending",
+          qr_code_base64: null,
+          pairing_code: pairingCode,
+          updated_at: new Date().toISOString(),
+        }).eq("id", instance.id);
+
+        if (!pairingCode) {
+          console.log("WAHA request-code falhou:", rc.raw.status, (rc.raw.text || "").slice(0, 300));
+        }
+
+        return jsonResponse({
+          success: !!pairingCode,
+          qrCode: null,
+          pairingCode,
+          message: pairingCode
+            ? undefined
+            : `WAHA não retornou pairing code (status ${rc.raw.status}). Verifique o número e tente novamente.`,
+        });
+      }
+
       const conn = await waConnect(ctx, {
         webhookUrl: `${supabaseUrl}/functions/v1/whatsapp-webhook`,
       });
@@ -117,33 +180,18 @@ serve(async (req) => {
         return jsonResponse({ error: conn.error || "Falha ao obter QR (WAHA)" }, 502);
       }
       const qrCodeBase64 = conn.qrCodeBase64 || null;
-      let pairingCode = conn.pairingCode || null;
-
-      // Se o usuário pediu conexão por número, tenta obter pairing code WAHA
-      if (phoneNumber) {
-        const rc = await wahaRequestCode({
-          wahaUrl: ctx.wahaUrl!,
-          wahaKey: ctx.wahaKey!,
-          session: ctx.wahaSession,
-          phoneNumber,
-        });
-        if (rc.code) pairingCode = rc.code;
-        else console.log("WAHA request-code falhou:", rc.raw.status, (rc.raw.text || "").slice(0, 200));
-      }
+      const pairingCode = conn.pairingCode || null;
 
       await supabase.from("whatsapp_instances").update({
-        status: qrCodeBase64 || pairingCode ? "qr_ready" : "pending",
+        status: qrCodeBase64 ? "qr_ready" : "pending",
         qr_code_base64: qrCodeBase64,
         pairing_code: pairingCode,
         updated_at: new Date().toISOString(),
       }).eq("id", instance.id);
       return jsonResponse({
-        success: phoneNumber ? !!pairingCode : !!qrCodeBase64,
+        success: !!qrCodeBase64,
         qrCode: qrCodeBase64,
         pairingCode,
-        message: phoneNumber && !pairingCode
-          ? "WAHA não retornou pairing code (verifique se o número é válido no WhatsApp). Use o QR Code."
-          : undefined,
       });
     }
 
