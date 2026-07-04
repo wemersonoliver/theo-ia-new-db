@@ -272,6 +272,10 @@ export async function wahaSessionCreate(opts: {
   phoneNumber?: string | null;
 }): Promise<WahaRequestResult> {
   const config: Record<string, any> = {};
+  if (opts.phoneNumber) {
+    // WAHA usa engine NOWEB para pairing code por número.
+    config.metadata = { phoneNumber: String(opts.phoneNumber).replace(/\D/g, "") };
+  }
   if (opts.webhookUrl) {
     config.webhooks = [
       {
@@ -288,7 +292,6 @@ export async function wahaSessionCreate(opts: {
     start: true,
     config,
   };
-  if (opts.phoneNumber) body.phoneNumber = opts.phoneNumber;
 
   return wahaRequest({
     wahaUrl: opts.wahaUrl,
