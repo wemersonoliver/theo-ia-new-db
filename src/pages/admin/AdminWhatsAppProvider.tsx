@@ -16,6 +16,7 @@ type InstanceRow = {
   provider: string | null;
   status: string | null;
   account_id: string | null;
+  owner_email?: string | null;
 };
 
 export default function AdminWhatsAppProvider() {
@@ -36,7 +37,31 @@ export default function AdminWhatsAppProvider() {
       .select("id, instance_name, display_name, provider, status, account_id")
       .order("updated_at", { ascending: false })
       .limit(500);
-    setInstances((data as InstanceRow[]) || []);
+    const rows = (data as InstanceRow[]) || [];
+
+    // Busca email do dono de cada conta para exibir na tabela (evita confusão de nomes)
+    const accountIds = Array.from(new Set(rows.map((r) => r.account_id).filter(Boolean))) as string[];
+    const ownerMap: Record<string, string> = {};
+    if (accountIds.length > 0) {
+      const { data: members } = await (supabase as any)
+        .from("account_members")
+        .select("account_id, user_id, role, created_at")
+        .in("account_id", accountIds)
+        .order("created_at", { ascending: true });
+      const userIds = Array.from(new Set(((members as any[]) || []).map((m) => m.user_id)));
+      const { data: profs } = await (supabase as any)
+        .from("profiles")
+        .select("user_id, email")
+        .in("user_id", userIds);
+      const emailByUser: Record<string, string> = {};
+      for (const p of (profs as any[]) || []) emailByUser[p.user_id] = p.email;
+      // Preferir owner (role=owner) se existir; senão o primeiro membro
+      for (const m of (members as any[]) || []) {
+        if (ownerMap[m.account_id] && m.role !== "owner") continue;
+        if (emailByUser[m.user_id]) ownerMap[m.account_id] = emailByUser[m.user_id];
+      }
+    }
+    setInstances(rows.map((r) => ({ ...r, owner_email: r.account_id ? ownerMap[r.account_id] ?? null : null })));
     setLoadingList(false);
   }
 
@@ -45,9 +70,23 @@ export default function AdminWhatsAppProvider() {
   async function switchInstance(row: InstanceRow, target: "evolution" | "waha") {
     if (row.provider === target) return;
     const confirmMsg =
-      `Trocar a instância "${row.display_name || row.instance_name}" para ${target === "waha" ? "WAHA" : "Evolution API"}?\n\n` +
+      `Trocar a instância "${row.display_name || row.instance_name}"\n` +
+      `Dono: ${row.owner_email || "(desconhecido)"}\n` +
+      `Conta: ${row.account_id}\n\n` +
+      `Para: ${target === "waha" ? "WAHA" : "Evolution API"}\n\n` +
       `O cliente precisará escanear o QR Code novamente para o novo provedor.`;
     if (!confirm(confirmMsg)) return;
+    // 1) Persiste override por conta PRIMEIRO — sobrevive a exclusão/recriação da instância
+    if (row.account_id) {
+      const { error: ovErr } = await (supabase as any)
+        .from("account_wa_provider")
+        .upsert({ account_id: row.account_id, provider: target, updated_at: new Date().toISOString() });
+      if (ovErr) {
+        toast.error(`Erro ao fixar provedor da conta: ${ovErr.message}`);
+        return;
+      }
+    }
+    // 2) Atualiza a instância atual
     const { data: updated, error } = await (supabase as any)
       .from("whatsapp_instances")
       .update({ provider: target, status: "disconnected", qr_code_base64: null, pairing_code: null })
@@ -61,19 +100,18 @@ export default function AdminWhatsAppProvider() {
       toast.error("Nada foi alterado. Sua conta não tem permissão para trocar esta instância (RLS bloqueou).");
       return;
     }
-    // Persiste a escolha por conta — sobrevive a desconexões/recriações da instância
-    if (row.account_id) {
-      const { error: ovErr } = await (supabase as any)
-        .from("account_wa_provider")
-        .upsert({ account_id: row.account_id, provider: target, updated_at: new Date().toISOString() });
-      if (ovErr) toast.error(`Aviso: não foi possível fixar o provedor da conta: ${ovErr.message}`);
-    }
-    toast.success(`Provedor alterado para ${updated[0].provider.toUpperCase()}. Peça ao cliente para reconectar.`);
+    toast.success(
+      `${row.owner_email || row.instance_name} → ${updated[0].provider.toUpperCase()}. Peça ao cliente para reconectar.`,
+    );
     reload();
   }
 
   const filtered = instances.filter((i) =>
-    !search ? true : `${i.instance_name} ${i.display_name || ""}`.toLowerCase().includes(search.toLowerCase()),
+    !search
+      ? true
+      : `${i.instance_name} ${i.display_name || ""} ${i.owner_email || ""} ${i.account_id || ""}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
   );
 
   return (
@@ -165,7 +203,7 @@ export default function AdminWhatsAppProvider() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nome..."
+              placeholder="Buscar por nome, email do dono ou account_id..."
               className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm text-white placeholder:text-slate-500"
             />
 
@@ -181,6 +219,7 @@ export default function AdminWhatsAppProvider() {
                   <thead>
                     <tr className="border-b border-slate-800 text-amber-400/70 uppercase text-xs font-semibold">
                       <th className="text-left py-2 px-3">Instância</th>
+                      <th className="text-left py-2 px-3">Dono (email)</th>
                       <th className="text-left py-2 px-3">Status</th>
                       <th className="text-left py-2 px-3">Provedor atual</th>
                       <th className="text-right py-2 px-3">Ações</th>
@@ -194,6 +233,10 @@ export default function AdminWhatsAppProvider() {
                           <td className="py-2 px-3">
                             <div className="text-white">{row.display_name || row.instance_name}</div>
                             <div className="text-xs text-slate-500">{row.instance_name}</div>
+                          </td>
+                          <td className="py-2 px-3">
+                            <div className="text-slate-200 text-sm">{row.owner_email || <span className="text-slate-600">—</span>}</div>
+                            <div className="text-[10px] text-slate-600 font-mono">{row.account_id?.slice(0, 8)}</div>
                           </td>
                           <td className="py-2 px-3">
                             <Badge variant="outline" className={cn(
