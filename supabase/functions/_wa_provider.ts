@@ -77,9 +77,33 @@ function getEvolutionCreds() {
 
 function getWahaCreds() {
   return {
+    wahaUrl: normalizeWahaUrl(Deno.env.get("WAHA_API_URL_NEW") || Deno.env.get("WAHA_API_URL")),
+    wahaKey: Deno.env.get("WAHA_API_KEY_NEW") || Deno.env.get("WAHA_API_KEY") || null,
+  };
+}
+
+// Instâncias que permanecem no servidor WAHA ANTIGO até serem desconectadas
+// pelo próprio usuário. Após a desconexão (que apaga a instância), a próxima
+// conexão usará automaticamente o servidor novo (getWahaCreds()).
+const LEGACY_WAHA_INSTANCE_IDS = new Set<string>([
+  "4ecec876-62e1-4179-97b7-368c5d4bc721", // jozeluiz1081@gmail.com — biz1053_principal
+]);
+const LEGACY_WAHA_INSTANCE_NAMES = new Set<string>([
+  "biz1053_principal",
+]);
+
+function getLegacyWahaCreds() {
+  return {
     wahaUrl: normalizeWahaUrl(Deno.env.get("WAHA_API_URL")),
     wahaKey: Deno.env.get("WAHA_API_KEY") ?? null,
   };
+}
+
+function pickWahaCreds(opts: { instanceId?: string | null; instanceName?: string | null }) {
+  const isLegacy =
+    (opts.instanceId && LEGACY_WAHA_INSTANCE_IDS.has(opts.instanceId)) ||
+    (opts.instanceName && LEGACY_WAHA_INSTANCE_NAMES.has(opts.instanceName));
+  return isLegacy ? getLegacyWahaCreds() : getWahaCreds();
 }
 
 function ctxHasCreds(ctx: WaInstanceContext): { ok: boolean; error?: string } {
@@ -110,7 +134,6 @@ export async function resolveInstanceContext(
   },
 ): Promise<WaInstanceContext | null> {
   const evo = getEvolutionCreds();
-  const waha = getWahaCreds();
 
   if (opts.system) {
     const { data } = await supabase
@@ -119,6 +142,7 @@ export async function resolveInstanceContext(
       .maybeSingle();
     if (!data) return null;
     const provider = (data.provider === "waha" ? "waha" : "evolution") as WaProvider;
+    const waha = pickWahaCreds({ instanceName: data.instance_name });
     return {
       provider,
       instanceName: data.instance_name,
@@ -161,6 +185,7 @@ export async function resolveInstanceContext(
   if (!data) return null;
 
   const provider = (data.provider === "waha" ? "waha" : "evolution") as WaProvider;
+  const waha = pickWahaCreds({ instanceId: data.id, instanceName: data.instance_name });
   return {
     provider,
     instanceName: data.instance_name,
