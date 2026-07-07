@@ -724,8 +724,7 @@ export async function wahaToInternalEvent(body: any): Promise<{ event: string; i
       if (alt && String(alt).includes("@")) {
         resolvedChatId = String(alt);
       } else {
-        const wahaUrl = normalizeWahaUrl(Deno.env.get("WAHA_API_URL"));
-        const wahaKey = Deno.env.get("WAHA_API_KEY");
+        const { wahaUrl, wahaKey } = pickWahaCreds({ instanceName: session });
         if (wahaUrl && wahaKey) {
           const resolved = await wahaResolveLid({ wahaUrl, wahaKey, session, lid: rawChatId }).catch(() => null);
           if (resolved) {
