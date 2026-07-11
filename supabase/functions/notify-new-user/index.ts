@@ -12,8 +12,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { full_name, email } = await req.json();
-    console.log("notify-new-user called:", { full_name, email });
+    const { full_name, email, phone } = await req.json();
+    console.log("notify-new-user called:", { full_name, email, phone });
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -72,7 +72,10 @@ Deno.serve(async (req) => {
     const dateStr = now.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
     const timeStr = now.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
 
-    const message = `🆕 *Novo usuário cadastrado!*\n\n📋 *Nome:* ${full_name || "Não informado"}\n📧 *Email:* ${email || "Não informado"}\n📅 *Data:* ${dateStr} às ${timeStr}`;
+    const phoneDigits = (phone || "").toString().replace(/\D/g, "");
+    const phoneLine = phoneDigits ? `\n📱 *Telefone:* ${phoneDigits}` : "";
+
+    const message = `🆕 *Novo usuário cadastrado!*\n\n📋 *Nome:* ${full_name || "Não informado"}\n📧 *Email:* ${email || "Não informado"}${phoneLine}\n📅 *Data:* ${dateStr} às ${timeStr}`;
 
     let sent = 0;
 
