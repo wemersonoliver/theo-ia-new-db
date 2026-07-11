@@ -86,10 +86,10 @@ function getWahaCreds() {
 // pelo próprio usuário. Após a desconexão (que apaga a instância), a próxima
 // conexão usará automaticamente o servidor novo (getWahaCreds()).
 const LEGACY_WAHA_INSTANCE_IDS = new Set<string>([
-  "4ecec876-62e1-4179-97b7-368c5d4bc721", // jozeluiz1081@gmail.com — biz1053_principal
+  // jozeluiz1081@gmail.com foi migrado para o servidor WAHA novo.
 ]);
 const LEGACY_WAHA_INSTANCE_NAMES = new Set<string>([
-  "biz1053_principal",
+  // vazio — todos os usuários usam o servidor WAHA novo
 ]);
 
 function getLegacyWahaCreds() {
