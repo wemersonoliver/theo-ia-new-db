@@ -57,25 +57,44 @@ serve(async (req) => {
       .eq("role", "super_admin");
 
     const ids = (superAdmins || []).map((r) => r.user_id);
-    if (ids.length === 0) {
-      return new Response(JSON.stringify({ ok: false, reason: "no_super_admins" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+
+    const normalize = (raw: string) => {
+      const digits = raw.replace(/\D/g, "");
+      return digits.length === 10 || digits.length === 11 ? `55${digits}` : digits;
+    };
+
+    const recipientsMap = new Map<string, { phone: string; name: string }>();
+
+    if (ids.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, full_name, phone")
+        .in("user_id", ids);
+
+      (profiles || [])
+        .filter((p) => p.phone && p.phone.replace(/\D/g, "").length >= 10)
+        .forEach((p) => {
+          const phone = normalize(p.phone!);
+          recipientsMap.set(phone, { phone, name: p.full_name || "" });
+        });
     }
 
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("user_id, full_name, phone")
-      .in("user_id", ids);
+    // Também envia para contatos ativos cadastrados no painel Admin → Notificações
+    const { data: adminContacts } = await supabase
+      .from("admin_notification_contacts")
+      .select("phone, name, active")
+      .eq("active", true);
 
-    const recipients = (profiles || [])
-      .filter((p) => p.phone && p.phone.replace(/\D/g, "").length >= 10)
-      .map((p) => {
-        const digits = p.phone!.replace(/\D/g, "");
-        // Normaliza para formato internacional (prefixa 55 se 10/11 dígitos)
-        const normalized = digits.length === 10 || digits.length === 11 ? `55${digits}` : digits;
-        return { phone: normalized, name: p.full_name || "" };
+    (adminContacts || [])
+      .filter((c) => c.phone && c.phone.replace(/\D/g, "").length >= 10)
+      .forEach((c) => {
+        const phone = normalize(c.phone);
+        if (!recipientsMap.has(phone)) {
+          recipientsMap.set(phone, { phone, name: c.name || "" });
+        }
       });
+
+    const recipients = Array.from(recipientsMap.values());
 
     if (recipients.length === 0) {
       return new Response(JSON.stringify({ ok: false, reason: "no_phones" }), {
