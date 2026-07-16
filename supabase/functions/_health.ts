@@ -6,6 +6,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 export type ApiName = "evolution_api" | "gemini" | "groq" | "elevenlabs";
 
 const COOLDOWN_MINUTES = 15;
+// Só dispara alerta após N falhas consecutivas — evita flapping em erros transientes
+// (ex.: Evolution API "Connection Closed" que se resolve na próxima chamada).
+const FAILURE_THRESHOLD = 3;
 
 function admin() {
   return createClient(
@@ -19,12 +22,17 @@ export async function reportApiSuccess(apiName: ApiName): Promise<void> {
     const supabase = admin();
     const { data: row } = await supabase
       .from("system_api_health")
-      .select("status, recovery_alert_sent")
+      .select("status, recovery_alert_sent, last_alert_sent_at")
       .eq("api_name", apiName)
       .maybeSingle();
 
+    // Só envia "recuperada" se de fato houve alerta de falha antes.
+    // Sem isso, qualquer falha transiente (que não chegou ao threshold) geraria
+    // um "API restabelecida" fantasma.
     const wasDown = row?.status === "down";
-    const needsRecoveryAlert = wasDown && row?.recovery_alert_sent === false;
+    const hadFailureAlert = !!row?.last_alert_sent_at;
+    const needsRecoveryAlert =
+      wasDown && row?.recovery_alert_sent === false && hadFailureAlert;
 
     await supabase
       .from("system_api_health")
@@ -77,6 +85,11 @@ export async function reportApiFailure(apiName: ApiName, errorMessage: string): 
         recovery_alert_sent: false,
       })
       .eq("api_name", apiName);
+
+    // Só alerta após N falhas consecutivas (evita flapping em erros transientes).
+    if (newFailures < FAILURE_THRESHOLD) {
+      return;
+    }
 
     // Cooldown: só dispara alerta se passaram >= 15min do último alerta
     const lastAlert = row?.last_alert_sent_at ? new Date(row.last_alert_sent_at).getTime() : 0;
