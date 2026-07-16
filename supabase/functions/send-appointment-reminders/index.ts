@@ -246,23 +246,41 @@ serve(async (req) => {
 
 async function sendWhatsAppMessage(supabase: any, userId: string, phone: string, message: string): Promise<boolean> {
   try {
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-
-    if (!evolutionUrl || !evolutionKey) {
-      console.error("Evolution API not configured");
-      return false;
-    }
-
     const { data: instance } = await supabase
       .from("whatsapp_instances")
-      .select("id, instance_name, status")
+      .select("id, instance_name, status, provider")
       .eq("user_id", userId)
       .in("status", ["connected", "open"])
       .maybeSingle();
 
     if (!instance) {
       console.log("Connected instance not found for user:", userId);
+      return false;
+    }
+
+    // Roteia para o provedor correto (Evolution ou WAHA) via camada de abstração.
+    // Antes, esta função chamava Evolution direto — para instâncias WAHA, o
+    // Evolution devolvia 404 "instance does not exist" e marcávamos a instância
+    // como desconectada, mesmo estando ativa no servidor WAHA.
+    if (instance.provider === "waha") {
+      const ctx = await resolveInstanceContext(supabase, { instanceId: instance.id });
+      if (!ctx) {
+        console.error("WAHA context not resolved for instance", instance.id);
+        return false;
+      }
+      const r = await sendWhatsAppText(ctx, phone, message);
+      if (!r.ok) {
+        console.error("WAHA send failed:", r.status, r.errorPayload);
+        return false;
+      }
+      return true;
+    }
+
+    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
+    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+
+    if (!evolutionUrl || !evolutionKey) {
+      console.error("Evolution API not configured");
       return false;
     }
 
