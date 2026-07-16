@@ -110,7 +110,11 @@ serve(async (req) => {
 
     const { data: instances } = await supabase
       .from("whatsapp_instances")
-      .select("id, instance_name, status, user_id");
+      .select("id, instance_name, status, user_id, provider")
+      // Este cron consulta apenas a Evolution. Sem este filtro, sessões WAHA
+      // (que não aparecem em /instance/fetchInstances) eram marcadas como
+      // desconectadas indevidamente, mesmo estando ativas no servidor WAHA.
+      .eq("provider", "evolution");
 
     let updated = 0;
     const updates: Array<{ name: string; from: string | null; to: string }> = [];
