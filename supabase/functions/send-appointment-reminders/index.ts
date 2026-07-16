@@ -58,6 +58,21 @@ serve(async (req) => {
       const messageTemplate = config.reminder_message_template ||
         "Olá {nome}! Lembrando que você tem um agendamento {dia_referencia} às {hora}. Por favor, confirme sua presença respondendo SIM ou informe se precisa reagendar.";
 
+      // Se o WhatsApp do usuário não está conectado, não tenta enviar lembretes.
+      // Antes, o cron tentava a cada execução e gerava erro recorrente quando a
+      // instância estava marcada como conectada no banco, mas já não existia na Evolution.
+      const { data: activeInstance } = await supabase
+        .from("whatsapp_instances")
+        .select("id, instance_name, status")
+        .eq("user_id", userId)
+        .in("status", ["connected", "open"])
+        .maybeSingle();
+
+      if (!activeInstance) {
+        console.log(`[skip] no connected WhatsApp instance for reminder user=${userId}`);
+        continue;
+      }
+
       const businessStart = config.business_hours_start || "08:00";
       const businessEnd = config.business_hours_end || "19:00";
       const [bStartH, bStartM] = businessStart.split(":").map(Number);
@@ -240,12 +255,13 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
 
     const { data: instance } = await supabase
       .from("whatsapp_instances")
-      .select("instance_name")
+      .select("id, instance_name, status")
       .eq("user_id", userId)
+      .in("status", ["connected", "open"])
       .maybeSingle();
 
     if (!instance) {
-      console.error("Instance not found for user:", userId);
+      console.log("Connected instance not found for user:", userId);
       return false;
     }
 
@@ -259,7 +275,16 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
     });
 
     if (!response.ok) {
-      console.error("Evolution send error:", await response.text());
+      const errorText = await response.text();
+      console.error("Evolution send error:", errorText);
+
+      if (response.status === 404 && errorText.toLowerCase().includes("instance") && errorText.toLowerCase().includes("does not exist")) {
+        await supabase
+          .from("whatsapp_instances")
+          .update({ status: "disconnected", updated_at: new Date().toISOString() })
+          .eq("id", instance.id);
+      }
+
       return false;
     }
     return true;
