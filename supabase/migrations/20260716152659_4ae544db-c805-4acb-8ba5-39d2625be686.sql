@@ -1,0 +1,1 @@
+UPDATE public.whatsapp_instances SET status = 'connected', updated_at = now(), last_sync_at = now() WHERE instance_name = 'biz1139_principal' AND provider = 'waha';
