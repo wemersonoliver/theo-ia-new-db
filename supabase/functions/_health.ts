@@ -12,6 +12,9 @@ const FAILURE_THRESHOLD = 3;
 // Além da quantidade de falhas, exige que a API fique sem sucesso por um tempo mínimo.
 // Isso evita alertas quando várias requisições simultâneas falham no mesmo segundo.
 const MIN_DOWN_SECONDS_BEFORE_ALERT = 60;
+// Após um alerta de queda, só envia "restabelecida" quando a API estiver estável
+// por este tempo (sem novas falhas). Evita mensagens "caiu/voltou" com segundos de diferença.
+const MIN_STABLE_OK_SECONDS_BEFORE_RECOVERY = 300;
 
 function admin() {
   return createClient(
@@ -25,48 +28,48 @@ export async function reportApiSuccess(apiName: ApiName): Promise<void> {
     const supabase = admin();
     const { data: row } = await supabase
       .from("system_api_health")
-      .select("status, recovery_alert_sent, last_alert_sent_at")
+      .select("status, recovery_alert_sent, last_alert_sent_at, last_error_at")
       .eq("api_name", apiName)
       .maybeSingle();
 
-    // Só envia "recuperada" se havia um alerta ativo nesta queda.
-    // last_alert_sent_at é limpo quando a API volta, então falhas transitórias
-    // abaixo do threshold não geram "restabelecida" fantasma.
-    const canClaimRecoveryAlert =
-      row?.status === "down" &&
-      row?.recovery_alert_sent === false &&
-      !!row?.last_alert_sent_at;
+    const now = new Date();
+    const hadFailureAlert = !!row?.last_alert_sent_at && row?.recovery_alert_sent === false;
 
-    let shouldSendRecoveryAlert = false;
-
-    if (canClaimRecoveryAlert) {
-      const { data: claimed } = await supabase
-        .from("system_api_health")
-        .update({
-          status: "ok",
-          last_ok_at: new Date().toISOString(),
-          consecutive_failures: 0,
-          recovery_alert_sent: true,
-          last_alert_sent_at: null,
-        })
-        .eq("api_name", apiName)
-        .eq("status", "down")
-        .eq("recovery_alert_sent", false)
-        .not("last_alert_sent_at", "is", null)
-        .select("api_name");
-
-      shouldSendRecoveryAlert = (claimed?.length ?? 0) > 0;
-    } else {
-      await supabase
+    // Sempre marca a API como OK e zera falhas, mas NÃO limpa last_alert_sent_at
+    // enquanto a recuperação não for confirmada. Isso permite medir o tempo estável ok.
+    await supabase
       .from("system_api_health")
       .update({
         status: "ok",
-        last_ok_at: new Date().toISOString(),
+        last_ok_at: now.toISOString(),
         consecutive_failures: 0,
-        recovery_alert_sent: true,
-        last_alert_sent_at: null,
+        // recovery_alert_sent só vira true quando de fato enviamos a mensagem abaixo.
+        recovery_alert_sent: hadFailureAlert ? false : true,
       })
       .eq("api_name", apiName);
+
+    let shouldSendRecoveryAlert = false;
+
+    if (hadFailureAlert) {
+      // Só envia "restabelecida" quando a API está estável há X segundos sem novos erros.
+      const lastErrMs = row?.last_error_at ? new Date(row.last_error_at).getTime() : 0;
+      const stableForMs = lastErrMs ? now.getTime() - lastErrMs : Number.POSITIVE_INFINITY;
+
+      if (stableForMs >= MIN_STABLE_OK_SECONDS_BEFORE_RECOVERY * 1000) {
+        // Claim atômico: só uma execução consegue marcar recovery_alert_sent=true
+        const { data: claimed } = await supabase
+          .from("system_api_health")
+          .update({
+            recovery_alert_sent: true,
+            last_alert_sent_at: null,
+          })
+          .eq("api_name", apiName)
+          .eq("recovery_alert_sent", false)
+          .not("last_alert_sent_at", "is", null)
+          .select("api_name");
+
+        shouldSendRecoveryAlert = (claimed?.length ?? 0) > 0;
+      }
     }
 
     if (shouldSendRecoveryAlert) {
