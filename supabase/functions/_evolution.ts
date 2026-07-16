@@ -109,19 +109,33 @@ export async function evolutionRequest({
       if (![401, 403].includes(response.status)) {
         // Erros 5xx e timeouts indicam API fora; 4xx (exceto 401/403) podem ser problemas de payload
         if (response.status >= 500 || response.status === 0) {
-          reportApiFailure("evolution_api", `HTTP ${response.status}: ${(text || "").slice(0, 200)}`).catch(() => {});
+          reportApiFailure("evolution_api", `HTTP ${response.status}: ${(text || "").slice(0, 200)}`, {
+            path: resolvedPath,
+            method: method ?? (body ? "POST" : "GET"),
+            status: response.status,
+            auth_mode: authMode,
+          }).catch(() => {});
         }
         return lastFailure;
       }
     } catch (error) {
       const text = error instanceof Error ? error.message : "Unknown Evolution API error";
-      reportApiFailure("evolution_api", text).catch(() => {});
+      reportApiFailure("evolution_api", text, {
+        path: resolvedPath,
+        method: method ?? (body ? "POST" : "GET"),
+        auth_mode: authMode,
+      }).catch(() => {});
       return { ok: false, status: 0, url, authMode, data: null, text };
     }
   }
 
   if (lastFailure && (lastFailure.status >= 500 || lastFailure.status === 0 || lastFailure.status === 401 || lastFailure.status === 403)) {
-    reportApiFailure("evolution_api", `HTTP ${lastFailure.status}: ${(lastFailure.text || "").slice(0, 200)}`).catch(() => {});
+    reportApiFailure("evolution_api", `HTTP ${lastFailure.status}: ${(lastFailure.text || "").slice(0, 200)}`, {
+      path: resolvedPath,
+      method: method ?? (body ? "POST" : "GET"),
+      status: lastFailure.status,
+      auth_mode: lastFailure.authMode,
+    }).catch(() => {});
   }
   return lastFailure ?? { ok: false, status: 0, url, authMode: "apikey", data: null, text: "Unknown Evolution API error" };
 }
