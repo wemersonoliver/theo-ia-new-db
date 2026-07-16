@@ -4644,8 +4644,10 @@ export type Database = {
           consecutive_failures: number
           created_at: string
           id: string
+          incident_started_at: string | null
           last_alert_sent_at: string | null
           last_error_at: string | null
+          last_error_context: Json | null
           last_error_message: string | null
           last_ok_at: string | null
           recovery_alert_sent: boolean
@@ -4657,8 +4659,10 @@ export type Database = {
           consecutive_failures?: number
           created_at?: string
           id?: string
+          incident_started_at?: string | null
           last_alert_sent_at?: string | null
           last_error_at?: string | null
+          last_error_context?: Json | null
           last_error_message?: string | null
           last_ok_at?: string | null
           recovery_alert_sent?: boolean
@@ -4670,8 +4674,10 @@ export type Database = {
           consecutive_failures?: number
           created_at?: string
           id?: string
+          incident_started_at?: string | null
           last_alert_sent_at?: string | null
           last_error_at?: string | null
+          last_error_context?: Json | null
           last_error_message?: string | null
           last_ok_at?: string | null
           recovery_alert_sent?: boolean

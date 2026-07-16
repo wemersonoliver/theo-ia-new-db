@@ -4,6 +4,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 export type ApiName = "evolution_api" | "gemini" | "groq" | "elevenlabs";
+export type ApiHealthContext = Record<string, unknown>;
 
 const COOLDOWN_MINUTES = 15;
 // Só dispara alerta após N falhas consecutivas — evita flapping em erros transientes
@@ -28,7 +29,7 @@ export async function reportApiSuccess(apiName: ApiName): Promise<void> {
     const supabase = admin();
     const { data: row } = await supabase
       .from("system_api_health")
-      .select("status, recovery_alert_sent, last_alert_sent_at, last_error_at")
+      .select("status, recovery_alert_sent, last_alert_sent_at, last_error_at, incident_started_at")
       .eq("api_name", apiName)
       .maybeSingle();
 
@@ -45,6 +46,9 @@ export async function reportApiSuccess(apiName: ApiName): Promise<void> {
         consecutive_failures: 0,
         // recovery_alert_sent só vira true quando de fato enviamos a mensagem abaixo.
         recovery_alert_sent: hadFailureAlert ? false : true,
+        // Se nunca houve alerta, o sucesso encerra o incidente transitório.
+        // Se houve alerta, só limpamos quando a recuperação estável for confirmada.
+        incident_started_at: hadFailureAlert ? (row?.incident_started_at ?? null) : null,
       })
       .eq("api_name", apiName);
 
@@ -62,6 +66,7 @@ export async function reportApiSuccess(apiName: ApiName): Promise<void> {
           .update({
             recovery_alert_sent: true,
             last_alert_sent_at: null,
+            incident_started_at: null,
           })
           .eq("api_name", apiName)
           .eq("recovery_alert_sent", false)
@@ -89,20 +94,28 @@ export async function reportApiSuccess(apiName: ApiName): Promise<void> {
   }
 }
 
-export async function reportApiFailure(apiName: ApiName, errorMessage: string): Promise<void> {
+export async function reportApiFailure(
+  apiName: ApiName,
+  errorMessage: string,
+  context: ApiHealthContext = {},
+): Promise<void> {
   try {
     const supabase = admin();
     const now = new Date();
 
     const { data: row } = await supabase
       .from("system_api_health")
-      .select("consecutive_failures, last_alert_sent_at, last_ok_at, status")
+      .select("consecutive_failures, last_alert_sent_at, last_ok_at, status, incident_started_at, recovery_alert_sent")
       .eq("api_name", apiName)
       .maybeSingle();
 
     const newFailures = (row?.consecutive_failures ?? 0) + 1;
     const trimmedError = (errorMessage || "Unknown error").slice(0, 500);
-    const isNewIncident = row?.status !== "down";
+    const isUnresolvedAlert = !!row?.last_alert_sent_at && row?.recovery_alert_sent === false;
+    const isNewIncident = row?.status !== "down" && !isUnresolvedAlert;
+    const incidentStartedAt = isNewIncident || !row?.incident_started_at
+      ? now.toISOString()
+      : row.incident_started_at;
 
     await supabase
       .from("system_api_health")
@@ -110,6 +123,8 @@ export async function reportApiFailure(apiName: ApiName, errorMessage: string): 
         status: "down",
         last_error_at: now.toISOString(),
         last_error_message: trimmedError,
+        last_error_context: context,
+        incident_started_at: incidentStartedAt,
         consecutive_failures: newFailures,
         recovery_alert_sent: false,
         // Limpa alerta antigo quando começa uma nova queda.
@@ -126,8 +141,11 @@ export async function reportApiFailure(apiName: ApiName, errorMessage: string): 
 
     // Também exige tempo mínimo sem sucesso. Várias chamadas simultâneas podem
     // acumular 3+ falhas em 1-2 segundos, mas isso não significa API fora do ar.
-    const lastOkMs = row?.last_ok_at ? new Date(row.last_ok_at).getTime() : 0;
-    const downForMs = lastOkMs ? now.getTime() - lastOkMs : Number.POSITIVE_INFINITY;
+    // Mede a duração da queda pelo primeiro erro do incidente atual, não pelo
+    // último sucesso global. Sem isso, 3 erros simultâneos horas após o último
+    // sucesso eram interpretados como "API fora há horas".
+    const incidentStartMs = incidentStartedAt ? new Date(incidentStartedAt).getTime() : 0;
+    const downForMs = incidentStartMs ? now.getTime() - incidentStartMs : Number.POSITIVE_INFINITY;
     if (downForMs < MIN_DOWN_SECONDS_BEFORE_ALERT * 1000) {
       return;
     }
