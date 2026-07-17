@@ -24,6 +24,8 @@ export interface Appointment {
   assigned_to: string | null;
   created_at: string;
   updated_at: string;
+  created_via?: string | null;
+  created_by?: string | null;
 }
 
 export interface AppointmentSlot {
@@ -235,6 +237,8 @@ export function useAppointments(selectedDate?: Date, range?: { start: Date; end:
         duration_minutes: input.duration_minutes ?? 30,
         appointment_type_id: input.appointment_type_id ?? null,
         status: "scheduled",
+        created_via: "user",
+        created_by: user.id,
       });
       if (error) throw error;
     },
