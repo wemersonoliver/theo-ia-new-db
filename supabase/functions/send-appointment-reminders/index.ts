@@ -185,9 +185,15 @@ serve(async (req) => {
           continue;
         }
 
-        // Send via Evolution API
-        const sent = await sendWhatsAppMessage(supabase, userId, apt.phone, message);
-        if (!sent) {
+        // Envio via provedor (Evolution/WAHA) com retorno de chatId e status
+        const sendResult = await sendReminderMessage(supabase, userId, apt.phone, message);
+        console.log(
+          `[reminder] apt=${apt.id} user=${userId} phone=${apt.phone} ` +
+            `result=${sendResult.ok ? "sent" : `error:${sendResult.status ?? "unknown"}`} ` +
+            `chatId=${sendResult.waChatId ?? "null"}` +
+            (sendResult.ok ? "" : ` err=${(sendResult.error || "").slice(0, 200)}`),
+        );
+        if (!sendResult.ok) {
           await supabase
             .from("appointments")
             .update({
@@ -197,12 +203,20 @@ serve(async (req) => {
             })
             .eq("id", apt.id)
             .eq("reminder_sent_at", claimedAt);
-          console.error(`Reminder send failed for appointment ${apt.id}; claim released.`);
+          console.error(`[reminder] claim released for appointment ${apt.id}`);
           continue;
         }
 
-        // Save message to conversation
-        await saveMessageToConversation(supabase, userId, apt.phone, message);
+        // Upsert da conversa (cria se não existir) para o lembrete aparecer no painel
+        await saveMessageToConversation(
+          supabase,
+          userId,
+          apt.account_id,
+          apt.phone,
+          apt.contact_name || apt.title || null,
+          message,
+          sendResult.waChatId ?? null,
+        );
 
         // *** CRITICAL: Activate AI for this conversation so the AI handles the client response ***
         // 1. Ensure ai_active is true on the conversation
@@ -228,7 +242,6 @@ serve(async (req) => {
           }, { onConflict: "user_id,phone" });
 
         totalSent++;
-        console.log(`Reminder sent for appointment ${apt.id} (${apt.title}) to ${apt.phone}. AI session activated for confirmation.`);
       }
     }
 
@@ -244,7 +257,19 @@ serve(async (req) => {
   }
 });
 
-async function sendWhatsAppMessage(supabase: any, userId: string, phone: string, message: string): Promise<boolean> {
+interface ReminderSendResult {
+  ok: boolean;
+  status?: number;
+  waChatId?: string | null;
+  error?: string;
+}
+
+async function sendReminderMessage(
+  supabase: any,
+  userId: string,
+  phone: string,
+  message: string,
+): Promise<ReminderSendResult> {
   try {
     const { data: instance } = await supabase
       .from("whatsapp_instances")
@@ -254,34 +279,29 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
       .maybeSingle();
 
     if (!instance) {
-      console.log("Connected instance not found for user:", userId);
-      return false;
+      return { ok: false, error: "no-connected-instance" };
     }
 
-    // Roteia para o provedor correto (Evolution ou WAHA) via camada de abstração.
-    // Antes, esta função chamava Evolution direto — para instâncias WAHA, o
-    // Evolution devolvia 404 "instance does not exist" e marcávamos a instância
-    // como desconectada, mesmo estando ativa no servidor WAHA.
+    // Roteia por provedor via camada de abstração (funciona para WAHA e Evolution).
     if (instance.provider === "waha") {
       const ctx = await resolveInstanceContext(supabase, { instanceId: instance.id });
-      if (!ctx) {
-        console.error("WAHA context not resolved for instance", instance.id);
-        return false;
-      }
+      if (!ctx) return { ok: false, error: "waha-context-not-resolved" };
       const r = await sendWhatsAppText(ctx, phone, message);
       if (!r.ok) {
-        console.error("WAHA send failed:", r.status, r.errorPayload);
-        return false;
+        return {
+          ok: false,
+          status: r.status,
+          error: JSON.stringify(r.errorPayload || {}).slice(0, 400),
+        };
       }
-      return true;
+      return { ok: true, status: r.status, waChatId: r.waChatId ?? null };
     }
 
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
 
     if (!evolutionUrl || !evolutionKey) {
-      console.error("Evolution API not configured");
-      return false;
+      return { ok: false, error: "evolution-not-configured" };
     }
 
     const response = await fetch(`${evolutionUrl}/message/sendText/${instance.instance_name}`, {
@@ -295,52 +315,78 @@ async function sendWhatsAppMessage(supabase: any, userId: string, phone: string,
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Evolution send error:", errorText);
-
       if (response.status === 404 && errorText.toLowerCase().includes("instance") && errorText.toLowerCase().includes("does not exist")) {
         await supabase
           .from("whatsapp_instances")
           .update({ status: "disconnected", updated_at: new Date().toISOString() })
           .eq("id", instance.id);
       }
-
-      return false;
+      return { ok: false, status: response.status, error: errorText.slice(0, 400) };
     }
-    return true;
+    return { ok: true, status: response.status };
   } catch (error) {
-    console.error("Send message error:", error);
-    return false;
+    return { ok: false, error: (error as Error)?.message || "unknown" };
   }
 }
 
-async function saveMessageToConversation(supabase: any, userId: string, phone: string, content: string) {
-  const { data: conversation } = await supabase
-    .from("whatsapp_conversations")
-    .select("id, messages")
-    .eq("user_id", userId)
-    .eq("phone", phone)
-    .maybeSingle();
-
+async function saveMessageToConversation(
+  supabase: any,
+  userId: string,
+  accountId: string | null,
+  phone: string,
+  contactName: string | null,
+  content: string,
+  waChatId: string | null,
+) {
+  const nowIso = new Date().toISOString();
   const newMessage = {
     id: crypto.randomUUID(),
-    timestamp: new Date().toISOString(),
+    timestamp: nowIso,
     from_me: true,
     content,
     type: "text",
     sent_by: "ai",
   };
 
+  const { data: conversation } = await supabase
+    .from("whatsapp_conversations")
+    .select("id, messages, wa_chat_id")
+    .eq("user_id", userId)
+    .eq("phone", phone)
+    .maybeSingle();
+
   if (conversation) {
-    const messages = conversation.messages || [];
+    const messages = Array.isArray(conversation.messages) ? conversation.messages : [];
     const updated = [...messages, newMessage];
-    await supabase
-      .from("whatsapp_conversations")
-      .update({
-        messages: updated,
-        last_message_at: new Date().toISOString(),
-        total_messages: updated.length,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", conversation.id);
+    const patch: Record<string, any> = {
+      messages: updated,
+      last_message_at: nowIso,
+      total_messages: updated.length,
+      updated_at: nowIso,
+      ai_active: true,
+    };
+    if (!conversation.wa_chat_id && waChatId) patch.wa_chat_id = waChatId;
+    await supabase.from("whatsapp_conversations").update(patch).eq("id", conversation.id);
+    return;
+  }
+
+  // Cria a conversa (lead novo do agendamento) para o lembrete aparecer no painel.
+  const insertPayload: Record<string, any> = {
+    user_id: userId,
+    account_id: accountId,
+    phone,
+    contact_name: contactName,
+    messages: [newMessage],
+    total_messages: 1,
+    last_message_at: nowIso,
+    ai_active: true,
+  };
+  if (waChatId) insertPayload.wa_chat_id = waChatId;
+
+  const { error: insertErr } = await supabase
+    .from("whatsapp_conversations")
+    .insert(insertPayload);
+  if (insertErr) {
+    console.error(`[reminder] failed to create conversation for ${phone}:`, insertErr.message);
   }
 }

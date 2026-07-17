@@ -1,114 +1,46 @@
-## Contexto adicional
-A Evolution API entrega mensagens do próprio aparelho com um marcador diferente (`source`) e nós usávamos isso para saber quando o cliente respondeu pelo celular e pausar a IA. O WAHA **não faz essa distinção**: toda mensagem saindo do seu número vem com `fromMe: true`, seja ela:
+## Diagnóstico (confirmado no banco)
 
-1. Enviada pela IA (via nossa edge function)
-2. Enviada pelo atendente no painel (via nossa edge function)
-3. Enviada manualmente pelo aparelho/WhatsApp Web do cliente
+A instância WAHA da Débora está **conectada** e o cron `send-appointment-reminders` **está rodando** para ela. Dois lembretes de hoje (18:00) foram marcados como `reminder_sent=true` exatamente nos horários corretos (12:00 e 12:25 BRT — 6h antes). Ou seja: o disparador funciona.
 
-Precisamos recriar essa distinção para poder pausar a IA quando o dono do número intervém pelo aparelho.
+O problema **não é o formato do telefone** — o WAHA aceita os números como estão (sem o 9). O que faz parecer "nada foi enviado" são duas coisas no código do `send-appointment-reminders`:
 
----
+**1. Lembrete enviado nunca aparece no painel de Conversas.**
+A função `saveMessageToConversation` só grava se a conversa **já existir**. Como quase todo lead de agendamento é primeiro contato, a conversa não existe → o lembrete é entregue no WhatsApp mas some do painel. Do lado da Débora, "não foi enviado".
 
-## Estratégia (baseada na doc oficial WAHA)
+**2. Nenhum log útil por atendimento.**
+Existe só um `console.log` genérico de sucesso, sem chatId, sem resposta do WAHA, sem motivo de falha. Não dá para auditar quais lembretes realmente saíram.
 
-O `POST /api/sendText` e `POST /api/sendImage/…` **retornam o `id` da mensagem criada** (formato `true_<chatId>_<messageId>`). Toda mensagem que sai por nossos endpoints WAHA vai gerar um webhook `message.any` com `fromMe: true` — usando o **mesmo id**.
+## Correção (apenas `supabase/functions/send-appointment-reminders/index.ts`)
 
-**Regra:** se o id que chega no webhook está registrado como "enviado por nós" → é IA ou atendente pelo painel. Se **não está** → foi digitado no aparelho → pausar IA.
+### Passo 1 — Upsert da conversa ao enviar lembrete
+Trocar `saveMessageToConversation` por um upsert:
+- Se a conversa existir → append no `messages[]` (como hoje).
+- Se **não existir** → criar linha em `whatsapp_conversations` com `account_id`, `user_id`, `phone`, `contact_name` do appointment, `ai_active=true`, `messages=[<lembrete>]`, `total_messages=1`, `last_message_at=now()` e — quando o WAHA retornar — `wa_chat_id`.
 
----
+Efeito: o lembrete sempre aparece no painel, e a resposta "SIM" do cliente cai no fluxo normal da IA.
 
-## Plano completo (juntando com o anterior)
+### Passo 2 — Aproveitar o `wa_chat_id` retornado pelo WAHA
+`sendWhatsAppText` já devolve `waChatId` no resultado. Salvar esse valor na conversa (novo campo ou update) para que os próximos envios/typing usem o chatId real (evita o WAHA errar por causa da tentativa de adicionar 9).
 
-### 1. Padrão de identificadores WAHA (do plano anterior)
-- Respeitar `@c.us`, `@lid`, `@g.us`, `@newsletter`, `@broadcast` no parser.
-- LID → resolver via `GET /api/{session}/lids/{lid}`; se falhar, ignorar.
-- Guardar `wa_chat_id` original e reusar no envio.
-- Para envio novo, usar `GET /api/contacts/check-exists` (regra oficial BR).
-- Baixar mídia com header `X-Api-Key`.
-
-### 2. Rastreamento de mensagens enviadas por nós (novo)
-
-**Nova tabela `wa_outgoing_messages`:**
-```sql
-CREATE TABLE public.wa_outgoing_messages (
-  message_id text PRIMARY KEY,        -- id retornado pelo WAHA
-  instance_id uuid,
-  account_id uuid,
-  user_id uuid,
-  phone text NOT NULL,
-  origin text NOT NULL,               -- 'ai' | 'panel' | 'system'
-  sender_user_id uuid,                -- quem clicou "enviar" no painel (null p/ IA)
-  created_at timestamptz DEFAULT now()
-);
-CREATE INDEX ON public.wa_outgoing_messages (phone, created_at DESC);
-GRANT SELECT, INSERT ON public.wa_outgoing_messages TO authenticated;
-GRANT ALL ON public.wa_outgoing_messages TO service_role;
-ALTER TABLE public.wa_outgoing_messages ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "service_role_all" ON public.wa_outgoing_messages
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+### Passo 3 — Log estruturado por appointment
+Para cada agendamento processado, imprimir uma linha padronizada:
 ```
-Purga automática após 7 dias por `pg_cron` (não precisa histórico longo).
-
-### 3. Toda edge function que envia registra o id
-
-Alterar `_wa_provider.ts → sendWhatsAppText/Media` para **retornar `messageId`**. Nas funções que enviam (`send-whatsapp-message`, `send-whatsapp-media`, `whatsapp-ai-agent`, `send-appointment-reminders`, follow-ups, etc.), após envio bem-sucedido:
-
-```ts
-await supabaseAdmin.from("wa_outgoing_messages").insert({
-  message_id: sendResult.messageId,
-  instance_id: ctx.instanceId,
-  account_id: accountId,
-  user_id: userId,
-  phone: normalizedPhone,
-  origin: isAI ? "ai" : (system ? "system" : "panel"),
-  sender_user_id: isAI ? null : userId,
-});
+[reminder] apt=<id> user=<userId> phone=<original> result=<sent|waha-error:<status>> chatId=<retornado|null>
 ```
+Sem essa linha hoje, não temos como confirmar entrega quando o cliente reclama.
 
-### 4. Webhook decide o que fazer quando `fromMe: true`
+### Passo 4 — Release da claim em falha real do WAHA (já existe, manter)
+O comportamento atual de liberar `reminder_sent=false` quando `sendWhatsAppText` retorna `!ok` está correto. Apenas garantir que o log do Passo 3 imprima o status HTTP e o corpo do erro do WAHA.
 
-Em `whatsapp-webhook`, para todo evento com `fromMe: true` (só WAHA):
+## O que NÃO vou mudar
 
-```
-1. lookup na tabela wa_outgoing_messages pelo message_id
-2. se ACHOU → é IA ou painel → apenas grava/atualiza a msg (já foi salva no envio, marcar como entregue), NÃO pausa IA
-3. se NÃO ACHOU → foi pelo aparelho → 
-     - grava a mensagem na conversa com sent_by: "human_phone"
-     - marca whatsapp_ai_sessions como handed_off (pausa IA)
-     - remove enrollment de follow-up automático
-     - notifica handoff
-```
+- **Nada de normalização de telefone** para WAHA. O WAHA aceita o número como veio (o próprio `sendWhatsAppText` já faz `check-exists` com as duas variantes BR internamente).
+- **Nenhuma migração de banco**.
+- **Nenhuma mudança no front**.
+- **Nenhum outro helper WAHA/Evolution**.
 
-Retry: se o webhook chegar antes do INSERT ser commitado (raro), a msg cai como "phone" e pausaria IA erradamente. Solução: aguardar 500ms e re-consultar antes de decidir pelo handoff.
+## Como validar depois do deploy
 
-### 5. Botão manual "Pausar IA" continua existindo
-
-Independente do detector automático, o botão do painel em `/conversations` continua marcando `ai_active = false`.
-
----
-
-## Arquivos alterados
-
-**Backend / migrations:**
-1. `supabase/functions/_wa_provider.ts` — parser respeitando sufixos; `sendWhatsAppText/Media` retornam `{ ok, messageId }`
-2. `supabase/functions/_waha.ts` — helpers `wahaResolveLid()`, `wahaCheckExists()`, `wahaDownloadMediaBase64()`
-3. `supabase/functions/whatsapp-webhook/index.ts` — lookup em `wa_outgoing_messages`; handoff automático se `fromMe` sem match
-4. `supabase/functions/send-whatsapp-message/index.ts` — registrar id, usar `wa_chat_id`
-5. `supabase/functions/send-whatsapp-media/index.ts` — idem
-6. `supabase/functions/whatsapp-ai-agent/index.ts` — registrar id com `origin: 'ai'`
-7. Demais funções de envio (reminders, followups, welcome) — registrar id
-8. Migration: tabela `wa_outgoing_messages` + coluna `wa_chat_id` em `whatsapp_conversations` + cron de purga + limpeza das 2 conversas fantasma do 1053
-
-**Sem mudança de UI.**
-
----
-
-## Como validar depois de implementar
-
-1. Contato manda msg nova → banco grava telefone real (13 dígitos) e `wa_chat_id`.
-2. IA responde → id registrado em `wa_outgoing_messages`. Webhook `fromMe:true` chega, encontra match, IA continua ativa.
-3. Você responde do painel → mesmo comportamento.
-4. Você abre o WhatsApp no celular e digita uma resposta → webhook `fromMe:true` chega **sem match** → IA pausa automaticamente, aparece no painel como "atendente assumiu pelo aparelho".
-5. Envio de mídia (imagem/áudio) recebida e enviada funcionando com `X-Api-Key`.
-
-Aprove para eu implementar tudo em uma leva só.
+1. Rodar `send-appointment-reminders` manualmente e conferir nos logs: cada appointment deve imprimir a linha `[reminder] apt=... result=...`.
+2. Para os appointments futuros da Débora (07/20, 07/22, 07/23): quando o cron disparar 6h antes, a mensagem deve aparecer no painel de **Conversas** do lead — mesmo se for a primeira mensagem — e chegar no WhatsApp real.
+3. Se algum não chegar, o log agora diz exatamente por quê (status do WAHA).
