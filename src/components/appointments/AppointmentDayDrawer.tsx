@@ -5,7 +5,7 @@ import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 import { getAssigneeColor } from "@/lib/assignee-colors";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Clock, Phone, User, CheckCircle, XCircle, Plus } from "lucide-react";
+import { Clock, Phone, User, CheckCircle, XCircle, Plus, Bot, UserCog, Cog } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +20,28 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   cancelled: { label: "Cancelado", variant: "destructive" },
   completed: { label: "Concluído", variant: "outline" },
 };
+
+function OriginBadge({ via }: { via?: string | null }) {
+  if (via === "ai") {
+    return (
+      <Badge variant="outline" className="text-[10px] gap-1 border-purple-400/40 text-purple-500">
+        <Bot className="h-3 w-3" /> IA
+      </Badge>
+    );
+  }
+  if (via === "system") {
+    return (
+      <Badge variant="outline" className="text-[10px] gap-1">
+        <Cog className="h-3 w-3" /> Sistema
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] gap-1">
+      <UserCog className="h-3 w-3" /> Manual
+    </Badge>
+  );
+}
 
 interface Props {
   open: boolean;
@@ -81,6 +103,7 @@ export function AppointmentDayDrawer({
                       <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="font-semibold text-sm truncate">{appt.title}</h4>
                         <Badge variant={status.variant} className="text-[10px]">{status.label}</Badge>
+                        <OriginBadge via={appt.created_via} />
                       </div>
                       <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
