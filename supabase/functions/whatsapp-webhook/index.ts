@@ -727,13 +727,35 @@ serve(async (req) => {
           // Transcribe audio
           messageType = "audio";
           try {
-            persistedMedia = await persistEvolutionMedia({
-              supabase, evolutionUrl, evolutionKey, instanceName,
-              messageKey, scope: userId, phone,
-              messageId: msg.key?.id || crypto.randomUUID(),
-              fallbackExt: "ogg",
-              knownMime: msg.message?.audioMessage?.mimetype || null,
-            });
+            if (isWaha) {
+              const mediaUrl = data?._waha?.mediaUrl;
+              const wahaUrl = Deno.env.get("WAHA_API_URL") || "";
+              const wahaKey = Deno.env.get("WAHA_API_KEY") || "";
+              if (mediaUrl && wahaUrl && wahaKey) {
+                persistedMedia = await persistWahaMedia({
+                  supabase, wahaUrl, wahaKey, mediaUrl,
+                  scope: userId, phone,
+                  messageId: msg.key?.id || crypto.randomUUID(),
+                  fallbackExt: "ogg",
+                  filename: null,
+                  knownMime: msg.message?.audioMessage?.mimetype || data?._waha?.mediaMimetype || null,
+                });
+              } else {
+                console.error("WAHA audio: no mediaUrl available. _waha keys=",
+                  data?._waha ? Object.keys(data._waha).join(",") : "(missing)",
+                  " raw payload keys=",
+                  data?._waha?.raw ? Object.keys(data._waha.raw).join(",") : "(missing)",
+                );
+              }
+            } else {
+              persistedMedia = await persistEvolutionMedia({
+                supabase, evolutionUrl, evolutionKey, instanceName,
+                messageKey, scope: userId, phone,
+                messageId: msg.key?.id || crypto.randomUUID(),
+                fallbackExt: "ogg",
+                knownMime: msg.message?.audioMessage?.mimetype || null,
+              });
+            }
           } catch (e) { console.error("Persist audio error:", e); }
           try {
             console.log("Transcribing audio message for:", phone);
@@ -743,7 +765,11 @@ serve(async (req) => {
                 isWaha: true, data, msg, evolutionUrl, evolutionKey, instanceName,
               });
               if (dl) { transcribeBody.mediaBase64 = dl.base64; transcribeBody.mimeType = dl.mime; }
-              else { console.error("WAHA audio: fetchMediaBase64Unified returned null"); }
+              else {
+                console.error("WAHA audio: fetchMediaBase64Unified returned null. _waha=",
+                  JSON.stringify(data?._waha ? { ...data._waha, raw: undefined } : null),
+                );
+              }
             }
             const transcribeResponse = await fetch(
               `${supabaseUrl}/functions/v1/transcribe-audio`,
