@@ -291,6 +291,8 @@ serve(async (req) => {
             appointment_date: date,
             appointment_time: timeWithSeconds,
             status: "scheduled",
+            created_via: "ai",
+            created_by: null,
           })
           .select()
           .single();

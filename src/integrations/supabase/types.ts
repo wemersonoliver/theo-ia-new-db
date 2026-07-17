@@ -654,6 +654,8 @@ export type Database = {
           confirmed_by_client: boolean | null
           contact_name: string | null
           created_at: string | null
+          created_by: string | null
+          created_via: string
           description: string | null
           duration_minutes: number | null
           id: string
@@ -676,6 +678,8 @@ export type Database = {
           confirmed_by_client?: boolean | null
           contact_name?: string | null
           created_at?: string | null
+          created_by?: string | null
+          created_via?: string
           description?: string | null
           duration_minutes?: number | null
           id?: string
@@ -698,6 +702,8 @@ export type Database = {
           confirmed_by_client?: boolean | null
           contact_name?: string | null
           created_at?: string | null
+          created_by?: string | null
+          created_via?: string
           description?: string | null
           duration_minutes?: number | null
           id?: string
