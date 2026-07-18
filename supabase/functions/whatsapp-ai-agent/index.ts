@@ -105,25 +105,25 @@ const schedulingTools = {
     },
     {
       name: "cancel_appointment",
-      description: "Cancela um agendamento existente do cliente.",
+      description: "Cancela um agendamento existente do cliente. O telefone do cliente é detectado automaticamente pelo contexto da conversa — se o cliente tiver apenas 1 agendamento ativo, você NÃO precisa informar date/time (deixe vazio) e o sistema cancela o próximo agendamento dele. Só informe date/time quando o cliente tiver vários agendamentos e quiser cancelar um específico.",
       parameters: {
         type: "object",
         properties: {
           date: {
             type: "string",
-            description: "Data do agendamento a cancelar no formato YYYY-MM-DD"
+            description: "OPCIONAL. Data do agendamento a cancelar (YYYY-MM-DD). Deixe vazio para cancelar o próximo agendamento do cliente."
           },
           time: {
             type: "string",
-            description: "Horário do agendamento a cancelar no formato HH:MM"
+            description: "OPCIONAL. Horário do agendamento a cancelar (HH:MM). Deixe vazio para cancelar o próximo agendamento do cliente."
           }
         },
-        required: ["date", "time"]
+        required: []
       }
     },
     {
       name: "reschedule_appointment",
-      description: "Reagenda um agendamento existente do cliente, atualizando o agendamento atual para a nova data e horário. Use quando o cliente pedir para remarcar/reagendar e informar o novo horário.",
+      description: "Reagenda o agendamento existente do cliente. O telefone do cliente é detectado automaticamente — você NÃO precisa perguntar qual agendamento reagendar quando ele só tem 1 ativo; o sistema encontra sozinho pelo telefone. Basta informar a nova data e horário.",
       parameters: {
         type: "object",
         properties: {
@@ -149,7 +149,7 @@ const schedulingTools = {
     },
     {
       name: "list_appointments",
-      description: "Lista os agendamentos do cliente.",
+      description: "Lista os agendamentos futuros do cliente atual (identificado automaticamente pelo telefone da conversa). Use SEMPRE que o cliente pedir para remarcar, cancelar, confirmar ou consultar os agendamentos dele, para descobrir data/hora sem precisar perguntar.",
       parameters: {
         type: "object",
         properties: {
