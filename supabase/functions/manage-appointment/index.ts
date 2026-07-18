@@ -345,28 +345,46 @@ serve(async (req) => {
       }
 
       case "cancel_appointment": {
-        if (!appointmentId && (!date || !time || !phone)) {
+        if (!appointmentId && !phone) {
           return new Response(JSON.stringify({ error: "Missing appointment identifier" }), { 
             status: 400, 
             headers: { ...corsHeaders, "Content-Type": "application/json" } 
           });
         }
 
-        let query = supabase
-          .from("appointments")
-          .update({ status: "cancelled", updated_at: new Date().toISOString() })
-          .eq("user_id", userId);
-
-        if (appointmentId) {
-          query = query.eq("id", appointmentId);
-        } else {
-          const timeWithSeconds = time.includes(":") && time.split(":").length === 2 
-            ? `${time}:00` 
-            : time;
-          query = query.eq("phone", phone).eq("appointment_date", date).eq("appointment_time", timeWithSeconds);
+        // Resolve target appointment id
+        let targetId = appointmentId as string | undefined;
+        if (!targetId) {
+          let findQ = supabase
+            .from("appointments")
+            .select("id")
+            .eq("user_id", userId)
+            .eq("phone", phone)
+            .in("status", ["scheduled", "confirmed"])
+            .order("appointment_date", { ascending: true })
+            .order("appointment_time", { ascending: true });
+          if (date) findQ = findQ.eq("appointment_date", date);
+          if (time) {
+            const timeWithSeconds = time.includes(":") && time.split(":").length === 2 ? `${time}:00` : time;
+            findQ = findQ.eq("appointment_time", timeWithSeconds);
+          }
+          const { data: found } = await findQ.limit(1).maybeSingle();
+          targetId = found?.id;
         }
 
-        const { data, error } = await query.select();
+        if (!targetId) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: "Não encontrei um agendamento ativo para cancelar."
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const { data, error } = await supabase
+          .from("appointments")
+          .update({ status: "cancelled", updated_at: new Date().toISOString() })
+          .eq("user_id", userId)
+          .eq("id", targetId)
+          .select();
 
         if (error || !data?.length) {
           return new Response(JSON.stringify({ 
