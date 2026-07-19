@@ -82,6 +82,9 @@ serve(async (req) => {
       // Mesmo que o usuário configure 00:00–23:59, NUNCA enviar fora dessa janela.
       const GLOBAL_FLOOR_MIN = 8 * 60;   // 08:00
       const GLOBAL_CEIL_MIN  = 19 * 60;  // 19:00
+      // Teto específico para envios feitos no DIA ANTERIOR ao agendamento.
+      // Evita mandar lembrete "amanhã" tarde da noite (ex.: 18:30 de domingo).
+      const DAY_BEFORE_CEIL_MIN = 18 * 60; // 18:00
       const businessStartMinutes = Math.max(bStartH * 60 + bStartM, GLOBAL_FLOOR_MIN);
       const businessEndMinutes   = Math.min(bEndH * 60 + bEndM,   GLOBAL_CEIL_MIN);
 
@@ -131,15 +134,20 @@ serve(async (req) => {
         } else if (isTomorrow) {
           // Só faz sentido lembrar hoje se a janela de amanhã cair antes
           // do expediente (ex.: agendamento 08:00 + 2h antes = 06:00).
-          // Nesse caso, mandamos hoje nas últimas 2h antes do fechamento.
+          // Nesse caso, mandamos hoje nas últimas 2h antes do fechamento,
+          // respeitando o teto de véspera (DAY_BEFORE_CEIL_MIN = 18:00 BRT).
           if (idealStart < businessStartMinutes) {
             const sendWindowStart = Math.max(
               businessEndMinutes - 120,
               businessStartMinutes,
             );
+            const sendWindowEnd = Math.min(
+              businessEndMinutes,
+              DAY_BEFORE_CEIL_MIN,
+            );
             if (
               currentMinutes >= sendWindowStart &&
-              currentMinutes <= businessEndMinutes
+              currentMinutes <= sendWindowEnd
             ) {
               shouldSendNow = true;
             }
@@ -155,15 +163,49 @@ serve(async (req) => {
           continue;
         }
 
-        // Build message from template
+        // ============================================================
+        // Build message from template (BRT wall-clock)
+        // ============================================================
         const diaReferencia = isToday ? "hoje" : "amanhã";
         const horaFormatted = `${String(aptH).padStart(2, "0")}:${String(aptM).padStart(2, "0")}`;
-        const message = messageTemplate
-          .replace("{nome}", apt.contact_name || "")
-          .replace("{dia_referencia}", diaReferencia)
-          .replace("{hora}", horaFormatted)
-          .replace("{titulo}", apt.title || "")
-          .replace("{data}", apt.appointment_date);
+        // apt.appointment_date vem como "YYYY-MM-DD" (wall-clock BRT).
+        // Construímos meio-dia BRT para evitar qualquer viagem de fuso.
+        const [yyyy, mm, dd] = String(apt.appointment_date).split("-").map(Number);
+        const aptDateBrt = new Date(Date.UTC(yyyy, (mm || 1) - 1, dd || 1, 12, 0, 0));
+        const diaSemana = aptDateBrt.toLocaleDateString("pt-BR", {
+          weekday: "long",
+          timeZone: TZ,
+        });
+        const dataBr = `${String(dd).padStart(2, "0")}/${String(mm).padStart(2, "0")}/${yyyy}`;
+        const dataCurta = `${String(dd).padStart(2, "0")}/${String(mm).padStart(2, "0")}`;
+        console.log(
+          `[reminder] apt=${apt.id} isToday=${isToday} isTomorrow=${isTomorrow} ` +
+            `weekday=${nowBrt.getDay()} nowBRT=${String(nowBrt.getHours()).padStart(2, "0")}:${String(nowBrt.getMinutes()).padStart(2, "0")}`,
+        );
+
+        // 1) Normaliza palavras "hoje/amanhã" escritas fixas pelo usuário no template
+        //    ANTES de aplicar placeholders, para não afetar {dia_referencia}.
+        let normalizedTemplate = messageTemplate as string;
+        if (isTomorrow) {
+          normalizedTemplate = normalizedTemplate.replace(/\bhoje\b/gi, "amanhã");
+        } else if (isToday) {
+          normalizedTemplate = normalizedTemplate.replace(/\b(amanhã|amanha)\b/gi, "hoje");
+        }
+
+        // 2) Substitui placeholders (replaceAll para múltiplas ocorrências).
+        let message = normalizedTemplate
+          .replaceAll("{nome}", apt.contact_name || "")
+          .replaceAll("{dia_referencia}", diaReferencia)
+          .replaceAll("{hora}", horaFormatted)
+          .replaceAll("{titulo}", apt.title || "")
+          .replaceAll("{data}", apt.appointment_date)
+          .replaceAll("{data_br}", dataBr)
+          .replaceAll("{data_curta}", dataCurta)
+          .replaceAll("{dia_semana}", diaSemana);
+
+        // 3) Anexa linha final com data real formatada em BRT — elimina ambiguidade
+        //    mesmo quando o template do usuário estiver mal escrito.
+        message = `${message}\n\n📅 ${diaSemana}, ${dataCurta} às ${horaFormatted}`;
 
         // Atomic claim BEFORE sending. Multiple cron/function executions can overlap;
         // only the first one that flips reminder_sent from false -> true may send.
