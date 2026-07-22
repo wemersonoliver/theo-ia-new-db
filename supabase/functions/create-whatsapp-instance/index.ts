@@ -150,8 +150,14 @@ serve(async (req) => {
 
     const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    const wahaUrl = normalizeWahaUrl(Deno.env.get("WAHA_API_URL"));
-    const wahaKey = Deno.env.get("WAHA_API_KEY") ?? null;
+    // Preferimos o servidor WAHA novo. O servidor antigo (WAHA_API_URL) só é
+    // usado para instâncias legadas listadas em LEGACY_WAHA_INSTANCE_NAMES
+    // (ver _wa_provider.ts). Novas conexões vão sempre para o servidor novo.
+    const wahaUrl = normalizeWahaUrl(
+      Deno.env.get("WAHA_API_URL_NEW") || Deno.env.get("WAHA_API_URL"),
+    );
+    const wahaKey =
+      Deno.env.get("WAHA_API_KEY_NEW") || Deno.env.get("WAHA_API_KEY") || null;
 
     // Determina qual provider usar. Prioridade:
     // 1) providerOverride (body)
