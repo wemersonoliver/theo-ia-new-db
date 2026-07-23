@@ -578,7 +578,12 @@ export function extractWahaMessageId(result: WahaRequestResult | null | undefine
     d?.id?._serialized ||
     d?.id ||
     d?._data?.id?._serialized ||
+    d?._data?.id?.id ||
+    d?._data?.key?.id ||
+    d?.key?._serialized ||
     d?.key?.id ||
+    d?.message?.id?._serialized ||
+    d?.message?.id ||
     d?.messageId ||
     null;
   return typeof id === "string" ? id : null;

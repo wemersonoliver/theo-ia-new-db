@@ -947,6 +947,33 @@ serve(async (req) => {
               }
             }
           }
+
+          // Fallback crítico para WAHA em contas migradas Evolution → WAHA:
+          // às vezes a IA já salvou a mensagem com UUID (sem providerMsgId), e o WAHA
+          // ecoa segundos depois com outro id/LID. Se o texto é exatamente igual ao
+          // último envio do sistema, é eco do sistema — não intervenção humana.
+          if (!outgoingOrigin && conversation) {
+            const normalizeText = (value: unknown) =>
+              String(value || "")
+                .replace(/\s+/g, " ")
+                .trim();
+            const currentText = normalizeText(content);
+            const now = Date.now();
+            const recentSystemEcho = [...((conversation.messages || []) as any[])]
+              .reverse()
+              .find((m: any) => {
+                if (!m?.from_me) return false;
+                if (m?.sent_by !== "ai" && m?.sent_by !== "human" && m?.origin !== "ai" && m?.origin !== "panel") return false;
+                const ts = new Date(m.timestamp).getTime();
+                if (!Number.isFinite(ts) || now - ts > 60_000) return false;
+                return normalizeText(m.content) === currentText;
+              });
+            if (recentSystemEcho) {
+              outgoingOrigin = recentSystemEcho.origin || (recentSystemEcho.sent_by === "ai" ? "ai" : "panel");
+              console.log(`[webhook] echo WAHA reconhecido por texto/tempo (origin=${outgoingOrigin}, id=${outgoingId || "sem-id"}) — pulando duplicata`);
+              continue;
+            }
+          }
           // Se veio marcador _waha=true e não achamos o id, é mensagem digitada pelo aparelho.
           // Se veio de Evolution, mantém compat: source `app`/`android` também é aparelho.
           const isFromDevice = isWaha
