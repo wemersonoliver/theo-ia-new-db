@@ -159,6 +159,22 @@ export async function resolveInstanceContext(
       .from("whatsapp_instances")
       .select("id, instance_name, status, provider, waha_session_name, account_id, user_id, is_primary");
 
+  const resolveAccountProviderOverride = async (accountId?: string | null): Promise<WaProvider | null> => {
+    if (!accountId) return null;
+    try {
+      const { data: override } = await supabase
+        .from("account_wa_provider")
+        .select("provider")
+        .eq("account_id", accountId)
+        .maybeSingle();
+      if ((override as any)?.provider === "waha") return "waha";
+      if ((override as any)?.provider === "evolution") return "evolution";
+    } catch (e) {
+      console.error("resolveAccountProviderOverride error:", e);
+    }
+    return null;
+  };
+
   // Tenta cada critério em sequência — se um id/nome estiver desatualizado
   // (instância recriada), cai para account_id / user_id em vez de falhar.
   let data: any = null;
@@ -184,7 +200,10 @@ export async function resolveInstanceContext(
   }
   if (!data) return null;
 
-  const provider = (data.provider === "waha" ? "waha" : "evolution") as WaProvider;
+  // Em migrações Evolution → WAHA, a linha da instância pode ficar com provider antigo.
+  // O override da conta é a fonte de verdade para roteamento depois da troca no admin.
+  const accountOverride = await resolveAccountProviderOverride(data.account_id);
+  const provider = (accountOverride || (data.provider === "waha" ? "waha" : "evolution")) as WaProvider;
   const waha = pickWahaCreds({ instanceId: data.id, instanceName: data.instance_name });
   return {
     provider,
