@@ -929,6 +929,23 @@ serve(async (req) => {
               .eq("message_id", outgoingId)
               .maybeSingle();
             outgoingOrigin = (tracked as any)?.origin || null;
+            // Fallback: WAHA às vezes ecoa o id com chatId em LID (ex.: true_<lid>@lid_HASH)
+            // enquanto o envio foi registrado com @c.us (true_<phone>@c.us_HASH). O hash final
+            // é estável, então fazemos match pelo sufixo "_HASH".
+            if (!outgoingOrigin) {
+              const parts = outgoingId.split("_");
+              const hash = parts[parts.length - 1];
+              if (hash && hash.length >= 8) {
+                const { data: trackedBySuffix } = await supabase
+                  .from("wa_outgoing_messages")
+                  .select("origin")
+                  .like("message_id", `%_${hash}`)
+                  .order("created_at", { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                outgoingOrigin = (trackedBySuffix as any)?.origin || null;
+              }
+            }
           }
           // Se veio marcador _waha=true e não achamos o id, é mensagem digitada pelo aparelho.
           // Se veio de Evolution, mantém compat: source `app`/`android` também é aparelho.
