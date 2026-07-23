@@ -574,15 +574,18 @@ export async function wahaDownloadMediaBase64(opts: {
 export function extractWahaMessageId(result: WahaRequestResult | null | undefined): string | null {
   if (!result || !result.ok) return null;
   const d: any = result.data || {};
+  // Preferir IDs serializados completos (`true_<chatId>_<HASH>`). Em alguns
+  // retornos do WAHA `d.id` vem apenas como hash; se gravarmos só o hash, o
+  // webhook pode ecoar o ID completo e a deduplicação fica frágil.
   const id =
     d?.id?._serialized ||
-    d?.id ||
     d?._data?.id?._serialized ||
+    d?.key?._serialized ||
+    d?.message?.id?._serialized ||
+    d?.id ||
     d?._data?.id?.id ||
     d?._data?.key?.id ||
-    d?.key?._serialized ||
     d?.key?.id ||
-    d?.message?.id?._serialized ||
     d?.message?.id ||
     d?.messageId ||
     null;
