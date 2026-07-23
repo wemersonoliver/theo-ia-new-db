@@ -907,11 +907,33 @@ serve(async (req) => {
         // Handle outgoing messages (sent by human via WhatsApp)
         if (isFromMe) {
           const outgoingId = msg.key?.id || null;
+          const wahaSource = isWaha
+            ? String(msg?._waha?.raw?.source || data?._waha?.raw?.source || "").toLowerCase()
+            : "";
+          const isWahaApiEcho = isWaha && wahaSource === "api";
+          const canonicalWahaMessageHash = (value: unknown): string | null => {
+            const raw = String(value || "").trim();
+            if (!raw) return null;
+            const parts = raw.split("_").filter(Boolean);
+            const last = parts.length ? parts[parts.length - 1] : raw;
+            const candidate = last || raw;
+            return /^[A-Za-z0-9]{8,}$/.test(candidate) ? candidate : null;
+          };
+
           // Dedup: se a mensagem já foi gravada pelo agente/painel
-          // com o mesmo id, este é apenas o eco do envio.
+          // com o mesmo id, este é apenas o eco do envio. No WAHA também deduplica
+          // pelo hash final, porque o mesmo envio pode chegar como:
+          // - true_5547...@c.us_3EB...
+          // - true_2639...@lid_3EB...
+          // - 3EB... (payload compatível com Evolution)
           if (outgoingId && conversation) {
             const existing = (conversation.messages || []) as any[];
-            const already = existing.find((m) => m?.id === outgoingId);
+            const outgoingHash = canonicalWahaMessageHash(outgoingId);
+            const already = existing.find((m) => {
+              if (m?.id === outgoingId) return true;
+              if (!outgoingHash || !m?.from_me) return false;
+              return canonicalWahaMessageHash(m?.id) === outgoingHash;
+            });
             if (already) {
               console.log(`[webhook] echo de mensagem já gravada (id=${outgoingId}) — pulando duplicata`);
               continue;
@@ -933,8 +955,7 @@ serve(async (req) => {
             // enquanto o envio foi registrado com @c.us (true_<phone>@c.us_HASH). O hash final
             // é estável, então fazemos match pelo sufixo "_HASH".
             if (!outgoingOrigin) {
-              const parts = outgoingId.split("_");
-              const hash = parts[parts.length - 1];
+              const hash = canonicalWahaMessageHash(outgoingId);
               if (hash && hash.length >= 8) {
                 const { data: trackedBySuffix } = await supabase
                   .from("wa_outgoing_messages")
@@ -974,6 +995,15 @@ serve(async (req) => {
               continue;
             }
           }
+
+          // Regra canônica do WAHA: source="api" é eco de envio feito pela API
+          // (IA, painel, lembretes, follow-up). Nunca deve pausar a IA. Já
+          // source="app" representa mensagem digitada no aparelho e deve pausar.
+          if (!outgoingOrigin && isWahaApiEcho) {
+            outgoingOrigin = "api";
+            console.log(`[webhook] WAHA source=api reconhecido como eco do sistema (id=${outgoingId || "sem-id"})`);
+          }
+
           // Se veio marcador _waha=true e não achamos o id, é mensagem digitada pelo aparelho.
           // Se veio de Evolution, mantém compat: source `app`/`android` também é aparelho.
           const isFromDevice = isWaha
