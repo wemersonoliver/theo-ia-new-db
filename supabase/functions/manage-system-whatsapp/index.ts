@@ -1,6 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildEvolutionErrorPayload, evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import {
+  buildWahaErrorPayload,
+  normalizeWahaUrl,
+  wahaGetQrCode,
+  wahaSessionCreate,
+  wahaSessionDelete,
+  wahaSessionStatus,
+} from "../_waha.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -89,14 +97,131 @@ serve(async (req) => {
     }
 
     const { action } = await req.json();
+
+    const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
+
+    // ---------- Provedor do WhatsApp de suporte ----------
+    const { data: sysRow } = await supabase
+      .from("system_whatsapp_instance")
+      .select("id, instance_name, provider, waha_session_name")
+      .limit(1)
+      .maybeSingle();
+
+    const systemProvider: "evolution" | "waha" =
+      (sysRow as any)?.provider === "evolution" ? "evolution" : "waha";
+
+    if (systemProvider === "waha") {
+      const wahaUrl = normalizeWahaUrl(
+        Deno.env.get("WAHA_API_URL_NEW") || Deno.env.get("WAHA_API_URL"),
+      );
+      const wahaKey = Deno.env.get("WAHA_API_KEY_NEW") || Deno.env.get("WAHA_API_KEY");
+      if (!wahaUrl || !wahaKey) {
+        return jsonResponse({ error: "WAHA API não configurada" }, 500);
+      }
+
+      const session = (sysRow as any)?.waha_session_name || SYSTEM_INSTANCE_NAME;
+      const wahaEvents = ["message.any", "session.status"];
+
+      if (action === "connect" || action === "refresh_qr") {
+        const status = await wahaSessionStatus({ wahaUrl, wahaKey, session });
+        const state = String((status.data as any)?.status ?? "").toUpperCase();
+
+        if (status.ok && state === "WORKING") {
+          const me: any = (status.data as any)?.me ?? {};
+          await upsertSystemInstance(supabase, {
+            instance_name: SYSTEM_INSTANCE_NAME,
+            provider: "waha",
+            waha_session_name: session,
+            status: "connected",
+            qr_code_base64: null,
+            phone_number: me?.id ? String(me.id).split("@")[0] : undefined,
+            profile_name: me?.pushName ?? undefined,
+          });
+          return jsonResponse({ success: true, status: "connected", provider: "waha" });
+        }
+
+        // Sessão inexistente ou travada: recria do zero
+        if (!status.ok || state !== "SCAN_QR_CODE") {
+          try {
+            await wahaSessionDelete({ wahaUrl, wahaKey, session });
+          } catch (_e) { /* ignora */ }
+          const created = await wahaSessionCreate({
+            wahaUrl,
+            wahaKey,
+            session,
+            webhookUrl,
+            events: wahaEvents,
+          });
+          if (!created.ok && created.status !== 409 && created.status !== 422) {
+            return jsonResponse(
+              buildWahaErrorPayload(created as any, "Erro ao criar sessão WAHA do sistema"),
+              502,
+            );
+          }
+          // aguarda a sessão gerar o QR
+          for (let i = 0; i < 12; i++) {
+            await new Promise((r) => setTimeout(r, 1500));
+            const st = await wahaSessionStatus({ wahaUrl, wahaKey, session });
+            const s = String((st.data as any)?.status ?? "").toUpperCase();
+            if (s === "SCAN_QR_CODE" || s === "WORKING") break;
+          }
+        }
+
+        const qr = await wahaGetQrCode({ wahaUrl, wahaKey, session });
+        if (!qr.base64) {
+          return jsonResponse(
+            buildWahaErrorPayload(qr.raw as any, "Falha ao obter QR Code (WAHA)"),
+            502,
+          );
+        }
+
+        await upsertSystemInstance(supabase, {
+          instance_name: SYSTEM_INSTANCE_NAME,
+          provider: "waha",
+          waha_session_name: session,
+          status: "qr_ready",
+          qr_code_base64: qr.base64,
+        });
+
+        return jsonResponse({ success: true, qrCode: qr.base64, status: "qr_ready", provider: "waha" });
+      }
+
+      if (action === "sync_webhook") {
+        const created = await wahaSessionCreate({
+          wahaUrl,
+          wahaKey,
+          session,
+          webhookUrl,
+          events: wahaEvents,
+        });
+        if (!created.ok && created.status !== 409 && created.status !== 422) {
+          return jsonResponse(
+            buildWahaErrorPayload(created as any, "Erro ao sincronizar webhook WAHA"),
+            502,
+          );
+        }
+        return jsonResponse({ success: true, provider: "waha" });
+      }
+
+      if (action === "disconnect") {
+        try {
+          await wahaSessionDelete({ wahaUrl, wahaKey, session });
+        } catch (_e) { /* ignora */ }
+        if ((sysRow as any)?.id) {
+          await supabase.from("system_whatsapp_instance").delete().eq("id", (sysRow as any).id);
+        }
+        return jsonResponse({ success: true, provider: "waha" });
+      }
+
+      return jsonResponse({ error: "Invalid action" }, 400);
+    }
+
     const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
 
     if (!evolutionUrl || !evolutionKey) {
       return jsonResponse({ error: "Evolution API não configurada" }, 500);
     }
-
-    const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
 
     const syncWebhook = async () => {
       // Try the flat payload first (Evolution v1), then wrapped (Evolution v2)
