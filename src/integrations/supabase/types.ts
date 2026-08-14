@@ -709,8 +709,11 @@ export type Database = {
           id: string
           notes: string | null
           phone: string
+          recurrence: string
+          recurrence_end_date: string | null
           reminder_sent: boolean | null
           reminder_sent_at: string | null
+          series_id: string | null
           status: string | null
           tags: string[] | null
           title: string
@@ -733,8 +736,11 @@ export type Database = {
           id?: string
           notes?: string | null
           phone: string
+          recurrence?: string
+          recurrence_end_date?: string | null
           reminder_sent?: boolean | null
           reminder_sent_at?: string | null
+          series_id?: string | null
           status?: string | null
           tags?: string[] | null
           title: string
@@ -757,8 +763,11 @@ export type Database = {
           id?: string
           notes?: string | null
           phone?: string
+          recurrence?: string
+          recurrence_end_date?: string | null
           reminder_sent?: boolean | null
           reminder_sent_at?: string | null
+          series_id?: string | null
           status?: string | null
           tags?: string[] | null
           title?: string
