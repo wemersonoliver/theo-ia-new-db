@@ -211,8 +211,10 @@ export default function Appointments() {
           }}
           onDeleteBlock={(id) => deleteBlock.mutate(id)}
           onStatusChange={(id, status) => updateStatus.mutate({ id, status })}
+          onSeriesStatusChange={(id, status) => updateStatus.mutate({ id, status, scope: "series" })}
           onAssign={(id, userId) => assignAppointment.mutate({ id, userId })}
-          onDelete={(id) => deleteAppointment.mutate(id)}
+          onDelete={(id) => deleteAppointment.mutate({ id, scope: "single" })}
+          onDeleteSeries={(id) => deleteAppointment.mutate({ id, scope: "series" })}
         />
 
         <div className="space-y-4">
