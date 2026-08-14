@@ -554,6 +554,54 @@ export type Database = {
         }
         Relationships: []
       }
+      appointment_blocks: {
+        Row: {
+          account_id: string
+          all_day: boolean
+          created_at: string
+          days_of_week: number[]
+          end_date: string | null
+          end_time: string | null
+          id: string
+          reason: string
+          recurrence: string
+          start_date: string | null
+          start_time: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          all_day?: boolean
+          created_at?: string
+          days_of_week?: number[]
+          end_date?: string | null
+          end_time?: string | null
+          id?: string
+          reason?: string
+          recurrence?: string
+          start_date?: string | null
+          start_time?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          all_day?: boolean
+          created_at?: string
+          days_of_week?: number[]
+          end_date?: string | null
+          end_time?: string | null
+          id?: string
+          reason?: string
+          recurrence?: string
+          start_date?: string | null
+          start_time?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       appointment_slots: {
         Row: {
           account_id: string | null
