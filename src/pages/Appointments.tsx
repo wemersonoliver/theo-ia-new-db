@@ -6,6 +6,7 @@ import { useAppointments } from "@/hooks/useAppointments";
 import { AppointmentDialog } from "@/components/appointments/AppointmentDialog";
 import { BlockDialog } from "@/components/appointments/BlockDialog";
 import { useAppointmentBlocks, findBlockConflict, blockCoversDate } from "@/hooks/useAppointmentBlocks";
+import { buildRecurrenceDates } from "@/hooks/useAppointments";
 import { AppointmentCalendar, CalendarView } from "@/components/appointments/AppointmentCalendar";
 import { AppointmentDayDrawer } from "@/components/appointments/AppointmentDayDrawer";
 import { AppointmentFilters, StatusFilter } from "@/components/appointments/AppointmentFilters";
@@ -171,15 +172,21 @@ export default function Appointments() {
           defaultDate={dialogDefaultDate}
           isSubmitting={createAppointment.isPending}
           onSubmit={async (data) => {
-            const conflict = findBlockConflict(
-              blocks,
-              data.appointment_date,
-              data.appointment_time?.slice(0, 5),
-              data.duration_minutes || 30
-            );
-            if (conflict) {
-              toast.error(`Horário bloqueado: ${conflict.reason}`);
-              return;
+            const dates = buildRecurrenceDates(data.appointment_date, data.recurrence ?? "none", {
+              occurrences: data.occurrences,
+              endDate: data.recurrence_end_date,
+            });
+            for (const d of dates) {
+              const conflict = findBlockConflict(
+                blocks,
+                d,
+                data.appointment_time?.slice(0, 5),
+                data.duration_minutes || 30
+              );
+              if (conflict) {
+                toast.error(`Horário bloqueado em ${d.split("-").reverse().join("/")}: ${conflict.reason}`);
+                return;
+              }
             }
             await createAppointment.mutateAsync(data);
           }}
@@ -211,8 +218,10 @@ export default function Appointments() {
           }}
           onDeleteBlock={(id) => deleteBlock.mutate(id)}
           onStatusChange={(id, status) => updateStatus.mutate({ id, status })}
+          onSeriesStatusChange={(id, status) => updateStatus.mutate({ id, status, scope: "series" })}
           onAssign={(id, userId) => assignAppointment.mutate({ id, userId })}
-          onDelete={(id) => deleteAppointment.mutate(id)}
+          onDelete={(id) => deleteAppointment.mutate({ id, scope: "single" })}
+          onDeleteSeries={(id) => deleteAppointment.mutate({ id, scope: "series" })}
         />
 
         <div className="space-y-4">

@@ -8,7 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 import { useAppointmentTypes } from "@/hooks/useAppointmentTypes";
 import { format } from "date-fns";
-import { Loader2 } from "lucide-react";
+import { Loader2, Repeat } from "lucide-react";
+import { toast } from "sonner";
+
+export type RecurrenceType = "none" | "weekly" | "biweekly" | "monthly";
 
 interface AppointmentDialogProps {
   open: boolean;
@@ -28,6 +31,9 @@ interface AppointmentDialogProps {
     appointment_type_id?: string | null;
     assigned_to?: string | null;
     notes?: string | null;
+    recurrence?: RecurrenceType;
+    recurrence_end_date?: string | null;
+    occurrences?: number | null;
   }) => Promise<void> | void;
   isSubmitting?: boolean;
 }
@@ -53,6 +59,10 @@ export function AppointmentDialog({
   const [typeId, setTypeId] = useState<string>("none");
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
+  const [recurrence, setRecurrence] = useState<RecurrenceType>("none");
+  const [endMode, setEndMode] = useState<"count" | "date">("count");
+  const [occurrences, setOccurrences] = useState(12);
+  const [recurrenceEnd, setRecurrenceEnd] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -66,6 +76,10 @@ export function AppointmentDialog({
       setTypeId("none");
       setAssignedTo(defaultAssignedTo ?? null);
       setNotes("");
+      setRecurrence("none");
+      setEndMode("count");
+      setOccurrences(12);
+      setRecurrenceEnd("");
     }
   }, [open, defaultDate, defaultPhone, defaultContactName, defaultAssignedTo]);
 
@@ -84,6 +98,10 @@ export function AppointmentDialog({
 
   const handleSave = async () => {
     if (!canSubmit) return;
+    if (recurrence !== "none" && endMode === "date" && !recurrenceEnd) {
+      toast.error("Informe a data final da repetição");
+      return;
+    }
     await onSubmit({
       title: title.trim(),
       phone: phone.trim(),
@@ -95,6 +113,9 @@ export function AppointmentDialog({
       appointment_type_id: typeId === "none" ? null : typeId,
       assigned_to: assignedTo,
       notes: notes.trim() || null,
+      recurrence,
+      recurrence_end_date: recurrence !== "none" && endMode === "date" ? recurrenceEnd || null : null,
+      occurrences: recurrence !== "none" && endMode === "count" ? occurrences : null,
     });
     onOpenChange(false);
   };
@@ -158,6 +179,60 @@ export function AppointmentDialog({
           <div className="space-y-2">
             <Label>Responsável</Label>
             <AssigneeSelector value={assignedTo} onChange={setAssignedTo} />
+          </div>
+
+          <div className="space-y-3 rounded-lg border p-3">
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Repeat className="h-4 w-4" />
+                Agendamento fixo (recorrente)
+              </Label>
+              <Select value={recurrence} onValueChange={(v) => setRecurrence(v as RecurrenceType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Não se repete</SelectItem>
+                  <SelectItem value="weekly">Toda semana</SelectItem>
+                  <SelectItem value="biweekly">A cada 2 semanas</SelectItem>
+                  <SelectItem value="monthly">Todo mês</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {recurrence !== "none" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Terminar</Label>
+                  <Select value={endMode} onValueChange={(v) => setEndMode(v as "count" | "date")}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="count">Após X repetições</SelectItem>
+                      <SelectItem value="date">Em uma data final</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {endMode === "count" ? (
+                  <div className="space-y-2">
+                    <Label>Repetições</Label>
+                    <Input
+                      type="number"
+                      min={2}
+                      max={104}
+                      value={occurrences}
+                      onChange={(e) => setOccurrences(Math.max(2, Math.min(104, Number(e.target.value) || 2)))}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Data final</Label>
+                    <Input type="date" min={date} value={recurrenceEnd} onChange={(e) => setRecurrenceEnd(e.target.value)} />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

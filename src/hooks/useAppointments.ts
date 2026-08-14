@@ -26,6 +26,41 @@ export interface Appointment {
   updated_at: string;
   created_via?: string | null;
   created_by?: string | null;
+  series_id?: string | null;
+  recurrence?: string | null;
+  recurrence_end_date?: string | null;
+}
+
+export type RecurrenceType = "none" | "weekly" | "biweekly" | "monthly";
+
+const MAX_OCCURRENCES = 104;
+
+/** Gera as datas (YYYY-MM-DD) de uma série recorrente a partir da data inicial. */
+export function buildRecurrenceDates(
+  startDate: string,
+  recurrence: RecurrenceType,
+  opts: { occurrences?: number | null; endDate?: string | null }
+): string[] {
+  if (recurrence === "none") return [startDate];
+
+  const dates: string[] = [];
+  const base = new Date(`${startDate}T12:00:00`);
+  const limit = opts.endDate ? new Date(`${opts.endDate}T12:00:00`) : null;
+  const total = limit ? MAX_OCCURRENCES : Math.min(opts.occurrences || 1, MAX_OCCURRENCES);
+
+  for (let i = 0; i < total; i++) {
+    const d = new Date(base);
+    if (recurrence === "weekly") d.setDate(base.getDate() + i * 7);
+    else if (recurrence === "biweekly") d.setDate(base.getDate() + i * 14);
+    else d.setMonth(base.getMonth() + i);
+
+    if (limit && d > limit) break;
+    dates.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+    );
+  }
+
+  return dates.length > 0 ? dates : [startDate];
 }
 
 export interface AppointmentSlot {
@@ -144,12 +179,28 @@ export function useAppointments(selectedDate?: Date, range?: { start: Date; end:
   });
 
   const updateStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+    mutationFn: async ({ id, status, scope = "single" }: { id: string; status: string; scope?: "single" | "series" }) => {
+      if (scope === "series") {
+        const { data: appt } = await supabase
+          .from("appointments")
+          .select("series_id, appointment_date")
+          .eq("id", id)
+          .maybeSingle();
+        if (appt?.series_id) {
+          const { error } = await supabase
+            .from("appointments")
+            .update({ status, updated_at: new Date().toISOString() })
+            .eq("series_id", appt.series_id)
+            .gte("appointment_date", appt.appointment_date);
+          if (error) throw error;
+          return;
+        }
+      }
+
       const { error } = await supabase
         .from("appointments")
         .update({ status, updated_at: new Date().toISOString() })
         .eq("id", id);
-
       if (error) throw error;
     },
     onSuccess: () => {
@@ -165,12 +216,28 @@ export function useAppointments(selectedDate?: Date, range?: { start: Date; end:
   });
 
   const deleteAppointment = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("appointments")
-        .delete()
-        .eq("id", id);
+    mutationFn: async (input: string | { id: string; scope?: "single" | "series" }) => {
+      const id = typeof input === "string" ? input : input.id;
+      const scope = typeof input === "string" ? "single" : input.scope ?? "single";
 
+      if (scope === "series") {
+        const { data: appt } = await supabase
+          .from("appointments")
+          .select("series_id, appointment_date")
+          .eq("id", id)
+          .maybeSingle();
+        if (appt?.series_id) {
+          const { error } = await supabase
+            .from("appointments")
+            .delete()
+            .eq("series_id", appt.series_id)
+            .gte("appointment_date", appt.appointment_date);
+          if (error) throw error;
+          return;
+        }
+      }
+
+      const { error } = await supabase.from("appointments").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -214,6 +281,9 @@ export function useAppointments(selectedDate?: Date, range?: { start: Date; end:
       appointment_type_id?: string | null;
       assigned_to?: string | null;
       notes?: string | null;
+      recurrence?: RecurrenceType;
+      recurrence_end_date?: string | null;
+      occurrences?: number | null;
     }) => {
       if (!user) throw new Error("Usuário não autenticado");
       const ctx = await resolveAccountContext(user.id);
@@ -223,7 +293,14 @@ export function useAppointments(selectedDate?: Date, range?: { start: Date; end:
       let phone = (input.phone || "").replace(/\D/g, "");
       if (phone.length === 10 || phone.length === 11) phone = "55" + phone;
 
-      const { error } = await supabase.from("appointments").insert({
+      const recurrence = input.recurrence ?? "none";
+      const dates = buildRecurrenceDates(input.appointment_date, recurrence, {
+        occurrences: input.occurrences,
+        endDate: input.recurrence_end_date,
+      });
+      const seriesId = recurrence !== "none" ? crypto.randomUUID() : null;
+
+      const rows = dates.map((d) => ({
         user_id: user.id,
         account_id: ctx.accountId,
         assigned_to: input.assigned_to ?? user.id,
@@ -232,22 +309,30 @@ export function useAppointments(selectedDate?: Date, range?: { start: Date; end:
         contact_name: input.contact_name ?? null,
         description: input.description ?? null,
         notes: input.notes ?? null,
-        appointment_date: input.appointment_date,
+        appointment_date: d,
         appointment_time: input.appointment_time,
         duration_minutes: input.duration_minutes ?? 30,
         appointment_type_id: input.appointment_type_id ?? null,
         status: "scheduled",
         created_via: "user",
         created_by: user.id,
-      });
+        series_id: seriesId,
+        recurrence,
+        recurrence_end_date: input.recurrence_end_date ?? null,
+      }));
+
+      const { error } = await supabase.from("appointments").insert(rows);
       if (error) throw error;
+      return { count: rows.length };
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["appointments"] });
       queryClient.invalidateQueries({ queryKey: ["appointments-today"] });
       queryClient.invalidateQueries({ queryKey: ["appointments-upcoming"] });
       queryClient.invalidateQueries({ queryKey: ["appointment-dates"] });
-      toast.success("Agendamento criado!");
+      toast.success(
+        res && res.count > 1 ? `Agendamento fixo criado (${res.count} datas)!` : "Agendamento criado!"
+      );
     },
     onError: (e: Error) => toast.error(`Erro ao criar agendamento: ${e.message}`),
   });
