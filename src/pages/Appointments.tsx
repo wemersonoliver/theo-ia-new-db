@@ -312,9 +312,20 @@ export default function Appointments() {
                 setDialogDefaultDate(d);
                 setDialogOpen(true);
               }}
-              onReschedule={(id, newDate) =>
-                rescheduleAppointment.mutate({ id, appointment_date: newDate })
-              }
+              onReschedule={(id, newDate) => {
+                const appt = filtered.find((a) => a.id === id);
+                const conflict = findBlockConflict(
+                  blocks,
+                  newDate,
+                  appt?.appointment_time?.slice(0, 5),
+                  appt?.duration_minutes || 30
+                );
+                if (conflict) {
+                  toast.error(`Horário bloqueado: ${conflict.reason}`);
+                  return;
+                }
+                rescheduleAppointment.mutate({ id, appointment_date: newDate });
+              }}
             />
           )}
 
