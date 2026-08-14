@@ -187,6 +187,18 @@ serve(async (req) => {
         const targetDate = new Date(date);
         const dayOfWeek = targetDate.getDay();
 
+        // Rejeita criação em horário bloqueado
+        const createBlocks = await fetchAppointmentBlocks(supabase, userId);
+        const createConflict = findBlockConflict(createBlocks, date, String(timeWithSeconds).slice(0, 5), 30);
+        if (createConflict) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: createConflict.all_day
+              ? "A agenda está bloqueada nesta data. Por favor, escolha outro dia."
+              : "Este horário está bloqueado na agenda. Por favor, escolha outro horário."
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
         // Get max capacity - try appointment_types first, fallback to appointment_slots
         let maxPerSlot = 1;
         
@@ -474,6 +486,17 @@ serve(async (req) => {
         const timeWithSeconds = time.includes(":") && time.split(":").length === 2 ? `${time}:00` : time;
         const targetDate = new Date(date);
         const dayOfWeek = targetDate.getDay();
+
+        const rescheduleBlocks = await fetchAppointmentBlocks(supabase, userId);
+        const rescheduleConflict = findBlockConflict(rescheduleBlocks, date, String(timeWithSeconds).slice(0, 5), aptToReschedule.duration_minutes || 30);
+        if (rescheduleConflict) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: rescheduleConflict.all_day
+              ? "A agenda está bloqueada nesta data. Por favor, escolha outro dia."
+              : "Este horário está bloqueado na agenda. Por favor, escolha outro horário."
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
 
         let maxPerSlot = 1;
         const { data: typeConfig } = await supabase
