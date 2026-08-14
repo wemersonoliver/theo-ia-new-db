@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evolutionRequest, getEvolutionErrorMessage, normalizeEvolutionUrl } from "../_evolution.ts";
+import { fetchAppointmentBlocks, findBlockConflict } from "../_appointment-blocks.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,6 +39,17 @@ serve(async (req) => {
 
         const targetDate = new Date(date);
         const dayOfWeek = targetDate.getDay();
+
+        // Bloqueios de agenda
+        const dayBlocks = await fetchAppointmentBlocks(supabase, userId);
+        const fullDayBlock = findBlockConflict(dayBlocks, date);
+        if (fullDayBlock && fullDayBlock.all_day) {
+          return new Response(JSON.stringify({
+            available_slots: [],
+            date,
+            message: "A agenda está bloqueada neste dia. Sugira outra data ao cliente."
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
 
         // First try appointment_types (new system from onboarding)
         const { data: appointmentTypes } = await supabase
@@ -105,7 +117,8 @@ serve(async (req) => {
               const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}:00`;
               const currentCount = appointmentCountByTime[timeStr] || 0;
 
-              if (currentCount < maxPerSlot) {
+              const blockedHere = findBlockConflict(dayBlocks, date, timeStr.slice(0, 5), slotDuration);
+              if (currentCount < maxPerSlot && !blockedHere) {
                 const remaining = maxPerSlot - currentCount;
                 const display = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
                 availableSlots.push(maxPerSlot > 1 ? `${display} (${remaining} vaga${remaining > 1 ? "s" : ""})` : display);
@@ -131,7 +144,8 @@ serve(async (req) => {
               const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}:00`;
               const currentCount = appointmentCountByTime[timeStr] || 0;
 
-              if (currentCount < maxPerSlot) {
+              const blockedHere = findBlockConflict(dayBlocks, date, timeStr.slice(0, 5), slotDuration);
+              if (currentCount < maxPerSlot && !blockedHere) {
                 const remaining = maxPerSlot - currentCount;
                 const display = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
                 availableSlots.push(maxPerSlot > 1 ? `${display} (${remaining} vaga${remaining > 1 ? "s" : ""})` : display);
@@ -172,6 +186,18 @@ serve(async (req) => {
 
         const targetDate = new Date(date);
         const dayOfWeek = targetDate.getDay();
+
+        // Rejeita criação em horário bloqueado
+        const createBlocks = await fetchAppointmentBlocks(supabase, userId);
+        const createConflict = findBlockConflict(createBlocks, date, String(timeWithSeconds).slice(0, 5), 30);
+        if (createConflict) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: createConflict.all_day
+              ? "A agenda está bloqueada nesta data. Por favor, escolha outro dia."
+              : "Este horário está bloqueado na agenda. Por favor, escolha outro horário."
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
 
         // Get max capacity - try appointment_types first, fallback to appointment_slots
         let maxPerSlot = 1;
@@ -460,6 +486,17 @@ serve(async (req) => {
         const timeWithSeconds = time.includes(":") && time.split(":").length === 2 ? `${time}:00` : time;
         const targetDate = new Date(date);
         const dayOfWeek = targetDate.getDay();
+
+        const rescheduleBlocks = await fetchAppointmentBlocks(supabase, userId);
+        const rescheduleConflict = findBlockConflict(rescheduleBlocks, date, String(timeWithSeconds).slice(0, 5), aptToReschedule.duration_minutes || 30);
+        if (rescheduleConflict) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: rescheduleConflict.all_day
+              ? "A agenda está bloqueada nesta data. Por favor, escolha outro dia."
+              : "Este horário está bloqueado na agenda. Por favor, escolha outro horário."
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
 
         let maxPerSlot = 1;
         const { data: typeConfig } = await supabase

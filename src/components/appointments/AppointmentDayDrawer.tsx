@@ -5,7 +5,7 @@ import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 import { getAssigneeColor } from "@/lib/assignee-colors";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Clock, Phone, User, CheckCircle, XCircle, Plus, Bot, UserCog, Cog } from "lucide-react";
+import { Clock, Phone, User, CheckCircle, XCircle, Plus, Bot, UserCog, Cog, Ban, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Appointment } from "@/hooks/useAppointments";
+import type { AppointmentBlock } from "@/hooks/useAppointmentBlocks";
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   scheduled: { label: "Agendado", variant: "default" },
@@ -48,7 +49,10 @@ interface Props {
   onOpenChange: (v: boolean) => void;
   date: Date | null;
   appointments: Appointment[];
+  blocks?: AppointmentBlock[];
   onCreate: () => void;
+  onCreateBlock?: () => void;
+  onDeleteBlock?: (id: string) => void;
   onStatusChange: (id: string, status: string) => void;
   onAssign: (id: string, userId: string | null) => void;
   onDelete: (id: string) => void;
@@ -59,7 +63,10 @@ export function AppointmentDayDrawer({
   onOpenChange,
   date,
   appointments,
+  blocks = [],
   onCreate,
+  onCreateBlock,
+  onDeleteBlock,
   onStatusChange,
   onAssign,
   onDelete,
@@ -76,12 +83,40 @@ export function AppointmentDayDrawer({
           </p>
         </SheetHeader>
 
-        <div className="mt-4">
+        <div className="mt-4 flex gap-2">
           <Button onClick={onCreate} className="w-full" size="sm">
             <Plus className="h-4 w-4 mr-2" />
-            Novo agendamento neste dia
+            Novo agendamento
           </Button>
+          {onCreateBlock && (
+            <Button onClick={onCreateBlock} variant="outline" className="w-full" size="sm">
+              <Ban className="h-4 w-4 mr-2" />
+              Bloquear horário
+            </Button>
+          )}
         </div>
+
+        {blocks.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Bloqueios</p>
+            {blocks.map((b) => (
+              <div key={b.id} className="flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{b.reason}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {b.all_day ? "Dia inteiro" : `${b.start_time?.slice(0, 5)} – ${b.end_time?.slice(0, 5)}`}
+                    {b.recurrence === "weekly" ? " · toda semana" : ""}
+                  </p>
+                </div>
+                {onDeleteBlock && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDeleteBlock(b.id)}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-6 space-y-3">
           {appointments.length === 0 ? (

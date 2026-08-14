@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAppointments } from "@/hooks/useAppointments";
 import { AppointmentDialog } from "@/components/appointments/AppointmentDialog";
+import { BlockDialog } from "@/components/appointments/BlockDialog";
+import { useAppointmentBlocks, findBlockConflict, blockCoversDate } from "@/hooks/useAppointmentBlocks";
 import { AppointmentCalendar, CalendarView } from "@/components/appointments/AppointmentCalendar";
 import { AppointmentDayDrawer } from "@/components/appointments/AppointmentDayDrawer";
 import { AppointmentFilters, StatusFilter } from "@/components/appointments/AppointmentFilters";
@@ -20,7 +22,8 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
-import { CalendarCheck, Loader2, Plus } from "lucide-react";
+import { CalendarCheck, Loader2, Plus, Ban } from "lucide-react";
+import { toast } from "sonner";
 import { Settings as SettingsIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AppointmentSettingsTab } from "@/components/settings/AppointmentSettingsTab";
@@ -45,6 +48,10 @@ export default function Appointments() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerDate, setDrawerDate] = useState<Date | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [blockDialogOpen, setBlockDialogOpen] = useState(false);
+  const [blockDefaultDate, setBlockDefaultDate] = useState<Date | undefined>(undefined);
+
+  const { blocks, createBlock, deleteBlock } = useAppointmentBlocks();
 
   // Range visível
   const range = useMemo(() => {
@@ -138,6 +145,12 @@ export default function Appointments() {
     return filtered.filter((a) => a.appointment_date === key);
   }, [drawerDate, filtered]);
 
+  const dayBlocks = useMemo(() => {
+    if (!drawerDate) return [];
+    const key = format(drawerDate, "yyyy-MM-dd");
+    return blocks.filter((b) => blockCoversDate(b, key));
+  }, [drawerDate, blocks]);
+
   const todayPending = todayAppointments.filter((a) => a.status === "scheduled").length;
 
   // Membros visíveis na legenda (com agendamentos no range filtrado)
@@ -158,7 +171,27 @@ export default function Appointments() {
           defaultDate={dialogDefaultDate}
           isSubmitting={createAppointment.isPending}
           onSubmit={async (data) => {
+            const conflict = findBlockConflict(
+              blocks,
+              data.appointment_date,
+              data.appointment_time?.slice(0, 5),
+              data.duration_minutes || 30
+            );
+            if (conflict) {
+              toast.error(`Horário bloqueado: ${conflict.reason}`);
+              return;
+            }
             await createAppointment.mutateAsync(data);
+          }}
+        />
+
+        <BlockDialog
+          open={blockDialogOpen}
+          onOpenChange={setBlockDialogOpen}
+          defaultDate={blockDefaultDate}
+          isSubmitting={createBlock.isPending}
+          onSubmit={async (data) => {
+            await createBlock.mutateAsync(data);
           }}
         />
 
@@ -167,10 +200,16 @@ export default function Appointments() {
           onOpenChange={setDrawerOpen}
           date={drawerDate}
           appointments={dayAppts}
+          blocks={dayBlocks}
           onCreate={() => {
             setDialogDefaultDate(drawerDate ?? undefined);
             setDialogOpen(true);
           }}
+          onCreateBlock={() => {
+            setBlockDefaultDate(drawerDate ?? undefined);
+            setBlockDialogOpen(true);
+          }}
+          onDeleteBlock={(id) => deleteBlock.mutate(id)}
           onStatusChange={(id, status) => updateStatus.mutate({ id, status })}
           onAssign={(id, userId) => assignAppointment.mutate({ id, userId })}
           onDelete={(id) => deleteAppointment.mutate(id)}
@@ -220,6 +259,18 @@ export default function Appointments() {
             </Button>
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => {
+                setBlockDefaultDate(cursor);
+                setBlockDialogOpen(true);
+              }}
+              className="w-full sm:w-auto"
+            >
+              <Ban className="h-4 w-4 mr-2" />
+              Bloquear horário
+            </Button>
+            <Button
+              size="sm"
               onClick={() => {
                 setDialogDefaultDate(cursor);
                 setDialogOpen(true);
@@ -252,6 +303,7 @@ export default function Appointments() {
               cursor={cursor}
               onCursorChange={setCursor}
               appointments={filtered}
+              blocks={blocks}
               onDayClick={(d) => {
                 setDrawerDate(d);
                 setDrawerOpen(true);
@@ -260,9 +312,20 @@ export default function Appointments() {
                 setDialogDefaultDate(d);
                 setDialogOpen(true);
               }}
-              onReschedule={(id, newDate) =>
-                rescheduleAppointment.mutate({ id, appointment_date: newDate })
-              }
+              onReschedule={(id, newDate) => {
+                const appt = filtered.find((a) => a.id === id);
+                const conflict = findBlockConflict(
+                  blocks,
+                  newDate,
+                  appt?.appointment_time?.slice(0, 5),
+                  appt?.duration_minutes || 30
+                );
+                if (conflict) {
+                  toast.error(`Horário bloqueado: ${conflict.reason}`);
+                  return;
+                }
+                rescheduleAppointment.mutate({ id, appointment_date: newDate });
+              }}
             />
           )}
 
