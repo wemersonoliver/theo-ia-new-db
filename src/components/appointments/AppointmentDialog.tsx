@@ -9,6 +9,7 @@ import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 import { useAppointmentTypes } from "@/hooks/useAppointmentTypes";
 import { format } from "date-fns";
 import { Loader2, Repeat } from "lucide-react";
+import { toast } from "sonner";
 
 export type RecurrenceType = "none" | "weekly" | "biweekly" | "monthly";
 
@@ -97,6 +98,10 @@ export function AppointmentDialog({
 
   const handleSave = async () => {
     if (!canSubmit) return;
+    if (recurrence !== "none" && endMode === "date" && !recurrenceEnd) {
+      toast.error("Informe a data final da repetição");
+      return;
+    }
     await onSubmit({
       title: title.trim(),
       phone: phone.trim(),
