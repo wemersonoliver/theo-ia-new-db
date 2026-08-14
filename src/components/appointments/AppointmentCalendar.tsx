@@ -301,6 +301,7 @@ function MonthView({
 function WeekView({
   cursor,
   apptByDate,
+  blocksForDate,
   dragOverDate,
   setDragOverDate,
   onDayClick,
@@ -338,7 +339,7 @@ function WeekView({
       {/* Grid */}
       <div className="grid grid-cols-[60px_repeat(7,1fr)] max-h-[70vh] overflow-y-auto">
         {HOURS.map((h) => (
-          <Row key={h} hour={h} days={days} apptByDate={apptByDate} dragOverDate={dragOverDate} setDragOverDate={setDragOverDate} onDayClick={onDayClick} onEmptyDayClick={onEmptyDayClick} onDragStart={onDragStart} onDrop={onDrop} />
+          <Row key={h} hour={h} days={days} apptByDate={apptByDate} blocksForDate={blocksForDate} dragOverDate={dragOverDate} setDragOverDate={setDragOverDate} onDayClick={onDayClick} onEmptyDayClick={onEmptyDayClick} onDragStart={onDragStart} onDrop={onDrop} />
         ))}
       </div>
     </div>
@@ -349,6 +350,7 @@ function Row({
   hour,
   days,
   apptByDate,
+  blocksForDate,
   dragOverDate,
   setDragOverDate,
   onDayClick,
@@ -359,6 +361,7 @@ function Row({
   hour: number;
   days: Date[];
   apptByDate: Map<string, Appointment[]>;
+  blocksForDate: (key: string) => AppointmentBlock[];
   dragOverDate?: string | null;
   setDragOverDate?: (d: string | null) => void;
   onDayClick: (date: Date) => void;
@@ -375,6 +378,7 @@ function Row({
         const key = format(d, "yyyy-MM-dd");
         const all = apptByDate.get(key) ?? [];
         const slot = all.filter((a) => Number(a.appointment_time.slice(0, 2)) === hour);
+        const blocked = findBlockConflict(blocksForDate(key), key, `${String(hour).padStart(2, "0")}:00`, 60);
         const isDragOver = dragOverDate === key;
         return (
           <div
@@ -388,9 +392,14 @@ function Row({
             onDrop={(e) => onDrop?.(e, d)}
             className={`min-h-[44px] cursor-pointer border-b border-r p-0.5 transition hover:bg-accent/40 ${
               isDragOver ? "ring-2 ring-primary ring-inset bg-accent" : ""
-            }`}
+            } ${blocked ? "bg-muted/70 bg-[repeating-linear-gradient(45deg,transparent,transparent_5px,hsl(var(--muted-foreground)/0.15)_5px,hsl(var(--muted-foreground)/0.15)_10px)]" : ""}`}
           >
             <div className="space-y-0.5">
+              {blocked && (
+                <div className="truncate text-[9px] font-medium text-muted-foreground" title={blocked.reason}>
+                  {blocked.reason}
+                </div>
+              )}
               {slot.map((a) => (
                 <AppointmentEventChip
                   key={a.id}
@@ -409,25 +418,30 @@ function Row({
 }
 
 /* ---------------- Day View ---------------- */
-function DayView({ cursor, apptByDate, onDayClick, onEmptyDayClick }: SubProps) {
+function DayView({ cursor, apptByDate, blocksForDate, onDayClick, onEmptyDayClick }: SubProps) {
   const key = format(cursor, "yyyy-MM-dd");
   const all = apptByDate.get(key) ?? [];
+  const dayBlocks = blocksForDate(key);
 
   return (
     <div className="rounded-lg border bg-card overflow-hidden">
       <div className="max-h-[70vh] overflow-y-auto">
         {HOURS.map((h) => {
           const slot = all.filter((a) => Number(a.appointment_time.slice(0, 2)) === h);
+          const blocked = findBlockConflict(dayBlocks, key, `${String(h).padStart(2, "0")}:00`, 60);
           return (
             <div
               key={h}
-              className="grid grid-cols-[70px_1fr] border-b cursor-pointer hover:bg-accent/30"
+              className={`grid grid-cols-[70px_1fr] border-b cursor-pointer hover:bg-accent/30 ${blocked ? "bg-muted/70 bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,hsl(var(--muted-foreground)/0.15)_6px,hsl(var(--muted-foreground)/0.15)_12px)]" : ""}`}
               onClick={() => (slot.length > 0 ? onDayClick(cursor) : onEmptyDayClick(cursor))}
             >
               <div className="border-r px-2 py-2 text-right text-xs font-medium text-muted-foreground">
                 {String(h).padStart(2, "0")}:00
               </div>
               <div className="min-h-[60px] p-2 space-y-1">
+                {blocked && (
+                  <div className="text-xs font-medium text-muted-foreground">Bloqueado · {blocked.reason}</div>
+                )}
                 {slot.map((a) => {
                   const color = getAssigneeColor(a.assigned_to);
                   return (
