@@ -5,13 +5,21 @@ import { AssigneeSelector } from "@/components/team/AssigneeSelector";
 import { getAssigneeColor } from "@/lib/assignee-colors";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Clock, Phone, User, CheckCircle, XCircle, Plus, Bot, UserCog, Cog, Ban, Trash2 } from "lucide-react";
+import { Clock, Phone, User, CheckCircle, XCircle, Plus, Bot, UserCog, Cog, Ban, Trash2, Repeat } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+const recurrenceLabel: Record<string, string> = {
+  weekly: "Toda semana",
+  biweekly: "Quinzenal",
+  monthly: "Mensal",
+};
+
 import type { Appointment } from "@/hooks/useAppointments";
 import type { AppointmentBlock } from "@/hooks/useAppointmentBlocks";
 
@@ -56,6 +64,8 @@ interface Props {
   onStatusChange: (id: string, status: string) => void;
   onAssign: (id: string, userId: string | null) => void;
   onDelete: (id: string) => void;
+  onSeriesStatusChange?: (id: string, status: string) => void;
+  onDeleteSeries?: (id: string) => void;
 }
 
 export function AppointmentDayDrawer({
@@ -70,6 +80,8 @@ export function AppointmentDayDrawer({
   onStatusChange,
   onAssign,
   onDelete,
+  onSeriesStatusChange,
+  onDeleteSeries,
 }: Props) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -139,6 +151,12 @@ export function AppointmentDayDrawer({
                         <h4 className="font-semibold text-sm truncate">{appt.title}</h4>
                         <Badge variant={status.variant} className="text-[10px]">{status.label}</Badge>
                         <OriginBadge via={appt.created_via} />
+                        {appt.series_id && (
+                          <Badge variant="outline" className="text-[10px] gap-1">
+                            <Repeat className="h-3 w-3" />
+                            Fixo{appt.recurrence && recurrenceLabel[appt.recurrence] ? ` · ${recurrenceLabel[appt.recurrence]}` : ""}
+                          </Badge>
+                        )}
                       </div>
                       <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
@@ -163,6 +181,7 @@ export function AppointmentDayDrawer({
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">Ações</Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {appt.series_id && <DropdownMenuLabel className="text-xs">Somente este</DropdownMenuLabel>}
                         {appt.status !== "confirmed" && (
                           <DropdownMenuItem onClick={() => onStatusChange(appt.id, "confirmed")}>
                             <CheckCircle className="mr-2 h-4 w-4" /> Confirmar
@@ -187,6 +206,24 @@ export function AppointmentDayDrawer({
                         >
                           <XCircle className="mr-2 h-4 w-4" /> Excluir
                         </DropdownMenuItem>
+                        {appt.series_id && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel className="text-xs">Toda a série (deste dia em diante)</DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onClick={() => onSeriesStatusChange?.(appt.id, "cancelled")}
+                              className="text-destructive"
+                            >
+                              <XCircle className="mr-2 h-4 w-4" /> Cancelar série
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => onDeleteSeries?.(appt.id)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Excluir série
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
