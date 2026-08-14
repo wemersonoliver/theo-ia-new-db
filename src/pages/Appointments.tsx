@@ -23,6 +23,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { CalendarCheck, Loader2, Plus, Ban } from "lucide-react";
+import { toast } from "sonner";
 import { Settings as SettingsIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AppointmentSettingsTab } from "@/components/settings/AppointmentSettingsTab";
