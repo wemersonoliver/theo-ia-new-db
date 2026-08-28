@@ -1,6 +1,7 @@
 import type { IgreenEvent, AutomationResult } from "../types.ts";
 import { withIdempotency } from "./_idempotency.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveInstanceContext, sendWhatsAppText as providerSendText } from "../../_wa_provider.ts";
 
 let _client: SupabaseClient | null = null;
 function svc() {
@@ -89,20 +90,11 @@ async function notifyOperators(account_id: string, phone: string, reason: string
       return { sent: 0, total: 0 };
     }
 
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) return { sent: 0, total: recipients.size, error: "evolution_not_configured" };
-
-    const { data: sysInstance } = await supabase
-      .from("system_whatsapp_instance")
-      .select("instance_name, status")
-      .limit(1)
-      .maybeSingle();
-    if (!sysInstance || (sysInstance as any).status !== "connected") {
+    const sysCtx = await resolveInstanceContext(supabase, { system: true });
+    if (!sysCtx || sysCtx.status !== "connected") {
       console.error("[igreen handoff notify] system instance not connected");
       return { sent: 0, total: recipients.size, error: "system_instance_offline" };
     }
-    const instanceName = (sysInstance as any).instance_name;
 
     const horario = new Date().toLocaleTimeString("pt-BR", {
       hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
@@ -114,13 +106,9 @@ async function notifyOperators(account_id: string, phone: string, reason: string
     let sent = 0;
     for (const [num] of recipients) {
       try {
-        const resp = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", apikey: evolutionKey },
-          body: JSON.stringify({ number: num, text: message }),
-        });
-        if (resp.ok) sent++;
-        else console.error(`[igreen handoff notify] failed ${num}: ${resp.status}`);
+        const res = await providerSendText(sysCtx, num, message);
+        if (res.ok) sent++;
+        else console.error(`[igreen handoff notify] failed ${num} (${sysCtx.provider}):`, res.status, JSON.stringify(res.errorPayload || {}).slice(0, 300));
       } catch (e) {
         console.error(`[igreen handoff notify] error ${num}:`, e);
       }

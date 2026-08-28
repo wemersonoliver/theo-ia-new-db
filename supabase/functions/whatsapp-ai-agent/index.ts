@@ -3132,43 +3132,30 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
       : "";
     const message = `🔔 *Transferência de Atendimento*\n\nUm cliente precisa de atendimento humano.\n\n👤 *Nome:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n⏰ *Horário:* ${horario}${summaryBlock}`;
 
-    // Enviar SEMPRE pela instância de suporte (system) diretamente via Evolution API
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) {
-      console.error("Evolution API not configured for handoff notification");
+    // Enviar SEMPRE pela instância de suporte (system), roteando pelo provedor real (WAHA/Evolution)
+    const sysCtx = await resolveInstanceContext(supabase, { system: true });
+    if (!sysCtx) {
+      console.error("System WhatsApp instance not found — cannot send handoff notification");
       return;
     }
-
-    const { data: sysInstance } = await supabase
-      .from("system_whatsapp_instance")
-      .select("instance_name, status")
-      .limit(1)
-      .maybeSingle();
-
-    if (!sysInstance || sysInstance.status !== "connected") {
+    if (sysCtx.status !== "connected") {
       console.error("System WhatsApp instance not connected — cannot send handoff notification");
       return;
     }
 
-    const instanceName = sysInstance.instance_name;
     let sent = 0;
     for (const [phoneNum] of recipients) {
       const target = phoneNum; // já normalizado com 55
       try {
-        const resp = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", apikey: evolutionKey },
-          body: JSON.stringify({ number: target, text: message }),
-        });
-        if (resp.ok) sent++;
-        else console.error(`Handoff notify failed for ${target}: ${resp.status} ${await resp.text()}`);
+        const res = await providerSendText(sysCtx, target, message);
+        if (res.ok) sent++;
+        else console.error(`Handoff notify failed for ${target} (${sysCtx.provider}):`, res.status, JSON.stringify(res.errorPayload || {}).slice(0, 300));
       } catch (err) {
         console.error(`Handoff notify error for ${target}:`, err);
       }
     }
 
-    console.log(`Handoff notification sent to ${sent}/${recipients.size} recipients via system instance`);
+    console.log(`Handoff notification sent to ${sent}/${recipients.size} recipients via system instance (${sysCtx.provider})`);
   } catch (error) {
     console.error("Error sending handoff notifications:", error);
   }
@@ -3337,8 +3324,6 @@ async function applyRouletteOnHandoff(
         .eq("id", accountId)
         .maybeSingle();
       if (acc?.owner_user_id) {
-        const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
-        const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
         const { data: prof } = await supabase
           .from("profiles")
           .select("phone")
@@ -3346,20 +3331,16 @@ async function applyRouletteOnHandoff(
           .maybeSingle();
         const digits = String(prof?.phone || "").replace(/\D/g, "");
         const number = digits.length === 10 || digits.length === 11 ? "55" + digits : digits;
-        const { data: sysInst } = await supabase
-          .from("system_whatsapp_instance")
-          .select("instance_name, status")
-          .limit(1)
-          .maybeSingle();
-        if (number && evolutionUrl && evolutionKey && sysInst?.status === "connected") {
-          await fetch(`${evolutionUrl}/message/sendText/${sysInst.instance_name}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", apikey: evolutionKey },
-            body: JSON.stringify({
-              number,
-              text: `⚠️ *Roleta sem atendente*\n\nNenhum membro está disponível${cfg?.require_online ? " (online)" : ""} para atender ${contactName || phone}.`,
-            }),
-          });
+        const sysCtx = await resolveInstanceContext(supabase, { system: true });
+        if (number && sysCtx && sysCtx.status === "connected") {
+          const res = await providerSendText(
+            sysCtx,
+            number,
+            `⚠️ *Roleta sem atendente*\n\nNenhum membro está disponível${cfg?.require_online ? " (online)" : ""} para atender ${contactName || phone}.`,
+          );
+          if (!res.ok) {
+            console.error("Roulette: owner notify failed", res.status, JSON.stringify(res.errorPayload || {}).slice(0, 300));
+          }
         }
       }
     } catch (e) {
@@ -3437,28 +3418,21 @@ async function applyRouletteOnHandoff(
     const assigneeDigits = String(assigneeProfile?.phone || "").replace(/\D/g, "");
     if (!assigneeDigits) return;
 
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) return;
-
-    const { data: sysInstance } = await supabase
-      .from("system_whatsapp_instance")
-      .select("instance_name, status")
-      .limit(1)
-      .maybeSingle();
-
-    if (!sysInstance || sysInstance.status !== "connected") return;
+    const sysCtx = await resolveInstanceContext(supabase, { system: true });
+    if (!sysCtx || sysCtx.status !== "connected") {
+      console.error("Roulette assignee notify: system instance unavailable");
+      return;
+    }
 
     let target = assigneeDigits;
     if (target.length === 10 || target.length === 11) target = "55" + target;
 
     const msg = `🎯 *Roleta de Atendimento*\n\nVocê foi designado para atender:\n\n👤 *Cliente:* ${contactName || "Desconhecido"}\n📱 *Telefone:* ${phone}\n⏰ *Horário:* ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}\n\n⏱️ *Inicie em até ${timeoutMin} min*, ou a vez será passada ao próximo da fila.`;
 
-    await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: evolutionKey },
-      body: JSON.stringify({ number: target, text: msg }),
-    });
+    const res = await providerSendText(sysCtx, target, msg);
+    if (!res.ok) {
+      console.error("Roulette assignee notify failed", res.status, JSON.stringify(res.errorPayload || {}).slice(0, 300));
+    }
   } catch (err) {
     console.error("Roulette assignee notify error:", err);
   }

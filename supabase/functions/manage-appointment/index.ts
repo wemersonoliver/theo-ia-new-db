@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { evolutionRequest, getEvolutionErrorMessage, normalizeEvolutionUrl } from "../_evolution.ts";
+import { resolveInstanceContext, sendWhatsAppText as providerSendText } from "../_wa_provider.ts";
 import { fetchAppointmentBlocks, findBlockConflict } from "../_appointment-blocks.ts";
 
 const corsHeaders = {
@@ -839,49 +839,38 @@ async function notifyAppointment(
       ? `🔁 *Agendamento Reagendado*\n\n👤 *Cliente:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n📋 *Serviço:* ${title}${previousBlock}\n\n🗓️ *Nova data:* ${formatDate(date)}\n⏰ *Novo horário:* ${time}`
       : `📅 *Novo Agendamento*\n\n👤 *Cliente:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n📋 *Serviço:* ${title}\n🗓️ *Data:* ${formatDate(date)}\n⏰ *Horário:* ${time}`;
 
-    const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) return;
-
-    let instanceName: string | null = null;
-
-    // Check system instance first
-    const { data: sysInstance } = await supabase
-      .from("system_whatsapp_instance")
-      .select("instance_name, status")
-      .limit(1)
-      .maybeSingle();
-
-    if (sysInstance && sysInstance.status === "connected") {
-      instanceName = sysInstance.instance_name;
-    } else {
-      // Fallback to user's instance
-      const { data: userInstance } = await supabase
-        .from("whatsapp_instances")
-        .select("instance_name")
-        .eq("user_id", userId)
-        .maybeSingle();
-      instanceName = userInstance?.instance_name || null;
+    // Resolve o contexto do provedor real (WAHA ou Evolution).
+    // Prioriza a instância do sistema; se não estiver conectada, usa a do usuário.
+    let ctx = await resolveInstanceContext(supabase, { system: true });
+    let source = "system";
+    if (!ctx || ctx.status !== "connected") {
+      ctx = await resolveInstanceContext(supabase, { userId });
+      source = "user";
     }
 
-    if (!instanceName) return;
+    if (!ctx) {
+      console.error("Appointment notification: nenhuma instância de WhatsApp disponível");
+      return;
+    }
 
+    let sent = 0;
     for (const contact of notifContacts) {
-      const sendResponse = await evolutionRequest({
-        evolutionUrl,
-        evolutionKey,
-        path: `/message/sendText/${instanceName}`,
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ number: contact.phone, text: message }),
-      });
-
-      if (!sendResponse.ok) {
-        console.error("Error sending appointment notification:", getEvolutionErrorMessage(sendResponse, "Falha ao enviar notificação de agendamento"), sendResponse);
+      try {
+        const res = await providerSendText(ctx, contact.phone, message);
+        if (res.ok) sent++;
+        else {
+          console.error(
+            `Error sending appointment notification to ${contact.phone} (${ctx.provider}/${source}):`,
+            res.status,
+            JSON.stringify(res.errorPayload || {}).slice(0, 300),
+          );
+        }
+      } catch (e) {
+        console.error(`Appointment notification exception for ${contact.phone}:`, e);
       }
     }
 
-    console.log(`Appointment notification sent to ${notifContacts.length} contacts via ${sysInstance?.status === "connected" ? "system" : "user"} instance`);
+    console.log(`Appointment notification sent to ${sent}/${notifContacts.length} contacts via ${source} instance (${ctx.provider})`);
   } catch (error) {
     console.error("Error sending appointment notifications:", error);
   }

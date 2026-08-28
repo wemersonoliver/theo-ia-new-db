@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import { resolveInstanceContext, sendWhatsAppText } from "../_wa_provider.ts";
 import { requireInternalKey } from "../_cron_auth.ts";
 
 const corsHeaders = {
@@ -37,13 +37,10 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Pega instância de WhatsApp do sistema
-    const { data: instance } = await supabase
-      .from("system_whatsapp_instance")
-      .select("instance_name, status")
-      .maybeSingle();
+    // Pega instância de WhatsApp do sistema (roteada pelo provedor real)
+    const ctx = await resolveInstanceContext(supabase, { system: true });
 
-    if (!instance || instance.status !== "connected") {
+    if (!ctx || ctx.status !== "connected") {
       console.warn("[notify-api-failure] System WhatsApp not connected, skipping");
       return new Response(JSON.stringify({ ok: false, reason: "system_wa_disconnected" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -102,14 +99,6 @@ serve(async (req) => {
       });
     }
 
-    const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) {
-      console.error("[notify-api-failure] Evolution API not configured");
-      return new Response(JSON.stringify({ ok: false, reason: "evolution_not_configured" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
     const apiLabel = API_LABELS[api_name] || api_name;
     const timestamp = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -137,16 +126,9 @@ serve(async (req) => {
     let sent = 0;
     for (const r of recipients) {
       try {
-        const res = await evolutionRequest({
-          evolutionUrl,
-          evolutionKey,
-          path: `/message/sendText/${instance.instance_name}`,
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ number: r.phone, text }),
-        });
+        const res = await sendWhatsAppText(ctx, r.phone, text);
         if (res.ok) sent++;
-        else console.error(`[notify-api-failure] failed for ${r.phone}:`, res.text?.slice(0, 200));
+        else console.error(`[notify-api-failure] failed for ${r.phone} (${ctx.provider}):`, res.status, JSON.stringify(res.errorPayload || {}).slice(0, 300));
       } catch (e) {
         console.error(`[notify-api-failure] exception for ${r.phone}:`, e);
       }
