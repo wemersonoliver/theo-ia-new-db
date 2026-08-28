@@ -245,7 +245,7 @@ export async function sendWhatsAppText(
         session: ctx.wahaSession,
         phone: normalized,
       }).catch(() => null);
-      if (resolved) chatId = `${resolved}@c.us`;
+      if (resolved) chatId = resolved.includes("@") ? resolved : `${resolved}@c.us`;
     }
 
     // 3) Também tenta variante BR se check-exists falhou
@@ -258,7 +258,7 @@ export async function sendWhatsAppText(
           session: ctx.wahaSession,
           phone: variant,
         }).catch(() => null);
-        if (alt) chatId = `${alt}@c.us`;
+        if (alt) chatId = alt.includes("@") ? alt : `${alt}@c.us`;
       }
     }
 
@@ -369,7 +369,7 @@ export async function sendWhatsAppMedia(
         session: ctx.wahaSession,
         phone: normalized,
       }).catch(() => null);
-      if (resolved) chatId = `${resolved}@c.us`;
+      if (resolved) chatId = resolved.includes("@") ? resolved : `${resolved}@c.us`;
     }
     if (!chatId) {
       const variant = getBrazilianPhoneVariant(normalized);
@@ -380,7 +380,7 @@ export async function sendWhatsAppMedia(
           session: ctx.wahaSession,
           phone: variant,
         }).catch(() => null);
-        if (alt) chatId = `${alt}@c.us`;
+        if (alt) chatId = alt.includes("@") ? alt : `${alt}@c.us`;
       }
     }
     const sendChatId = chatId || `${normalized}@c.us`;
@@ -480,7 +480,7 @@ export async function setWhatsAppPresence(
         const resolved = await wahaCheckNumberExists({
           wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession, phone: normalized,
         });
-        if (resolved) chatId = `${resolved}@c.us`;
+        if (resolved) chatId = resolved.includes("@") ? resolved : `${resolved}@c.us`;
       } catch (_) { /* ignore */ }
     }
     if (!chatId) {
@@ -490,7 +490,7 @@ export async function setWhatsAppPresence(
           const alt = await wahaCheckNumberExists({
             wahaUrl: ctx.wahaUrl!, wahaKey: ctx.wahaKey!, session: ctx.wahaSession, phone: variant,
           });
-          if (alt) chatId = `${alt}@c.us`;
+          if (alt) chatId = alt.includes("@") ? alt : `${alt}@c.us`;
         } catch (_) { /* ignore */ }
       }
     }
