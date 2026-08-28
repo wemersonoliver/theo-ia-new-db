@@ -1,52 +1,80 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveInstanceContext } from "../_wa_provider.ts";
+import { wahaRequest } from "../_waha.ts";
 
-const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*" };
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: cors });
-  const url = new URL(req.url);
-  const session = url.searchParams.get("session") || "biz1053_principal";
-  const phone = url.searchParams.get("phone");
-  const create = url.searchParams.get("create") === "1";
-  const del = url.searchParams.get("delete") === "1";
-  const engine = url.searchParams.get("engine") || "NOWEB";
-  const wahaUrl = (Deno.env.get("WAHA_API_URL") || "").replace(/\/+$/, "");
-  const wahaKey = Deno.env.get("WAHA_API_KEY") || "";
-  const h = { "X-Api-Key": wahaKey, "Content-Type": "application/json", Accept: "application/json" };
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  const out: any = {};
+  try {
+    const { phone, send } = await req.json();
+    const digits = String(phone || "").replace(/\D/g, "");
 
-  if (del) {
-    const r = await fetch(`${wahaUrl}/api/sessions/${encodeURIComponent(session)}`, { method: "DELETE", headers: h });
-    out.delete = { code: r.status, body: (await r.text()).slice(0, 400) };
-  }
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
 
-  if (create) {
-    const body: any = { name: session, start: true, config: { metadata: {}, debug: false } };
-    if (phone) body.config.metadata = { phoneNumber: phone.replace(/\D/g, "") };
-    body.config.engine = engine;
-    const r = await fetch(`${wahaUrl}/api/sessions`, { method: "POST", headers: h, body: JSON.stringify(body) });
-    out.create = { code: r.status, body: (await r.text()).slice(0, 600) };
-    // wait for STARTED / SCAN_QR_CODE
-    for (let i = 0; i < 8; i++) {
-      await new Promise(r => setTimeout(r, 1000));
-      const s = await fetch(`${wahaUrl}/api/sessions/${encodeURIComponent(session)}`, { headers: h });
-      const t = await s.text();
-      out[`status_${i}`] = { code: s.status, body: t.slice(0, 300) };
-      if (/SCAN_QR_CODE|WORKING|STARTED/.test(t)) break;
+    const ctx = await resolveInstanceContext(supabase, { system: true });
+    if (!ctx || ctx.provider !== "waha") {
+      return new Response(JSON.stringify({ error: "no waha ctx", ctx: ctx?.provider }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
-  }
 
-  const statusRes = await fetch(`${wahaUrl}/api/sessions/${encodeURIComponent(session)}`, { headers: h });
-  out.status = { code: statusRes.status, body: await statusRes.text() };
+    const session = ctx.wahaSession;
+    const out: any = { session, tests: {} };
 
-  if (phone) {
-    const reqRes = await fetch(`${wahaUrl}/api/${encodeURIComponent(session)}/auth/request-code`, {
-      method: "POST", headers: h,
-      body: JSON.stringify({ phoneNumber: phone.replace(/\D/g, "") }),
+    const paths: Record<string, string> = {
+      version: `/api/version`,
+      sessionInfo: `/api/sessions/${encodeURIComponent(session)}`,
+      checkExists: `/api/contacts/check-exists?session=${encodeURIComponent(session)}&phone=${digits}`,
+      lidByPn: `/api/${encodeURIComponent(session)}/lids/pn/${digits}`,
+      lidByPnCus: `/api/${encodeURIComponent(session)}/lids/pn/${digits}@c.us`,
+    };
+
+    for (const [name, path] of Object.entries(paths)) {
+      const res = await wahaRequest({
+        wahaUrl: ctx.wahaUrl!,
+        wahaKey: ctx.wahaKey!,
+        path,
+        method: "GET",
+      }).catch((e) => ({ ok: false, status: 0, text: String(e) } as any));
+      out.tests[name] = { status: res.status, body: (res.text || "").slice(0, 500) };
+    }
+
+    if (send) {
+      const variants: string[] = [`${digits}@c.us`];
+      const lidBody = out.tests.lidByPn?.body || out.tests.lidByPnCus?.body || "";
+      const lidMatch = lidBody.match(/(\d{6,})@lid/) || lidBody.match(/"lid"\s*:\s*"?(\d{6,})/);
+      if (lidMatch) variants.push(`${lidMatch[1]}@lid`);
+
+      out.sends = [];
+      for (const chatId of variants) {
+        const res = await wahaRequest({
+          wahaUrl: ctx.wahaUrl!,
+          wahaKey: ctx.wahaKey!,
+          path: "/api/sendText",
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session, chatId, text: "Teste de notificação Theo IA" }),
+        }).catch((e) => ({ ok: false, status: 0, text: String(e) } as any));
+        out.sends.push({ chatId, status: res.status, body: (res.text || "").slice(0, 500) });
+        if (res.ok) break;
+      }
+    }
+
+    return new Response(JSON.stringify(out, null, 2), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-    out.requestCode = { code: reqRes.status, body: await reqRes.text() };
+  } catch (e) {
+    return new Response(JSON.stringify({ error: String(e) }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
-
-  return new Response(JSON.stringify(out, null, 2), { headers: { ...cors, "Content-Type": "application/json" } });
 });
