@@ -3324,8 +3324,6 @@ async function applyRouletteOnHandoff(
         .eq("id", accountId)
         .maybeSingle();
       if (acc?.owner_user_id) {
-        const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
-        const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
         const { data: prof } = await supabase
           .from("profiles")
           .select("phone")
@@ -3333,20 +3331,16 @@ async function applyRouletteOnHandoff(
           .maybeSingle();
         const digits = String(prof?.phone || "").replace(/\D/g, "");
         const number = digits.length === 10 || digits.length === 11 ? "55" + digits : digits;
-        const { data: sysInst } = await supabase
-          .from("system_whatsapp_instance")
-          .select("instance_name, status")
-          .limit(1)
-          .maybeSingle();
-        if (number && evolutionUrl && evolutionKey && sysInst?.status === "connected") {
-          await fetch(`${evolutionUrl}/message/sendText/${sysInst.instance_name}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", apikey: evolutionKey },
-            body: JSON.stringify({
-              number,
-              text: `⚠️ *Roleta sem atendente*\n\nNenhum membro está disponível${cfg?.require_online ? " (online)" : ""} para atender ${contactName || phone}.`,
-            }),
-          });
+        const sysCtx = await resolveInstanceContext(supabase, { system: true });
+        if (number && sysCtx && sysCtx.status === "connected") {
+          const res = await providerSendText(
+            sysCtx,
+            number,
+            `⚠️ *Roleta sem atendente*\n\nNenhum membro está disponível${cfg?.require_online ? " (online)" : ""} para atender ${contactName || phone}.`,
+          );
+          if (!res.ok) {
+            console.error("Roulette: owner notify failed", res.status, JSON.stringify(res.errorPayload || {}).slice(0, 300));
+          }
         }
       }
     } catch (e) {
