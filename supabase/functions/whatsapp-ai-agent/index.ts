@@ -3132,43 +3132,30 @@ async function notifyHandoff(supabase: any, userId: string, clientPhone: string,
       : "";
     const message = `🔔 *Transferência de Atendimento*\n\nUm cliente precisa de atendimento humano.\n\n👤 *Nome:* ${displayName}\n📱 *Telefone:* ${clientPhone}\n⏰ *Horário:* ${horario}${summaryBlock}`;
 
-    // Enviar SEMPRE pela instância de suporte (system) diretamente via Evolution API
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) {
-      console.error("Evolution API not configured for handoff notification");
+    // Enviar SEMPRE pela instância de suporte (system), roteando pelo provedor real (WAHA/Evolution)
+    const sysCtx = await resolveInstanceContext(supabase, { system: true });
+    if (!sysCtx) {
+      console.error("System WhatsApp instance not found — cannot send handoff notification");
       return;
     }
-
-    const { data: sysInstance } = await supabase
-      .from("system_whatsapp_instance")
-      .select("instance_name, status")
-      .limit(1)
-      .maybeSingle();
-
-    if (!sysInstance || sysInstance.status !== "connected") {
+    if (sysCtx.status !== "connected") {
       console.error("System WhatsApp instance not connected — cannot send handoff notification");
       return;
     }
 
-    const instanceName = sysInstance.instance_name;
     let sent = 0;
     for (const [phoneNum] of recipients) {
       const target = phoneNum; // já normalizado com 55
       try {
-        const resp = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", apikey: evolutionKey },
-          body: JSON.stringify({ number: target, text: message }),
-        });
-        if (resp.ok) sent++;
-        else console.error(`Handoff notify failed for ${target}: ${resp.status} ${await resp.text()}`);
+        const res = await providerSendText(sysCtx, target, message);
+        if (res.ok) sent++;
+        else console.error(`Handoff notify failed for ${target} (${sysCtx.provider}):`, res.status, JSON.stringify(res.errorPayload || {}).slice(0, 300));
       } catch (err) {
         console.error(`Handoff notify error for ${target}:`, err);
       }
     }
 
-    console.log(`Handoff notification sent to ${sent}/${recipients.size} recipients via system instance`);
+    console.log(`Handoff notification sent to ${sent}/${recipients.size} recipients via system instance (${sysCtx.provider})`);
   } catch (error) {
     console.error("Error sending handoff notifications:", error);
   }
