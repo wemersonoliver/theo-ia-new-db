@@ -99,14 +99,6 @@ serve(async (req) => {
       });
     }
 
-    const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) {
-      console.error("[notify-api-failure] Evolution API not configured");
-      return new Response(JSON.stringify({ ok: false, reason: "evolution_not_configured" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
     const apiLabel = API_LABELS[api_name] || api_name;
     const timestamp = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
