@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { evolutionRequest, getEvolutionErrorMessage, normalizeEvolutionUrl } from "../_evolution.ts";
+import { resolveInstanceContext, sendWhatsAppText as providerSendText } from "../_wa_provider.ts";
 import { fetchAppointmentBlocks, findBlockConflict } from "../_appointment-blocks.ts";
 
 const corsHeaders = {
