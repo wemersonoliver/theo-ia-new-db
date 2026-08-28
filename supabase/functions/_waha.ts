@@ -437,6 +437,11 @@ export async function wahaRequestCode(opts: {
   return { code: finalCode, raw };
 }
 
+/**
+ * Verifica se o número existe no WhatsApp e devolve o chatId COMPLETO retornado
+ * pelo WAHA (pode ser "<lid>@lid" no engine GOWS ou "<numero>@c.us").
+ * IMPORTANTE: não remover o sufixo — no GOWS o envio exige o chatId exato.
+ */
 export async function wahaCheckNumberExists(opts: {
   wahaUrl: string;
   wahaKey: string;
@@ -452,11 +457,16 @@ export async function wahaCheckNumberExists(opts: {
   });
   if (!res.ok) return null;
   const data: any = res.data || {};
-  if (data?.numberExists && (data?.chatId || data?.jid)) {
-    return stripWahaSuffix(data.chatId || data.jid);
+  if (!data?.numberExists) return null;
+  const raw = data?.chatId || data?.jid || data?.pn || null;
+  if (!raw || typeof raw !== "string") return null;
+  if (raw.includes("@")) {
+    // normaliza @s.whatsapp.net → @c.us; mantém @lid
+    return raw.replace(/@s\.whatsapp\.net$/i, "@c.us");
   }
-  return null;
+  return `${raw.replace(/\D/g, "")}@c.us`;
 }
+
 
 /**
  * Resolve um chatId real (@c.us) a partir de um LID (@lid). Retorna null se o WAHA não conseguir.
