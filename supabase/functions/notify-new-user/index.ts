@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { evolutionRequest, getEvolutionErrorMessage, normalizeEvolutionUrl } from "../_evolution.ts";
+import { resolveInstanceContext, sendWhatsAppText } from "../_wa_provider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,34 +39,24 @@ Deno.serve(async (req) => {
 
     console.log(`Found ${contacts.length} active contacts`);
 
-    // Get system WhatsApp instance
-    const { data: instances } = await supabase
-      .from("system_whatsapp_instance")
-      .select("instance_name, status")
-      .eq("status", "connected")
-      .limit(1);
+    // Get system WhatsApp instance context (WAHA ou Evolution — resolvido pelo provedor)
+    const ctx = await resolveInstanceContext(supabase, { system: true });
 
-    const instance = instances?.[0];
-    if (!instance) {
-      console.log("No connected system instance");
+    if (!ctx) {
+      console.log("No system instance configured");
+      return new Response(JSON.stringify({ message: "No system instance" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (ctx.status !== "connected") {
+      console.log("System instance not connected:", ctx.status);
       return new Response(JSON.stringify({ message: "No connected system instance" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("Using instance:", instance.instance_name);
-
-    const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY")!;
-
-    if (!evolutionUrl || !evolutionKey) {
-      return new Response(JSON.stringify({ error: "Evolution API não configurada" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    console.log("Evolution URL:", evolutionUrl);
+    console.log("Using instance:", ctx.instanceName, "provider:", ctx.provider);
 
     const now = new Date();
     const dateStr = now.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -82,29 +72,17 @@ Deno.serve(async (req) => {
     // Send to all active contacts
     for (const c of contacts) {
       try {
-        const url = `${evolutionUrl}/message/sendText/${instance.instance_name}`;
-        console.log(`Sending to ${c.phone} via ${url}`);
-
-        const res = await evolutionRequest({
-          evolutionUrl,
-          evolutionKey,
-          path: `/message/sendText/${instance.instance_name}`,
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            number: c.phone,
-            text: message,
-          }),
-        });
-
-        console.log(`Response for ${c.phone}: status=${res.status}, body=${res.text}`);
+        const res = await sendWhatsAppText(ctx, c.phone, message);
+        console.log(`Response for ${c.phone}: ok=${res.ok} status=${res.status}`);
 
         if (res.ok) {
           sent++;
         } else {
-          console.error(`Failed to send to ${c.phone}:`, getEvolutionErrorMessage(res, "Falha ao enviar notificação"));
+          console.error(
+            `Failed to send to ${c.phone} (${ctx.provider}):`,
+            res.status,
+            JSON.stringify(res.errorPayload || {}).slice(0, 300),
+          );
         }
       } catch (err) {
         console.error(`Failed to send to ${c.phone}:`, err);
