@@ -126,16 +126,9 @@ serve(async (req) => {
     let sent = 0;
     for (const r of recipients) {
       try {
-        const res = await evolutionRequest({
-          evolutionUrl,
-          evolutionKey,
-          path: `/message/sendText/${instance.instance_name}`,
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ number: r.phone, text }),
-        });
+        const res = await sendWhatsAppText(ctx, r.phone, text);
         if (res.ok) sent++;
-        else console.error(`[notify-api-failure] failed for ${r.phone}:`, res.text?.slice(0, 200));
+        else console.error(`[notify-api-failure] failed for ${r.phone} (${ctx.provider}):`, res.status, JSON.stringify(res.errorPayload || {}).slice(0, 300));
       } catch (e) {
         console.error(`[notify-api-failure] exception for ${r.phone}:`, e);
       }
