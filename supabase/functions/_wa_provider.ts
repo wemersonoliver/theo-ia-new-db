@@ -263,15 +263,37 @@ export async function sendWhatsAppText(
     }
 
     // 4) Fallback final: usar o número normalizado bruto
-    const sendChatId = chatId || `${normalized}@c.us`;
+    let sendChatId = chatId || `${normalized}@c.us`;
 
-    const res = await wahaSendText({
+    let res = await wahaSendText({
       wahaUrl: ctx.wahaUrl!,
       wahaKey: ctx.wahaKey!,
       session: ctx.wahaSession,
       phone: sendChatId,
       text,
     });
+
+    // Retry: engine GOWS exige o chatId LID para alguns contatos ("no LID found for ...").
+    if (!res.ok && /no lid/i.test(res.text || "")) {
+      const relookup = await wahaCheckNumberExists({
+        wahaUrl: ctx.wahaUrl!,
+        wahaKey: ctx.wahaKey!,
+        session: ctx.wahaSession,
+        phone: normalized,
+      }).catch(() => null);
+      if (relookup && relookup !== sendChatId) {
+        console.log(`[wa_provider] retry WAHA com chatId resolvido: ${relookup}`);
+        sendChatId = relookup;
+        res = await wahaSendText({
+          wahaUrl: ctx.wahaUrl!,
+          wahaKey: ctx.wahaKey!,
+          session: ctx.wahaSession,
+          phone: sendChatId,
+          text,
+        });
+      }
+    }
+
     if (!res.ok) {
       return {
         ok: false, provider: "waha", status: res.status,
@@ -287,6 +309,7 @@ export async function sendWhatsAppText(
       messageId: extractWahaMessageId(res),
       waChatId: sendChatId,
     };
+
   }
 
   // Evolution (com resolução de JID)
