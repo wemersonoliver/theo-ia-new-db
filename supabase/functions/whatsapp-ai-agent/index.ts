@@ -3418,28 +3418,21 @@ async function applyRouletteOnHandoff(
     const assigneeDigits = String(assigneeProfile?.phone || "").replace(/\D/g, "");
     if (!assigneeDigits) return;
 
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/$/, "");
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) return;
-
-    const { data: sysInstance } = await supabase
-      .from("system_whatsapp_instance")
-      .select("instance_name, status")
-      .limit(1)
-      .maybeSingle();
-
-    if (!sysInstance || sysInstance.status !== "connected") return;
+    const sysCtx = await resolveInstanceContext(supabase, { system: true });
+    if (!sysCtx || sysCtx.status !== "connected") {
+      console.error("Roulette assignee notify: system instance unavailable");
+      return;
+    }
 
     let target = assigneeDigits;
     if (target.length === 10 || target.length === 11) target = "55" + target;
 
     const msg = `🎯 *Roleta de Atendimento*\n\nVocê foi designado para atender:\n\n👤 *Cliente:* ${contactName || "Desconhecido"}\n📱 *Telefone:* ${phone}\n⏰ *Horário:* ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}\n\n⏱️ *Inicie em até ${timeoutMin} min*, ou a vez será passada ao próximo da fila.`;
 
-    await fetch(`${evolutionUrl}/message/sendText/${sysInstance.instance_name}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: evolutionKey },
-      body: JSON.stringify({ number: target, text: msg }),
-    });
+    const res = await providerSendText(sysCtx, target, msg);
+    if (!res.ok) {
+      console.error("Roulette assignee notify failed", res.status, JSON.stringify(res.errorPayload || {}).slice(0, 300));
+    }
   } catch (err) {
     console.error("Roulette assignee notify error:", err);
   }
