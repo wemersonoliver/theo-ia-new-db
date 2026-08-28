@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import { resolveInstanceContext, sendWhatsAppText } from "../_wa_provider.ts";
 import { requireInternalKey } from "../_cron_auth.ts";
 
 const corsHeaders = {
@@ -37,13 +37,10 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Pega instância de WhatsApp do sistema
-    const { data: instance } = await supabase
-      .from("system_whatsapp_instance")
-      .select("instance_name, status")
-      .maybeSingle();
+    // Pega instância de WhatsApp do sistema (roteada pelo provedor real)
+    const ctx = await resolveInstanceContext(supabase, { system: true });
 
-    if (!instance || instance.status !== "connected") {
+    if (!ctx || ctx.status !== "connected") {
       console.warn("[notify-api-failure] System WhatsApp not connected, skipping");
       return new Response(JSON.stringify({ ok: false, reason: "system_wa_disconnected" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
