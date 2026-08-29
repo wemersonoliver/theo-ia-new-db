@@ -37,13 +37,9 @@ serve(async (req) => {
           });
         }
 
-        const targetDate = new Date(date);
-        const dayOfWeek = targetDate.getDay();
+        const avail = await computeDayAvailability(supabase, userId, date);
 
-        // Bloqueios de agenda
-        const dayBlocks = await fetchAppointmentBlocks(supabase, userId);
-        const fullDayBlock = findBlockConflict(dayBlocks, date);
-        if (fullDayBlock && fullDayBlock.all_day) {
+        if (avail.allDayBlocked) {
           return new Response(JSON.stringify({
             available_slots: [],
             date,
@@ -51,121 +47,21 @@ serve(async (req) => {
           }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // First try appointment_types (new system from onboarding)
-        const { data: appointmentTypes } = await supabase
-          .from("appointment_types")
-          .select("*")
-          .eq("user_id", userId)
-          .eq("is_active", true)
-          .order("name");
-
-        // Filter types that are available on this day of week
-        const typesForDay = (appointmentTypes || []).filter((t: any) => 
-          t.days_of_week && t.days_of_week.includes(dayOfWeek)
-        );
-
-        // Fallback to legacy appointment_slots if no appointment_types exist
-        const { data: legacySlots } = await supabase
-          .from("appointment_slots")
-          .select("*")
-          .eq("user_id", userId)
-          .eq("day_of_week", dayOfWeek)
-          .eq("is_active", true)
-          .order("start_time");
-
-        const hasTypes = typesForDay.length > 0;
-        const hasLegacySlots = legacySlots && legacySlots.length > 0;
-
-        if (!hasTypes && !hasLegacySlots) {
-          return new Response(JSON.stringify({ 
+        if (avail.grid.length === 0) {
+          return new Response(JSON.stringify({
             available_slots: [],
-            message: "Nenhum horário disponível neste dia."
-          }), { 
-            headers: { ...corsHeaders, "Content-Type": "application/json" } 
-          });
+            date,
+            message: "Não há atendimento neste dia da semana. Sugira outra data ao cliente e NUNCA invente horários."
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Get existing appointments for this date
-        const { data: existingAppointments } = await supabase
-          .from("appointments")
-          .select("appointment_time, duration_minutes")
-          .eq("user_id", userId)
-          .eq("appointment_date", date)
-          .neq("status", "cancelled");
-
-        const appointmentCountByTime: Record<string, number> = {};
-        for (const a of (existingAppointments || [])) {
-          appointmentCountByTime[a.appointment_time] = (appointmentCountByTime[a.appointment_time] || 0) + 1;
-        }
-
-        const availableSlots: string[] = [];
-
-        if (hasTypes) {
-          // Use appointment_types system
-          for (const type of typesForDay) {
-            const [startHour, startMin] = type.start_time.split(":").map(Number);
-            const [endHour, endMin] = type.end_time.split(":").map(Number);
-            const slotDuration = type.duration_minutes || 30;
-            const maxPerSlot = type.max_appointments_per_slot || 1;
-
-            let currentMinutes = startHour * 60 + startMin;
-            const endMinutes = endHour * 60 + endMin;
-
-            while (currentMinutes + slotDuration <= endMinutes) {
-              const hour = Math.floor(currentMinutes / 60);
-              const minute = currentMinutes % 60;
-              const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}:00`;
-              const currentCount = appointmentCountByTime[timeStr] || 0;
-
-              const blockedHere = findBlockConflict(dayBlocks, date, timeStr.slice(0, 5), slotDuration);
-              if (currentCount < maxPerSlot && !blockedHere) {
-                const remaining = maxPerSlot - currentCount;
-                const display = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
-                availableSlots.push(maxPerSlot > 1 ? `${display} (${remaining} vaga${remaining > 1 ? "s" : ""})` : display);
-              }
-
-              currentMinutes += slotDuration;
-            }
-          }
-        } else {
-          // Fallback: use legacy appointment_slots
-          for (const slot of legacySlots!) {
-            const [startHour, startMin] = slot.start_time.split(":").map(Number);
-            const [endHour, endMin] = slot.end_time.split(":").map(Number);
-            const slotDuration = slot.slot_duration_minutes || 30;
-            const maxPerSlot = slot.max_appointments_per_slot || 1;
-
-            let currentMinutes = startHour * 60 + startMin;
-            const endMinutes = endHour * 60 + endMin;
-
-            while (currentMinutes + slotDuration <= endMinutes) {
-              const hour = Math.floor(currentMinutes / 60);
-              const minute = currentMinutes % 60;
-              const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}:00`;
-              const currentCount = appointmentCountByTime[timeStr] || 0;
-
-              const blockedHere = findBlockConflict(dayBlocks, date, timeStr.slice(0, 5), slotDuration);
-              if (currentCount < maxPerSlot && !blockedHere) {
-                const remaining = maxPerSlot - currentCount;
-                const display = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
-                availableSlots.push(maxPerSlot > 1 ? `${display} (${remaining} vaga${remaining > 1 ? "s" : ""})` : display);
-              }
-
-              currentMinutes += slotDuration;
-            }
-          }
-        }
-
-        // Deduplicate slots (multiple types may generate same times)
-        const uniqueSlots = [...new Set(availableSlots)].sort();
-
-        return new Response(JSON.stringify({ 
-          available_slots: uniqueSlots,
-          appointment_types: hasTypes ? typesForDay.map((t: any) => ({ name: t.name, duration: t.duration_minutes })) : undefined,
+        return new Response(JSON.stringify({
+          available_slots: avail.availableLabels,
+          appointment_types: avail.typeNames.length > 0 ? avail.typeNames : undefined,
           date,
-          message: uniqueSlots.length > 0 
-            ? `Horários disponíveis para ${formatDate(date)}: ${uniqueSlots.join(", ")}`
-            : "Todos os horários estão ocupados neste dia."
+          message: avail.availableLabels.length > 0
+            ? `Horários disponíveis para ${formatDate(date)}: ${avail.availableLabels.join(", ")}. Ofereça SOMENTE estes horários — nenhum outro existe nesta data.`
+            : "Todos os horários estão ocupados neste dia. Sugira outra data e NUNCA invente horários."
         }), { 
           headers: { ...corsHeaders, "Content-Type": "application/json" } 
         });
