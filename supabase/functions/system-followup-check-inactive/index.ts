@@ -39,8 +39,9 @@ serve(async (req) => {
 
     const { data: conversations } = await supabase
       .from("system_whatsapp_conversations")
-      .select("phone, messages, last_message_at, ai_active")
-      .lt("last_message_at", cutoffTime);
+      .select("phone, last_message_at, ai_active")
+      .lt("last_message_at", cutoffTime)
+      .limit(500);
 
     if (!conversations || conversations.length === 0) {
       return new Response(JSON.stringify({ created: 0 }), {
