@@ -80,18 +80,41 @@ serve(async (req) => {
           ? `${time}:00` 
           : time;
 
-        const targetDate = new Date(date);
-        const dayOfWeek = targetDate.getDay();
+        const dayOfWeek = dayOfWeekFromYmd(date);
 
-        // Rejeita criação em horário bloqueado
-        const createBlocks = await fetchAppointmentBlocks(supabase, userId);
-        const createConflict = findBlockConflict(createBlocks, date, String(timeWithSeconds).slice(0, 5), 30);
-        if (createConflict) {
+        // Valida contra a grade real de horários configurada + bloqueios
+        const createAvail = await computeDayAvailability(supabase, userId, date);
+        const requestedHHMM = String(timeWithSeconds).slice(0, 5);
+
+        if (createAvail.allDayBlocked) {
           return new Response(JSON.stringify({
             success: false,
-            message: createConflict.all_day
-              ? "A agenda está bloqueada nesta data. Por favor, escolha outro dia."
-              : "Este horário está bloqueado na agenda. Por favor, escolha outro horário."
+            message: "A agenda está bloqueada nesta data. Por favor, escolha outro dia."
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (createAvail.hasConfig && createAvail.grid.length === 0) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: "Não há atendimento neste dia da semana. Peça ao cliente para escolher outra data e consulte os horários disponíveis antes de oferecer qualquer horário."
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (createAvail.hasConfig && !createAvail.grid.includes(requestedHHMM)) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: createAvail.available.length > 0
+              ? `O horário ${requestedHHMM} NÃO existe na agenda desta data. Horários realmente disponíveis: ${createAvail.available.join(", ")}. Ofereça somente estes.`
+              : `O horário ${requestedHHMM} NÃO existe na agenda desta data e não há horários livres. Sugira outra data.`
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (createAvail.hasConfig && !createAvail.available.includes(requestedHHMM)) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: createAvail.available.length > 0
+              ? `Este horário não está livre. Horários disponíveis: ${createAvail.available.join(", ")}.`
+              : "Este horário não está disponível e não há horários livres nesta data. Sugira outra data."
           }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
