@@ -143,6 +143,13 @@ export function AudioRecordButton({ onTranscription, disabled }: AudioRecordButt
         size="icon"
         onClick={handleClick}
         disabled={disabled || state === "transcribing"}
+        aria-label={
+          state === "idle"
+            ? "Gravar áudio"
+            : state === "recording"
+            ? "Parar gravação"
+            : "Transcrevendo áudio"
+        }
         title={
           state === "idle"
             ? "Gravar áudio"
@@ -167,6 +174,7 @@ export function AudioRecordButton({ onTranscription, disabled }: AudioRecordButt
             <button
               type="button"
               onClick={cancelRecording}
+              aria-label="Cancelar gravação"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-destructive transition-colors"
               title="Cancelar"
             >
@@ -199,6 +207,7 @@ export function AudioRecordButton({ onTranscription, disabled }: AudioRecordButt
             <button
               type="button"
               onClick={stopRecording}
+              aria-label="Enviar gravação"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
               title="Enviar"
             >
