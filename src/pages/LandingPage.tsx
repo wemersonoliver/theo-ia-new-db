@@ -1,3 +1,4 @@
+import { Seo } from "@/components/Seo";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -120,6 +121,12 @@ const included = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[hsl(222,47%,5%)] text-[hsl(210,40%,98%)]">
+      <Seo
+        title="Theo IA — Atendimento no WhatsApp com Inteligência Artificial"
+        description="Automatize seu atendimento no WhatsApp com IA: qualifique leads, agende consultas e nunca mais perca um cliente."
+        path="/"
+        jsonLd={{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Theo IA","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://theoia.com.br/","offers":{"@type":"Offer","price":"97","priceCurrency":"BRL"}}}
+      />
       {/* Nav */}
       <nav className="sticky top-0 z-50 border-b border-[hsl(217,33%,17%)] bg-[hsl(222,47%,5%)]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">

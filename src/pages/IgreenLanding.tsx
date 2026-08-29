@@ -1,3 +1,4 @@
+import { Seo } from "@/components/Seo";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -107,6 +108,12 @@ const igreenFaq = [
 export default function IgreenLanding() {
   return (
     <div className="min-h-screen bg-[hsl(140,40%,6%)] text-[hsl(140,20%,96%)]">
+      <Seo
+        title="Theo IA para iGreen Energy — Atendimento automático no WhatsApp"
+        description="Template pronto de IA para consultores iGreen Energy: qualifica leads, valida faturas e conduz o cadastro pelo WhatsApp."
+        path="/igreen"
+        jsonLd={{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Theo IA para iGreen Energy","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://theoia.com.br/igreen","offers":{"@type":"Offer","price":"97","priceCurrency":"BRL"}}}
+      />
       {/* Nav */}
       <nav className="sticky top-0 z-50 border-b border-emerald-900/40 bg-[hsl(140,40%,6%)]/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">

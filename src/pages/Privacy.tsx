@@ -1,3 +1,4 @@
+import { Seo } from "@/components/Seo";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
@@ -5,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 export default function Privacy() {
   return (
     <div className="min-h-screen bg-background">
+      <Seo title="Política de Privacidade — Theo IA" description="Saiba como o Theo IA coleta, usa e protege os dados pessoais dos usuários, em conformidade com a LGPD." path="/privacy" />
       <header className="border-b border-border/60 bg-background/80 backdrop-blur sticky top-0 z-40">
         <div className="container mx-auto flex items-center justify-between py-4">
           <Link to="/" className="font-display text-lg font-bold">Theo IA</Link>
