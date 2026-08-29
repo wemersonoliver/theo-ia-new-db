@@ -1,3 +1,4 @@
+import { Seo } from "@/components/Seo";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
@@ -35,6 +36,7 @@ export default function Login() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden">
+      <Seo title="Entrar no Theo IA — Acesse sua conta" description="Faça login na plataforma Theo IA e gerencie seu atendimento automatizado no WhatsApp." path="/login" />
       <AuroraBackground intensity="vivid" />
       <FloatingSparkles count={18} />
       <Card className="relative w-full max-w-md glass-strong border-primary/20 shadow-glow-primary animate-scale-in">
@@ -45,9 +47,9 @@ export default function Login() {
               <MessageSquare className="h-7 w-7 text-primary-foreground" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-display font-bold">
+          <h1 className="text-2xl font-display font-bold leading-none tracking-tight">
             Bem-vindo ao <span className="gradient-text">Theo IA</span>
-          </CardTitle>
+          </h1>
           <CardDescription>
             Entre com suas credenciais para acessar o sistema
           </CardDescription>
