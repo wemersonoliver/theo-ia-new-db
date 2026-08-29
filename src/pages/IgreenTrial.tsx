@@ -46,12 +46,12 @@ export default function IgreenTrial() {
   return (
     <div
       className="min-h-screen flex items-center justify-center p-4"
-      <Seo title="Teste grátis 7 dias — Theo IA para iGreen Energy" description="Crie sua conta e teste por 7 dias o template Theo IA para consultores iGreen Energy, com 3 cenários de atendimento prontos." path="/igreen-trial" />
       style={{
         background:
           "linear-gradient(135deg, hsl(135 75% 18%) 0%, hsl(105 65% 32%) 50%, hsl(38 95% 55%) 100%)",
       }}
     >
+      <Seo title="Teste grátis 7 dias — Theo IA para iGreen Energy" description="Crie sua conta e teste por 7 dias o template Theo IA para consultores iGreen Energy, com 3 cenários de atendimento prontos." path="/igreen-trial" />
       <Card className="w-full max-w-md border-emerald-700/40 bg-background/95 backdrop-blur">
         <CardHeader className="text-center">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-emerald-600 to-amber-500 text-white">
