@@ -65,15 +65,28 @@ serve(async (req) => {
     );
 
     let created = 0;
+    const candidates = (conversations as any[]).filter((conv) => {
+      if (activePhones.has(conv.phone) || completedPhones.has(conv.phone)) return false;
+      if (config.exclude_handoff && conv.ai_active === false) return false;
+      return true;
+    });
 
-    for (const conv of conversations) {
-      if (activePhones.has(conv.phone) || completedPhones.has(conv.phone)) continue;
+    // Histórico só dos candidatos (a coluna messages é pesada).
+    const { data: convMessages } = candidates.length
+      ? await supabase
+          .from("system_whatsapp_conversations")
+          .select("phone, messages")
+          .in("phone", candidates.map((c) => c.phone))
+      : { data: [] as any[] };
 
-      // Pula handoffs (IA desativada manualmente) se configurado
-      if (config.exclude_handoff && conv.ai_active === false) continue;
+    const messagesByPhone = new Map<string, any[]>(
+      (convMessages || []).map((c: any) => [c.phone, (c.messages as any[]) || []]),
+    );
 
-      const messages = (conv.messages as any[]) || [];
+    for (const conv of candidates) {
+      const messages = messagesByPhone.get(conv.phone) || [];
       if (messages.length === 0) continue;
+
 
       const lastMsg = messages[messages.length - 1];
       // Não fazer follow-up se a última mensagem foi de operador humano
