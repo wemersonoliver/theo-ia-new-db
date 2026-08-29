@@ -1,3 +1,4 @@
+import { Seo } from "@/components/Seo";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
@@ -83,6 +84,7 @@ export default function Register() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden">
+      <Seo title="Criar conta no Theo IA — Teste grátis" description="Crie sua conta no Theo IA e comece a automatizar o atendimento do seu WhatsApp com inteligência artificial." path="/register" />
       <AuroraBackground intensity="vivid" />
       <FloatingSparkles count={18} />
       <Card className="relative w-full max-w-md glass-strong border-primary/20 shadow-glow-primary animate-scale-in">
@@ -93,7 +95,7 @@ export default function Register() {
               <MessageSquare className="h-7 w-7 text-primary-foreground" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-display font-bold">Criar conta</CardTitle>
+          <h1 className="text-2xl font-display font-bold leading-none tracking-tight">Criar conta</h1>
           <CardDescription>
             Preencha os dados abaixo para começar
           </CardDescription>

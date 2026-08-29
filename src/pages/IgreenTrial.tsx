@@ -1,3 +1,4 @@
+import { Seo } from "@/components/Seo";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ export default function IgreenTrial() {
   return (
     <div
       className="min-h-screen flex items-center justify-center p-4"
+      <Seo title="Teste grátis 7 dias — Theo IA para iGreen Energy" description="Crie sua conta e teste por 7 dias o template Theo IA para consultores iGreen Energy, com 3 cenários de atendimento prontos." path="/igreen-trial" />
       style={{
         background:
           "linear-gradient(135deg, hsl(135 75% 18%) 0%, hsl(105 65% 32%) 50%, hsl(38 95% 55%) 100%)",
@@ -55,7 +57,7 @@ export default function IgreenTrial() {
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-emerald-600 to-amber-500 text-white">
             <Leaf className="h-7 w-7" />
           </div>
-          <CardTitle className="text-2xl">Plano Igreen Energy — Teste grátis 7 dias</CardTitle>
+          <h1 className="text-2xl font-semibold leading-none tracking-tight">Plano Igreen Energy — Teste grátis 7 dias</h1>
           <CardDescription>
             Crie sua conta e ganhe 7 dias para testar todos os recursos do template Igreen,
             incluindo os 3 cenários de atendimento prontos.
