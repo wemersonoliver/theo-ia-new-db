@@ -91,22 +91,40 @@ serve(async (req) => {
     const cutoff = new Date(Date.now() - idleMs).toISOString();
 
     // Find conversations idle for >= cutoff (last_message_at <= cutoff)
+    // Sem `messages` aqui: coluna JSONB pesada, buscada só para os candidatos.
     const { data: convs } = await supabase
       .from("whatsapp_conversations")
-      .select("phone, last_message_at, ai_active, messages")
+      .select("phone, last_message_at, ai_active")
       .eq("account_id", (flow as any).account_id)
       .lte("last_message_at", cutoff)
       .limit(500);
 
-    for (const conv of convs || []) {
+    const candidates = (convs || []).filter((conv: any) => {
+      if (!conv.phone) return false;
+      if ((flow as any).exclude_handoff && conv.ai_active === false) return false;
+      return true;
+    });
+
+    const { data: convMessages } = candidates.length
+      ? await supabase
+          .from("whatsapp_conversations")
+          .select("phone, messages")
+          .eq("account_id", (flow as any).account_id)
+          .in("phone", candidates.map((c: any) => c.phone))
+      : { data: [] as any[] };
+
+    const messagesByPhone = new Map<string, any[]>(
+      (convMessages || []).map((c: any) => [c.phone, (c.messages as any[]) || []]),
+    );
+
+    for (const conv of candidates) {
       const phone = (conv as any).phone;
-      if (!phone) continue;
-      if ((flow as any).exclude_handoff && (conv as any).ai_active === false) continue;
 
       // Skip if last message is from us already (no idle from contact)
-      const msgs = ((conv as any).messages || []) as any[];
+      const msgs = messagesByPhone.get(phone) || [];
       const last = msgs[msgs.length - 1];
       if (!last || last.from_me) continue; // only enroll when last message is from contact
+
 
       // Already active enrollment?
       const { data: existing } = await supabase
