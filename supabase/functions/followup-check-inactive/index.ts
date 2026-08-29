@@ -82,11 +82,15 @@ serve(async (req) => {
           continue;
         }
 
+        // Não trazer `messages` aqui: a coluna JSONB é enorme e essa query roda
+        // a cada ciclo para todos os usuários. O histórico é buscado só para os
+        // candidatos que sobrevivem aos filtros baratos abaixo.
         const { data: conversations, error: convError } = await supabase
           .from("whatsapp_conversations")
-          .select("phone, messages, last_message_at, ai_active")
+          .select("phone, last_message_at, ai_active")
           .eq("user_id", config.user_id)
-          .lt("last_message_at", cutoffTime);
+          .lt("last_message_at", cutoffTime)
+          .limit(500);
 
         if (convError) {
           console.error(`[${runId}] [user ${config.user_id}] conversations query error:`, convError);
