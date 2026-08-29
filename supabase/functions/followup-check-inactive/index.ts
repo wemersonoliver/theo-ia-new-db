@@ -82,11 +82,15 @@ serve(async (req) => {
           continue;
         }
 
+        // Não trazer `messages` aqui: a coluna JSONB é enorme e essa query roda
+        // a cada ciclo para todos os usuários. O histórico é buscado só para os
+        // candidatos que sobrevivem aos filtros baratos abaixo.
         const { data: conversations, error: convError } = await supabase
           .from("whatsapp_conversations")
-          .select("phone, messages, last_message_at, ai_active")
+          .select("phone, last_message_at, ai_active")
           .eq("user_id", config.user_id)
-          .lt("last_message_at", cutoffTime);
+          .lt("last_message_at", cutoffTime)
+          .limit(500);
 
         if (convError) {
           console.error(`[${runId}] [user ${config.user_id}] conversations query error:`, convError);
@@ -129,30 +133,42 @@ serve(async (req) => {
           (blockedContacts || []).map((c: any) => c.phone)
         );
 
-        for (const conv of conversations) {
+        // Filtros baratos primeiro (sem tocar no histórico).
+        const candidates = conversations.filter((conv: any) => {
           if (activePhonesSet.has(conv.phone)) {
             trackReason("already_active_tracking");
-            console.log(`[${runId}] [${conv.phone}] SKIP: active tracking exists`);
-            continue;
+            return false;
           }
           if (completedPhonesSet.has(conv.phone)) {
             trackReason("cycle_completed");
-            console.log(`[${runId}] [${conv.phone}] SKIP: cycle completed`);
-            continue;
+            return false;
           }
           if (blockedPhonesSet.has(conv.phone)) {
             trackReason("blocked_by_tag");
-            console.log(`[${runId}] [${conv.phone}] SKIP: blocked by tag (agendamento/sem-interesse)`);
-            continue;
+            return false;
           }
-
           if (config.exclude_handoff && !conv.ai_active) {
             trackReason("excluded_handoff");
-            console.log(`[${runId}] [${conv.phone}] SKIP: excluded handoff (ai_active=false)`);
-            continue;
+            return false;
           }
+          return true;
+        });
 
-          const messages = (conv.messages as any[]) || [];
+        if (candidates.length === 0) continue;
+
+        // Só agora buscamos o histórico, e apenas dos candidatos restantes.
+        const { data: convMessages } = await supabase
+          .from("whatsapp_conversations")
+          .select("phone, messages")
+          .eq("user_id", config.user_id)
+          .in("phone", candidates.map((c: any) => c.phone));
+
+        const messagesByPhone = new Map<string, any[]>(
+          (convMessages || []).map((c: any) => [c.phone, (c.messages as any[]) || []])
+        );
+
+        for (const conv of candidates) {
+          const messages = messagesByPhone.get(conv.phone) || [];
           if (messages.length === 0) {
             trackReason("empty_messages");
             continue;
