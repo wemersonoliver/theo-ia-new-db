@@ -1,3 +1,4 @@
+import { Seo } from "@/components/Seo";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -123,6 +124,12 @@ const personaliteIncluded = [
 export default function AcademiasLanding() {
   return (
     <div className="min-h-screen bg-[hsl(222,47%,5%)] text-[hsl(210,40%,98%)]">
+      <Seo
+        title="Theo IA para Academias — Automatize matrículas no WhatsApp"
+        description="IA que responde alunos, agenda aulas experimentais e converte matrículas no WhatsApp da sua academia, 24 horas por dia."
+        path="/academias"
+        jsonLd={{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Theo IA para Academias","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://theoia.com.br/academias","offers":{"@type":"Offer","price":"97","priceCurrency":"BRL"}}}
+      />
       {/* Nav */}
       <nav className="sticky top-0 z-50 border-b border-[hsl(217,33%,17%)] bg-[hsl(222,47%,5%)]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">

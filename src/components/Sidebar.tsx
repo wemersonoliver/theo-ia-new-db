@@ -117,6 +117,7 @@ export function Sidebar({ mobile, onNavigate }: SidebarProps) {
                 variant="ghost"
                 size="icon"
                 onClick={() => setCollapsed(!collapsed)}
+                aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
                 className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               >
                 {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}

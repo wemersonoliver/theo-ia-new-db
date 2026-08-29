@@ -99,7 +99,7 @@ export function RecordSendAudioButton({ phone, disabled, onSend, isSending, clas
   if (state === "recording") {
     return (
       <div className={cn("flex items-center gap-2 rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1", className)}>
-        <button type="button" onClick={cancel} className="text-slate-400 hover:text-red-400 p-1" title="Cancelar">
+        <button type="button" aria-label="Cancelar gravação" onClick={cancel} className="text-slate-400 hover:text-red-400 p-1" title="Cancelar">
           <Trash2 className="h-4 w-4" />
         </button>
         <span className="relative flex h-2.5 w-2.5">
@@ -107,7 +107,7 @@ export function RecordSendAudioButton({ phone, disabled, onSend, isSending, clas
           <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
         </span>
         <span className="font-mono text-xs tabular-nums text-slate-200">{fmt(elapsed)}</span>
-        <button type="button" onClick={stop} className="ml-1 flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600" title="Enviar">
+        <button type="button" aria-label="Enviar áudio" onClick={stop} className="ml-1 flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600" title="Enviar">
           <Send className="h-3.5 w-3.5" />
         </button>
       </div>
