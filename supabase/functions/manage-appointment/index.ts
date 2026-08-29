@@ -403,17 +403,33 @@ serve(async (req) => {
         }
 
         const timeWithSeconds = time.includes(":") && time.split(":").length === 2 ? `${time}:00` : time;
-        const targetDate = new Date(date);
-        const dayOfWeek = targetDate.getDay();
+        const dayOfWeek = dayOfWeekFromYmd(date);
 
-        const rescheduleBlocks = await fetchAppointmentBlocks(supabase, userId);
-        const rescheduleConflict = findBlockConflict(rescheduleBlocks, date, String(timeWithSeconds).slice(0, 5), aptToReschedule.duration_minutes || 30);
-        if (rescheduleConflict) {
+        const rescheduleAvail = await computeDayAvailability(supabase, userId, date, aptToReschedule.id);
+        const newHHMM = String(timeWithSeconds).slice(0, 5);
+
+        if (rescheduleAvail.allDayBlocked) {
           return new Response(JSON.stringify({
             success: false,
-            message: rescheduleConflict.all_day
-              ? "A agenda está bloqueada nesta data. Por favor, escolha outro dia."
-              : "Este horário está bloqueado na agenda. Por favor, escolha outro horário."
+            message: "A agenda está bloqueada nesta data. Por favor, escolha outro dia."
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (rescheduleAvail.hasConfig && !rescheduleAvail.grid.includes(newHHMM)) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: rescheduleAvail.available.length > 0
+              ? `O horário ${newHHMM} NÃO existe na agenda desta data. Horários realmente disponíveis: ${rescheduleAvail.available.join(", ")}. Ofereça somente estes.`
+              : `Não há atendimento nesta data. Sugira outra data ao cliente.`
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (rescheduleAvail.hasConfig && !rescheduleAvail.available.includes(newHHMM)) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: rescheduleAvail.available.length > 0
+              ? `Este horário não está livre. Horários disponíveis: ${rescheduleAvail.available.join(", ")}.`
+              : "Não há horários livres nesta data. Sugira outra data."
           }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
