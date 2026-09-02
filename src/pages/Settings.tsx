@@ -285,6 +285,11 @@ export default function Settings() {
           <KnowledgeBaseTab />
         </TabsContent>
 
+        <TabsContent value="catalogs">
+          <CatalogsTab />
+        </TabsContent>
+
+
         {isIgreen && (
           <TabsContent value="igreen-products">
             <IgreenProductsTab />
