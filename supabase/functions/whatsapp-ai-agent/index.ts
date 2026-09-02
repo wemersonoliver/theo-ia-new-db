@@ -339,6 +339,17 @@ const schedulingTools = {
         },
         required: ["client_name"]
       }
+    },
+    {
+      name: "send_catalog",
+      description: "Envia um catálogo (imagem ou PDF) cadastrado pela empresa diretamente no WhatsApp do cliente. Use SEMPRE que o cliente pedir catálogo, tabela de preços, lista de produtos, portfólio ou material equivalente, e a lista CATÁLOGOS DISPONÍVEIS estiver presente no contexto. Após chamar esta tool com sucesso, NÃO escreva outra mensagem — o arquivo já foi enviado.",
+      parameters: {
+        type: "object",
+        properties: {
+          catalog_name: { type: "string", description: "Nome exato do catálogo desejado conforme a lista CATÁLOGOS DISPONÍVEIS. Omita se houver apenas um catálogo." }
+        },
+        required: []
+      }
     }
   ]
 };
@@ -1887,6 +1898,28 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
           functionCallsProcessed++;
           continue;
         }
+
+        // Handle send_catalog (envia catálogo em imagem/PDF cadastrado pela conta)
+        if (fc.name === "send_catalog") {
+          const catalogName = typeof fc.args?.catalog_name === "string" ? fc.args.catalog_name.trim() : "";
+          const catalogResult = await executeSendCatalog(supabase, userId, accountId, phone, catalogName);
+          lastToolResult = catalogResult;
+          geminiPayload.contents.push(content);
+          geminiPayload.contents.push({
+            role: "user",
+            parts: [{ functionResponse: { name: fc.name, response: catalogResult } }],
+          });
+          if ((catalogResult as any)?.success) {
+            aiReply = "";
+            toolOnlyTurnHandled = true;
+            functionCallsProcessed = maxFunctionCalls;
+            break;
+          }
+          functionCallsProcessed++;
+          continue;
+        }
+
+
 
         if (fc.name === "request_human_handoff") {
           const handoffReason = String(fc.args?.reason || "Solicitação de atendimento humano");

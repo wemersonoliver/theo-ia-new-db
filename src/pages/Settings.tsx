@@ -16,6 +16,7 @@ import { RouletteTab } from "@/components/settings/RouletteTab";
 import { AppointmentSettingsTab } from "@/components/settings/AppointmentSettingsTab";
 import { SubscriptionsTab } from "@/components/settings/SubscriptionsTab";
 import { KnowledgeBaseTab } from "@/components/settings/KnowledgeBaseTab";
+import { CatalogsTab } from "@/components/settings/CatalogsTab";
 import { AISettingsTab } from "@/components/settings/AISettingsTab";
 import { RemindersTab } from "@/components/settings/RemindersTab";
 import { IgreenProductsTab } from "@/components/settings/IgreenProductsTab";
@@ -143,6 +144,7 @@ export default function Settings() {
     { value: "reminders", label: "Lembretes" },
     { value: "subscriptions", label: "Assinatura" },
     { value: "knowledge-base", label: "Base de Conhecimento" },
+    { value: "catalogs", label: "Catálogos" },
     { value: "igreen-products", label: "Produtos Igreen", show: isIgreen },
     { value: "igreen-audios", label: "Áudios de Saudação (iGreen)", show: isIgreen },
     { value: "team", label: "Equipe", show: !!isOwner },
@@ -283,6 +285,11 @@ export default function Settings() {
         <TabsContent value="knowledge-base">
           <KnowledgeBaseTab />
         </TabsContent>
+
+        <TabsContent value="catalogs">
+          <CatalogsTab />
+        </TabsContent>
+
 
         {isIgreen && (
           <TabsContent value="igreen-products">
