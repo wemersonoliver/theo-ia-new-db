@@ -143,6 +143,7 @@ export default function Settings() {
     { value: "reminders", label: "Lembretes" },
     { value: "subscriptions", label: "Assinatura" },
     { value: "knowledge-base", label: "Base de Conhecimento" },
+    { value: "catalogs", label: "Catálogos" },
     { value: "igreen-products", label: "Produtos Igreen", show: isIgreen },
     { value: "igreen-audios", label: "Áudios de Saudação (iGreen)", show: isIgreen },
     { value: "team", label: "Equipe", show: !!isOwner },
