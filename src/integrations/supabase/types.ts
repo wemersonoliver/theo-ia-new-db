@@ -929,6 +929,63 @@ export type Database = {
         }
         Relationships: []
       }
+      catalogs: {
+        Row: {
+          account_id: string
+          caption: string | null
+          created_at: string
+          description: string | null
+          enabled: boolean
+          file_name: string | null
+          file_path: string | null
+          file_type: string
+          file_url: string
+          id: string
+          keywords: string[]
+          mime_type: string | null
+          name: string
+          position: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          caption?: string | null
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          file_name?: string | null
+          file_path?: string | null
+          file_type?: string
+          file_url: string
+          id?: string
+          keywords?: string[]
+          mime_type?: string | null
+          name: string
+          position?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          caption?: string | null
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          file_name?: string | null
+          file_path?: string | null
+          file_type?: string
+          file_url?: string
+          id?: string
+          keywords?: string[]
+          mime_type?: string | null
+          name?: string
+          position?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
           account_id: string | null
