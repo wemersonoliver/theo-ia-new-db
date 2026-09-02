@@ -339,6 +339,17 @@ const schedulingTools = {
         },
         required: ["client_name"]
       }
+    },
+    {
+      name: "send_catalog",
+      description: "Envia um catálogo (imagem ou PDF) cadastrado pela empresa diretamente no WhatsApp do cliente. Use SEMPRE que o cliente pedir catálogo, tabela de preços, lista de produtos, portfólio ou material equivalente, e a lista CATÁLOGOS DISPONÍVEIS estiver presente no contexto. Após chamar esta tool com sucesso, NÃO escreva outra mensagem — o arquivo já foi enviado.",
+      parameters: {
+        type: "object",
+        properties: {
+          catalog_name: { type: "string", description: "Nome exato do catálogo desejado conforme a lista CATÁLOGOS DISPONÍVEIS. Omita se houver apenas um catálogo." }
+        },
+        required: []
+      }
     }
   ]
 };
