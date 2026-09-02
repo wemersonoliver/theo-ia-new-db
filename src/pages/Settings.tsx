@@ -16,6 +16,7 @@ import { RouletteTab } from "@/components/settings/RouletteTab";
 import { AppointmentSettingsTab } from "@/components/settings/AppointmentSettingsTab";
 import { SubscriptionsTab } from "@/components/settings/SubscriptionsTab";
 import { KnowledgeBaseTab } from "@/components/settings/KnowledgeBaseTab";
+import { CatalogsTab } from "@/components/settings/CatalogsTab";
 import { AISettingsTab } from "@/components/settings/AISettingsTab";
 import { RemindersTab } from "@/components/settings/RemindersTab";
 import { IgreenProductsTab } from "@/components/settings/IgreenProductsTab";
