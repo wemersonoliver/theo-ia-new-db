@@ -11,7 +11,7 @@ import { buildAgentSystemPrompt, buildCalendarBlock } from "../_ai_system_prompt
 import { getBrtNowParts, buildIgreenProductsPromptBlock, buildGreenSimulationReply, buildGreenKnownDiscountBlock, buildGreenDistributorStateReply } from "../_igreen_flow.ts";
 import { openAIGeminiShapeFallback, markProviderOutOfCredits, isProviderOutOfCredits, detectCreditError } from "../_shared/ai-fallback/index.ts";
 import { getPrimaryProvider } from "../_shared/ai-provider/primary.ts";
-import { resolveInstanceContext, sendWhatsAppText as providerSendText } from "../_wa_provider.ts";
+import { resolveInstanceContext, sendWhatsAppText as providerSendText, sendWhatsAppMedia as providerSendMedia } from "../_wa_provider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
