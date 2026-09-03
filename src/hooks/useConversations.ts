@@ -60,8 +60,12 @@ export function useConversations() {
       })) as Conversation[];
     },
     enabled: !!user && !!accountId,
-    refetchInterval: 5000,
+    // Realtime (abaixo) invalida a query a cada mudança. O intervalo longo é apenas
+    // uma rede de segurança caso a conexão realtime caia.
+    refetchInterval: 60000,
+    staleTime: 15000,
   });
+
 
   // Subscribe to realtime updates
   useEffect(() => {
@@ -319,8 +323,11 @@ export function useConversation(phone: string) {
       } as Conversation;
     },
     enabled: !!user && !!accountId && !!phone,
-    refetchInterval: 3000,
+    // Atualização vem do realtime; polling apenas como fallback.
+    refetchInterval: 30000,
+    staleTime: 5000,
   });
+
 
   // Subscribe to realtime updates for this specific conversation
   useEffect(() => {
