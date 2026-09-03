@@ -1663,13 +1663,21 @@ INSTRUÇÃO: Cumprimente o cliente de forma calorosa, demonstrando que se lembra
       console.error("Error loading departments:", e);
     }
 
+    // Catálogos cadastrados pela conta (imagem/PDF enviados pela IA sob demanda)
+    let catalogsBlock = "";
+    try {
+      catalogsBlock = buildCatalogsPromptBlock(await loadAccountCatalogs(supabase, accountId));
+    } catch (e) {
+      console.error("Error loading catalogs:", e);
+    }
+
     // Build system prompt (compartilhado com test-ai-prompt via _ai_system_prompt.ts)
     const systemPrompt = buildAgentSystemPrompt({
       aiConfig,
       knowledgeBase,
       productsCatalog,
       returningClientContext,
-      departmentsBlock,
+      departmentsBlock: `${departmentsBlock}${catalogsBlock}`,
       existingAppointmentsContext,
       pendingConfirmationContext,
       todayStr,
