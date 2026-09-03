@@ -2502,6 +2502,92 @@ async function executeSendProductVideo(
   }
 }
 
+// ===== Catálogos (imagem/PDF cadastrados pela conta) =====
+async function loadAccountCatalogs(supabase: any, accountId: string | null): Promise<any[]> {
+  if (!accountId) return [];
+  const { data, error } = await supabase
+    .from("catalogs")
+    .select("id, name, description, keywords, file_url, file_type, mime_type, file_name, caption, enabled, position")
+    .eq("account_id", accountId)
+    .eq("enabled", true)
+    .order("position", { ascending: true });
+  if (error) {
+    console.error("[catalogs] erro ao carregar:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+function buildCatalogsPromptBlock(catalogs: any[]): string {
+  if (!catalogs.length) return "";
+  const list = catalogs
+    .map((c) => `- ${c.name}${c.description ? ` — ${c.description}` : ""}${(c.keywords || []).length ? ` (palavras-chave: ${(c.keywords || []).join(", ")})` : ""}`)
+    .join("\n");
+  return `\nCATÁLOGOS DISPONÍVEIS PARA ENVIO:\n${list}\n\nREGRA: quando o cliente pedir catálogo, tabela de preços, lista de produtos ou material equivalente, chame a ferramenta send_catalog (informando catalog_name quando houver mais de um). NUNCA diga que não tem catálogo se houver algum na lista acima e NUNCA descreva o arquivo em texto — envie pela ferramenta.\n`;
+}
+
+async function executeSendCatalog(
+  supabase: any,
+  userId: string,
+  accountId: string | null,
+  phone: string,
+  catalogName: string,
+): Promise<any> {
+  try {
+    const catalogs = await loadAccountCatalogs(supabase, accountId);
+    if (!catalogs.length) {
+      return { success: false, error: "no_catalog", instruction: "Não há catálogo cadastrado. Informe ao cliente que vai verificar com a equipe." };
+    }
+
+    let catalog = catalogs[0];
+    if (catalogName) {
+      const needle = catalogName.toLowerCase();
+      const match =
+        catalogs.find((c: any) => (c.name || "").toLowerCase() === needle) ||
+        catalogs.find((c: any) => (c.name || "").toLowerCase().includes(needle)) ||
+        catalogs.find((c: any) => (c.keywords || []).some((k: string) => k.toLowerCase().includes(needle)));
+      if (match) catalog = match;
+    }
+
+    const { data: conv } = await supabase
+      .from("whatsapp_conversations")
+      .select("instance_id, wa_chat_id")
+      .eq("user_id", userId)
+      .eq("phone", phone)
+      .maybeSingle();
+
+    const ctx = await resolveInstanceContext(supabase, {
+      instanceId: (conv as any)?.instance_id ?? null,
+      accountId,
+      userId,
+    });
+    if (!ctx) return { success: false, error: "Instância WhatsApp não encontrada." };
+
+    const result = await providerSendMedia(ctx, {
+      phone,
+      mediaUrl: catalog.file_url,
+      mediaType: catalog.file_type === "image" ? "image" : "document",
+      mimetype: catalog.mime_type || (catalog.file_type === "image" ? "image/jpeg" : "application/pdf"),
+      filename: catalog.file_name || `${catalog.name}.pdf`,
+      caption: catalog.caption || "",
+      waChatId: (conv as any)?.wa_chat_id ?? null,
+    });
+
+    if (!result.ok) {
+      console.error("[send_catalog] falha no envio:", JSON.stringify(result.errorPayload ?? {}));
+      return { success: false, error: "Erro ao enviar o catálogo." };
+    }
+
+    await saveAIMessage(supabase, userId, phone, `📄 Catálogo enviado: ${catalog.name}`, "ai");
+    console.log(`[send_catalog] "${catalog.name}" enviado para ${phone}`);
+    return { success: true, instruction: "Catálogo enviado com sucesso. NÃO escreva outra mensagem agora." };
+  } catch (error) {
+    console.error("executeSendCatalog error:", error);
+    return { success: false, error: "Falha ao enviar o catálogo." };
+  }
+}
+
+
 // Allowed user IDs for the promotional image tool (Fonseca Brothers JJ / André)
 const PROMO_IMAGE_ALLOWED_USERS = new Set<string>([
   "c753d23b-7f23-4d56-a867-6639897b6767",
