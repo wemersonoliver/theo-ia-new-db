@@ -7,7 +7,7 @@ Atualizar o atendimento automático da conta `deboravcolombo@hotmail.com` para r
 1. **Separar o atendimento Vida Card do atendimento particular**
    - Quando o cliente mencionar Vida Card, cartão, associação ou associado, confirmar que se trata do atendimento pelo Vida Card.
    - Informar: abordagem TCC, atendimento para crianças, adolescentes e adultos, duração de 30 minutos e investimento de R$ 90,00.
-   - Não apresentar R$ 90,00 como preço geral para pacientes particulares. Se um paciente particular perguntar o preço, a IA não inventará um valor e encaminhará a dúvida para confirmação humana.
+   - Para consultas particulares, também informar o investimento de R$ 90,00 por sessão, preservando as demais regras atuais do atendimento particular.
 
 2. **Atualizar o pagamento para todos os pacientes**
    - Remover completamente a chave Pix antiga por CPF.
@@ -22,7 +22,7 @@ Atualizar o atendimento automático da conta `deboravcolombo@hotmail.com` para r
 4. **Aplicar e validar**
    - Salvar o prompt completo atualizado diretamente na configuração da conta da Débora.
    - Conferir que o serviço “Sessão de Terapia” já configurado continua com duração de 30 minutos.
-   - Simular perguntas sobre Vida Card, preço particular, pagamento e agendamento para confirmar que as respostas e o serviço escolhido estão corretos.
+   - Simular perguntas sobre Vida Card, preço particular de R$ 90,00, pagamento e agendamento para confirmar que as respostas e o serviço escolhido estão corretos.
 
 ## Detalhes técnicos
 - A conta e o prompt atual foram localizados.
