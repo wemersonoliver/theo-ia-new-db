@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { evolutionRequest, normalizeEvolutionUrl } from "../_evolution.ts";
+import { resolveInstanceContext, sendWhatsAppText } from "../_wa_provider.ts";
 import { normalizeBrazilianPhone } from "../_phone.ts";
-import { requireInternalKey } from "../_cron_auth.ts";
+import { requireInternalKeyOrJwt } from "../_cron_auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,21 +27,11 @@ async function sendSystemMessage(
   phone: string,
   message: string,
 ) {
-  const evolutionUrl = normalizeEvolutionUrl(Deno.env.get("EVOLUTION_API_URL"));
-  const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-  if (!evolutionUrl || !evolutionKey) throw new Error("Evolution API não configurada");
-
-  const sendResponse = await evolutionRequest({
-    evolutionUrl,
-    evolutionKey,
-    path: `/message/sendText/${instanceName}`,
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ number: phone, text: message }),
-  });
-
-  if (!sendResponse.ok) {
-    throw new Error(`Evolution ${sendResponse.status}: ${sendResponse.text}`);
+  const ctx = await resolveInstanceContext(supabase as any, { system: true });
+  if (!ctx) throw new Error("Instância do sistema não encontrada");
+  const res = await sendWhatsAppText(ctx, phone, message);
+  if (!res.ok) {
+    throw new Error(`${ctx.provider} ${res.status}: ${JSON.stringify(res.errorPayload || {}).slice(0, 300)}`);
   }
 
   // Persist message in system conversation history
@@ -161,7 +151,7 @@ async function processOne(
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const __authErr = requireInternalKey(req);
+  const __authErr = await requireInternalKeyOrJwt(req);
   if (__authErr) return __authErr;
 
   try {
