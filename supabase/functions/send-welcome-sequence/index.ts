@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const __authErr = await requireInternalKeyOrJwt(req);
-  if (__authErr) return __authErr;
+  if (__authErr) { console.warn("welcome: unauthorized call"); return __authErr; }
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -176,6 +176,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!sysInstance || sysInstance.status !== "connected") {
+      console.warn("welcome: system WhatsApp not connected");
       return new Response(
         JSON.stringify({ ok: false, error: "system WhatsApp not connected" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -202,6 +203,7 @@ Deno.serve(async (req) => {
       }
     }
 
+    console.log(`welcome: processed=${processed} pending=${pending?.length || 0}`);
     return new Response(JSON.stringify({ ok: true, processed, total: pending?.length || 0 }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
